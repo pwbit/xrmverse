@@ -23,6 +23,7 @@ import { t } from "../../../shell/i18n/t";
 import type { LookupValue } from "../formValues";
 import { useLoad } from "../useLoad";
 import { entityPath } from "../tableApi";
+import { useFieldAppearance } from "./fieldAppearance";
 import type { FieldProps } from "./fieldProps";
 
 const useStyles = makeStyles({
@@ -131,6 +132,7 @@ export function LookupField({
     );
     const targets = [...new Set(relationships.map((r) => r.referencedEntity))];
     const styles = useStyles();
+    const appearance = useFieldAppearance(disabled);
     const [choosing, setChoosing] = useState(false);
     const openRecord = useRecordOpener();
     // The name the opened record was saved with, shown without changing the form's value (which stays clean).
@@ -182,6 +184,7 @@ export function LookupField({
                 validationMessage={error}
             >
                 <Input
+                    appearance={appearance}
                     readOnly
                     // A read-only lookup still opens its record: the input stays focusable and clickable.
                     disabled={disabled && !openable}

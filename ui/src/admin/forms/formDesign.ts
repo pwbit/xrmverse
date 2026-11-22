@@ -59,6 +59,8 @@ export interface DesignSection {
   showLabel: boolean;
   visible: boolean;
   columns: 1 | 2 | 3 | 4;
+  /** Where the section's field labels sit (`celllabelposition`): beside the field (Dataverse's default) or above it. */
+  labelPosition?: 'left' | 'top';
   /** In reading order. A write keeps the source's row breaks and re-flows only the rows an edit touches ({@link keepRows}). */
   cells: DesignCell[];
 }
@@ -303,6 +305,7 @@ function readBody(sc: Scan): Pick<FormDesign, 'tabs' | 'header'> {
           showLabel: flag(s.el, 'showlabel', true),
           visible: flag(s.el, 'visible', true),
           columns: columnCount(s.el.getAttribute('columns')) as DesignSection['columns'],
+          labelPosition: s.el.getAttribute('celllabelposition')?.toLowerCase() === 'top' ? 'top' : 'left',
           cells: s.cells.map((cell) => readCell(cell, custom, bindings)),
         })),
       })),
@@ -705,6 +708,9 @@ class Writer {
     }
     setFlag(el, 'showlabel', s.showLabel, true);
     setFlag(el, 'visible', s.visible, true);
+    // Left is the default: an absent attribute stays absent, one the source had is kept in step.
+    if (s.labelPosition === 'top') el.setAttribute('celllabelposition', 'Top');
+    else if (el.hasAttribute('celllabelposition')) el.setAttribute('celllabelposition', 'Left');
     setLabels(el, s.labels);
     const cells = s.cells.map((c) => this.cell(c, false));
     const before = this.original.get(s.key);
@@ -1048,7 +1054,7 @@ export function moveSection(d: FormDesign, key: string, to: 'up' | 'down' | 'pre
 export function setSection(
   d: FormDesign,
   key: string,
-  patch: { label?: string; showLabel?: boolean; visible?: boolean; columns?: 1 | 2 | 3 | 4 },
+  patch: { label?: string; showLabel?: boolean; visible?: boolean; columns?: 1 | 2 | 3 | 4; labelPosition?: 'left' | 'top' },
 ): FormDesign {
   const at = locate(d, key);
   if (!at) return d;
@@ -1063,6 +1069,7 @@ export function setSection(
         showLabel: patch.showLabel ?? s.showLabel,
         visible: patch.visible ?? s.visible,
         columns,
+        labelPosition: patch.labelPosition ?? s.labelPosition,
         cells: columns === s.columns ? s.cells
           : s.cells.map((cell) => clampSpan(cell, columns)),
       };

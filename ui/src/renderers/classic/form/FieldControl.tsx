@@ -1,6 +1,7 @@
 import { Field, makeStyles, Text, tokens } from '@fluentui/react-components';
 import { useRef, type FocusEvent } from 'react';
 import { FieldEditor } from '../../../admin/tables/fields/FieldEditor';
+import { FieldAppearanceProvider } from '../../../admin/tables/fields/fieldAppearance';
 import { NoAccessField, SecuredField } from '../../../admin/tables/fields/SecuredField';
 import { optionsOf } from '../../../admin/tables/fields/fieldProps';
 import { sameValue, type FieldValue } from '../../../admin/tables/formValues';
@@ -102,29 +103,32 @@ export function FieldControl({ cell, control, env, forceReadOnly = false }: { ce
   // UI-1d: the PCF control the FormXml names for the web; the standard control when it cannot run (ruling R7). A column the
   // user may not read keeps the standard "no access" field.
   const custom = control.customControl;
+  // The app forms draw their editable fields with a soft gray fill and no border (the owner's choice, 2026-11-22).
   return (
-    <div onFocus={entered} onBlur={left}>
-      {custom && !unreadable ? (
-        <PcfFieldControl
-          key={custom.name}
-          cell={cell}
-          control={{ ...control, customControl: custom }}
-          env={env}
-          column={column}
-          label={label}
-          required={attr.required}
-          disabled={disabled}
-          error={error}
-          fallback={standard}
-        />
-      ) : (
-        standard
-      )}
-      {recommendation && (
-        <Text size={200} role="note" className={styles.recommendation}>
-          {recommendation}
-        </Text>
-      )}
-    </div>
+    <FieldAppearanceProvider value="filled-darker">
+      <div onFocus={entered} onBlur={left}>
+        {custom && !unreadable ? (
+          <PcfFieldControl
+            key={custom.name}
+            cell={cell}
+            control={{ ...control, customControl: custom }}
+            env={env}
+            column={column}
+            label={label}
+            required={attr.required}
+            disabled={disabled}
+            error={error}
+            fallback={standard}
+          />
+        ) : (
+          standard
+        )}
+        {recommendation && (
+          <Text size={200} role="note" className={styles.recommendation}>
+            {recommendation}
+          </Text>
+        )}
+      </div>
+    </FieldAppearanceProvider>
   );
 }

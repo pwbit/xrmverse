@@ -8,6 +8,7 @@ import { zoneLabel } from '../../../apps/timeZones';
 import { useLoadedUserSettings } from '../../../apps/userSettings';
 import { t, uiLocale } from '../../../shell/i18n/t';
 import { isUserLocal } from '../metadata';
+import { useFieldAppearance } from './fieldAppearance';
 import type { FieldProps } from './fieldProps';
 
 type DayOfWeek = NonNullable<DatePickerProps['firstDayOfWeek']>;
@@ -95,6 +96,7 @@ function calendarStrings(locale: string): CalendarStrings {
  */
 export function DateField({ attr, value, onChange, disabled, error }: FieldProps) {
   const styles = useStyles();
+  const appearance = useFieldAppearance(disabled);
   const text = typeof value === 'string' ? value : '';
   const datePart = text.slice(0, 10);
   const time = attr.dateOnly ? '' : text.slice(11, 16);
@@ -164,6 +166,7 @@ export function DateField({ attr, value, onChange, disabled, error }: FieldProps
   const picker = (control: FieldControlProps) => (
     <DatePicker
       {...control}
+      appearance={appearance}
       className={attr.dateOnly ? undefined : styles.date}
       input={{ className: styles.input }}
       value={date}
@@ -198,6 +201,7 @@ export function DateField({ attr, value, onChange, disabled, error }: FieldProps
             {/* The time box has its own name; the field's label, hint and required mark belong to the date. */}
             <FieldContextProvider value={undefined}>
               <TimePicker
+                appearance={appearance}
                 className={styles.time}
                 input={{ className: styles.input }}
                 aria-label={t('field.date.time', { name: attr.displayName })}

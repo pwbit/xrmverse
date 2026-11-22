@@ -333,7 +333,8 @@ libraries or events.
   last column; nothing is lost.
 - **Sections.** Add a section to a tab column, move it up, down or to the previous or next column, and delete it (asks
   first when it holds anything, a field or another control, disabled for the only section of a tab). A section has a
-  label, show label, visible and 1 to 4 columns; a changed column count re-flows its cells row by row.
+  label, show label, visible, 1 to 4 columns and a label position (beside the field, the default, or above it; written
+  as `celllabelposition`, as Dataverse does); a changed column count re-flows its cells row by row.
 - **Fields.** Add a column of the table from a picker with search (hidden, virtual and system-only columns are not offered,
   except the primary name; a column already in the body is not offered again). Move a field up or down, to the previous or
   next section, or remove it. A field has a label, show label, visible and read-only; whether the column is required is

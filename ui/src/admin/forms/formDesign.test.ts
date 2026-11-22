@@ -245,6 +245,17 @@ describe('sections', () => {
     expect(sectionEl(written(next), 'side')).toBeUndefined();
   });
 
+  it('setSection({labelPosition}) writes celllabelposition: Top above, Left only where the source had the attribute', () => {
+    const d = read();
+    const main = d.tabs[0].columns[0].sections[0];
+    expect(main.labelPosition).toBe('left');
+    const top = setSection(d, main.key, { labelPosition: 'top' });
+    expect(top.tabs[0].columns[0].sections[0].labelPosition).toBe('top');
+    expect(sectionEl(written(top), 'main').getAttribute('celllabelposition')).toBe('Top');
+    const back = setSection(top, main.key, { labelPosition: 'left' });
+    expect(sectionEl(written(back), 'main').hasAttribute('celllabelposition')).toBe(false);
+  });
+
   it('setSection({columns: 2}) re-flows the cells, clamping colspan', () => {
     const d = read();
     const main = d.tabs[0].columns[0].sections[0];

@@ -665,6 +665,11 @@ Forms are edited in the web admin's form designer; see [Forms](web-admin.md#form
   a cell with no control keeps its space. `rowspan` is not drawn.
 - A cell's label is its label in the user's language, else 1033, else the column's display label; `showlabel="false"`
   hides it.
+- A section's `celllabelposition` places its field labels: `Left` (the default) beside the field, `Top` above it. The
+  form designer sets it per section.
+- Editable fields are drawn with a soft gray fill and no border (Fluent's `filled-darker` appearance, which follows the
+  light and dark themes); read-only and disabled fields keep their outline, so they stand apart. The web admin's record
+  pages keep the outlined fields.
 - The form's **header card** holds the title (with the auto-save status), the table's name and the form selector under
   it, the **header** cells and, at its foot, the tabs. The header cells are shown compact and read-only at the end of the
   title's row (value over label); the chevron next to them opens a panel where they are edited, as in Power Apps' flyout

@@ -128,6 +128,18 @@ export function FormPropertiesPanel({ design, attributes, onChange, selection, r
           </Select>
         </Field>
       )}
+      {section && (
+        <Field label={t('forms.props.labelPosition')}>
+          <Select
+            value={section.labelPosition ?? 'left'}
+            disabled={readOnly}
+            onChange={(_, d) => onChange(setSection(design, section!.key, { labelPosition: d.value as 'left' | 'top' }))}
+          >
+            <option value="left">{t('forms.props.labelPosition.left')}</option>
+            <option value="top">{t('forms.props.labelPosition.top')}</option>
+          </Select>
+        </Field>
+      )}
       {cell?.control && (
         <ControlProperties
           key={cell.key}
