@@ -123,6 +123,8 @@ img { max-width: 100%; height: auto; }
   border: 1px solid var(--button-bg);
 }
 .button:hover { text-decoration: none; opacity: 0.88; }
+.button-with-icon { display: inline-flex; align-items: center; gap: 8px; }
+.button-icon { flex: none; }
 .button.is-pending { background: transparent; color: var(--muted); border-color: var(--line); cursor: default; }
 .button.is-pending:hover { opacity: 1; }
 .secondary { margin: 22px 0 0; font-size: 0.95rem; }
