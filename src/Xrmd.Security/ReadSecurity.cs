@@ -38,11 +38,13 @@ public sealed class ReadSecurity(IReadOnlyList<SecurityProfile> principals, Busi
     private const string BusinessUnit = "businessunit";
     private const string OwnerId = "ownerid";
     private const string OwningBusinessUnit = "owningbusinessunit";
+    private const string QueueViewType = "queueviewtype";
 
     /// <inheritdoc />
     /// <remarks>
     /// Per principal, with <c>d</c> the depth of <c>prvRead{SchemaName}</c>: intersect entities → no restriction;
     /// <c>fileattachment</c> → the rows whose owning record (<c>objectid</c>) the principal can read (see <see cref="AttachmentFilter"/>);
+    /// <c>queue</c> and <c>queueitem</c> → see <see cref="QueuePrivacy"/> and <see cref="QueueItemFilter"/>;
     /// <c>activityparty</c> → the rows whose activity the principal can read through <c>activitypointer</c> (see <see cref="PartyFilter"/>);
     /// <c>post</c>, <c>postregarding</c> and <c>postcomment</c> → <c>prvReadPost</c>, then the rows whose regarding record, or post, the
     /// principal can read (see <see cref="PostFilter"/>);
@@ -86,6 +88,70 @@ public sealed class ReadSecurity(IReadOnlyList<SecurityProfile> principals, Busi
     }
 
     private FilterNode? PrincipalFilter(SecurityProfile p, EntityMetadata entity, bool isQueryUser)
+    {
+        if (entity.LogicalName == QueueSchema.QueueItem) return QueueItemFilter(p, entity, isQueryUser);
+        var filter = OwnershipFilter(p, entity, isQueryUser);
+        // A queue is also restricted by its privacy, below Global depth as well as at it (Basic User reads queues at Global).
+        return entity.LogicalName == QueueSchema.Queue && !p.IsSystemAdministrator ? And(filter, QueuePrivacy(p, entity, isQueryUser)) : filter;
+    }
+
+    private static FilterNode And(FilterNode? left, FilterNode right)
+    {
+        if (left is null) return right;
+        var and = new FilterNode { Operator = LogicalOperator.And };
+        and.Filters.Add(left);
+        and.Filters.Add(right);
+        return and;
+    }
+
+    /// <summary>
+    /// <c>queue</c> (plan 4.1a, spec §6): a public queue (<c>queueviewtype</c> 0) is readable by whoever holds Read Queue, a private
+    /// one by the user or a team that owns it (so a team's members read the private queue the team owns, ruling R9), by a member
+    /// (<c>queuemembership</c>) and by a principal it is shared with for Read. A System Administrator reads every queue. Our call
+    /// where Learn is silent: the Global depth of Read Queue does not lift the privacy, because Basic User holds it. The security guard
+    /// checks one queue with this same predicate before an item in it is worked or placed (ruling R23), so the rule is written once.
+    /// </summary>
+    private FilterNode QueuePrivacy(SecurityProfile p, EntityMetadata queue, bool isQueryUser)
+    {
+        var filter = new FilterNode { Operator = LogicalOperator.Or };
+        filter.Conditions.Add(new ConditionNode(null, QueueViewType, ConditionOperator.Equal, [QueueSchema.PublicViewType]));
+        filter.Conditions.Add(OwnedBy(p, isQueryUser));
+        filter.QueueMembers.Add(new QueueMemberNode(p.UserId));
+        filter.Shared.Add(new SharedRecordsNode(p.UserId, queue.ObjectTypeCode ?? 0, (int)AccessRights.ReadAccess));
+        return filter;
+    }
+
+    /// <summary>
+    /// <c>queueitem</c> (plan 4.1a, spec §6): an item has no owner; it is readable when its queue (<c>queueid</c>, with the queue's own
+    /// rule above) and the record it points to (<c>objectid</c>, with that table's restriction) are, whatever the depth of
+    /// <c>prvReadQueueItem</c> (PrivilegeDenied without it). A target table the principal has no read privilege on contributes no
+    /// row. A System Administrator reads every item.
+    /// </summary>
+    private FilterNode? QueueItemFilter(SecurityProfile p, EntityMetadata item, bool isQueryUser)
+    {
+        var privilege = PrivilegeNames.For(AccessRights.ReadAccess, item);
+        if (p.DepthOf(privilege) == DepthMask.None)
+            throw XrmdFaultException.PrivilegeDenied(p.UserId, privilege, item.LogicalName, item.ObjectTypeCode ?? 0);
+        if (p.IsSystemAdministrator) return null;
+        var queue = store.GetEntity(QueueSchema.Queue)
+                    ?? throw new InvalidOperationException($"The table '{QueueSchema.Queue}' does not exist."); // fail closed
+        var record = (item.Attributes ?? []).OfType<LookupAttributeMetadata>().FirstOrDefault(a => a.LogicalName == QueueSchema.ObjectId)
+                     ?? throw new InvalidOperationException($"'{item.LogicalName}' has no '{QueueSchema.ObjectId}' lookup."); // fail closed
+        var targets = new List<ParentTarget>();
+        foreach (var name in record.Targets ?? [])
+        {
+            if (store.GetEntity(name) is not { ObjectTypeCode: { } otc } parent) continue;
+            if (p.DepthOf(PrivilegeNames.For(AccessRights.ReadAccess, parent)) == DepthMask.None) continue;
+            targets.Add(new ParentTarget(parent.LogicalName, otc, PrincipalFilter(p, parent, isQueryUser)));
+        }
+        var filter = new FilterNode();
+        filter.Parents.Add(new ParentRecordsNode(QueueSchema.QueueIdColumn,
+            [new ParentTarget(queue.LogicalName, queue.ObjectTypeCode, PrincipalFilter(p, queue, isQueryUser))]));
+        filter.Parents.Add(new ParentRecordsNode(QueueSchema.ObjectId, targets));
+        return filter;
+    }
+
+    private FilterNode? OwnershipFilter(SecurityProfile p, EntityMetadata entity, bool isQueryUser)
     {
         if (entity.IsIntersect == true) return null; // readable by every member of the organization, no privilege
         if (entity.LogicalName == FileColumns.AttachmentEntity) return AttachmentFilter(p, entity, isQueryUser);

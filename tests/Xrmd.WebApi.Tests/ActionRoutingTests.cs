@@ -233,7 +233,9 @@ public class ActionRoutingTests
     public void Every_refused_activity_message_is_a_reserved_entity_set_name()
     {
         // Plan 2.11 (A18, review M1): the Web API answers these names as unbound operations, whatever their case.
-        ActivitySchema.RefusedMessages.Should().Contain(["Book", "Rollup", "Restore", "RouteTo", "InitializeAnnotationBlocksUpload"]);
+        ActivitySchema.RefusedMessages.Should().Contain(["Book", "Rollup", "Restore", "AddRecurrence", "InitializeAnnotationBlocksUpload"]);
+        // Plan 4.1a: the queue messages are implemented, none is refused any more.
+        ActivitySchema.RefusedMessages.Should().NotContain(QueueSchema.Messages);
         foreach (var name in ActivitySchema.RefusedMessages)
         {
             LogicalNameValidator.ReservedEntitySetNames.Contains(name.ToLowerInvariant()).Should().BeTrue($"'{name}' is reserved, ignoring case");

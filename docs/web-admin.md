@@ -213,6 +213,12 @@ In **Tables** (see [Activities and notes](activities.md)):
   create or update, and are not offered as list columns. Change participants with the SDK or the Web API.
 - A note's form hides `documentbody`. Timelines, activity forms and a note editor are not part of the web admin.
 
+## Queues
+
+`queue`, `queueitem` and `queuemembership` are tables like the others: Tables lists them, and you can add your own columns,
+forms and views to `queue` and `queueitem`. There is no queue-specific page, apart from the one-way **enable queues** switch on a table's page; working queue items is done in a model-driven
+app or with `xrmd queue` (see [Email and queues](email-and-queues.md)).
+
 ## Currencies
 
 The **Currencies** page (`/manage/currencies`, System Administrators only) lists the currencies with code, name, symbol, precision, exchange rate and

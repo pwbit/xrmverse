@@ -51,6 +51,8 @@ public static class ExportedSettings
         copy.HasActivities ??= false;
         copy.ActivityTypeMask = entity.IsActivity == true ? entity.ActivityTypeMask : null;
         copy.IsDuplicateDetectionEnabled ??= new BooleanManagedProperty(false); // modelled (plan 2.15): a table without the setting has none
+        // Modelled (plan 4.1a): a table without the setting is not queue-enabled; the read shows the stored shape.
+        copy.IsValidForQueue = QueueSchema.SettingFlag(entity.IsValidForQueue?.Value == true);
         copy.CanChangeTrackingBeEnabled = new BooleanManagedProperty(ChangeTrackingSchema.CanBeEnabled(entity)); // computed, never stored
         copy.TableType = ElasticTables.NormalizeTableType(entity.TableType); // a table stored without a type is Standard
         if (ElasticTables.IsElastic(entity)) SdkProperty.Set(copy, nameof(EntityMetadata.Keys), new[] { ElasticTables.NoSqlKey(entity) }); // computed, never stored

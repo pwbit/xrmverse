@@ -174,6 +174,7 @@ public sealed class ODataEdmModelBuilder(IMetadataStore store, CustomApiRegistry
         DuplicateDetectionActions.AddOperations(model, container, types); // after the audit ones: it uses PagingInfo
         AccessActions.AddOperations(model, container, types); // after the audit ones: it uses AccessRights
         RollupActions.AddOperations(model, container); // after ActionController's: it uses crmbaseentity
+        QueueActions.AddOperations(model, container, types); // after ActionController's: it uses crmbaseentity
         FunctionController.AddFormOperations(model, container, types); // after ActionController's: it uses crmbaseentity
         CustomApiOperations.AddOperations(model, container, types, customApiDefinitions, warn); // last: it uses crmbaseentity
         return model;

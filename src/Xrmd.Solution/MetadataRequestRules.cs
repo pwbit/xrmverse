@@ -40,6 +40,8 @@ public static class MetadataRequestRules
         // Plan 2.11 (A4, A5): the store applies them and their rules.
         nameof(EntityMetadata.HasNotes), nameof(EntityMetadata.HasActivities), nameof(EntityMetadata.ActivityTypeMask),
         nameof(EntityMetadata.IsDuplicateDetectionEnabled), nameof(EntityMetadata.TableType),
+        // Plan 4.1a: the store applies it and its rule.
+        nameof(EntityMetadata.IsValidForQueue),
     };
 
     /// <summary>The SDK properties whose setting the export writes under another name.</summary>
@@ -232,7 +234,7 @@ public static class MetadataRequestRules
     /// <summary>
     /// The properties of <paramref name="changes"/> that differ from <paramref name="current"/> and that UpdateEntity does
     /// not apply: anything but the labels, <c>IsAuditEnabled</c>, <c>AutoCreateAccessTeams</c>, <c>ChangeTrackingEnabled</c>,
-    /// <c>HasActivities</c>, <c>HasNotes</c> and <c>IsDuplicateDetectionEnabled</c> (the store applies their rules; the child collections
+    /// <c>HasActivities</c>, <c>HasNotes</c>, <c>IsDuplicateDetectionEnabled</c> and <c>IsValidForQueue</c> (the store applies their rules; the child collections
     /// are not part of UpdateEntity and are not compared). <c>IsActivity</c> and <c>ActivityTypeMask</c> are compared: they cannot change.
     /// </summary>
     public static IReadOnlyList<string> UnappliedEntityChanges(EntityMetadata current, EntityMetadata changes)
@@ -243,7 +245,7 @@ public static class MetadataRequestRules
             property => Identity.Contains(property) || EntityChildren.Contains(property) || EntityLabels.Contains(property)
                         || property is nameof(EntityMetadata.IsAuditEnabled) or nameof(EntityMetadata.AutoCreateAccessTeams)
                             or nameof(EntityMetadata.ChangeTrackingEnabled) or nameof(EntityMetadata.HasActivities) or nameof(EntityMetadata.HasNotes)
-                            or nameof(EntityMetadata.IsDuplicateDetectionEnabled), "");
+                            or nameof(EntityMetadata.IsDuplicateDetectionEnabled) or nameof(EntityMetadata.IsValidForQueue), "");
         differences.AddRange(UnappliedAuditChanges(current.IsAuditEnabled, changes.IsAuditEnabled));
         return differences;
     }

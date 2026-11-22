@@ -146,6 +146,8 @@ public sealed class MigrationSchemaPhaseTests(XrmdFixture fx) : IDisposable
                 ["EntitySetName"] = $"new_mig{suffix}s", ["PrimaryIdAttribute"] = $"new_mig{suffix}id", ["PrimaryNameAttribute"] = "new_name",
                 ["DisplayName"] = Label("Mig project"), ["DisplayCollectionName"] = Label("Mig projects"), ["OwnershipType"] = "UserOwned",
                 ["IsActivity"] = false, ["TableType"] = "Standard", ["HasNotes"] = true, ["HasActivities"] = false,
+                // Plan 4.1a: the source's queue setting travels with the table.
+                ["IsValidForQueue"] = new JsonObject { ["Value"] = true, ["CanBeChanged"] = true, ["ManagedPropertyLogicalName"] = "canmodifyqueuesettings" },
             },
         }),
         ["columns"] = new JsonArray(
@@ -235,6 +237,7 @@ public sealed class MigrationSchemaPhaseTests(XrmdFixture fx) : IDisposable
         var table = store.GetEntity($"new_mig{suffix}")!;
         table.Should().NotBeNull();
         table.PrimaryNameAttribute.Should().Be("new_name");
+        table.IsValidForQueue!.Value.Should().BeTrue();
         table.Attributes.Should().Contain(a => a.LogicalName == "new_name" && ((StringAttributeMetadata)a).MaxLength == 200);
         table.Attributes.Should().Contain(a => a.LogicalName == "new_accountid" && a is LookupAttributeMetadata);
         var account = store.GetEntity("account")!;

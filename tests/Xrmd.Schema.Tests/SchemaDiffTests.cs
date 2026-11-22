@@ -506,6 +506,52 @@ public class SchemaDiffTests
     }
 
     [Fact]
+    public void Diff_switches_isValidForQueue_on_one_way_and_exports_it()
+    {
+        var org = Applied(Sample());
+        var document = Sample();
+        document.Tables[0].IsValidForQueue = true;
+
+        var plan = Diff(document, org);
+
+        plan.Rejections.Should().BeEmpty();
+        var update = plan.Changes.Should().ContainSingle().Which.Should().BeOfType<UpdateEntityRequest>().Subject;
+        (update.Entity.LogicalName, update.Entity.IsValidForQueue?.Value).Should().Be(("xv_project", true));
+        org.Apply(plan.Changes);
+        Diff(document, org).Changes.Should().BeEmpty();
+        SchemaExporter.Export(org.Entities, org.OptionSets, "xv").Tables.Single(t => t.Name == "xv_project").IsValidForQueue.Should().BeTrue();
+
+        document.Tables[0].IsValidForQueue = false;
+        Diff(document, org).Rejections.Should().ContainSingle().Which.Should().Contain("isValidForQueue").And.Contain("cannot be turned off");
+    }
+
+    [Fact]
+    public void Activity_without_queues_exports_false_and_applies_elsewhere_without_queues()
+    {
+        var source = new InMemoryOrg();
+        var document = SchemaYaml.Read(SchemaYamlTests.ActivitySample);
+        document.Tables[0].IsValidForQueue = false; // xv_sms, created without queues
+        source.Apply(Diff(document, new InMemoryOrg()).Changes);
+        source.Entity("xv_sms").IsValidForQueue!.Value.Should().BeFalse();
+
+        var exported = SchemaExporter.Export(source.Entities, source.OptionSets, "xv");
+        exported.Tables.Single(t => t.Name == "xv_sms").IsValidForQueue.Should().BeFalse("absent would mean on for an activity");
+        exported.Tables.Single(t => t.Name == "xv_plain").IsValidForQueue.Should().BeNull("absent means off for an ordinary table");
+        var yaml = SchemaYaml.Write(exported);
+        yaml.Should().Contain("isValidForQueue: false");
+
+        // Applied to another organization, the activity stays without queues; applied back to the source, nothing changes.
+        var target = new InMemoryOrg();
+        var plan = Diff(SchemaYaml.Read(yaml), target);
+        plan.Rejections.Should().BeEmpty();
+        ((CreateEntityRequest)plan.Changes.First(c => c is CreateEntityRequest r && r.Entity.LogicalName == "xv_sms")).Entity.IsValidForQueue!.Value
+            .Should().BeFalse();
+        target.Apply(plan.Changes);
+        target.Entity("xv_sms").IsValidForQueue!.Value.Should().BeFalse();
+        Diff(SchemaYaml.Read(yaml), source).Changes.Should().BeEmpty();
+    }
+
+    [Fact]
     public void Diff_refuses_turning_flags_off()
     {
         var org = Applied(ActivitySample());

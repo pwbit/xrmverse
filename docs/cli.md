@@ -66,6 +66,7 @@ template used for the macOS archives. Nothing is published to nuget.org.
 | `currency` | `list`, `create <code> --name --symbol --rate [--precision] [--custom]`, `rate <code> <rate>`, `activate\|deactivate <code>`, `pricing-precision <0-4>`: currencies over the Web API |
 | `envvar` | `list`, `get <schemaname>`, `set <schemaname> <value>`, `unset <schemaname>`: environment variable values over the Web API; see [Environment variables](environment-variables.md) |
 | `workflow` | `apply <file.yaml> [--solution] [--activate] [--dry-run]`, `export <nameOrId> [--format yaml\|xaml] [--file]`, `list [--kind] [--entity]`, `activate\|deactivate <nameOrId>`: workflows, business rules and actions as YAML over the authoring API; see [Workflow authoring as code](workflow-authoring.md) |
+| `queue` | `list [--public]`, `create <name> [--private]`, `member add <queue> <user\|team>`, `items <queue>`: queues over the Web API; see [Email and queues](email-and-queues.md) |
 | `dev` | `seed <table>`: sample rows |
 | `apply <schema.yaml>` | applies a schema file (tables, columns, choices, relationships) |
 | `mcp` | stdio MCP bridge to the server's `/mcp` endpoint (see [MCP](mcp.md)) |
@@ -421,6 +422,21 @@ xrmd access-team disable account                       # refused while a templat
   question (and is required when stdin is not a terminal).
 - Server refusals are shown as they are: 403 exits 3, an unknown table, template or user exits 4, an invalid mask, a limit or
   any other 400 exits 5 (see [Exit codes](#exit-codes)).
+
+## Queues
+
+`xrmd queue` lists and creates queues, adds users or teams to a queue, and lists a queue's items (see
+[Email and queues](email-and-queues.md)). It runs over the Web API as the signed-in user, so the server's privilege checks apply.
+
+```bash
+xrmd queue create "Support"                   # a public queue; add --private for a private one
+xrmd queue list --public
+xrmd queue member add "Support" jane@example.com
+xrmd queue items "Support"
+```
+
+- A queue is named by its name or its id. A name that matches several queues exits 5; use the id.
+- An unknown queue, user or team exits 4 (not found). Any other refusal is the server's, shown as it is.
 
 ## Change tracking
 

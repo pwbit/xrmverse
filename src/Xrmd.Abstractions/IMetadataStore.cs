@@ -99,6 +99,13 @@ public interface IMetadataStore
         GetAllEntities().Where(e => e.HasNotes == true).Select(e => e.LogicalName).ToHashSet(StringComparer.Ordinal);
 
     /// <summary>
+    /// The logical names of the tables with <c>IsValidForQueue</c> true (plan 4.1a): with <c>activitypointer</c>, the targets of
+    /// <c>queueitem.objectid</c>. From cache.
+    /// </summary>
+    IReadOnlySet<string> QueueTables =>
+        GetAllEntities().Where(e => e.IsValidForQueue?.Value == true).Select(e => e.LogicalName).ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>
     /// Why deleting the table <paramref name="logicalName"/> would be refused by the activity model now (plan 2.11: activities
     /// regarding its records, notes attached to them), without locks; null when nothing blocks it. Activities of the tables in
     /// <paramref name="dropped"/> are not counted. A store without the activity model blocks nothing.

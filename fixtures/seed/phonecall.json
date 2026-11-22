@@ -24,6 +24,11 @@
   "IsActivity": true,
   "HasActivities": false,
   "HasNotes": true,
+  "IsValidForQueue": {
+    "Value": true,
+    "CanBeChanged": true,
+    "ManagedPropertyLogicalName": "canmodifyqueuesettings"
+  },
   "PrimaryIdAttribute": "activityid",
   "PrimaryNameAttribute": "subject",
   "Attributes": [

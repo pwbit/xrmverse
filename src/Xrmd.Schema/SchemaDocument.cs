@@ -85,6 +85,12 @@ public sealed class SchemaTable
     public bool? HasActivities { get; set; }
 
     /// <summary>
+    /// The table's records can be put in queues (<c>isValidForQueue:</c>, plan 4.1a); null: not stated (unchanged; a new activity is
+    /// queue-enabled by default). One-way: true cannot become false.
+    /// </summary>
+    public bool? IsValidForQueue { get; set; }
+
+    /// <summary>
     /// The table type (<c>tableType:</c>), <c>Standard</c> or <c>Elastic</c> (<see cref="Xrmd.Metadata.ElasticTables"/>). Written only
     /// when elastic; it cannot change on an existing table.
     /// </summary>

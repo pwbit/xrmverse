@@ -278,6 +278,40 @@ public class SchemaYamlTests
         SchemaYaml.Write(again).Should().Be(written);
     }
 
+    [Fact]
+    public void Yaml_round_trips_isValidForQueue()
+    {
+        const string yaml = """
+            publisher: xv
+            tables:
+              - name: xv_ticket
+                label: Ticket
+                ownership: user
+                isValidForQueue: true
+                primaryName: { name: xv_name, label: Name }
+              - name: xv_sms
+                label: SMS
+                ownership: user
+                isActivity: true
+                isValidForQueue: false
+                primaryName: { name: subject, label: Subject }
+              - name: xv_plain
+                label: Plain
+                ownership: user
+                primaryName: { name: xv_name, label: Name }
+            """;
+        var document = SchemaYaml.Read(yaml);
+
+        document.Tables.Select(t => t.IsValidForQueue).Should().Equal(true, false, null);
+        var written = SchemaYaml.Write(document);
+        written.Should().Contain("isValidForQueue: true").And.Contain("isValidForQueue: false");
+        var again = SchemaYaml.Read(written);
+        again.Should().BeEquivalentTo(document, o => o.WithStrictOrdering());
+        SchemaYaml.Write(again).Should().Be(written);
+        FluentActions.Invoking(() => SchemaYaml.Read(yaml.Replace("isValidForQueue: true", "isValidForQueue: maybe")))
+            .Should().Throw<Exception>().WithMessage("*isValidForQueue*");
+    }
+
     [Theory]
     [InlineData("isActivity: true\n    primaryName: { name: xv_name }", "subject")]
     [InlineData("isActivity: true\n    hasActivities: true\n    primaryName: { name: subject }", "hasActivities")]

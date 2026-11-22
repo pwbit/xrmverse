@@ -621,11 +621,59 @@ describe('TableDetail', () => {
       expect(screen.getByText(en['table.isActivity'])).toBeInTheDocument();
     });
 
+    it('switches queues on with confirmation, sending the managed flag', async () => {
+      let queues = false;
+      const puts: Record<string, unknown>[] = [];
+      server.use(
+        onPath('get', "EntityDefinitions(LogicalName='xv_project')", () =>
+          HttpResponse.json({
+            ...flagged({}),
+            IsValidForQueue: { Value: queues, CanBeChanged: true, ManagedPropertyLogicalName: 'canmodifyqueuesettings' },
+          }),
+        ),
+        onPath('put', "EntityDefinitions(LogicalName='xv_project')", async ({ request }) => {
+          const body = (await request.json()) as Record<string, unknown>;
+          puts.push(body);
+          queues = (body.IsValidForQueue as { Value?: boolean }).Value === true;
+          return new HttpResponse(null, { status: 204 });
+        }),
+      );
+      const user = userEvent.setup();
+      await open();
+      const toggle = screen.getByRole('switch', { name: en['table.queues.enable'] });
+      expect(toggle).not.toBeChecked();
+
+      await user.click(toggle);
+      expect(await screen.findByText(en['table.queues.confirmBody'])).toBeInTheDocument();
+      await user.click(await screen.findByRole('button', { name: en['table.flag.confirmButton'] }));
+      await waitFor(() => expect(screen.getByRole('switch', { name: en['table.queues.enable'] })).toBeChecked());
+      expect(puts).toHaveLength(1);
+      expect(puts[0]).toMatchObject({
+        LogicalName: 'xv_project',
+        HasNotes: false,
+        IsValidForQueue: { Value: true, CanBeChanged: true, ManagedPropertyLogicalName: 'canmodifyqueuesettings' },
+      });
+      expect(screen.getByRole('switch', { name: en['table.queues.enable'] })).toBeDisabled();
+      expect(screen.getByText(en['table.queues.alreadyOn'])).toBeInTheDocument();
+    });
+
+    it('queues switch hidden on the tables that cannot be queued', async () => {
+      server.use(
+        onPath('get', "EntityDefinitions(LogicalName='annotation')", () =>
+          HttpResponse.json({ ...flagged({}), LogicalName: 'annotation', IsValidForQueue: { Value: false } }),
+        ),
+      );
+      render(<App initialEntries={['/manage/tables/annotation']} />);
+      await screen.findByRole('switch', { name: en['table.notes.enable'] });
+      expect(screen.queryByRole('switch', { name: en['table.queues.enable'] })).toBeNull();
+    });
+
     it('shows no switch when the server does not report the settings', async () => {
       render(<App initialEntries={['/manage/tables/xv_project']} />);
       await screen.findByRole('table', { name: en['table.tab.columns'] });
       expect(screen.queryByRole('switch', { name: en['table.notes.enable'] })).toBeNull();
       expect(screen.queryByRole('switch', { name: en['table.activities.enable'] })).toBeNull();
+      expect(screen.queryByRole('switch', { name: en['table.queues.enable'] })).toBeNull();
     });
   });
 });

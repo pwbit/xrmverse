@@ -2748,6 +2748,9 @@ public sealed class SolutionImporter(IMetadataStore store, IDbConnectionFactory 
                 {
                     if (OneWayFlag(log, entity.LogicalName, "HasRelatedActivities", entity.HasActivities, published.HasActivities)) update.HasActivities = true;
                     if (OneWayFlag(log, entity.LogicalName, "HasRelatedNotes", entity.HasNotes, published.HasNotes)) update.HasNotes = true;
+                    // Queues (plan 4.1a): one-way too.
+                    if (OneWayFlag(log, entity.LogicalName, "IsValidForQueue", entity.IsValidForQueue?.Value, published.IsValidForQueue?.Value))
+                        update.IsValidForQueue = new BooleanManagedProperty(true);
                 }
                 // Duplicate detection (plan 2.15, ruling D18): the file's flag is applied (the store applies the rules, 400).
                 if (!IsShell(package, entity) && entity.IsDuplicateDetectionEnabled is { } fileDuplicates
@@ -2907,6 +2910,7 @@ public sealed class SolutionImporter(IMetadataStore store, IDbConnectionFactory 
         return (relationship.ReferencingEntity, relationship.ReferencingAttribute) switch
         {
             (ActivitySchema.Annotation, ActivitySchema.ObjectId) => ActivitySchema.NotesRelationship(referenced).SchemaName,
+            (QueueSchema.QueueItem, QueueSchema.ObjectId) => QueueSchema.ItemRelationship(referenced).SchemaName,
             (ActivitySchema.Party, ActivitySchema.ActivityId) => ActivitySchema.PartiesRelationship(referenced).SchemaName,
             (ActivitySchema.Party, ActivitySchema.PartyId) => ActivitySchema.PartyTargetRelationship(referenced.LogicalName).SchemaName,
             (_, ActivitySchema.RegardingObjectId) when Table(relationship.ReferencingEntity) is { } activity

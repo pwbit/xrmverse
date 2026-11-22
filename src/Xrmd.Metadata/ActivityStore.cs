@@ -15,10 +15,12 @@ namespace Xrmd.Metadata;
 /// <item><c>annotation.objectid</c>: the tables with <c>HasNotes</c> (<see cref="ActivitySchema.NotesRelationship"/>);</item>
 /// <item><c>postregarding.regardingobjectid</c> and <c>post.regardingobjectid</c> (plan 3.5 UI-1g): the tables with <c>HasNotes</c> or
 /// <c>HasActivities</c>, with <see cref="PostSchema.PostRegardingsRelationship"/> for the first and no relationship for the second;</item>
-/// <item><c>activityparty.activityid</c>: <c>activitypointer</c> and every activity table (<see cref="ActivitySchema.PartiesRelationship"/>).</item>
+/// <item><c>activityparty.activityid</c>: <c>activitypointer</c> and every activity table (<see cref="ActivitySchema.PartiesRelationship"/>);</item>
+/// <item><c>queueitem.objectid</c> (plan 4.1a): <c>activitypointer</c> and the tables with <c>IsValidForQueue</c>, a setting that goes
+/// from false to true only (<see cref="QueueSchema.ItemRelationship"/>).</item>
 /// </list>
 /// Only these paths change those targets and relationships; the public messages refuse it. Deleting a table is refused while an
-/// activity, a note or a post refers to one of its records; deleting a custom activity deletes its pointer and party rows.
+/// activity, a note, a post or a queue item refers to one of its records; deleting a custom activity deletes its pointer and party rows.
 /// </summary>
 public sealed partial class MetadataStore
 {
@@ -30,6 +32,9 @@ public sealed partial class MetadataStore
 
     /// <inheritdoc />
     public IReadOnlySet<string> NotesTables => _cache.NotesTables;
+
+    /// <inheritdoc />
+    public IReadOnlySet<string> QueueTables => _cache.QueueTables;
 
     /// <summary>
     /// The rules of a custom activity created by a caller (A4), applied to the copy <paramref name="e"/> it is created from: its
@@ -58,6 +63,8 @@ public sealed partial class MetadataStore
             throw new XrmdValidationException($"{what}: IsMailMergeEnabled must be false.");
         e.HasActivities = false;
         e.HasNotes = true;
+        // Plan 4.1a: a custom activity is queue-enabled when created, unless the caller says otherwise.
+        e.IsValidForQueue ??= QueueSchema.SettingFlag(true);
         e.ActivityTypeMask ??= 1;
         e.OwnershipType = OwnershipTypes.UserOwned;
     }
@@ -159,7 +166,8 @@ public sealed partial class MetadataStore
         var (regarding, notes, refusal) = await ActivityDeleteBlockersAsync(session, cache, entity, locked: true, ignored: null, ct);
         if (refusal is not null) throw new XrmdValidationException(refusal);
         return regarding || notes || PostTarget(cache, entity.LogicalName) || ActivitySchema.IsActivityTable(entity)
-               || entity.HasActivities == true || entity.HasNotes == true;
+               || entity.HasActivities == true || entity.HasNotes == true || entity.IsValidForQueue?.Value == true
+               || Targets(cache, QueueSchema.QueueItem, QueueSchema.ObjectId, entity.LogicalName);
     }
 
     /// <summary>
@@ -218,6 +226,17 @@ public sealed partial class MetadataStore
                     ct, ("@code", code));
                 if (count > 0)
                     return (regarding, notes, $"Entity '{name}' cannot be deleted: {count} posts are regarding its records. Delete them first.");
+            }
+            // Plan 4.1a: the queue items of its records, refused as notes are (a raw delete would bypass the queue items' own
+            // deletion log; removing them first goes through the messages).
+            if (Targets(cache, QueueSchema.QueueItem, QueueSchema.ObjectId, name))
+            {
+                if (locked) await session.KeyLockAsync(QueueSchema.QueueItem, code, ct);
+                var count = await ScalarAsync<int>(session,
+                    $"SELECT COUNT(*) FROM {session.DataTable(QueueSchema.QueueItem)}{hint} WHERE {session.Quote(QueueSchema.ObjectId + TypeMapping.TypeColumnSuffix)} = @code",
+                    ct, ("@code", code));
+                if (count > 0)
+                    return (regarding, notes, $"Entity '{name}' cannot be deleted: {count} queue items refer to its records. Remove them from their queues first.");
             }
         }
         return (regarding, notes, null);
@@ -296,6 +315,9 @@ public sealed partial class MetadataStore
             PostSchema.PostRegardingsRelationship, ct);
         // post.regardingobjectid has the same targets and no relationships, as on Learn.
         await SyncManagedLookupAsync(session, pending, PostSchema.Post, ActivitySchema.RegardingObjectId, posts, relationship: null, ct);
+        // Plan 4.1a: queueitem.objectid targets the pointer (as on Learn) and the queue-enabled tables.
+        await SyncManagedLookupAsync(session, pending, QueueSchema.QueueItem, QueueSchema.ObjectId, QueueItemTargets(cache),
+            QueueSchema.ItemRelationship, ct);
         // Plan 2.11 A16: note bodies are fileattachment rows, so annotation is a target of fileattachment.objectid.
         await EnsurePermanentAttachmentTargetsAsync(session, pending, ct);
     }
@@ -335,6 +357,66 @@ public sealed partial class MetadataStore
 
     /// <summary>The public messages never write the targets or the relationships of the managed lookups of the activity model.</summary>
     private static XrmdValidationException ActivityLookupIsManaged(string what) => new(
-        $"{what} belongs to the activity model: its targets and relationships follow the tables' IsActivity, HasActivities and HasNotes " +
-        "settings and cannot be changed directly.");
+        $"{what} belongs to the activity model: its targets and relationships follow the tables' IsActivity, HasActivities, HasNotes " +
+        "and IsValidForQueue settings and cannot be changed directly.");
+
+    // ---- IsValidForQueue (plan 4.1a) ------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The targets of <c>queueitem.objectid</c> in <paramref name="cache"/>: <c>activitypointer</c> first (Learn lists it, with
+    /// <c>ActivityPointer_QueueItem</c>), then the tables with <c>IsValidForQueue</c> by name.
+    /// </summary>
+    private static List<EntityMetadata> QueueItemTargets(CacheState cache) =>
+        cache.ByLogicalName.Values
+            .Where(e => e.IsIntersect != true && (e.LogicalName == ActivitySchema.Pointer || e.IsValidForQueue?.Value == true))
+            .OrderBy(e => e.LogicalName == ActivitySchema.Pointer ? 0 : 1).ThenBy(e => e.LogicalName, StringComparer.Ordinal).ToList();
+
+    /// <summary>
+    /// What an update asks of <c>IsValidForQueue</c> of <paramref name="current"/>: one-way, false to true only, where
+    /// <see cref="QueueSettingRefusal(Func{string, bool}, EntityMetadata)"/> allows it. Only a change is checked, so a retrieved
+    /// definition sent back passes.
+    /// </summary>
+    /// <returns>True when the update turns the setting on.</returns>
+    /// <exception cref="XrmdValidationException">400 naming <c>IsValidForQueue</c>.</exception>
+    private static bool QueueSettingChange(CacheState cache, EntityMetadata current, EntityMetadata changes)
+    {
+        if (changes.IsValidForQueue is not { } flag || flag.Value == (current.IsValidForQueue?.Value == true)) return false;
+        if (!flag.Value)
+            throw new XrmdValidationException(
+                $"IsValidForQueue cannot be disabled on entity '{current.LogicalName}': once a table is enabled for queues, it stays enabled.");
+        DemandQueueSettingAllowed(cache, current);
+        return true;
+    }
+
+    /// <summary><paramref name="entity"/> can be enabled for queues (<see cref="QueueSettingRefusal(Func{string, bool}, EntityMetadata)"/>).</summary>
+    /// <exception cref="XrmdValidationException">400 naming <c>IsValidForQueue</c>.</exception>
+    private static void DemandQueueSettingAllowed(CacheState cache, EntityMetadata entity)
+    {
+        if (QueueSettingRefusal(cache.ByLogicalName.ContainsKey, entity) is { } refusal) throw new XrmdValidationException(refusal);
+    }
+
+    /// <summary>
+    /// Why <paramref name="entity"/> cannot be enabled for queues in this organization, or null when it can. The startup upgrade
+    /// reports a kept flag with it.
+    /// </summary>
+    internal string? QueueSettingRefusal(EntityMetadata entity) => QueueSettingRefusal(_cache.ByLogicalName.ContainsKey, entity);
+
+    /// <summary>
+    /// The rule of <c>IsValidForQueue</c> (plan 4.1a): neither an intersect table, nor the queue tables, the pointer, an activity
+    /// party or a note can be put in a queue; the organization needs <c>queueitem</c>.
+    /// </summary>
+    private static string? QueueSettingRefusal(Func<string, bool> hasTable, EntityMetadata entity)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        var name = entity.LogicalName;
+        if (entity.IsIntersect == true)
+            return $"IsValidForQueue cannot be enabled on entity '{name}': it is an intersect entity.";
+        if (name is QueueSchema.Queue or QueueSchema.QueueItem or QueueSchema.QueueMembership or ActivitySchema.Pointer
+            or ActivitySchema.Party or ActivitySchema.Annotation)
+            return $"IsValidForQueue cannot be enabled on entity '{name}': a queue, a queue item, the activity pointer, an activity party or a note cannot be put in a queue.";
+        if (!hasTable(QueueSchema.QueueItem))
+            return $"IsValidForQueue needs the table '{QueueSchema.QueueItem}', which this organization does not have yet.";
+        return null;
+    }
+
 }

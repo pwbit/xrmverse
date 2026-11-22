@@ -88,12 +88,11 @@ public static class ActivitySchema
         "appointment scheduling and recurrence are not replicated; create or update the appointment instead";
     private const string EmailReason =
         "xrmverse has no email provider, email templates or incoming email processing yet; use SendEmail, which only changes the email's state";
-    private const string QueueReason = "queues are not modelled yet";
 
     /// <summary>
     /// The activity and note messages a caller could reach that xrmverse refuses explicitly (A18), with the reason given in the
     /// refusal. They are answered "not supported" before any custom message of the organization is looked up, and no custom API
-    /// can take their names (pre-flight C15). The queue message names are from memory (checklist 4).
+    /// can take their names (pre-flight C15). The queue messages are implemented (plan 4.1a, <c>QueueSchema.Messages</c>).
     /// </summary>
     public static readonly IReadOnlyDictionary<string, string> RefusedMessageReasons =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -117,12 +116,6 @@ public static class ActivitySchema
                 "chunked note attachments are not supported; write annotation.documentbody (base64) with Create or Update",
             ["InitializeAnnotationBlocksDownload"] =
                 "chunked note attachments are not supported; read annotation.documentbody (base64) with Retrieve or RetrieveMultiple",
-            ["AddToQueue"] = QueueReason,
-            ["PickFromQueue"] = QueueReason,
-            ["ReleaseToQueue"] = QueueReason,
-            ["RemoveFromQueue"] = QueueReason,
-            ["RouteTo"] = QueueReason,
-            ["RetrieveUserQueues"] = QueueReason,
         };
 
     /// <summary>The names of <see cref="RefusedMessageReasons"/>, in a stable order.</summary>
@@ -157,7 +150,7 @@ public static class ActivitySchema
 
     /// <summary>
     /// The lookups whose targets the metadata store maintains (pre-flight C1): <c>regardingobjectid</c> of an activity table, of
-    /// the pointer, of <c>post</c> and of <c>postregarding</c> (plan 3.5 UI-1g), <c>annotation.objectid</c>,
+    /// the pointer, of <c>post</c> and of <c>postregarding</c> (plan 3.5 UI-1g), <c>annotation.objectid</c>, <c>queueitem.objectid</c> (plan 4.1a),
     /// <c>activityparty.partyid</c> and <c>activityparty.activityid</c>. They keep a type column whatever the number of their targets.
     /// A <c>regardingobjectid</c> outside the seeded tables that have their own
     /// (<c>team</c> for access teams, <c>audit</c>, <c>asyncoperation</c>, whose column is a UniqueIdentifier, and
@@ -170,7 +163,7 @@ public static class ActivitySchema
             (null, _) or (_, null) => false,
             (AccessTeamSchema.Team or AuditTable.Name or "asyncoperation" or DuplicateDetectionSchema.Condition, RegardingObjectId) => false,
             (_, RegardingObjectId) => true,
-            (Annotation, ObjectId) => true,
+            (Annotation or QueueSchema.QueueItem, ObjectId) => true,
             (Party, PartyId or ActivityId) => true,
             _ => false,
         };

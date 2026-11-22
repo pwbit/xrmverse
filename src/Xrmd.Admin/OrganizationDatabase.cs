@@ -189,6 +189,8 @@ public static class OrganizationDatabase
             services.GetService<Microsoft.Extensions.Logging.ILoggerFactory>()?.CreateLogger(nameof(CurrencyColumnsUpgrade)));
         await ActivitySettingsUpgrade.EnsureAsync(services.GetRequiredService<IMetadataStore>(), services.GetRequiredService<IDbConnectionFactory>(), ct,
             services.GetService<Microsoft.Extensions.Logging.ILoggerFactory>()?.CreateLogger(nameof(ActivitySettingsUpgrade)));
+        await QueueSettingsUpgrade.EnsureAsync(services.GetRequiredService<IMetadataStore>(), services.GetRequiredService<IDbConnectionFactory>(), ct,
+            services.GetService<Microsoft.Extensions.Logging.ILoggerFactory>()?.CreateLogger(nameof(QueueSettingsUpgrade)));
         await services.GetRequiredService<SdkMessageCatalog>().EnsureAsync(ct);
         await services.GetRequiredService<PrivilegeCatalog>().EnsureAsync(ct);
         var security = services.GetRequiredService<SecurityBootstrap>();

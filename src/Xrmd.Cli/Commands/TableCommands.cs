@@ -68,8 +68,15 @@ public static class TableCommands
         };
         var notes = new Option<bool>("--notes") { Description = "Allow notes on the table's records (HasNotes). Cannot be switched off later." };
         var activities = new Option<bool>("--activities") { Description = "Allow activities regarding the table's records (HasActivities). Cannot be switched off later." };
+        var queues = new Option<bool>("--queues")
+        {
+            Description = "Allow the table's records in queues (IsValidForQueue; on by default for an activity). Cannot be switched off later.",
+        };
         var solution = SolutionOption();
-        var command = new Command("create", "Create a table with its primary name column.") { name, label, plural, ownership, primaryName, activity, notes, activities, solution };
+        var command = new Command("create", "Create a table with its primary name column.")
+        {
+            name, label, plural, ownership, primaryName, activity, notes, activities, queues, solution,
+        };
         command.SetAction(async (parse, ct) =>
         {
             var table = parse.GetValue(name)!;
@@ -88,6 +95,7 @@ public static class TableCommands
                 IsActivity = isActivity,
                 HasNotes = parse.GetValue(notes) ? true : null,
                 HasActivities = parse.GetValue(activities) ? true : null,
+                IsValidForQueue = parse.GetValue(queues) ? true : null,
             };
             var response = await ctx.CreateClient().SendJsonAsync(HttpMethod.Post, "EntityDefinitions", SchemaWebApiBodies.Entity(schemaTable),
                 SolutionHeaders(parse.GetValue(solution)), ct);
@@ -173,11 +181,12 @@ public static class TableCommands
                 isActivity = Flag(entity, "IsActivity"),
                 hasNotes = Flag(entity, "HasNotes"),
                 hasActivities = Flag(entity, "HasActivities"),
+                isValidForQueue = Flag(entity, "IsValidForQueue"),
             };
             if (ctx.Format == Output.OutputFormat.Json)
             {
                 ctx.Write(new { summary.name, summary.schemaName, summary.entitySet, summary.label, summary.pluralLabel, summary.ownership,
-                    summary.custom, summary.primaryIdAttribute, summary.primaryNameAttribute, summary.isActivity, summary.hasNotes, summary.hasActivities,
+                    summary.custom, summary.primaryIdAttribute, summary.primaryNameAttribute, summary.isActivity, summary.hasNotes, summary.hasActivities, summary.isValidForQueue,
                     columns = attributes, relationships });
             }
             else
@@ -195,11 +204,18 @@ public static class TableCommands
         return command;
     }
 
-    /// <summary>A boolean property of a Web API definition: true only when the server returns true.</summary>
-    private static bool Flag(JsonElement row, string name) => row.TryGetProperty(name, out var flag) && flag.ValueKind == JsonValueKind.True;
+    /// <summary>
+    /// A boolean property of a Web API definition: true only when the server returns true, directly or as the <c>Value</c> of a
+    /// managed property (<c>IsValidForQueue</c>).
+    /// </summary>
+    private static bool Flag(JsonElement row, string name) =>
+        row.TryGetProperty(name, out var flag)
+        && (flag.ValueKind == JsonValueKind.True
+            || (flag.ValueKind == JsonValueKind.Object && flag.TryGetProperty("Value", out var value) && value.ValueKind == JsonValueKind.True));
 
     /// <summary>
-    /// <c>table set &lt;table&gt; --notes|--activities</c> (plan 2.11, A5): switches <c>HasNotes</c> and <c>HasActivities</c> on with a
+    /// <c>table set &lt;table&gt; --notes|--activities|--queues</c> (plan 2.11, A5; plan 4.1a): switches <c>HasNotes</c>, <c>HasActivities</c>
+    /// and <c>IsValidForQueue</c> on with a
     /// PUT of the table's definition (as <c>change-tracking enable</c>). One-way, as on the server: there is no option to switch
     /// one off (the flags take no value), and a confirmation is asked (<c>--yes</c> without a terminal). A flag already on is
     /// reported and not sent.
@@ -209,14 +225,20 @@ public static class TableCommands
         var table = TableArgument();
         var notes = new Option<bool>("--notes") { Description = "Switch notes on (HasNotes). Cannot be undone.", Arity = ArgumentArity.Zero };
         var activities = new Option<bool>("--activities") { Description = "Switch activities on (HasActivities). Cannot be undone.", Arity = ArgumentArity.Zero };
-        var command = new Command("set", "Switch a table's notes or activities on (one-way: they cannot be switched off).") { table, notes, activities, ctx.YesOption };
+        var queues = new Option<bool>("--queues") { Description = "Switch queues on (IsValidForQueue). Cannot be undone.", Arity = ArgumentArity.Zero };
+        var command = new Command("set", "Switch a table's notes, activities or queues on (one-way: they cannot be switched off).")
+        {
+            table, notes, activities, queues, ctx.YesOption,
+        };
         command.SetAction(async (parse, ct) =>
         {
             var name = parse.GetValue(table)!;
             var wanted = new List<string>();
             if (parse.GetValue(notes)) wanted.Add("HasNotes");
             if (parse.GetValue(activities)) wanted.Add("HasActivities");
-            if (wanted.Count == 0) throw new CliException(ExitCodes.Usage, "Nothing to switch on: give --notes, --activities or both (neither can be switched off).");
+            if (parse.GetValue(queues)) wanted.Add("IsValidForQueue");
+            if (wanted.Count == 0)
+                throw new CliException(ExitCodes.Usage, "Nothing to switch on: give --notes, --activities, --queues or several (none can be switched off).");
 
             var client = ctx.CreateClient();
             var path = EntityPath(name);
@@ -232,7 +254,10 @@ public static class TableCommands
                 body.Remove("@odata.context");
                 // Computed by the server, never written (as change-tracking enable).
                 body.Remove("CanChangeTrackingBeEnabled");
-                foreach (var flag in switchOn) body[flag] = true;
+                foreach (var flag in switchOn)
+                    // IsValidForQueue is a managed property: its Value is switched, the rest of what the server returned stays.
+                    if (body[flag] is JsonObject managed) managed["Value"] = true;
+                    else body[flag] = flag == "IsValidForQueue" ? new JsonObject { ["Value"] = true } : true;
                 await client.SendJsonAsync(HttpMethod.Put, path, body, cancellationToken: ct);
             }
             ctx.WriteResult(new { table = name, switchedOn = switchOn.Select(Camel).ToList(), alreadyOn },

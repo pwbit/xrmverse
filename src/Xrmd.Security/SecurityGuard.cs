@@ -7,6 +7,9 @@ using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
+using Xrmd.Query;
+using Xrmd.Query.Model;
+using Xrmd.Query.Sql;
 
 namespace Xrmd.Security;
 
@@ -86,6 +89,14 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
     /// RetrieveExchangeRate: Read on the currency <c>TransactionCurrencyId</c> (plan 2.10).
     /// CalculateRollupField: Write on the row <c>Target</c>, else 403 <c>0x8004E027</c> (plan 2.12b, ruling R10).
     /// SendEmail: Write on the email <c>EmailId</c>, and update on the secured columns it writes (plan 2.11, A17).
+    /// Queue items (plan 4.1a, ruling R23; a <c>queueitem</c> has no owner): working an item (PickFromQueue, ReleaseToQueue, RouteTo
+    /// for the queue it leaves, RemoveFromQueue, the Update and Delete of a <c>queueitem</c>) needs the item privilege (Write, Delete
+    /// for RemoveFromQueue and Delete), its current queue readable (<see cref="DemandQueueReadableAsync"/>: the read predicate of
+    /// <see cref="ReadSecurity"/>, privacy included) and Read on its record; placing one (AddToQueue, RouteTo for the queue it goes to,
+    /// the Create of a <c>queueitem</c>) needs Create Queue Item, the destination readable and Read on the record (AddToQueue: Read on
+    /// <c>Target</c>). Moving an item elsewhere is its Update, checked as such. Write on the <c>queue</c> record is never needed to work
+    /// its items; AddPrincipalToQueue needs Append To on the queue. RetrieveUserQueues: Global Read Queue for another user's queues,
+    /// the read predicate otherwise.
     /// CreateMultiple and UpdateMultiple on a standard table: <c>prvCreate</c> or <c>prvWrite</c> on the table of <c>Targets</c>
     /// at any depth (#76, ruling B13); each target is then checked as its inner Create or Update. UpsertMultiple: no rule of its own.
     /// Create and Update of a secured column: the field rules of <see cref="AuthorizeFieldWritesAsync"/> (ruling F4).
@@ -157,7 +168,13 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
             case "delete":
                 if (parameters.TryGetValue(Target, out var deleted) && deleted is EntityReference deleteTarget
                     && store.GetEntity(deleteTarget.LogicalName ?? "") is { } deletedEntity)
-                    await DemandRecordAsync(principals, deletedEntity, KeyedId(deletedEntity, deleteTarget), AccessRights.DeleteAccess, session, ct);
+                {
+                    // Plan 4.1a (ruling R23): a queue item has no owner; its Delete is working it.
+                    if (deletedEntity.LogicalName == QueueSchema.QueueItem)
+                        await DemandWorkItemAsync(principals, KeyedId(deletedEntity, deleteTarget), AccessRights.DeleteAccess, session, ct);
+                    else
+                        await DemandRecordAsync(principals, deletedEntity, KeyedId(deletedEntity, deleteTarget), AccessRights.DeleteAccess, session, ct);
+                }
                 break;
             case "assign":
                 if (parameters.TryGetValue(Target, out var assigned) && assigned is EntityReference assignTarget
@@ -281,6 +298,47 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
                     await DemandRecordAsync(principals, emailEntity, emailId, AccessRights.WriteAccess, session, ct);
                     await DemandFieldUpdateAsync(caller, emailEntity, emailId, SendEmailColumns(parameters), session, ct);
                 }
+                break;
+            case "addtoqueue":
+                // Plan 4.1a (ruling R23): placing. Read on the record, Create Queue Item and the destination queue readable (its
+                // privacy). Moving an item that is elsewhere is the item's Update, which this guard checks as such (working it: the
+                // queue it leaves readable).
+                if (parameters.TryGetValue(Target, out var queued) && queued is EntityReference queuedRecord
+                    && store.GetEntity(queuedRecord.LogicalName ?? "") is { } queuedEntity)
+                    await DemandRecordAsync(principals, queuedEntity, KeyedId(queuedEntity, queuedRecord), AccessRights.ReadAccess, session, ct);
+                if (parameters.TryGetValue("DestinationQueueId", out var destination) && destination is Guid destinationId)
+                    await DemandQueuePlacementAsync(principals, destinationId, session, ct);
+                break;
+            case "removefromqueue":
+                // Plan 4.1a (ruling R23): working the item with Delete (its Delete is then checked as a Delete).
+                if (parameters.TryGetValue("QueueItemId", out var removed) && removed is Guid removedId)
+                    await DemandWorkItemAsync(principals, removedId, AccessRights.DeleteAccess, session, ct);
+                break;
+            case "routeto":
+                // Plan 4.1a (ruling R23): working the item (the queue it leaves), and placing it in the queue it goes to (the target
+                // queue, or the default queue of the target user or team).
+                if (parameters.TryGetValue("QueueItemId", out var routed) && routed is Guid routedId)
+                    await DemandWorkItemAsync(principals, routedId, AccessRights.WriteAccess, session, ct);
+                if (parameters.TryGetValue(Target, out var routeTarget) && routeTarget is EntityReference routeTo
+                    && await RouteDestinationAsync(routeTo, session, ct) is { } routeQueue)
+                    await DemandQueuePlacementAsync(principals, routeQueue, session, ct);
+                break;
+            case "addprincipaltoqueue":
+                // Plan 4.1a (task 5, ruling R1): the rule of an Associate over queuemembership_association, Append To on the queue.
+                if (parameters.TryGetValue("QueueId", out var memberQueue) && memberQueue is Guid memberQueueId)
+                    await DemandRecordAsync(principals, Definition(QueueSchema.Queue), memberQueueId, AccessRights.AppendToAccess, session, ct);
+                break;
+            case "pickfromqueue" or "releasetoqueue":
+                // Plan 4.1a (ruling R23): working the item with Write. The worker may be any user (decision 4: a routing service
+                // picks for agents); the item's Update or Delete is then checked as such.
+                if (parameters.TryGetValue("QueueItemId", out var worked) && worked is Guid workedId)
+                    await DemandWorkItemAsync(principals, workedId, AccessRights.WriteAccess, session, ct);
+                break;
+            case "retrieveuserqueues":
+                // Plan 4.1a (task 6): another user's queues need Read Queue at Global depth; the query then returns only the queues
+                // the caller can read (the queue privacy of the read security, ruling R13).
+                if (parameters.TryGetValue("UserId", out var queuesOf) && queuesOf is Guid queuesUser && queuesUser != caller.UserId)
+                    DemandGlobalRead(principals, Definition(QueueSchema.Queue));
                 break;
             case "downloadblock":
                 // No record rule here: the continuation token is bound to the caller and its record, whose Read was demanded by
@@ -693,6 +751,12 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
             await DemandPostParentReadAsync(principals, entity, target, session, ct);
             return;
         }
+        // Plan 4.1a (ruling R23): a queue item is placed in a queue the caller can read, for a record it can read (no Append check).
+        if (entity.LogicalName == QueueSchema.QueueItem)
+        {
+            await DemandQueueItemParentsAsync(principals, target, session, ct);
+            return;
+        }
         var lookups = WrittenLookups(entity, target, isCreate: true)
             .Where(l => l.Value is not null).ToList();
         if (lookups.Count == 0) return;
@@ -701,12 +765,33 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
             await DemandAppendToAsync(principals, reference!, session, ct);
     }
 
+    /// <summary>
+    /// A direct Create of a <c>queueitem</c> (plan 4.1a, spec §6, ruling R23): its queue (<c>queueid</c>) readable
+    /// (<see cref="DemandQueueReadableAsync"/>; Create Queue Item is demanded by the caller), and Read on the record it points to
+    /// (<c>objectid</c>). A missing or unknown reference is left to the core operation (400).
+    /// </summary>
+    /// <exception cref="XrmdFaultException">403 PrivilegeDenied or AccessDenied; 404 for a missing queue or record.</exception>
+    private async Task DemandQueueItemParentsAsync(IReadOnlyList<SecurityProfile> principals, Entity target, DataSession session,
+        CancellationToken ct)
+    {
+        if (target.GetAttributeValue<EntityReference>(QueueSchema.QueueIdColumn) is { } queue && store.GetEntity(QueueSchema.Queue) is not null)
+            await DemandQueueReadableAsync(principals, queue.Id, session, ct);
+        if (target.GetAttributeValue<EntityReference>(QueueSchema.ObjectId) is { } record && store.GetEntity(record.LogicalName ?? "") is { } recordEntity)
+            await DemandRecordAsync(principals, recordEntity, KeyedId(recordEntity, record), AccessRights.ReadAccess, session, ct);
+    }
+
     private async Task AuthorizeUpdateAsync(IReadOnlyList<SecurityProfile> principals, Entity target, DataSession session,
         CancellationToken ct)
     {
         if (store.GetEntity(target.LogicalName ?? "") is not { } entity) return;
         var id = KeyedId(entity, target);
         if (id == Guid.Empty) return; // the core operation rejects it
+
+        if (entity.LogicalName == QueueSchema.QueueItem)
+        {
+            await AuthorizeQueueItemUpdateAsync(principals, id, target, session, ct);
+            return;
+        }
 
         var lookups = WrittenLookups(entity, target, isCreate: false).ToList();
         DemandPrivilege(principals, AccessRights.WriteAccess, entity);
@@ -733,6 +818,112 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
             await DemandRecordAsync(principals, entity, id, AccessRights.AssignAccess, record, session, ct);
             await DemandOwnerCanReadAsync(entity, newOwner, session, ct);
         }
+    }
+
+    /// <summary>
+    /// The Update of a <c>queueitem</c> (plan 4.1a, ruling R23): working the item (<see cref="DemandWorkItemAsync"/> with Write); a new
+    /// <c>queueid</c> must be readable (<see cref="DemandQueueReadableAsync"/>) and a new <c>objectid</c> readable.
+    /// </summary>
+    /// <exception cref="XrmdFaultException">403 PrivilegeDenied or AccessDenied; 404 for a missing item, queue or record.</exception>
+    private async Task AuthorizeQueueItemUpdateAsync(IReadOnlyList<SecurityProfile> principals, Guid id, Entity target,
+        DataSession session, CancellationToken ct)
+    {
+        var stored = await DemandWorkItemAsync(principals, id, AccessRights.WriteAccess, session, ct);
+        if (target.GetAttributeValue<EntityReference>(QueueSchema.QueueIdColumn) is { } moved && moved.Id != stored.Queue)
+            await DemandQueueReadableAsync(principals, moved.Id, session, ct);
+        if (target.GetAttributeValue<EntityReference>(QueueSchema.ObjectId) is { } record && record.Id != stored.Record
+            && store.GetEntity(record.LogicalName ?? "") is { } recordEntity)
+            await DemandRecordAsync(principals, recordEntity, KeyedId(recordEntity, record), AccessRights.ReadAccess, session, ct);
+    }
+
+    /// <summary>
+    /// Working the existing item <paramref name="itemId"/> (plan 4.1a, ruling R23): <paramref name="right"/> on <c>queueitem</c> (the
+    /// table has no owner, so any depth covers every item), the queue it is in readable (<see cref="DemandQueueReadableAsync"/>), and
+    /// Read on the record it points to. Write on the queue record is not needed.
+    /// </summary>
+    /// <returns>The item's stored queue and record ids.</returns>
+    /// <exception cref="XrmdFaultException">403 PrivilegeDenied or AccessDenied; 404 for a missing item.</exception>
+    private async Task<(Guid? Queue, Guid? Record)> DemandWorkItemAsync(IReadOnlyList<SecurityProfile> principals, Guid itemId, AccessRights right,
+        DataSession session, CancellationToken ct)
+    {
+        var item = Definition(QueueSchema.QueueItem);
+        DemandPrivilege(principals, right, item);
+        Guid? queue, record;
+        int? recordType;
+        await using (var cmd = session.Command(
+                         $"SELECT {session.Quote(QueueSchema.QueueIdColumn)}, {session.Quote(QueueSchema.ObjectId)}, {session.Quote(QueueSchema.ObjectId + TypeMapping.TypeColumnSuffix)} " +
+                         $"FROM {session.DataTable(item.LogicalName)} WHERE {session.Quote(SystemAttributes.PrimaryIdName(item))} = {IdParameter}"))
+        {
+            cmd.AddParameter(IdParameter, DbType.Guid, itemId);
+            await using var rd = await cmd.ExecuteReaderAsync(ct);
+            if (!await rd.ReadAsync(ct)) throw XrmdFaultException.ObjectDoesNotExist(item.LogicalName, itemId);
+            queue = rd.IsDBNull(0) ? null : rd.GetGuid(0);
+            record = rd.IsDBNull(1) ? null : rd.GetGuid(1);
+            recordType = rd.IsDBNull(2) ? null : Convert.ToInt32(rd.GetValue(2), System.Globalization.CultureInfo.InvariantCulture);
+        }
+        if (queue is { } q) await DemandQueueReadableAsync(principals, q, session, ct);
+        if (record is { } r)
+        {
+            // Fail closed (final re-review N2): a record whose table does not resolve cannot be shown readable.
+            if (recordType is not { } code || store.GetEntityByObjectTypeCode(code) is not { } recordEntity)
+                throw XrmdFaultException.InvalidArgument(
+                    $"The record of queue item {itemId} has the type code {recordType?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "null"}, " +
+                    "which names no table: the item cannot be changed.");
+            await DemandRecordAsync(principals, recordEntity, r, AccessRights.ReadAccess, session, ct);
+        }
+        return (queue, record);
+    }
+
+    /// <summary>
+    /// The queue RouteTo moves an item to: the target queue, or the default queue (<c>queueid</c>) of the target user or team; null
+    /// when the target names none (another table, or a principal without a default queue), which the core operation refuses (400).
+    /// </summary>
+    /// <exception cref="XrmdFaultException">404 for a missing user or team.</exception>
+    private async Task<Guid?> RouteDestinationAsync(EntityReference target, DataSession session, CancellationToken ct)
+    {
+        if (target.LogicalName == QueueSchema.Queue) return target.Id;
+        if (target.LogicalName is not (SystemUser or Team)) return null;
+        var principal = await ReadRecordAsync(Definition(target.LogicalName), target.Id, [QueueSchema.QueueIdColumn], session, ct);
+        return principal.Lookups.GetValueOrDefault(QueueSchema.QueueIdColumn);
+    }
+
+    /// <summary>
+    /// Placing an item in a queue by a message (plan 4.1a, ruling R23: AddToQueue, RouteTo): Create Queue Item and the queue readable
+    /// (<see cref="DemandQueueReadableAsync"/>). Write on the queue record is not needed.
+    /// </summary>
+    /// <exception cref="XrmdFaultException">403 PrivilegeDenied or AccessDenied; 404 for a missing queue.</exception>
+    private async Task DemandQueuePlacementAsync(IReadOnlyList<SecurityProfile> principals, Guid queueId, DataSession session, CancellationToken ct)
+    {
+        DemandPrivilege(principals, AccessRights.CreateAccess, Definition(QueueSchema.QueueItem));
+        await DemandQueueReadableAsync(principals, queueId, session, ct);
+    }
+
+    /// <summary>
+    /// The queue <paramref name="queueId"/> readable by every principal, exactly as a query reads it (plan 4.1a, ruling R23): the read
+    /// predicate of <see cref="ReadSecurity"/> for <c>queue</c> (Read Queue at its depth, and the privacy: public, owned by the
+    /// principal or one of its teams, a member, or shared for Read; a System Administrator reads every queue) is compiled and run on
+    /// the row, so the guard and the queries share one definition of the rule.
+    /// </summary>
+    /// <exception cref="XrmdFaultException">403 PrivilegeDenied without Read Queue, AccessDenied when the queue is not readable; 404 for
+    /// a missing queue.</exception>
+    private async Task DemandQueueReadableAsync(IReadOnlyList<SecurityProfile> principals, Guid queueId, DataSession session, CancellationToken ct)
+    {
+        var queue = Definition(QueueSchema.Queue);
+        var key = SystemAttributes.PrimaryIdName(queue);
+        var security = new ReadSecurity(principals, await cache.GetBusinessUnitTreeAsync(ct), store, queryUserId: Guid.Empty);
+        var root = new EntityNode { EntityName = queue.LogicalName, Columns = { new ColumnNode(key) } };
+        root.Filter.Conditions.Add(new ConditionNode(null, key, Microsoft.Xrm.Sdk.Query.ConditionOperator.Equal, [queueId]));
+        var compiled = new SqlQueryCompiler(store, session.Dialect).Compile(new QueryModel { Root = root, Top = 1 },
+            new QueryContext(Guid.Empty, Guid.Empty, DateTime.UtcNow) { Security = security, Hierarchy = security });
+        await using (var cmd = session.Command(compiled.Sql))
+        {
+            cmd.AddParameters(compiled.Parameters);
+            await using var rd = await cmd.ExecuteReaderAsync(ct);
+            if (await rd.ReadAsync(ct)) return;
+        }
+        await ReadRecordAsync(queue, queueId, [], session, ct); // 404 for a missing queue
+        var denied = principals.FirstOrDefault(p => !p.IsSystemAdministrator) ?? principals[0];
+        throw XrmdFaultException.AccessDenied(denied.UserId, AccessRights.ReadAccess, queue.LogicalName, queueId);
     }
 
     private async Task AuthorizeAssignAsync(IReadOnlyList<SecurityProfile> principals, EntityReference target, EntityReference assignee,
@@ -781,14 +972,43 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
             return; // the core operation rejects it
         }
 
+        // Plan 4.1a (final re-review N1, ruling R24): pointing a queue item's lookup elsewhere is its Update, so it follows the R23
+        // rule of AuthorizeQueueItemUpdateAsync instead of Append/AppendTo (the core sets the lookup with a direct Update).
+        if (referencingEntity.LogicalName == QueueSchema.QueueItem)
+        {
+            await AuthorizeQueueItemRelinkAsync(principals, r, referencing, referenced, associate, session, ct);
+            return;
+        }
+
         foreach (var record in referencing)
             await DemandRecordAsync(principals, referencingEntity, record.Id, AccessRights.AppendAccess, session, ct);
         await DemandRecordAsync(principals, referencedEntity, referenced.Id, AccessRights.AppendToAccess, session, ct);
     }
 
     /// <summary>
+    /// A one-to-many Associate or Disassociate whose child is a <c>queueitem</c> (plan 4.1a, ruling R24): each item is worked
+    /// (<see cref="DemandWorkItemAsync"/> with Write: its current queue readable, Read on its current record); on Associate the new
+    /// parent must be readable as an Update would need it: a queue (<c>queueid</c>) readable, a record (<c>objectid</c>) readable,
+    /// and AppendTo on the parent of any other lookup. The single-active-item rule is kept by the core Update.
+    /// </summary>
+    /// <exception cref="XrmdFaultException">403 PrivilegeDenied or AccessDenied; 404 for a missing item, queue or record.</exception>
+    private async Task AuthorizeQueueItemRelinkAsync(IReadOnlyList<SecurityProfile> principals, OneToManyRelationshipMetadata relationship,
+        IReadOnlyList<EntityReference> items, EntityReference parent, bool associate, DataSession session, CancellationToken ct)
+    {
+        foreach (var item in items)
+            await DemandWorkItemAsync(principals, item.Id, AccessRights.WriteAccess, session, ct);
+        if (!associate) return; // clearing the lookup reaches no new parent
+        if (relationship.ReferencingAttribute == QueueSchema.QueueIdColumn)
+            await DemandQueueReadableAsync(principals, parent.Id, session, ct);
+        else if (relationship.ReferencingAttribute == QueueSchema.ObjectId)
+            await DemandRecordAsync(principals, Definition(parent.LogicalName), parent.Id, AccessRights.ReadAccess, session, ct);
+        else
+            await DemandRecordAsync(principals, Definition(parent.LogicalName), parent.Id, AccessRights.AppendToAccess, session, ct);
+    }
+
+    /// <summary>
     /// A many-to-many relationship (Associate and Disassociate alike): Append and AppendTo on the target, AppendTo on each
-    /// related record. Records of the wrong entities are left to the core operation's 400.
+    /// related record; for <c>queuemembership_association</c>, Append To on the queue(s) only. Records of the wrong entities are left to the core operation's 400.
     /// </summary>
     private async Task AuthorizeManyToManyAsync(IReadOnlyList<SecurityProfile> principals, ManyToManyRelationshipMetadata relationship,
         EntityReference target, EntityReferenceCollection related, DataSession session, CancellationToken ct)
@@ -799,6 +1019,15 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
         if (other is null || related.Any(e => e.LogicalName != other)
             || store.GetEntity(target.LogicalName) is not { } targetEntity || store.GetEntity(other) is not { } otherEntity)
             return; // the core operation rejects it
+
+        // Plan 4.1a (task 4): a queue's membership is the queue's own: Append To on the queue, whichever side names it, and nothing on
+        // the users (the same rule the AddPrincipalToQueue message of task 5 uses).
+        if (relationship.SchemaName == QueueSchema.MembershipRelationshipName)
+        {
+            foreach (var queue in target.LogicalName == QueueSchema.Queue ? [target] : related.ToList())
+                await DemandRecordAsync(principals, Definition(QueueSchema.Queue), queue.Id, AccessRights.AppendToAccess, session, ct);
+            return;
+        }
 
         await DemandRecordAsync(principals, targetEntity, target.Id, AccessRights.AppendAccess, session, ct);
         await DemandRecordAsync(principals, targetEntity, target.Id, AccessRights.AppendToAccess, session, ct);

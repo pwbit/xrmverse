@@ -97,6 +97,8 @@ export interface TableInfo {
   labels: Record<string, string>;
   /** `AttributeType` by attribute logical name (`Money`, `DateTime`…), when the server gives it: how a view aligns the column. */
   types?: Record<string, string>;
+  /** `IsValidForQueue`: the table's records may be put in a queue; undefined when the server gives none. */
+  isValidForQueue?: boolean;
 }
 
 interface Label {
@@ -127,8 +129,9 @@ export async function loadTable(client: XrmApi, entity: string, lcid: number): P
       PrimaryIdAttribute: string;
       SchemaName?: string | null;
       PrimaryNameAttribute?: string | null;
+      IsValidForQueue?: { Value?: boolean } | null;
       DisplayName?: AttributeRow['DisplayName'];
-    }>(`${key}?$select=LogicalName,EntitySetName,PrimaryIdAttribute,SchemaName,PrimaryNameAttribute,DisplayName`),
+    }>(`${key}?$select=LogicalName,EntitySetName,PrimaryIdAttribute,SchemaName,PrimaryNameAttribute,DisplayName,IsValidForQueue`),
     client.get<{ value: AttributeRow[] }>(`${key}/Attributes?$select=LogicalName,DisplayName,AttributeType`),
   ]);
   const labels: Record<string, string> = {};
@@ -145,6 +148,7 @@ export async function loadTable(client: XrmApi, entity: string, lcid: number): P
     schemaName: definition.SchemaName || undefined,
     ...(definition.PrimaryNameAttribute ? { primaryName: definition.PrimaryNameAttribute } : {}),
     ...(displayLabel(definition.DisplayName, lcid) ? { displayName: displayLabel(definition.DisplayName, lcid) } : {}),
+    ...(definition.IsValidForQueue ? { isValidForQueue: definition.IsValidForQueue.Value === true } : {}),
     labels,
     types,
   };

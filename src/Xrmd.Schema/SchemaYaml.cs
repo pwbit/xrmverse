@@ -44,7 +44,7 @@ public static partial class SchemaYaml
     private static readonly string[] DocumentKeys = ["publisher", "solution", "choices", "tables"];
     private static readonly string[] ChoiceKeys = ["name", "label", "description", "options"];
     private static readonly string[] OptionKeys = ["value", "label"];
-    private static readonly string[] TableKeys = ["name", "schemaName", "label", "pluralLabel", "description", "ownership", "tableType", "isActivity", "hasNotes", "hasActivities", "primaryName", "columns", "manyToMany"];
+    private static readonly string[] TableKeys = ["name", "schemaName", "label", "pluralLabel", "description", "ownership", "tableType", "isActivity", "hasNotes", "hasActivities", "isValidForQueue", "primaryName", "columns", "manyToMany"];
     private static readonly string[] PrimaryNameKeys = ["name", "schemaName", "label", "description", "maxLength", "autoNumberFormat"];
     private static readonly string[] ColumnKeys = ["name", "schemaName", "type", "label", "description", "maxLength", "autoNumberFormat", "precision", "choice", "options", "target", "maxSizeInKB", "canStoreFullImage", "primary", "calculated", "rollup", "formula"];
     private static readonly string[] ManyToManyKeys = ["name", "with"];
@@ -108,6 +108,7 @@ public static partial class SchemaYaml
         if (t.IsActivity) AddOptional(table, "isActivity", true);
         AddOptional(table, "hasNotes", t.HasNotes);
         AddOptional(table, "hasActivities", t.HasActivities);
+        AddOptional(table, "isValidForQueue", t.IsValidForQueue);
         var primary = new YamlMappingNode { { "name", Scalar(t.PrimaryName.Name) } };
         primary.Style = MappingStyle.Flow;
         AddOptional(primary, "schemaName", t.PrimaryName.SchemaName);
@@ -311,6 +312,7 @@ public static partial class SchemaYaml
             table.IsActivity = OptionalBool(map, "isActivity") ?? false;
             table.HasNotes = OptionalBool(map, "hasNotes");
             table.HasActivities = OptionalBool(map, "hasActivities");
+            table.IsValidForQueue = OptionalBool(map, "isValidForQueue"); // plan 4.1a
             if (table.IsActivity)
             {
                 // The rules of a custom activity (plan 2.11 A4), refused here rather than by the server half-way through an apply.

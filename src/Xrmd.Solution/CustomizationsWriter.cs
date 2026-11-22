@@ -414,10 +414,17 @@ public static class CustomizationsWriter
             // (tests/fixtures/solutions/RealExports); False is written where the file had the element, or for a table created in
             // xrmverse (the defaults have its place).
             Flag("HasRelatedNotes", entity.HasNotes == true, keptInfo),
-            Flag("HasRelatedActivities", entity.HasActivities == true, keptInfo));
+            Flag("HasRelatedActivities", entity.HasActivities == true, keptInfo),
+            // Plan 4.1a: queues from the metadata, written as the notes flag is (only when on, or where the file had it; its place
+            // and its 1/0 are from memory, not from a real export: plan 4.1a checklist).
+            Flag("IsValidForQueue", entity.IsValidForQueue?.Value == true, keptInfo, Bit));
         // A flag switched on that the file did not have goes last, where a real export writes it (notes, then activities).
         var placed = keptInfo;
-        foreach (var (flag, on) in new[] { ("HasRelatedNotes", entity.HasNotes == true), ("HasRelatedActivities", entity.HasActivities == true) })
+        foreach (var (flag, on) in new[]
+                 {
+                     ("HasRelatedNotes", entity.HasNotes == true), ("HasRelatedActivities", entity.HasActivities == true),
+                     ("IsValidForQueue", entity.IsValidForQueue?.Value == true),
+                 })
             if (on && placed is not null && placed.Element(flag) is null) placed = UnmodelledXml.WithMarkerAtEnd(placed, flag);
         var info = UnmodelledXml.Merge(written, placed, UnmodelledXml.EntityShape,
             $"entity '{entity.LogicalName}'");
@@ -465,8 +472,8 @@ public static class CustomizationsWriter
     /// The table setting <paramref name="name"/> (<c>True</c>/<c>False</c>): written when on, and when off only where
     /// <paramref name="kept"/> has its place (null: nothing kept, the defaults have it).
     /// </summary>
-    private static XElement? Flag(string name, bool on, XElement? kept) =>
-        on || kept is null || kept.Element(name) is not null ? new XElement(name, on ? "True" : "False") : null;
+    private static XElement? Flag(string name, bool on, XElement? kept, Func<bool, string>? text = null) =>
+        on || kept is null || kept.Element(name) is not null ? new XElement(name, text?.Invoke(on) ?? (on ? "True" : "False")) : null;
 
     /// <summary>
     /// True for a companion of a file or image column of <paramref name="attributes"/> (<see cref="FileColumns.Companions"/>):

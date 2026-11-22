@@ -130,6 +130,13 @@
       "LogicalName": "systemmanaged",
       "SchemaName": "SystemManaged",
       "DefaultValue": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "queueid",
+      "SchemaName": "QueueId",
+      "DisplayName": {"LocalizedLabels": [{"Label": "Default Queue", "LanguageCode": 1033}], "UserLocalizedLabel": {"Label": "Default Queue", "LanguageCode": 1033}},
+      "Targets": ["queue"]
     }
   ],
   "ManyToOneRelationships": [
@@ -149,6 +156,14 @@
         "Archive": "NoCascade",
         "RollupView": "NoCascade"
       }
+    },
+    {
+      "SchemaName": "queue_team",
+      "ReferencedEntity": "queue",
+      "ReferencingEntity": "team",
+      "ReferencingAttribute": "queueid",
+      "ReferencingEntityNavigationPropertyName": "queueid",
+      "CascadeConfiguration": {"Assign": "NoCascade", "Delete": "NoCascade", "Merge": "NoCascade", "Reparent": "NoCascade", "Share": "NoCascade", "Unshare": "NoCascade", "Archive": "NoCascade", "RollupView": "NoCascade"}
     }
   ]
 }

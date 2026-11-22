@@ -58,6 +58,8 @@ public sealed class FilterNode
     public List<ParentRecordsNode> Parents { get; } = [];
     /// <summary>Records owned by one of a set of principals; combined with the conditions by <see cref="Operator"/>.</summary>
     public List<OwnedRecordsNode> Owned { get; } = [];
+    /// <summary>Queues a user is a member of; combined with the conditions by <see cref="Operator"/>.</summary>
+    public List<QueueMemberNode> QueueMembers { get; } = [];
     /// <summary>Records whose <c>versionnumber</c> lies in a range; combined with the conditions by <see cref="Operator"/>.</summary>
     public List<VersionRangeNode> Versions { get; } = [];
     /// <summary>Conditions on a value inside a JSON column; combined with the conditions by <see cref="Operator"/>.</summary>
@@ -99,6 +101,13 @@ public sealed record VersionRangeNode(long AfterExclusive, long BeforeExclusive)
 /// plan depends on the number of principals. Empty: no record. Produced only by the read security, never by a query front end.
 /// </summary>
 public sealed record OwnedRecordsNode(IReadOnlyCollection<Guid> Principals);
+
+/// <summary>
+/// The <c>queue</c> rows <paramref name="UserId"/> is a direct member of (a <c>queuemembership</c> row; a team's members reach the
+/// queues the team owns through the owner condition, plan 4.1a ruling R9). Produced only by the read security, never by a query
+/// front end.
+/// </summary>
+public sealed record QueueMemberNode(Guid UserId);
 
 /// <summary>
 /// The records whose polymorphic lookup <paramref name="LookupAttribute"/> (with its <c>&lt;name&gt;type</c> column) points to a

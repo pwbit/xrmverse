@@ -72,7 +72,7 @@ public static class UnmodelledXml
     /// <summary>
     /// A copy of <paramref name="kept"/> with a marker of <paramref name="name"/> as its last child: the place of a modelled child
     /// the file did not have and the export now writes (plan 2.11: <c>HasRelatedNotes</c> and <c>HasRelatedActivities</c> come
-    /// last in a real export, written only when True).
+    /// last in a real export, written only when True; plan 4.1a: <c>IsValidForQueue</c> after them, from memory).
     /// </summary>
     public static XElement WithMarkerAtEnd(XElement kept, string name)
     {
@@ -138,7 +138,7 @@ public static class UnmodelledXml
     public static UnmodelledShape EntityShape { get; } = new(
         ["LocalizedNames", "LocalizedCollectionNames", "Descriptions", "attributes", "EntitySetName", "OwnershipTypeMask", "IsActivity",
             "ActivityTypeMask", "IsAuditEnabled", "CanModifyAuditSettings", "AutoCreateAccessTeams", "ChangeTrackingEnabled",
-            "CanChangeTrackingBeEnabled", "HasRelatedNotes", "HasRelatedActivities", "IsDuplicateCheckSupported"],
+            "CanChangeTrackingBeEnabled", "HasRelatedNotes", "HasRelatedActivities", "IsDuplicateCheckSupported", "IsValidForQueue"],
         ["Name"],
         Defaults: EntityDefaults);
 
@@ -244,7 +244,7 @@ public static class UnmodelledXml
         ("CanModifyAdditionalSettings", "1"), ("CanEnableSyncToExternalSearchIndex", "1"), ("EnforceStateTransitions", "0"),
         ("CanChangeHierarchicalRelationship", "1"), ("EntityHelpUrlEnabled", "0"), ("ChangeTrackingEnabled", null),
         ("CanChangeTrackingBeEnabled", null), ("IsEnabledForExternalChannels", "0"), ("IsMSTeamsIntegrationEnabled", "0"),
-        ("IsSolutionAware", "0"), ("HasRelatedNotes", null), ("HasRelatedActivities", null));
+        ("IsSolutionAware", "0"), ("HasRelatedNotes", null), ("HasRelatedActivities", null), ("IsValidForQueue", null));
 
     /// <summary>
     /// The defaults of an attribute created with its table or through the SDK (from memory of real exports, not verified):

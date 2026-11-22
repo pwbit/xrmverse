@@ -948,6 +948,95 @@ public sealed class SolutionImportTests(XrmdFixture fx) : IAsyncLifetime
         (await ImportJobAsync(jobId)).Data.Should().Contain("status reason 2 has the state 0 in the file and 1 in xrmverse");
     }
 
+    // ---- plan 4.1a: IsValidForQueue and the queue tables --------------------------------------------------------------
+
+    [Fact]
+    public async Task Import_ZeroOnEnabledTable_KeepsItOn_WithWarning()
+    {
+        await ImportAsync(Admin, SolutionFixtureZip.Build(c => EntityInfo(c, "xv_Project").Add(new XElement("IsValidForQueue", "1"))));
+        Store.GetEntity("xv_project")!.IsValidForQueue!.Value.Should().BeTrue();
+        ((LookupAttributeMetadata)Store.GetEntity("queueitem")!.Attributes.Single(a => a.LogicalName == "objectid")).Targets.Should().Contain("xv_project");
+        Store.GetRelationship("xv_project_QueueItems").Should().NotBeNull();
+
+        var jobId = Guid.NewGuid();
+        await ImportAsync(Admin, SolutionFixtureZip.Build(c => EntityInfo(c, "xv_Project").Add(new XElement("IsValidForQueue", "0"))), jobId);
+
+        Store.GetEntity("xv_project")!.IsValidForQueue!.Value.Should().BeTrue("a table stays enabled for queues");
+        (await ImportJobAsync(jobId)).Data.Should()
+            .Contain("IsValidForQueue of 'xv_project' is on in xrmverse and cannot be switched off: the file's 0 is not applied.");
+    }
+
+    /// <summary>
+    /// Decision 4 (plan 4.1a): the contact center extends the platform's <c>queue</c> rather than a table of its own, so a solution
+    /// can add a column, a form and a view to it, and they round-trip. The column takes the fixture publisher's prefix.
+    /// </summary>
+    [Fact]
+    public async Task Queue_AcceptsCustomColumnsFormsAndViews()
+    {
+        var formId = new Guid("6b1c3f4e-1a2b-4c3d-8e9f-0a1b2c3d4e91");
+        var viewId = new Guid("6b1c3f4e-1a2b-4c3d-8e9f-0a1b2c3d4e92");
+        byte[] Build(Action<XElement>? alter = null) => SolutionFixtureZip.Build(c =>
+        {
+            var entities = c.Root!.Element("Entities")!;
+            var project = entities.Elements("Entity").Single(e => e.Element("Name")!.Value == "xv_Project");
+            var xml = project.ToString()
+                .Replace("6b1c3f4e-1a2b-4c3d-8e9f-0a1b2c3d4e32", formId.ToString("D"))
+                .Replace("6b1c3f4e-1a2b-4c3d-8e9f-0a1b2c3d4e31", viewId.ToString("D"))
+                .Replace("xv_projectid", "queueid").Replace("xv_project", "queue").Replace("xv_Project", "Queue")
+                .Replace("\"xv_name\"", "\"name\"").Replace(">xv_name<", ">name<");
+            var queue = XElement.Parse(xml);
+            queue.Element("Name")!.Value = "Queue";
+            var info = queue.Element("EntityInfo")!.Element("entity")!;
+            info.SetAttributeValue("Name", "Queue");
+            info.Element("EntitySetName")!.Value = "queues";
+            // Only the new column: the queue's own columns are the platform's.
+            var attributes = info.Element("attributes")!;
+            var column = attributes.Elements("attribute").Single(a => a.Element("LogicalName")!.Value == "xv_isactive");
+            attributes.Elements("attribute").Where(a => a != column).Remove();
+            column.SetAttributeValue("PhysicalName", "xv_IsRoutingQueue");
+            column.Element("Name")!.Value = "xv_isroutingqueue";
+            column.Element("LogicalName")!.Value = "xv_isroutingqueue";
+            if (column.Element("optionset") is { } optionSet) optionSet.SetAttributeValue("Name", "queue_xv_isroutingqueue");
+            foreach (var library in queue.Descendants("formLibraries").ToList()) library.Remove();
+            alter?.Invoke(queue);
+            entities.Add(queue);
+        });
+        try
+        {
+            var jobId = Guid.NewGuid();
+            await ImportAsync(Admin, Build(), jobId);
+
+            Store.GetEntity("queue")!.Attributes.Should().Contain(a => a.LogicalName == "xv_isroutingqueue");
+            (await Admin.RetrieveAsync("systemform", formId, new ColumnSet("objecttypecode"))).GetAttributeValue<string>("objecttypecode").Should().Be("queue");
+            (await Admin.RetrieveAsync("savedquery", viewId, new ColumnSet("returnedtypecode"))).GetAttributeValue<string>("returnedtypecode").Should().Be("queue");
+            var queueId = await Admin.CreateAsync(new Entity("queue") { ["name"] = "Routing", ["xv_isroutingqueue"] = true });
+            (await Admin.RetrieveAsync("queue", queueId, new ColumnSet("xv_isroutingqueue"))).GetAttributeValue<bool>("xv_isroutingqueue").Should().BeTrue();
+            await Admin.DeleteAsync("queue", queueId);
+
+            // Round trip: the export carries the column, the form and the view, and a re-import of it changes nothing.
+            var exported = ((ExportSolutionResponse)await Admin.ExecuteAsync(new ExportSolutionRequest { SolutionName = Fixture })).ExportSolutionFile;
+            using (var archive = new System.IO.Compression.ZipArchive(new MemoryStream(exported)))
+            {
+                await using var stream = archive.GetEntry("customizations.xml")!.Open();
+                var customizations = XDocument.Load(stream);
+                var queue = customizations.Root!.Element("Entities")!.Elements("Entity").Single(e => e.Element("Name")!.Value == "Queue");
+                queue.Element("EntityInfo")!.Element("entity")!.Element("attributes")!.Elements("attribute").Select(a => a.Element("LogicalName")!.Value).Should().Contain("xv_isroutingqueue");
+                queue.Descendants("formid").Select(f => Guid.Parse(f.Value)).Should().Contain(formId);
+                queue.Descendants("savedqueryid").Select(f => Guid.Parse(f.Value)).Should().Contain(viewId);
+            }
+            await ImportAsync(Admin, exported);
+            Store.GetEntity("queue")!.Attributes.Should().Contain(a => a.LogicalName == "xv_isroutingqueue");
+        }
+        finally
+        {
+            foreach (var (table, id) in new[] { ("systemform", formId), ("savedquery", viewId) })
+                if ((await Admin.RetrieveMultipleAsync(new QueryExpression(table) { Criteria = { Conditions = { new ConditionExpression(table + "id", ConditionOperator.Equal, id) } } })).Entities.Count > 0)
+                    await Admin.DeleteAsync(table, id);
+            if (Store.GetEntity("queue")!.Attributes.Any(a => a.LogicalName == "xv_isroutingqueue"))
+                await Admin.ExecuteAsync(new Microsoft.Xrm.Sdk.Messages.DeleteAttributeRequest { EntityLogicalName = "queue", LogicalName = "xv_isroutingqueue" });
+        }
+    }
+
     // ---- plan 2.11: activity tables and the HasActivities/HasNotes flags (ruling A19) ---------------------------------------
 
     [Fact]

@@ -20,6 +20,7 @@ public static class WebApiEndpoints
         parent.MapAccessEndpoints();
         parent.MapExecuteWorkflowEndpoints();
         parent.MapEmailEndpoints();
+        parent.MapQueueEndpoints();
         parent.MapDuplicateDetectionEndpoints();
         parent.MapRollupEndpoints();
         // The bulk actions of elastic tables: {set}/Microsoft.Dynamics.CRM.{CreateMultiple,…}, literal segments above the custom APIs.

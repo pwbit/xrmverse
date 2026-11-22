@@ -106,6 +106,8 @@ export interface EntityMeta {
   hasNotes?: boolean;
   /** `HasActivities` (one-way): absent when the server did not return it. */
   hasActivities?: boolean;
+  /** `IsValidForQueue` (plan 4.1a, one-way): absent when the server did not return it. */
+  isValidForQueue?: boolean;
   /** `IsDuplicateDetectionEnabled` (plan 2.15): absent when the server did not return it. */
   duplicateDetection?: AuditSetting;
 }
@@ -200,6 +202,7 @@ export interface RawEntity {
   IsActivity?: boolean | null;
   HasNotes?: boolean | null;
   HasActivities?: boolean | null;
+  IsValidForQueue?: { Value?: boolean } | null;
   IsDuplicateDetectionEnabled?: { Value?: boolean; CanBeChanged?: boolean } | null;
 }
 
@@ -333,5 +336,6 @@ export function parseEntity(raw: RawEntity): EntityMeta {
     isActivity: raw.IsActivity ?? undefined,
     hasNotes: raw.HasNotes ?? undefined,
     hasActivities: raw.HasActivities ?? undefined,
+    isValidForQueue: raw.IsValidForQueue == null ? undefined : raw.IsValidForQueue.Value === true,
   };
 }

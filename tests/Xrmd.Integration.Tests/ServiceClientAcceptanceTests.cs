@@ -2010,4 +2010,105 @@ public sealed class ServiceClientAcceptanceTests(ServiceClientFixture fx, ITestO
             .Select(r => (r!["xrmv_code"]!.GetValue<string>(), r["xrmv_total"]!.GetValue<decimal>()))
             .Should().Equal(("A1", 30m), ("B2", 100m));
     }
+
+    /// <summary>
+    /// Plan 4.1a, task 8: the queue round trip through the real <see cref="ServiceClient"/>. An administrator puts an email about an
+    /// account in a private team queue; a second user, holding only Basic User and a membership of that queue (ruling R23), picks it,
+    /// releases it and routes it to a public queue, and is cut off from it when it is routed to a private queue that user does not
+    /// belong to; <c>RetrieveUserQueues</c> with and without public queues.
+    /// </summary>
+    [Fact]
+    public async Task ServiceClient_QueueRoundTrip()
+    {
+        using var admin = Connect();
+        admin.IsReady.Should().BeTrue(admin.LastError);
+        await fx.App.Services.GetRequiredService<SdkMessageCatalog>().EnsureAsync(default);
+        var tag = "q" + Guid.NewGuid().ToString("N")[..8];
+        var rootBusinessUnit = ((WhoAmIResponse)admin.Execute(new WhoAmIRequest())).BusinessUnitId;
+        var oid = Guid.NewGuid();
+        var user = admin.Create(new Entity("systemuser")
+        {
+            ["fullname"] = $"Queue Worker {tag}", ["domainname"] = $"qw-{tag}@example.test", ["azureactivedirectoryobjectid"] = oid,
+            ["businessunitid"] = new EntityReference("businessunit", rootBusinessUnit),
+        });
+        var created = new List<(string Table, Guid Id)>();
+        try
+        {
+            // Basic User only: Read Queue, the queue item privileges, and the activities the user owns.
+            admin.Associate("systemuser", user, new Relationship("systemuserroles_association"),
+                new EntityReferenceCollection { new EntityReference("role", Xrmd.Security.StandardRoles.BasicUser) });
+
+            Guid Make(string table, Entity e) { var id = admin.Create(e); created.Add((table, id)); return id; }
+            var account = Make("account", new Entity("account") { ["name"] = $"{tag} Fabrikam Example" });
+            var email = Make("email", new Entity("email")
+            {
+                ["subject"] = $"{tag} Where is my order", ["regardingobjectid"] = new EntityReference("account", account),
+                ["ownerid"] = new EntityReference("systemuser", user),
+            });
+            var teamQueue = Make("queue", new Entity("queue") { ["name"] = $"{tag} Support team", ["queueviewtype"] = new OptionSetValue(1), ["queuetypecode"] = new OptionSetValue(1) });
+            var publicQueue = Make("queue", new Entity("queue") { ["name"] = $"{tag} Support", ["queueviewtype"] = new OptionSetValue(0), ["queuetypecode"] = new OptionSetValue(1) });
+            var privateQueue = Make("queue", new Entity("queue") { ["name"] = $"{tag} Escalations", ["queueviewtype"] = new OptionSetValue(1), ["queuetypecode"] = new OptionSetValue(1) });
+            admin.Execute(new AddPrincipalToQueueRequest { QueueId = teamQueue, Principal = new Entity("systemuser", user) });
+
+            // Add: one active item, no worker.
+            var add = (AddToQueueResponse)admin.Execute(new AddToQueueRequest
+            {
+                Target = new EntityReference("email", email), DestinationQueueId = teamQueue,
+            });
+            var item = add.QueueItemId;
+            Entity Item() => admin.Retrieve("queueitem", item, new ColumnSet("queueid", "workerid", "statecode"));
+            Item().GetAttributeValue<EntityReference>("queueid").Id.Should().Be(teamQueue);
+            Item().GetAttributeValue<EntityReference>("workerid").Should().BeNull();
+            Item().GetAttributeValue<OptionSetValue>("statecode").Value.Should().Be(0);
+
+            // Pick: the member takes the item; release hands it back; route moves it on to the public queue.
+            using var worker = ConnectAs(oid);
+            worker.RetrieveMultiple(new QueryExpression("queueitem") { ColumnSet = new ColumnSet("title") })
+                .Entities.Select(e => e.Id).Should().Contain(item);
+            worker.Execute(new PickFromQueueRequest { QueueItemId = item, WorkerId = user });
+            Item().GetAttributeValue<EntityReference>("workerid").Id.Should().Be(user);
+            worker.Execute(new ReleaseToQueueRequest { QueueItemId = item });
+            Item().GetAttributeValue<EntityReference>("workerid").Should().BeNull();
+            worker.Execute(new RouteToRequest { Target = new EntityReference("queue", publicQueue), QueueItemId = item });
+            Item().GetAttributeValue<EntityReference>("queueid").Id.Should().Be(publicQueue);
+
+            // RetrieveUserQueues: the member queue always, the public queue only when asked.
+            Guid[] Queues(bool includePublic) => ((RetrieveUserQueuesResponse)admin.Execute(new RetrieveUserQueuesRequest { UserId = user, IncludePublic = includePublic }))
+                .EntityCollection.Entities.Select(e => e.Id).ToArray();
+            Queues(true).Should().Contain([publicQueue, teamQueue]).And.NotContain(privateQueue);
+            Queues(false).Should().Contain(teamQueue).And.NotContain(publicQueue).And.NotContain(privateQueue);
+
+            // Route to a private queue the user does not belong to: the item leaves that user's view, and the user cannot work it.
+            admin.Execute(new RouteToRequest { Target = new EntityReference("queue", privateQueue), QueueItemId = item });
+            Item().GetAttributeValue<EntityReference>("queueid").Id.Should().Be(privateQueue);
+            worker.RetrieveMultiple(new QueryExpression("queueitem") { ColumnSet = new ColumnSet("title") })
+                .Entities.Select(e => e.Id).Should().NotContain(item);
+            worker.RetrieveMultiple(new QueryExpression("queue") { ColumnSet = new ColumnSet("name") })
+                .Entities.Select(e => e.Id).Should().NotContain(privateQueue);
+            FluentActions.Invoking(() => worker.Execute(new PickFromQueueRequest { QueueItemId = item, WorkerId = user }))
+                .Should().Throw<FaultException<OrganizationServiceFault>>();
+
+            admin.Execute(new RemoveFromQueueRequest { QueueItemId = item });
+        }
+        finally
+        {
+            foreach (var (table, id) in Enumerable.Reverse(created))
+                try
+                {
+                    admin.Delete(table, id);
+                }
+                catch (FaultException<OrganizationServiceFault> ex)
+                {
+                    output.WriteLine($"Cleanup: {table} {id} was not deleted: {ex.Message}");
+                }
+            try
+            {
+                admin.Update(new Entity("systemuser", user) { ["isdisabled"] = true });
+            }
+            catch (FaultException<OrganizationServiceFault> ex)
+            {
+                output.WriteLine($"Cleanup: systemuser {user} was not disabled: {ex.Message}");
+            }
+        }
+    }
 }

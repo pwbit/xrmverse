@@ -814,12 +814,24 @@ public sealed class PipelineExecutor(IPipelineCore core, StepRegistry registry, 
     public const string ExecuteWorkflowMessage = "ExecuteWorkflow";
 
     /// <summary>The primary entity of a message: from <c>Targets</c> (a bulk message), <c>Target</c> (entity or reference), <c>EntityName</c> (RetrieveEntityChanges),
-    /// <c>EmailId</c> (SendEmail), <c>TransactionCurrencyId</c> (RetrieveExchangeRate) or <c>Query</c>.</summary>
+    /// <c>EmailId</c> (SendEmail), <c>TransactionCurrencyId</c> (RetrieveExchangeRate), <c>QueueItemId</c> (RouteTo, RemoveFromQueue,
+    /// PickFromQueue, ReleaseToQueue), <c>QueueId</c> (AddPrincipalToQueue), <c>UserId</c> (RetrieveUserQueues) or <c>Query</c>.</summary>
     private static (string? Name, Guid Id) PrimaryEntity(OrganizationRequest request)
     {
         var parameters = request.Parameters;
         // A bulk message (#76): the table of Targets, no id.
         if (BulkTargets.MessageOf(request.RequestName) is not null) return (BulkTargets.TableNameOf(request), Guid.Empty);
+        // Plan 4.1a: RouteTo and RemoveFromQueue act on a queue item (RouteTo's Target is where it goes), AddPrincipalToQueue on a queue.
+        if (string.Equals(request.RequestName, QueueSchema.RouteTo, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(request.RequestName, QueueSchema.RemoveFromQueue, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(request.RequestName, QueueSchema.PickFromQueue, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(request.RequestName, QueueSchema.ReleaseToQueue, StringComparison.OrdinalIgnoreCase))
+            return (QueueSchema.QueueItem, parameters.TryGetValue("QueueItemId", out var item) && item is Guid itemId ? itemId : Guid.Empty);
+        if (string.Equals(request.RequestName, QueueSchema.AddPrincipalToQueue, StringComparison.OrdinalIgnoreCase))
+            return (QueueSchema.Queue, parameters.TryGetValue("QueueId", out var queue) && queue is Guid queueId ? queueId : Guid.Empty);
+        // RetrieveUserQueues: the user whose queues are read (the Web API binds it to systemuser; from memory for the plug-in context).
+        if (string.Equals(request.RequestName, QueueSchema.RetrieveUserQueues, StringComparison.OrdinalIgnoreCase))
+            return ("systemuser", parameters.TryGetValue("UserId", out var user) && user is Guid userId ? userId : Guid.Empty);
         if (parameters.TryGetValue(Target, out var target))
         {
             switch (target)

@@ -404,6 +404,9 @@ public sealed class PipelineMessagesTests(XrmdFixture fx) : IAsyncLifetime
             "CheckPromoteEmail", "BackgroundSendEmail", "SendEmailFromTemplate", "SendTemplate", "InstantiateTemplate", "GetTrackingTokenEmail",
             "AddRecurrence", "Rollup", "Restore", "AppendRelatedParty", "InitializeAnnotationBlocksUpload", "InitializeAnnotationBlocksDownload"]);
         EmailMessages.Refused.Should().NotContain(EmailMessages.SendEmail);
+        // Plan 4.1a: every queue message is implemented (tasks 5 and 6), none is refused.
+        EmailMessages.Refused.Should().NotContain(QueueSchema.Messages);
+        EmailMessages.Refused.Should().NotContain(["PickFromQueue", "ReleaseToQueue", "RetrieveUserQueues"]);
         foreach (var name in EmailMessages.Refused)
         {
             // Even when an organization holds an sdkmessage row of that name, the message stays refused.

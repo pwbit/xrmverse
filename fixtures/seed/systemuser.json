@@ -14,7 +14,14 @@
     { "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata", "LogicalName": "businessunitid", "SchemaName": "BusinessUnitId", "Targets": ["businessunit"] },
     { "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata", "LogicalName": "isdisabled", "SchemaName": "IsDisabled" },
     { "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata", "LogicalName": "parentsystemuserid", "SchemaName": "ParentSystemUserId", "Targets": ["systemuser"] },
-    { "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata", "LogicalName": "internalemailaddress", "SchemaName": "InternalEMailAddress", "MaxLength": 100, "Format": "Email" }
+    { "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata", "LogicalName": "internalemailaddress", "SchemaName": "InternalEMailAddress", "MaxLength": 100, "Format": "Email" },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "queueid",
+      "SchemaName": "QueueId",
+      "DisplayName": {"LocalizedLabels": [{"Label": "Default Queue", "LanguageCode": 1033}], "UserLocalizedLabel": {"Label": "Default Queue", "LanguageCode": 1033}},
+      "Targets": ["queue"]
+    }
   ],
   "ManyToOneRelationships": [
     {
@@ -34,6 +41,14 @@
         "Archive": "NoCascade",
         "RollupView": "NoCascade"
       }
+    },
+    {
+      "SchemaName": "queue_system_user",
+      "ReferencedEntity": "queue",
+      "ReferencingEntity": "systemuser",
+      "ReferencingAttribute": "queueid",
+      "ReferencingEntityNavigationPropertyName": "queueid",
+      "CascadeConfiguration": {"Assign": "NoCascade", "Delete": "NoCascade", "Merge": "NoCascade", "Reparent": "NoCascade", "Share": "NoCascade", "Unshare": "NoCascade", "Archive": "NoCascade", "RollupView": "NoCascade"}
     }
   ]
 }

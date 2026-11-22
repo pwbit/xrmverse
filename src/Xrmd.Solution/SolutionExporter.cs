@@ -556,6 +556,7 @@ public sealed class SolutionExporter(IMetadataStore store, IDbConnectionFactory 
                 AutoCreateAccessTeams = e.Entity.AutoCreateAccessTeams == true,
                 ChangeTrackingEnabled = e.Entity.ChangeTrackingEnabled == true,
                 IsDuplicateDetectionEnabled = new BooleanManagedProperty(e.Entity.IsDuplicateDetectionEnabled?.Value == true),
+                IsValidForQueue = new BooleanManagedProperty(e.Entity.IsValidForQueue?.Value == true),
                 CanChangeTrackingBeEnabled = new BooleanManagedProperty(ChangeTrackingSchema.CanBeEnabled(e.Entity)),
             };
             SdkProperty.Set(copy, nameof(EntityMetadata.PrimaryIdAttribute), e.Entity.PrimaryIdAttribute);

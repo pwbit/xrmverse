@@ -43,6 +43,8 @@ Behaviour that is wrong today and will be fixed.
 | Managed processes can be changed through the authoring API (#310) | `POST /authoring/workflows/apply` (and so `xrmd workflow apply` and the workflow studio) does not refuse a process that belongs to a managed solution, while Dataverse does not let a managed component be changed in place. The studio only shows a **Managed** badge. | To be fixed |
 | Lookup values in a loaded view filter (#261) | In the web admin's view designer, a lookup condition of a saved view shows the record's id instead of its name; a record picked in the designer shows its name. The filter itself is right. | To be fixed |
 | Deleting a file while the record is updated | `DeleteFile` on a file or image column and an Update that clears the same column at the same moment can deadlock: one request fails with 500 `0x80044150` and can be retried. On SQL Server and PostgreSQL alike. | To be fixed |
+| Queue counters | `queue.numberofitems` and `queue.numberofmembers` are not maintained. | To be fixed |
+| Deleting a queue while an item is added | Deleting a queue at the moment an item is being added to it can remove that just-added item. | To be fixed |
 | `xrmd envvar list` with long values (#177) | Long JSON values make the table output hard to read; use `--output json`. | To be fixed |
 
 ## Limitations
@@ -119,7 +121,9 @@ Features that are missing or partial today. Each one fails explicitly where it i
 | `AsynchronousStepPrimaryName` image (#87) | Asynchronous plug-in and webhook steps receive only the images registered on the step, not the automatic image Dataverse adds. | Not scheduled |
 | Classic workflows | XAML is run by xrmverse's own interpreter: steps outside the designer's catalog fail explicitly; no workflow log, no Pause/Resume; business rules with Entity scope only. See [Classic workflows](workflows.md#known-limits). | Stays for the most part |
 | Workflow studio | No concurrent edit detection (the last save wins); comments, key order and layout are kept only during the editing session, because the server stores XAML only; a process the YAML cannot represent opens read-only; no business process flows, dialogs or form-scope business rules. See [Workflow studio](workflow-studio.md#known-limits). | Not scheduled |
-| Email sending | `SendEmail` changes the email's state but does not send it; there is no mailbox, server-side sync or queue. See [Activities and notes](activities.md#known-limits). | Planned (item 4.1) |
+| Email sending | `SendEmail` changes the email's state but does not send it; there is no mailbox or server-side sync. Queues exist (item 4.1a); sending and receiving email are planned. See [Activities and notes](activities.md#known-limits). | Planned (items 4.1b and 4.1c) |
+| Queue privilege `prvPickFromQueue` | The message privilege is not modelled. Pick, Release, Route, Remove and the Update or Delete of a queue item need the queue item privilege, the item's queue readable (public, owned, a member, or shared) and Read on its record instead; no Write on the queue itself. See [Email and queues](email-and-queues.md#security-of-the-messages). | Stays until verified against Dataverse |
+| No optimistic concurrency on queue items | Queue items have no ETag or `If-Match` check; the last writer wins on a plain Update. See [Email and queues](email-and-queues.md#known-limits). | Not scheduled |
 | SharePoint document integration | Not available. | Planned (item 4.2) |
 | Microsoft SDK in every component | The Web API, web admin, MCP and CLI still need the Microsoft SDK that you install yourself. See [Installing the Microsoft SDK](microsoft-sdk.md). | Planned (item S.2) |
 | In-process plug-ins without the Microsoft SDK | Plug-ins that run inside the transaction must be built against the Microsoft SDK; without it, only webhooks and workflows are available. | Planned (item S.4) |

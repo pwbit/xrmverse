@@ -391,6 +391,8 @@ public static class CustomizationsReader
                     HasActivities = Bool(info, "HasRelatedActivities"),
                     // Duplicate detection (plan 2.15, ruling D18): null when the file has no element.
                     IsDuplicateDetectionEnabled = Bool(info, "IsDuplicateCheckSupported") is { } duplicates ? new BooleanManagedProperty(duplicates) : null,
+                    // Queues (plan 4.1a): null when the file has no element (an absent one is false, as the notes flag).
+                    IsValidForQueue = Bool(info, "IsValidForQueue") is { } queues ? new BooleanManagedProperty(queues) : null,
                 };
                 if (metadata.IsActivity == true) metadata.ActivityTypeMask = Int(info, "ActivityTypeMask");
                 // Auditing: the table's setting and whether it can change (a table without them gets the defaults of a created one).
@@ -1000,13 +1002,13 @@ public static class CustomizationsReader
         }
 
         /// <summary>
-        /// True for a relationship of the activity model (plan 2.11): on <c>annotation.objectid</c>, <c>activityparty</c>, or the
+        /// True for a relationship of the activity model (plan 2.11): on <c>annotation.objectid</c>, <c>queueitem.objectid</c> (plan 4.1a), <c>activityparty</c>, or the
         /// <c>regardingobjectid</c> of the pointer, a standard activity or an activity table of the file. The <c>regardingobjectid</c>
         /// of another platform table (<c>SyncError</c>, ...) is not one.
         /// </summary>
         private bool IsActivityModelLink(string referencing, string attribute) =>
             ActivitySchema.IsManagedLookup(referencing, attribute)
-            && (referencing is ActivitySchema.Annotation or ActivitySchema.Party or ActivitySchema.Pointer
+            && (referencing is ActivitySchema.Annotation or ActivitySchema.Party or ActivitySchema.Pointer or QueueSchema.QueueItem
                 || ActivitySchema.StandardActivities.Contains(referencing)
                 || Entities.Any(e => e.LogicalName == referencing && e.IsActivity == true));
 

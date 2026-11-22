@@ -32,6 +32,7 @@ function props(
     canCreate?: boolean;
     creating?: boolean;
     ownership?: string;
+    queue?: boolean;
     dirty?: boolean;
     busy?: boolean;
     readOnly?: boolean;
@@ -41,7 +42,7 @@ function props(
 ): CommandBarProps {
   const withState = over.statecode !== undefined;
   const ctx = contextOf([], over.creating ? undefined : withState ? { statecode: over.statecode } : {}, { rights: over.rights ?? ALL });
-  ctx.entity = entity(withState ? STATE_ATTRS : [], { ownership: over.ownership ?? 'UserOwned' });
+  ctx.entity = entity(withState ? STATE_ATTRS : [], { ownership: over.ownership ?? 'UserOwned', isValidForQueue: over.queue });
   ctx.canCreate = over.canCreate ?? true;
   const state = { dirty: over.dirty ?? false, busy: over.busy ?? false, readOnly: over.readOnly ?? false } as RecordForm;
   return {
@@ -65,6 +66,15 @@ const names = () =>
     .map((b) => b.textContent);
 
 describe('CommandBar', () => {
+  it('Add to queue shows on an existing record of a queue-enabled table only', () => {
+    const { rerender } = render(<CommandBar {...props({ queue: true })} />);
+    expect(names()).toEqual(['New', 'Save', 'Save & Close', 'Delete', 'Refresh', 'Assign', 'Add to queue', 'Share']);
+    rerender(<CommandBar {...props({ queue: false })} />);
+    expect(names()).not.toContain('Add to queue');
+    rerender(<CommandBar {...props({ queue: true, creating: true })} />);
+    expect(names()).not.toContain('Add to queue');
+  });
+
   it('commands_in_order_and_hidden_without_rights', () => {
     const { rerender } = render(<CommandBar {...props()} />);
     expect(names()).toEqual(['New', 'Save', 'Save & Close', 'Delete', 'Refresh', 'Assign', 'Share']);

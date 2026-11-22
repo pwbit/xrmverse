@@ -72,6 +72,9 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
         ChangeTracker.MessageName, DuplicateRulePublisher.PublishMessage, DuplicateRulePublisher.UnpublishMessage,
         DuplicateFinder.RetrieveMessage, BulkDetectDuplicatesJob.Message,
         CurrencyMessages.MessageName, EmailMessages.SendEmail, ElasticUpsert.MessageName, ElasticCosmosQuery.MessageName,
+        // Plan 4.1a (tasks 5 and 6): the queue messages.
+        QueueSchema.AddToQueue, QueueSchema.RemoveFromQueue, QueueSchema.RouteTo, QueueSchema.AddPrincipalToQueue,
+        QueueSchema.PickFromQueue, QueueSchema.ReleaseToQueue, QueueSchema.RetrieveUserQueues,
         // Plan 2.12b (R10): one rollup column of one row, calculated in the request's transaction.
         CalculateRollupFieldMessage,
         // Plan 2.14 (W21): its stage 30 is the classic workflows' hook, which the pipeline calls (it needs the pipeline to run a
@@ -109,6 +112,11 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
     /// <summary>SendEmail's stage 30 (plan 2.11, A17), on this instance's Update path.</summary>
     internal EmailMessages EmailMessages =>
         _emailMessages ??= new EmailMessages(this, store, (ILogger?)logger ?? NullLogger.Instance);
+
+    private QueueMessages? _queueMessages;
+
+    /// <summary>The queue messages' stage 30 (plan 4.1a), on this instance's data paths.</summary>
+    public QueueMessages QueueMessages => _queueMessages ??= new QueueMessages(this, store);
 
     private ChangeTracker? _changeTracker;
 
@@ -460,7 +468,8 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
     /// these privileges), RemovePrivilegeRole, AddUserToRecordTeam and RemoveUserFromRecordTeam (<see cref="Core.RecordTeams"/>), PublishDuplicateRule and
     /// UnpublishDuplicateRule (<see cref="DuplicateRulePublisher"/>), RetrieveDuplicates (<see cref="Duplicates.DuplicateFinder"/>) and
     /// BulkDetectDuplicates (<see cref="BulkDetectDuplicatesJob.EnqueueAsync"/>: the job is queued),
-    /// SendEmail (<see cref="Core.EmailMessages"/>, plan 2.11), reading the parameters from
+    /// SendEmail (<see cref="Core.EmailMessages"/>, plan 2.11), AddToQueue, RemoveFromQueue, RouteTo, AddPrincipalToQueue,
+    /// PickFromQueue, ReleaseToQueue and RetrieveUserQueues (<see cref="Core.QueueMessages"/>, plan 4.1a), reading the parameters from
     /// <c>request.Parameters</c> (the plug-ins' <c>InputParameters</c>) as they are after the pre-operation stages.
     /// </summary>
     /// <exception cref="XrmdFaultException">400 for a missing parameter, plus the faults of the operation.</exception>
@@ -570,6 +579,10 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
                 throw new InvalidOperationException("ExecuteWorkflow runs through the pipeline, which hands it to the classic workflows.");
             case EmailMessages.SendEmail:
                 return await EmailMessages.ExecuteAsync(request, caller, session, ct);
+            case QueueSchema.AddToQueue or QueueSchema.RemoveFromQueue or QueueSchema.RouteTo or QueueSchema.AddPrincipalToQueue
+                or QueueSchema.PickFromQueue or QueueSchema.ReleaseToQueue or QueueSchema.RetrieveUserQueues:
+                // Plan 4.1a: the item and membership writes run through the pipeline, one level deeper (decision 4).
+                return await QueueMessages.ExecuteAsync(request, caller, session, nested, ct);
             case ChangeTracker.MessageName:
                 UnmaskedData.Refuse(request);
                 return ChangeTracker.ToResponse(await ChangeTracker.RetrieveAsync(session, caller, ChangeTracker.ReadRequest(request), ct));
@@ -1272,6 +1285,9 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
 
         await ElasticRecords.ApplyLookupPartitionsAsync(s, store, attrs, row, ct);
         await EnsureReferencesExistAsync(s, row, attrs, ct);
+        // Plan 4.1a (ruling R15): one active queue item per record (a received email excepted), under the record's lock. A migration
+        // imports the source's items as they are.
+        if (m.LogicalName == QueueSchema.QueueItem && migrated is null) await QueueMessages.DemandNewItemAllowedAsync(s, store, row, ct);
         // An image set to a byte[] becomes its thumbnail, image id, timestamp and (CanStoreFullImage) full image (ruling F4).
         if (row.Attributes.Any(kv => attrs[kv.Key] is ImageAttributeMetadata))
             await files.ApplyImagesAsync(s, m, id, row, isCreate: true, ct);
@@ -1308,6 +1324,8 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
         InvalidateDuplicateRulesOnWrite(s, m);
         await duplicates.MatchCodes.RefreshAsync(s, m, id, ct);
         if (m.LogicalName == SystemUser) await InsertUserSettingsAsync(s, caller, id, ct);
+        // Plan 4.1a: a user and an owner team get a private default queue, in this transaction.
+        if (m.LogicalName is SystemUser or Team) await InsertDefaultQueueAsync(s, caller, m, id, ct);
         if (activity) await WriteActivityRowsAsync(s, m, id, partyLists!, isCreate: true, ct);
         if (CurrencyMessages.InvalidatesCatalog(m.LogicalName)) CurrencyMessages.InvalidateAfterTransaction(currencies, s);
         if (await audit.IsAuditedAsync(s, m, ct))
@@ -1343,6 +1361,83 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
         cmd.AddParameter("@_type", DbType.Int32, store.GetEntity(SystemUser)?.ObjectTypeCode ?? 8);
         for (var i = 0; i < defaults.Count; i++) cmd.AddParameter($"@_tz{i}", DbValueTypes.Of(defaults[i].Value), defaults[i].Value);
         await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>
+    /// Plan 4.1a: the default queue of a new user or owner team (an access or group team gets none): a private queue named
+    /// <c>&lt;fullname&gt;</c> or <c>&lt;team name&gt;</c> (from memory, checklist 4), owned by the principal, written as an ordinary
+    /// Create of <c>queue</c> in this session, then linked from the principal's <c>queueid</c>. A user is also a member of its queue
+    /// (a <c>queuemembership</c> row); a team's members are members at read time (task 4), so a team has no row. Not written inside
+    /// a migration (the source's own queues are imported) or when the organization has no <c>queue</c> table.
+    /// </summary>
+    /// <returns>The id of the new queue, or <see cref="Guid.Empty"/> when the principal gets none.</returns>
+    internal async Task<Guid> InsertDefaultQueueAsync(DataSession s, Caller caller, EntityMetadata principal, Guid principalId, CancellationToken ct)
+    {
+        if (MigrationScope.IsActive || store.GetEntity(QueueSchema.Queue) is null) return Guid.Empty;
+        var isTeam = principal.LogicalName == Team;
+        string? name;
+        await using (var cmd = s.Command(isTeam
+                         ? $"SELECT {s.Quote("name")}, {s.Quote("teamtype")} FROM {s.DataTable(Team)} WHERE {s.Quote("teamid")} = {IdParameter}"
+                         : $"SELECT {s.Quote("fullname")}, 0 FROM {s.DataTable(SystemUser)} WHERE {s.Quote("systemuserid")} = {IdParameter}"))
+        {
+            cmd.AddParameter(IdParameter, DbType.Guid, principalId);
+            await using var rd = await cmd.ExecuteReaderAsync(ct);
+            if (!await rd.ReadAsync(ct)) return Guid.Empty;
+            name = rd.IsDBNull(0) ? null : rd.GetString(0);
+            if (!rd.IsDBNull(1) && Convert.ToInt32(rd.GetValue(1)) != 0) return Guid.Empty;
+        }
+        var queueId = await CreateAsync(s, caller, new Entity(QueueSchema.Queue)
+        {
+            ["name"] = QueueSchema.DefaultQueueName(name),
+            ["queueviewtype"] = new OptionSetValue(QueueSchema.PrivateViewType),
+            ["queuetypecode"] = new OptionSetValue(QueueSchema.TypeCode),
+            [OwnerId] = new EntityReference(principal.LogicalName, principalId),
+        }, ct);
+        await ExecuteNonQueryAsync(s,
+            $"UPDATE {s.DataTable(principal.LogicalName)} SET {s.Quote(QueueSchema.QueueIdColumn)} = @queue " +
+            $"WHERE {s.Quote(SystemAttributes.PrimaryIdName(principal))} = {IdParameter}",
+            [new DetachedParameter("@queue", DbType.Guid, queueId), new DetachedParameter(IdParameter, DbType.Guid, principalId)], ct);
+        if (!isTeam && store.GetEntity(QueueSchema.QueueMembership) is { } membership)
+            await ExecuteNonQueryAsync(s, $"""
+                INSERT INTO {s.DataTable(membership.LogicalName)} ({s.Quote(SystemAttributes.PrimaryIdName(membership))}, {s.Quote(QueueSchema.QueueIdColumn)},
+                    {s.Quote("systemuserid")}, createdon, createdby, modifiedon, modifiedby, statecode, statuscode)
+                VALUES ({s.Dialect.NewGuid}, @queue, {IdParameter}, {s.Dialect.UtcNow}, @caller, {s.Dialect.UtcNow}, @caller, 0, 1)
+                """,
+                [
+                    new DetachedParameter("@queue", DbType.Guid, queueId), new DetachedParameter(IdParameter, DbType.Guid, principalId),
+                    new DetachedParameter("@caller", DbType.Guid, caller.UserId),
+                ], ct);
+        return queueId;
+    }
+
+    /// <summary>
+    /// Plan 4.1a: the default queue goes with its team, in the team's Delete, unless it holds active queue items (400, nothing is
+    /// deleted). Only the queue the team owns and points to is deleted; its inactive items go by the cascade of <c>queue_entries</c>.
+    /// Users are never deleted, so a user's default queue has no such step.
+    /// </summary>
+    private async Task DeleteDefaultQueueAsync(DataSession s, Caller caller, Guid teamId, CancellationToken ct)
+    {
+        if (store.GetEntity(QueueSchema.Queue) is null || store.GetEntity(QueueSchema.QueueItem) is null) return;
+        Guid? queueId;
+        await using (var cmd = s.Command(
+                         $"SELECT t.{s.Quote(QueueSchema.QueueIdColumn)} FROM {s.DataTable(Team)} t " +
+                         $"JOIN {s.DataTable(QueueSchema.Queue)} q ON q.{s.Quote(QueueSchema.QueueIdColumn)} = t.{s.Quote(QueueSchema.QueueIdColumn)} " +
+                         $"AND q.{s.Quote(OwnerId)} = t.{s.Quote("teamid")} WHERE t.{s.Quote("teamid")} = {IdParameter}"))
+        {
+            cmd.AddParameter(IdParameter, DbType.Guid, teamId);
+            queueId = await cmd.ExecuteScalarAsync(ct) is Guid g ? g : null;
+        }
+        if (queueId is not { } queue) return;
+        await using (var cmd = s.Command(
+                         $"SELECT COUNT(*) FROM {s.DataTable(QueueSchema.QueueItem)} WHERE {s.Quote(QueueSchema.QueueIdColumn)} = {IdParameter} " +
+                         $"AND {s.Quote("statecode")} = 0"))
+        {
+            cmd.AddParameter(IdParameter, DbType.Guid, queue);
+            if (Convert.ToInt64(await cmd.ExecuteScalarAsync(ct)) > 0)
+                throw XrmdFaultException.InvalidArgument(
+                    $"The team {teamId} cannot be deleted: its default queue {queue} still holds active queue items. Remove or deactivate them first.");
+        }
+        await DeleteAsync(s, caller, QueueSchema.Queue, queue, null, ct);
     }
 
     /// <summary>
@@ -1548,6 +1643,8 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
 
         await ElasticRecords.ApplyLookupPartitionsAsync(s, store, attrs, row, ct);
         await EnsureReferencesExistAsync(s, row, attrs, ct);
+        // Plan 4.1a (ruling R15): an item reactivated, or pointed at another record, keeps one active item per record.
+        if (m.LogicalName == QueueSchema.QueueItem && !MigrationScope.IsActive) await QueueMessages.DemandItemUpdateAllowedAsync(s, id, row, ct);
         // A file column set to null deletes its file (ruling F4); the commit's column gets its file id and name.
         if (commit is not null || row.Attributes.Any(kv => attrs[kv.Key] is FileAttributeMetadata))
             await files.ApplyOnUpdateAsync(s, m, id, row, commit, ct);
@@ -1584,6 +1681,9 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
         if (updated == 0) throw XrmdFaultException.ObjectDoesNotExist(m.LogicalName, id);
         if (writes is not null && !MigrationScope.IsActive) await writes.OnWrittenAsync(s, m.LogicalName, id, ct); // plan 2.14 (W10)
         if (activity) await WriteActivityRowsAsync(s, m, id, partyLists!, isCreate: false, ct);
+        // Plan 4.1a: a queue-enabled record that leaves the active state deactivates its active items, in this transaction.
+        if (m.IsValidForQueue?.Value == true && !MigrationScope.IsActive && row.GetAttributeValue<OptionSetValue>("statecode") is { Value: not 0 })
+            await QueueMessages.DeactivateItemsAsync(s, caller, m, id, row.GetAttributeValue<OptionSetValue>("statuscode")?.Value, ct);
         // Plan 2.15: the row's match codes when a column a rule matches on changed (Assign and SetState come through here too);
         // the organization switch turned off unpublishes every rule (ruling D11), in this transaction.
         InvalidateDuplicateRulesOnWrite(s, m);
@@ -1895,6 +1995,10 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
     {
         var m = EntityOf(entityName);
         await DemandRowDeleteAllowedAsync(s, caller, m.LogicalName, id, ct);
+        // Plan 4.1a: before the rule that a team owning records stays (its default queue is not one that keeps it).
+        if (m.LogicalName == Team) await DeleteDefaultQueueAsync(s, caller, id, ct);
+        // Plan 4.1a: a queue goes only once its items are inactive (they then go by the cascade of queue_entries).
+        if (m.LogicalName == QueueSchema.Queue && !MigrationScope.IsActive) await QueueMessages.DemandNoActiveItemsAsync(s, id, ct);
         await CheckDeleteRulesAsync(s, m.LogicalName, id, ct);
         // Plan 2.14 (W14): an action's message goes with its definition, before the cascades (its activations) run.
         if (writes is not null && !MigrationScope.IsActive) await writes.OnDeletingAsync(s, m.LogicalName, id, ct);

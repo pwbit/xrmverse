@@ -413,6 +413,60 @@ public sealed class CliTableTests(XrmdFixture fx) : IAsyncLifetime
         (await RunAsync("table", "set", Name("nosuch"), "--notes", "--yes")).Should().Be(4);
     }
 
+    // ---- plan 4.1a: queues ----------------------------------------------------------------------------------------------
+
+    private static bool Queues(JsonElement described) => described.GetProperty("isValidForQueue").GetBoolean();
+
+    [Fact]
+    public async Task Queues_on_create_and_set_then_describe()
+    {
+        var store = fx.App.Services.GetRequiredService<IMetadataStore>();
+        string[] Targets() => store.GetEntity("queueitem")!.Attributes.OfType<LookupAttributeMetadata>().Single(a => a.LogicalName == "objectid").Targets;
+
+        var ticket = Name("qticket");
+        (await RunAsync("table", "create", ticket, "--label", "Ticket", "--plural-label", "Tickets", "--queues")).Should().Be(0, _err.ToString());
+        Queues(await DescribeAsync(ticket)).Should().BeTrue();
+        Targets().Should().Contain(ticket);
+        // An activity is queue-enabled without the flag.
+        var sms = Name("qsms");
+        (await RunAsync("table", "create", sms, "--label", "SMS", "--plural-label", "SMSs", "--activity")).Should().Be(0, _err.ToString());
+        Queues(await DescribeAsync(sms)).Should().BeTrue();
+
+        var plain = Name("qplain");
+        await CreateTableAsync(plain);
+        Queues(await DescribeAsync(plain)).Should().BeFalse();
+        (await RunAsync("table", "set", plain, "--queues", "--yes", "-o", "json")).Should().Be(0, _err.ToString());
+        Out().GetProperty("switchedOn").EnumerateArray().Select(e => e.GetString()).Should().Equal("isValidForQueue");
+        Queues(await DescribeAsync(plain)).Should().BeTrue();
+        store.GetEntity(plain)!.IsValidForQueue!.Value.Should().BeTrue();
+        Targets().Should().Contain(plain);
+        (await RunAsync("table", "set", plain, "--queues", "-o", "json")).Should().Be(0, _err.ToString());
+        Out().GetProperty("alreadyOn").EnumerateArray().Select(e => e.GetString()).Should().Equal("isValidForQueue");
+
+        // A table that cannot be put in a queue: the server's refusal (exit 5).
+        (await RunAsync("table", "set", "annotation", "--queues", "--yes")).Should().Be(5);
+        _err.ToString().Should().Contain("IsValidForQueue");
+    }
+
+    /// <summary>Decision 4 (plan 4.1a): the contact center adds its columns to the platform's queue table.</summary>
+    [Fact]
+    public async Task Queue_takes_a_custom_column()
+    {
+        var store = fx.App.Services.GetRequiredService<IMetadataStore>();
+        var column = Name("maxwait");
+        try
+        {
+            (await RunAsync("table", "column", "add", "queue", column, "--type", "int")).Should().Be(0, _err.ToString());
+            store.GetEntity("queue")!.Attributes.Should().Contain(a => a.LogicalName == column && a is IntegerAttributeMetadata);
+            var described = await DescribeAsync("queue");
+            described.GetProperty("columns").EnumerateArray().Select(c => c.GetProperty("name").GetString()).Should().Contain(column);
+        }
+        finally
+        {
+            await TestEntities.InSessionAsync(fx.ConnectionString, s => store.DeleteAttributeAsync(s, "queue", column, default));
+        }
+    }
+
     [Fact]
     public async Task Set_asks_at_a_terminal_and_sends_nothing_when_refused()
     {

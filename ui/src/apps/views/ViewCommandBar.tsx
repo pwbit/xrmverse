@@ -8,7 +8,9 @@ import { SetStateDialog } from '../../renderers/classic/form/SetStateDialog';
 import { ShareDialog } from '../../renderers/classic/form/ShareDialog';
 import type { XrmApi } from '../../shell/api/client';
 import { t } from '../../shell/i18n/t';
-import { ActivateIcon, AssignIcon, DeactivateIcon, DeleteIcon, NewIcon, RefreshIcon, ShareIcon } from '../../shell/icons';
+import { ActivateIcon, AddToQueueIcon, AssignIcon, DeactivateIcon, DeleteIcon, NewIcon, PickIcon, ReleaseIcon, RefreshIcon, RemoveFromQueueIcon, RouteIcon, ShareIcon } from '../../shell/icons';
+import { addToQueueOp, currentUserId, pickOp, queueCommandState, releaseOp, removeOp, routeOp, type QueueTable } from '../queues/queueCommands';
+import { QueueTargetDialog } from '../queues/QueueTargetDialog';
 import type { RecordStateMeta } from '../record/recordStates';
 import { assignOp, commandState, deleteOp, setStateOp, type Enabled, type SelectedRecord } from './viewCommands';
 
@@ -26,6 +28,8 @@ export interface ViewCommandBarProps {
   owned: boolean;
   /** The user holds the table's Delete privilege: Delete exists. */
   canDelete?: boolean;
+  /** The listed table, for the queue commands: Add to queue where `isValidForQueue`, Pick, Release, Route and Remove on `queueitem`. */
+  queue?: QueueTable;
   /** Reads the records again; absent: no Refresh. */
   onRefresh?: () => void;
   /** Runs `op` on each selected record (the bulk runner), shows the result and reloads the view. */
@@ -64,7 +68,7 @@ const useStyles = makeStyles({
   below: { display: 'flex', alignItems: 'center', gap: tokens.spacingHorizontalS, flexWrap: 'wrap' },
 });
 
-type Pending = 'activate' | 'deactivate' | 'assign' | 'share' | 'delete' | undefined;
+type Pending = 'activate' | 'deactivate' | 'assign' | 'share' | 'delete' | 'queueAdd' | 'queueRoute' | undefined;
 
 /**
  * The header of a view, in one card on two rows: the back button, the table's name and the view selector, then "Show as",
@@ -73,7 +77,7 @@ type Pending = 'activate' | 'deactivate' | 'assign' | 'share' | 'delete' | undef
  * A disabled command tells why in its tooltip. Each record command runs one request per record through `onRun` (ruling
  * W9), with the form's requests; its dialog closes when the run is over.
  */
-export function ViewCommandBar({ api, set, onNew, selected, states, owned, canDelete, onRefresh, onRun, leading, modes, trailing, below }: ViewCommandBarProps) {
+export function ViewCommandBar({ api, set, onNew, selected, states, owned, canDelete, queue, onRefresh, onRun, leading, modes, trailing, below }: ViewCommandBarProps) {
   const styles = useStyles();
   const [pending, setPending] = useState<Pending>();
   const close = () => setPending(undefined);
@@ -92,6 +96,22 @@ export function ViewCommandBar({ api, set, onNew, selected, states, owned, canDe
   record('deactivate', <DeactivateIcon />, t('record.cmd.deactivate'), enablement?.deactivate);
   if (onRefresh) commands.push({ id: 'refresh', icon: <RefreshIcon />, label: t('record.cmd.refresh'), onClick: onRefresh });
   if (owned) record('assign', <AssignIcon />, t('record.cmd.assign'), enablement?.assign);
+  const queueState = queue && selected ? queueCommandState(selected.length, queue) : undefined;
+  const queueCommand = (id: string, icon: Command['icon'], label: string, state: Enabled | undefined, run: () => void) => {
+    if (!state || (!state.enabled && !state.reason)) return;
+    commands.push({ id, icon, label, disabled: !state.enabled, title: state.enabled ? undefined : state.reason, onClick: run });
+  };
+  queueCommand('queueAdd', <AddToQueueIcon />, t('apps.queues.add'), queueState?.add, () => setPending('queueAdd'));
+  if (api) {
+    queueCommand('queuePick', <PickIcon />, t('apps.queues.pick'), queueState?.pick, () => {
+        // The worker is read inside the op, so a failed WhoAmI is reported like any other failure of the run.
+        let worker: Promise<string> | undefined;
+        void onRun(async (id) => pickOp(api, await (worker ??= currentUserId(api)))(id));
+      });
+    queueCommand('queueRelease', <ReleaseIcon />, t('apps.queues.release'), queueState?.release, () => void onRun(releaseOp(api)));
+    queueCommand('queueRoute', <RouteIcon />, t('apps.queues.route'), queueState?.route, () => setPending('queueRoute'));
+    queueCommand('queueRemove', <RemoveFromQueueIcon />, t('apps.queues.remove'), queueState?.remove, () => void onRun(removeOp(api)));
+  }
   const share = owned ? enablement?.share : undefined;
 
   /** Runs `op` on the selection; the dialog closes afterwards (the result shows above the view). */
@@ -167,6 +187,12 @@ export function ViewCommandBar({ api, set, onNew, selected, states, owned, canDe
       />
       {pending === 'assign' && api && set && (
         <AssignDialog count={ids.length} onAssign={(owner: LookupValue) => runAll(assignOp(api, set, owner))} onClose={close} />
+      )}
+      {pending === 'queueAdd' && api && queue && (
+        <QueueTargetDialog mode="add" count={ids.length} onConfirm={(target) => runAll(addToQueueOp(api, queue, target.id))} onClose={close} />
+      )}
+      {pending === 'queueRoute' && api && (
+        <QueueTargetDialog mode="route" count={ids.length} onConfirm={(target) => runAll(routeOp(api, target))} onClose={close} />
       )}
       {pending === 'share' && set && ids[0] && (
         ids.length > 1 ? (

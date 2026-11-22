@@ -88,6 +88,7 @@ public sealed class SchemaDeltaApplier(MigrationPhaseContext context, IServicePr
                     ? Attribute(p) as StringAttributeMetadata : null;
                 primary ??= new StringAttributeMetadata { LogicalName = primaryName, SchemaName = primaryName, MaxLength = 100,
                     RequiredLevel = new AttributeRequiredLevelManagedProperty(AttributeRequiredLevel.ApplicationRequired) };
+                // The table settings of the source (IsValidForQueue too, plan 4.1a) travel on the entity; the store applies their rules.
                 return new CreateEntityRequest
                 {
                     Entity = entity, PrimaryAttribute = primary, HasActivities = entity.HasActivities ?? false, HasNotes = entity.HasNotes ?? false,

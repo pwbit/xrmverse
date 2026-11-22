@@ -119,4 +119,74 @@ describe('ViewCommandBar', () => {
     await userEvent.click(button('Refresh'));
     expect(onRefresh).toHaveBeenCalledOnce();
   });
+
+  it('Add to queue shows on a queue-enabled table, not on another', () => {
+    setup({ queue: { logicalName: 'email', primaryId: 'activityid', isValidForQueue: true } });
+    expect(labels()).toContain('Add to queue');
+  });
+
+  it('a table that is not queue-enabled has no queue command', () => {
+    setup({ queue: { logicalName: 'account', primaryId: 'accountid', isValidForQueue: false } });
+    expect(labels()).toEqual(['New', 'Activate', 'Deactivate', 'Assign']);
+  });
+
+  it('the queue item grid has Pick, Release, Route and Remove, and no Add to queue', () => {
+    setup({ queue: { logicalName: 'queueitem', primaryId: 'queueitemid' }, owned: false });
+    expect(labels()).toEqual(['New', 'Activate', 'Deactivate', 'Pick', 'Release', 'Route', 'Remove from queue']);
+  });
+
+  it('Release posts ReleaseToQueue for each selected row', async () => {
+    const post = vi.fn().mockResolvedValue(undefined);
+    const onRun = vi.fn(async (op: (id: string) => Promise<void>) => {
+      for (const id of ['a', 'b']) await op(id);
+    });
+    render(
+      <ViewCommandBar
+        api={{ post } as unknown as XrmApi}
+        set="queueitems"
+        selected={[{ id: 'a', statecode: 0 }, { id: 'b', statecode: 0 }]}
+        states={[]}
+        owned={false}
+        queue={{ logicalName: 'queueitem', primaryId: 'queueitemid' }}
+        onRun={onRun}
+      />,
+    );
+    await userEvent.click(button('Release'));
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
+    expect(post.mock.calls.map((c) => c[0])).toEqual(['queueitems(a)/Microsoft.Dynamics.CRM.ReleaseToQueue', 'queueitems(b)/Microsoft.Dynamics.CRM.ReleaseToQueue']);
+  });
+
+  it('Pick reads the signed-in user and posts PickFromQueue; a failed WhoAmI reaches the run as a failure', async () => {
+    const post = vi.fn().mockResolvedValue(undefined);
+    const get = vi.fn().mockResolvedValueOnce({ UserId: 'U1' }).mockRejectedValueOnce(new Error('WhoAmI failed'));
+    const failures: string[] = [];
+    const onRun = vi.fn(async (op: (id: string) => Promise<void>) => {
+      try {
+        await op('a');
+      } catch (e) {
+        failures.push((e as Error).message);
+      }
+    });
+    const mount = () =>
+      render(
+        <ViewCommandBar
+          api={{ post, get } as unknown as XrmApi}
+          set="queueitems"
+          selected={[{ id: 'a', statecode: 0 }]}
+          states={[]}
+          owned={false}
+          queue={{ logicalName: 'queueitem', primaryId: 'queueitemid' }}
+          onRun={onRun}
+        />,
+      );
+    const first = mount();
+    await userEvent.click(button('Pick'));
+    await waitFor(() => expect(post).toHaveBeenCalledOnce());
+    expect(post.mock.calls[0][1]).toMatchObject({ SystemUser: { systemuserid: 'U1' }, RemoveQueueItem: false });
+    first.unmount();
+    mount();
+    await userEvent.click(button('Pick'));
+    await waitFor(() => expect(failures).toEqual(['WhoAmI failed']));
+    expect(post).toHaveBeenCalledOnce();
+  });
 });

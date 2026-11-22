@@ -25,6 +25,7 @@ that names the member.
 | PCF controls | field and dataset controls with React and Fluent UI as platform libraries | Same idea |
 | Dashboards and charts | system dashboards and charts, drawn with Fluent UI React Charts | Differs: own chart drawing |
 | Timeline | activities, notes and, when switched on, posts | Same idea; own look |
+| Queues | **Add to queue** on lists of queue-enabled tables; **Pick**, **Release**, **Route** and **Remove from queue** on the queue item grid | Same idea; own look (see [Email and queues](email-and-queues.md)) |
 | Modern look | presentation overlay, board, calendar, cards, wizard, free grid, coloured choice values | Extra; the background colour of a choice value is Dataverse's own `Color` |
 | `XrmVerse`, app side panes, app notifications, app OnLoad | a client extension, panes beside the page, app-wide notifications and a `xrmverse_AppOnLoad` setting | Extra; not importable into Dataverse (see [xrmverse extensions](#xrmverse-extensions)) |
 | Business process flows, client-side business rules, editable grids, offline, canvas apps, custom pages | not available | Narrower |

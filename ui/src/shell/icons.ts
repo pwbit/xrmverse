@@ -103,6 +103,16 @@ import {
   NavigationRegular,
   FlowchartFilled,
   FlowchartRegular,
+  TextBulletListAddFilled,
+  TextBulletListAddRegular,
+  HandRightFilled,
+  HandRightRegular,
+  ArrowUndoFilled,
+  ArrowUndoRegular,
+  ArrowRoutingFilled,
+  ArrowRoutingRegular,
+  DismissFilled as QueueDismissFilled,
+  DismissRegular as QueueDismissRegular,
 } from '@fluentui/react-icons';
 
 /**
@@ -120,6 +130,11 @@ export const ActivateIcon = bundleIcon(CheckmarkCircleFilled, CheckmarkCircleReg
 export const DeactivateIcon = bundleIcon(DismissCircleFilled, DismissCircleRegular);
 export const RefreshIcon = bundleIcon(ArrowClockwiseFilled, ArrowClockwiseRegular);
 export const AssignIcon = bundleIcon(PersonArrowRightFilled, PersonArrowRightRegular);
+export const AddToQueueIcon = bundleIcon(TextBulletListAddFilled, TextBulletListAddRegular);
+export const PickIcon = bundleIcon(HandRightFilled, HandRightRegular);
+export const ReleaseIcon = bundleIcon(ArrowUndoFilled, ArrowUndoRegular);
+export const RouteIcon = bundleIcon(ArrowRoutingFilled, ArrowRoutingRegular);
+export const RemoveFromQueueIcon = bundleIcon(QueueDismissFilled, QueueDismissRegular);
 export const ShareIcon = bundleIcon(ShareFilled, ShareRegular);
 export const AddExistingIcon = bundleIcon(LinkFilled, LinkRegular);
 export const ImportIcon = bundleIcon(ArrowImportFilled, ArrowImportRegular);

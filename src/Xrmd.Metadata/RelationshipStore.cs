@@ -391,6 +391,33 @@ public sealed partial class MetadataStore
         }, ct);
 
     /// <summary>
+    /// Saves the many-to-many relationship <paramref name="relationship"/> of a seeded intersect table (plan 4.1a:
+    /// <c>queuemembership_association</c>) once; an existing one is left as it is. Unlike <see cref="CreateManyToManyAsync"/> the
+    /// intersect entity already exists (it is seeded), so only the relationship row is written.
+    /// </summary>
+    internal Task EnsureSeedManyToManyAsync(ManyToManyRelationshipMetadata relationship, CancellationToken ct = default) =>
+        InOwnSessionAsync(async session =>
+        {
+            var pending = await EnterAsync(session, ct);
+            var cache = pending.Working;
+            var r = MetadataSerializer.Clone(relationship);
+            if (r.SchemaName is null || cache.ManyToMany.ContainsKey(r.SchemaName)) return;
+            foreach (var name in (string[])[r.Entity1LogicalName, r.Entity2LogicalName, r.IntersectEntityName])
+                if (!cache.ByLogicalName.ContainsKey(name))
+                    throw new InvalidOperationException($"Seed relationship '{r.SchemaName}': entity '{name}' does not exist.");
+            r.MetadataId ??= Guid.NewGuid();
+            r.IsCustomRelationship ??= false;
+            r.Entity1NavigationPropertyName ??= r.SchemaName;
+            r.Entity2NavigationPropertyName ??= r.SchemaName;
+            SdkProperty.Set(r, nameof(RelationshipMetadataBase.RelationshipType), RelationshipType.ManyToManyRelationship);
+            var stamp = await BumpVersionStampAsync(session, pending, ct);
+            await ExecuteAsync(session,
+                "INSERT INTO meta.relationship (metadata_id, schema_name, definition, version_stamp) VALUES (@id, @name, @definition, @stamp)", ct,
+                ("@id", r.MetadataId.Value), ("@name", r.SchemaName), ("@definition", MetadataSerializer.SerializeRelationship(r)), ("@stamp", stamp));
+            cache.ManyToMany[r.SchemaName] = r;
+        }, ct);
+
+    /// <summary>
     /// Creates a Customer column with its two relationships (the <c>CreateCustomerRelationships</c> message): the lookup
     /// <paramref name="lookup"/> on the referencing entity (<c>AttributeType</c> Customer, <c>Targets</c> account and contact, with
     /// its <c>&lt;name&gt;type</c> column) and one saved one-to-many relationship per target, each keeping its SchemaName and

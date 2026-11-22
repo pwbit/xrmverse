@@ -56,6 +56,8 @@ internal sealed class InMemoryOrg
                 Set(entity, nameof(EntityMetadata.PrimaryIdAttribute), entity.IsActivity == true ? "activityid" : entity.LogicalName + "id");
                 if (r.HasNotes || entity.IsActivity == true) entity.HasNotes = true;
                 if (r.HasActivities) entity.HasActivities = true;
+                // Plan 4.1a: an activity is queue-enabled unless the request says otherwise.
+                if (entity.IsValidForQueue is null && entity.IsActivity == true) entity.IsValidForQueue = new Microsoft.Xrm.Sdk.BooleanManagedProperty(true);
                 Set(entity, nameof(EntityMetadata.PrimaryNameAttribute), primary.LogicalName);
                 primary.MaxLength ??= TypeMapping.DefaultStringLength;
                 entity.SetAttributes(SystemAttributes.Complete(entity, [primary]));
@@ -112,6 +114,8 @@ internal sealed class InMemoryOrg
                 r.Entity.HasActivities.Should().NotBe(false);
                 if (r.Entity.HasNotes == true) current.HasNotes = true;
                 if (r.Entity.HasActivities == true) current.HasActivities = true;
+                r.Entity.IsValidForQueue?.Value.Should().NotBe(false); // plan 4.1a: one-way too
+                if (r.Entity.IsValidForQueue?.Value == true) current.IsValidForQueue = new Microsoft.Xrm.Sdk.BooleanManagedProperty(true);
                 break;
             case UpdateAttributeRequest r:
                 var existing = Attribute(r.EntityName, r.Attribute.LogicalName);

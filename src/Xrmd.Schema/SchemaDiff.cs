@@ -11,7 +11,7 @@ namespace Xrmd.Schema;
 /// <summary>
 /// The additive plan that brings an org to a <see cref="SchemaDocument"/>: it creates what is missing (global choices,
 /// tables with their primary name, columns, lookups, many-to-many relationships, options) and updates only labels,
-/// descriptions, a larger <c>MaxLength</c>, a new <c>AutoNumberFormat</c>, option labels and <c>hasNotes</c>/<c>hasActivities</c>
+/// descriptions, a larger <c>MaxLength</c>, a new <c>AutoNumberFormat</c>, option labels and <c>hasNotes</c>/<c>hasActivities</c>/<c>isValidForQueue</c>
 /// switched on (one-way: switching one off, or changing <c>isActivity</c>, is a rejection). It never deletes: the org's components with the publisher
 /// prefix that the document does not mention are <see cref="SchemaPlan.Extras"/>. Every other difference (a type change,
 /// a smaller <c>MaxLength</c>, another lookup target, another precision, ownership or primary name, a choice bound
@@ -135,6 +135,8 @@ public static class SchemaDiff
                 if (table.IsActivity) created.IsActivity = true;
                 if (table.HasNotes == true) created.HasNotes = true;
                 if (table.HasActivities == true) created.HasActivities = true;
+                // Plan 4.1a: stated only when given (an activity is queue-enabled when absent).
+                if (table.IsValidForQueue is { } queues) created.IsValidForQueue = new BooleanManagedProperty(queues);
                 _tables.Add(Solution(new CreateEntityRequest
                 {
                     Entity = created, PrimaryAttribute = SchemaColumnTypes.ToPrimaryAttribute(table),
@@ -200,6 +202,12 @@ public static class SchemaDiff
             if (Switch(table, "hasActivities", table.HasActivities, entity.HasActivities == true))
             {
                 update.HasActivities = true;
+                changed = true;
+            }
+            // Plan 4.1a: IsValidForQueue is one-way as well.
+            if (Switch(table, "isValidForQueue", table.IsValidForQueue, entity.IsValidForQueue?.Value == true))
+            {
+                update.IsValidForQueue = new BooleanManagedProperty(true);
                 changed = true;
             }
             if (changed) _tables.Add(Solution(new UpdateEntityRequest { Entity = update }));

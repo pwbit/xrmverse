@@ -1,0 +1,25 @@
+{
+  "LogicalName": "queuemembership",
+  "SchemaName": "QueueMembership",
+  "IsAuditEnabled": {
+    "Value": false,
+    "CanBeChanged": false,
+    "ManagedPropertyLogicalName": "canmodifyauditsettings"
+  },
+  "EntitySetName": "queuememberships",
+  "ObjectTypeCode": 2027,
+  "OwnershipType": "OrganizationOwned",
+  "IsIntersect": true,
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.UniqueIdentifierAttributeMetadata",
+      "LogicalName": "queueid",
+      "SchemaName": "queueid"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.UniqueIdentifierAttributeMetadata",
+      "LogicalName": "systemuserid",
+      "SchemaName": "systemuserid"
+    }
+  ]
+}

@@ -24,8 +24,9 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
     /// <c>UX_principalobjectaccess_object_type_principal</c> (objectid, objecttypecode, principalid; unique; it replaces the
     /// earlier <c>UX_principalobjectaccess_object_principal</c>), <c>UX_team_record_template</c>
     /// (regardingobjectid, teamtemplateid; unique where teamtemplateid is not null: one access team per record and template),
-    /// <c>IX_teamtemplate_objecttypecode</c>, <c>IX_duplicaterule_baseentityname</c> (baseentityname, statecode), <c>IX_teammembership_systemuserid</c>
-    /// and <c>UX_systemuser_azureactivedirectoryobjectid</c> (unique on the non-null values: one user per Entra identity).
+    /// <c>IX_teamtemplate_objecttypecode</c>, <c>IX_duplicaterule_baseentityname</c> (baseentityname, statecode), <c>IX_teammembership_systemuserid</c>,
+    /// <c>UX_systemuser_azureactivedirectoryobjectid</c> (unique on the non-null values: one user per Entra identity), and the queue
+    /// indexes <c>IX_queueitem_objectid_state</c>, <c>IX_queueitem_queueid_state</c> and <c>IX_queuemembership_systemuserid</c>.
     /// </summary>
     /// <remarks>
     /// A standard role's privileges are seeded only by the run that creates the role row: privileges removed from (or
@@ -222,10 +223,28 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
             d.When($"{d.ColumnExists(data, "duplicaterule", "baseentityname")} AND NOT {d.IndexExists(data, "duplicaterule", "IX_duplicaterule_baseentityname")}",
                 DdlGenerator.CreateIndex("duplicaterule", "IX_duplicaterule_baseentityname", "baseentityname, statecode", d)),
             d.CreateIndexIfMissing(data, "teammembership", "IX_teammembership_systemuserid", "systemuserid"),
+            // The queue lookups (plan 4.1a, final review I4): a record's active items (placement, the single-item rule and the
+            // deactivation on every activity completion), a queue's active items (queue and team delete), and a user's queue
+            // memberships (the read privacy of queues, RetrieveUserQueues). The tables come with the seed, which runs first.
+            .. QueueIndexes(d),
             d.CreateIndexIfMissing(data, "systemuser", "UX_systemuser_azureactivedirectoryobjectid", "azureactivedirectoryobjectid",
                 unique: true, filter: "azureactivedirectoryobjectid IS NOT NULL"),
         ];
         return string.Join("\n", statements);
+    }
+
+    /// <summary>The indexes of the queue tables (plan 4.1a, final review I4), each created when its table exists and it is missing.</summary>
+    private static IEnumerable<string> QueueIndexes(ISqlDialect d)
+    {
+        const string data = DdlGenerator.DataSchema;
+        foreach (var (table, index, columns) in new[]
+                 {
+                     (QueueSchema.QueueItem, "IX_queueitem_objectid_state", "objectid, statecode"),
+                     (QueueSchema.QueueItem, "IX_queueitem_queueid_state", "queueid, statecode"),
+                     (QueueSchema.QueueMembership, "IX_queuemembership_systemuserid", "systemuserid"),
+                 })
+            yield return d.When($"{d.TableExists(data, table)} AND NOT {d.IndexExists(data, table, index)}",
+                DdlGenerator.CreateIndex(table, index, columns, d));
     }
 
     /// <summary>
@@ -350,10 +369,39 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
             PrivilegeCatalog.NamesOf(store.GetEntity(ChartSchema.Table)!).Select(PrivilegeNames.IdOf).ToHashSet());
         // Plan 3.5 UI-1g: Basic User's Create, Read and Delete (Global) on the posts.
         yield return ("post-privileges", PostGrants().Select(g => PrivilegeNames.IdOf(g.Privilege)).ToHashSet());
+        // Plan 4.1a (from memory, checklist 3): Basic User's Read on the queues and Create, Read, Write and Delete on the queue items.
+        yield return ("queue-role-privileges", QueueGrants().Select(g => PrivilegeNames.IdOf(g.Privilege)).ToHashSet());
+        // Plan 4.1a (ruling R23): Basic User's Append and Append To on the queue items, added after the grants above.
+        yield return ("queue-item-append-privileges", QueueItemAppendGrants().Select(g => PrivilegeNames.IdOf(g.Privilege)).ToHashSet());
         // UI-2a: Basic User's Read (Global) and System Customizer's privileges on the environment values of the settings
         // (organizationsetting). Its own top-up: app-setting-role-privileges already ran on an existing organization.
         yield return ("organization-setting-privileges",
             PrivilegeCatalog.NamesOf(store.GetEntity(AppModuleSchema.OrganizationSetting)!).Select(PrivilegeNames.IdOf).ToHashSet());
+    }
+
+    /// <summary>
+    /// Basic User's grants on the queues (plan 4.1a, from memory: checklist 3): Read Queue at Global depth, and Create, Read, Write
+    /// and Delete on the queue items (Global: the table has no owner, so Global is its only depth). Which queues and items a user
+    /// reads and works is narrowed by the queue privacy and the read access to the item's record (ReadSecurity, ruling R23), not by
+    /// the depth; no Write on the queue record is needed to work its items.
+    /// </summary>
+    private IEnumerable<(Guid Role, string Privilege, int Depth)> QueueGrants()
+    {
+        yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessRights.ReadAccess, store.GetEntity(QueueSchema.Queue)!), Global);
+        var item = store.GetEntity(QueueSchema.QueueItem)!;
+        foreach (var right in new[] { AccessRights.ReadAccess, AccessRights.WriteAccess, AccessRights.CreateAccess, AccessRights.DeleteAccess })
+            yield return (StandardRoles.BasicUser, PrivilegeNames.For(right, item), Global);
+    }
+
+    /// <summary>
+    /// Basic User's Append and Append To on the queue items (plan 4.1a, ruling R23), at Global depth (the table has no owner). A top-up
+    /// of its own, so an organization that already ran <c>queue-role-privileges</c> gets them too.
+    /// </summary>
+    private IEnumerable<(Guid Role, string Privilege, int Depth)> QueueItemAppendGrants()
+    {
+        var item = store.GetEntity(QueueSchema.QueueItem)!;
+        foreach (var right in new[] { AccessRights.AppendAccess, AccessRights.AppendToAccess })
+            yield return (StandardRoles.BasicUser, PrivilegeNames.For(right, item), Global);
     }
 
     /// <summary>
@@ -577,6 +625,8 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
         foreach (var grant in RibbonSolutionGrants()) yield return grant;
         foreach (var grant in ChartGrants()) yield return grant;
         foreach (var grant in PostGrants()) yield return grant;
+        foreach (var grant in QueueGrants()) yield return grant;
+        foreach (var grant in QueueItemAppendGrants()) yield return grant;
 
         yield return (StandardRoles.Delegate, PrivilegeNames.ActOnBehalfOfAnotherUser, Global);
     }

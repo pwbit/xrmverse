@@ -20,6 +20,8 @@ export interface TableInput {
   hasNotes?: boolean;
   /** Activities regarding the records (one-way). */
   hasActivities?: boolean;
+  /** The records can be put in queues (one-way; on by default for an activity). */
+  isValidForQueue?: boolean;
   primaryName: { name: string; schemaName?: string; label?: string; maxLength?: number };
 }
 
@@ -115,7 +117,7 @@ function attribute(column: ColumnInput): Json {
   return body;
 }
 
-/** `POST EntityDefinitions`: a table with its primary name column, and `IsActivity`, `HasNotes`, `HasActivities` when true. */
+/** `POST EntityDefinitions`: a table with its primary name column, and `IsActivity`, `HasNotes`, `HasActivities`, `IsValidForQueue` when true. */
 export function entityBody(table: TableInput): Json {
   const { name, label: primaryLabel, maxLength } = table.primaryName;
   // SchemaTable.PrimarySchemaName: an activity's `subject` is `Subject` unless stated.
@@ -134,6 +136,7 @@ export function entityBody(table: TableInput): Json {
   if (table.isActivity) body.IsActivity = true;
   if (table.hasNotes) body.HasNotes = true;
   if (table.hasActivities) body.HasActivities = true;
+  if (table.isValidForQueue) body.IsValidForQueue = { Value: true, CanBeChanged: true };
   return body;
 }
 

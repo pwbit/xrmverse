@@ -147,6 +147,8 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
         ActivitySchema.Appointment, ActivitySchema.Annotation,
         // The timeline posts (plan 3.5 UI-1g): postregarding before the posts that name it, the posts before their comments.
         PostSchema.Regarding, PostSchema.Post, PostSchema.Comment,
+        // The queues (plan 4.1a): the queue before the items and memberships that name it.
+        QueueSchema.Queue, QueueSchema.QueueItem, QueueSchema.QueueMembership,
     ];
 
     /// <summary>The seeded tables a custom table must not take the name of (an object type code of 10000 or more).</summary>
@@ -155,6 +157,7 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
         "account", "contact", ActivitySchema.Pointer, ActivitySchema.Party, ActivitySchema.Email, ActivitySchema.Task,
         ActivitySchema.PhoneCall, ActivitySchema.Appointment, ActivitySchema.Annotation,
         PostSchema.Regarding, PostSchema.Post, PostSchema.Comment,
+        QueueSchema.Queue, QueueSchema.QueueItem, QueueSchema.QueueMembership,
     ];
 
     /// <summary>The id of the system solution <c>Default</c>, which holds every component (Dataverse's well-known id).</summary>
@@ -186,6 +189,11 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
         DemandNoCustomBusinessTables(o.OrgName);
         foreach (var name in EntityOrder)
             await EnsureEntityAsync(name, ct);
+        // The many-to-many relationship of the seeded intersect table queuemembership (plan 4.1a; name from Learn). Only the server's
+        // store has the seed path: another one would leave the intersect without its relationship, so it fails instead.
+        if (store is not MetadataStore queueStore)
+            throw new NotSupportedException("The system seed needs the metadata store of the server to write the relationship 'queuemembership_association'.");
+        await queueStore.EnsureSeedManyToManyAsync(QueueSchema.MembershipRelationship(), ct);
 
         await using var conn = await factory.OpenAsync(ct);
         await using var tx = await conn.BeginTransactionAsync(ct);
@@ -271,6 +279,7 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
         await EnsureSystemSolutionsAsync(conn, tx, o, rootId.Value, adminId ?? newAdminId, now, ct);
         await EnsureSystemAdministratorProfileAsync(conn, tx, rootId.Value, adminId ?? newAdminId, now, ct);
         await EnsureSettingDefinitionsAsync(conn, tx, rootId.Value, adminId ?? newAdminId, now, ct);
+        await EnsureQueueViewsAsync(conn, tx, rootId.Value, adminId ?? newAdminId, now, ct);
 
         // Organizations of an older database get the default only where the new column is still empty.
         await ExecuteAsync(conn, tx, "UPDATE data.organization SET plugintracelogsetting = 1 WHERE plugintracelogsetting IS NULL", ct);
@@ -537,6 +546,24 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
         await KeyLockAsync(conn, tx, table, id, ct);
         return await FindIdAsync(conn, tx,
             $"SELECT {key} FROM data.{table}{dialect.LockHint(RowLock.UpdateRange)} WHERE {key} = @id{dialect.LockClause(RowLock.UpdateRange)}", ct, ("@id", id)) is null;
+    }
+
+    /// <summary>The system views of the queue tables (<see cref="QueueSchema.SystemViews"/>), each inserted only when its id is missing.</summary>
+    private async Task EnsureQueueViewsAsync(DbConnection conn, DbTransaction tx, Guid rootId, Guid creator, DateTime now, CancellationToken ct)
+    {
+        var dialect = SqlDialects.For(conn);
+        foreach (var view in QueueSchema.SystemViews)
+        {
+            if (!await MissingAsync(conn, tx, "savedquery", "savedqueryid", view.Id, ct)) continue;
+            var code = store.GetEntity(view.Table)?.ObjectTypeCode ?? 0;
+            await ExecuteAsync(conn, tx, $"""
+                INSERT INTO data.savedquery (savedqueryid, name, returnedtypecode, fetchxml, layoutxml, querytype, isdefault, ismanaged,
+                    owningbusinessunit, createdon, createdby, modifiedon, modifiedby, statecode, statuscode)
+                VALUES (@id, @name, @table, @fetch, @layout, 0, {dialect.BooleanLiteral(view.IsDefault)}, {dialect.BooleanLiteral(false)},
+                    @bu, @now, @by, @now, @by, 0, 1);
+                """, ct, ("@id", view.Id), ("@name", view.Name), ("@table", view.Table), ("@fetch", view.FetchXml),
+                ("@layout", view.LayoutXml(code)), ("@bu", rootId), ("@now", now), ("@by", creator));
+        }
     }
 
     /// <summary>

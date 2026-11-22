@@ -6,7 +6,7 @@ import { parseEntity, parseOptions, type EntityMeta, type OptionMeta, type RawEn
 /** `EntityDefinitions(LogicalName='x')`, quoted for a URL. */
 export const entityPath = (table: string): string => `EntityDefinitions(LogicalName=${encodeURIComponent(literal(table))})`;
 
-const ENTITY_SELECT = 'LogicalName,SchemaName,EntitySetName,DisplayName,PrimaryIdAttribute,PrimaryNameAttribute,OwnershipType,IsCustomEntity,IsAuditEnabled,AutoCreateAccessTeams,ChangeTrackingEnabled,CanChangeTrackingBeEnabled,IsActivity,HasNotes,HasActivities,IsDuplicateDetectionEnabled';
+const ENTITY_SELECT = 'LogicalName,SchemaName,EntitySetName,DisplayName,PrimaryIdAttribute,PrimaryNameAttribute,OwnershipType,IsCustomEntity,IsAuditEnabled,AutoCreateAccessTeams,ChangeTrackingEnabled,CanChangeTrackingBeEnabled,IsActivity,HasNotes,HasActivities,IsValidForQueue,IsDuplicateDetectionEnabled';
 
 async function all<T>(api: XrmApi, path: string): Promise<T[]> {
   const items: T[] = [];
@@ -162,14 +162,19 @@ export async function loadDefaultPrefix(api: XrmApi): Promise<string> {
 }
 
 /**
- * Switches a one-way table setting on (`ChangeTrackingEnabled`, `HasNotes`, `HasActivities`): the whole definition is read
- * and written back (the metadata API replaces); the computed `CanChangeTrackingBeEnabled` is not sent. The server refuses
- * to switch any of them off.
+ * Switches a one-way table setting on (`ChangeTrackingEnabled`, `HasNotes`, `HasActivities`, `IsValidForQueue`): the whole
+ * definition is read and written back (the metadata API replaces); the computed `CanChangeTrackingBeEnabled` is not sent.
+ * `IsValidForQueue` is a managed flag: its `Value` is switched. The server refuses to switch any of them off.
  */
-export async function enableTableSetting(api: XrmApi, table: string, setting: 'ChangeTrackingEnabled' | 'HasNotes' | 'HasActivities'): Promise<void> {
+export async function enableTableSetting(
+  api: XrmApi,
+  table: string,
+  setting: 'ChangeTrackingEnabled' | 'HasNotes' | 'HasActivities' | 'IsValidForQueue',
+): Promise<void> {
   const path = entityPath(table);
   const { CanChangeTrackingBeEnabled: _computed, '@odata.context': _context, ...body } = await api.get<Record<string, unknown>>(path);
-  await api.put(path, { ...body, [setting]: true });
+  const value = setting === 'IsValidForQueue' ? { ...((body.IsValidForQueue ?? {}) as Record<string, unknown>), Value: true } : true;
+  await api.put(path, { ...body, [setting]: value });
 }
 
 /** Switches change tracking on (see {@link enableTableSetting}). */

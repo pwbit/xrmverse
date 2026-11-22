@@ -1295,6 +1295,37 @@ public sealed class SolutionExportTests(XrmdFixture fx) : IAsyncLifetime
             .Elements("attribute").Single(a => a.Element("Name")!.Value == "xv_count").Element("DisplayMask").Should().BeNull();
     }
 
+    // ---- plan 4.1a: IsValidForQueue -----------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task SolutionRoundTrip_KeepsIsValidForQueue()
+    {
+        // The file has no element for xv_project; the table is enabled after the import, then exported and imported again.
+        await ImportFixtureAsync();
+        await Admin.ExecuteAsync(new UpdateEntityRequest
+        {
+            Entity = new EntityMetadata { LogicalName = "xv_project", IsValidForQueue = new BooleanManagedProperty(true) },
+        });
+
+        var exported = await ExportAsync(Admin);
+        var customizations = Document(Entries(exported)["customizations.xml"]);
+        var project = Info(customizations, "xv_project");
+        project.Element("IsValidForQueue")!.Value.Should().Be("1");
+        project.Elements().Last().Name.LocalName.Should().Be("IsValidForQueue", "a setting the file did not have goes last");
+        Info(customizations, "xv_tag").Element("IsValidForQueue").Should().BeNull("off and not in the file: not written");
+        var retrieved = ((RetrieveEntityResponse)await Admin.ExecuteAsync(
+            new RetrieveEntityRequest { LogicalName = "xv_project", EntityFilters = EntityFilters.Entity })).EntityMetadata;
+        retrieved.IsValidForQueue.Value.Should().BeTrue();
+
+        // A new organization's view of the file: the table is created from it enabled for queues.
+        await SolutionImportTests.ClearImportAsync(fx);
+        Store.GetEntity("xv_project").Should().BeNull();
+        await Admin.ExecuteAsync(new ImportSolutionRequest { CustomizationFile = exported, ImportJobId = Guid.NewGuid() });
+        Store.GetEntity("xv_project")!.IsValidForQueue!.Value.Should().BeTrue();
+        Store.GetRelationship("xv_project_QueueItems").Should().NotBeNull();
+        Info(Document(Entries(await ExportAsync(Admin))["customizations.xml"]), "xv_project").Element("IsValidForQueue")!.Value.Should().Be("1");
+    }
+
     // ---- plan 2.11: activity tables and the HasActivities/HasNotes flags (ruling A19) ---------------------------------------
 
     private static XElement Info(XDocument customizations, string logicalName) =>

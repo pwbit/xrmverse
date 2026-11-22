@@ -342,6 +342,67 @@
       }
     },
     {
+      "name": "entity_queues",
+      "kind": "entity",
+      "input": {
+        "name": "xv_ticket",
+        "label": "Ticket",
+        "ownership": "user",
+        "primaryName": {
+          "name": "xv_name",
+          "label": "Name"
+        },
+        "isValidForQueue": true
+      },
+      "expected": {
+        "@odata.type": "Microsoft.Dynamics.CRM.EntityMetadata",
+        "DisplayName": {
+          "LocalizedLabels": [
+            {
+              "Label": "Ticket",
+              "LanguageCode": 1033
+            }
+          ],
+          "UserLocalizedLabel": {
+            "Label": "Ticket",
+            "LanguageCode": 1033
+          }
+        },
+        "IsValidForQueue": {
+          "Value": true,
+          "CanBeChanged": true
+        },
+        "LogicalName": "xv_ticket",
+        "OwnershipType": "UserOwned",
+        "SchemaName": "xv_ticket",
+        "Attributes": [
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+            "AttributeType": "String",
+            "AttributeTypeName": {
+              "Value": "StringType"
+            },
+            "DisplayName": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Name",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Name",
+                "LanguageCode": 1033
+              }
+            },
+            "IsValidODataAttribute": false,
+            "LogicalName": "xv_name",
+            "SchemaName": "xv_name",
+            "IsPrimaryName": true
+          }
+        ]
+      }
+    },
+    {
       "name": "attribute_string",
       "kind": "attribute",
       "input": {

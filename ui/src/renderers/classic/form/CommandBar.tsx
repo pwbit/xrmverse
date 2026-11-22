@@ -43,11 +43,14 @@ import type { RecordForm } from '../../../apps/record/useRecordForm';
 import type { RibbonButton } from '../../../apps/record/useRibbonCommands';
 import { t } from '../../../shell/i18n/t';
 import { useSurfaceStyles } from '../../../shell/layout/surface';
+import { useAuth } from '../../../shell/auth/AuthProvider';
+import { addToQueueOp } from '../../../apps/queues/queueCommands';
+import { QueueTargetDialog } from '../../../apps/queues/QueueTargetDialog';
 import { AssignDialog } from './AssignDialog';
 import { saveAvailability } from './saveAvailability';
 import { SetStateDialog } from './SetStateDialog';
 import { ShareDialog } from './ShareDialog';
-import { ActivateIcon, AssignIcon, DeactivateIcon, DeleteIcon, NewIcon, RefreshIcon, SaveCloseIcon, SaveIcon, ShareIcon } from '../../../shell/icons';
+import { ActivateIcon, AddToQueueIcon, AssignIcon, DeactivateIcon, DeleteIcon, NewIcon, RefreshIcon, SaveCloseIcon, SaveIcon, ShareIcon } from '../../../shell/icons';
 
 
 export interface CommandBarProps {
@@ -137,7 +140,7 @@ function HiddenCommand({ command }: { command: Command }) {
   );
 }
 
-type Pending = 'delete' | 'refresh' | 'discardForAssign' | 'assign' | 'discardForSetState' | 'setState' | 'share' | undefined;
+type Pending = 'queueAdd' | 'delete' | 'refresh' | 'discardForAssign' | 'assign' | 'discardForSetState' | 'setState' | 'share' | undefined;
 
 /**
  * The form's command bar, in Power Apps' order: New, Save, Save & Close, Delete, Activate or Deactivate, Refresh, Assign,
@@ -180,6 +183,8 @@ export function CommandBar({ ctx, state, onNew, onSave, onSaveAndClose, onDelete
     commands.push({ id: 'refresh', icon: <RefreshIcon />, label: t('record.cmd.refresh'), disabled: state.busy, onClick: () => (state.dirty ? setPending('refresh') : onRefresh()) });
   if (existing && owned && ctx.rights.includes('Assign'))
     commands.push({ id: 'assign', icon: <AssignIcon />, label: t('record.cmd.assign'), disabled: state.busy, onClick: () => setPending(state.dirty ? 'discardForAssign' : 'assign') });
+  if (existing && ctx.entity.isValidForQueue === true && !!id)
+    commands.push({ id: 'queueAdd', icon: <AddToQueueIcon />, label: t('apps.queues.add'), disabled: state.busy, onClick: () => setPending('queueAdd') });
   if (existing && owned && ctx.rights.includes('Share'))
     commands.push({ id: 'share', icon: <ShareIcon />, label: t('record.cmd.share'), disabled: state.busy, onClick: () => setPending('share') });
   for (const { command, busy, run } of custom)
@@ -235,7 +240,16 @@ export function CommandBar({ ctx, state, onNew, onSave, onSaveAndClose, onDelete
       {pending === 'setState' && stateCommand && (
         <SetStateDialog mode={stateCommand} states={states} onSetState={onSetState} onClose={close} error={state.notification} />
       )}
+      {pending === 'queueAdd' && id && <AddToQueue table={ctx.entity} id={id} onClose={close} />}
       {pending === 'share' && id && set && <ShareDialog set={set} id={id} onClose={close} />}
     </>
   );
+}
+
+/** The form's Add to queue: the queue lookup, then AddToQueue for the open record. */
+function AddToQueue({ table, id, onClose }: { table: RecordContext['entity']; id: string; onClose: () => void }) {
+  const { api } = useAuth();
+  if (!api) return null;
+  const target = { logicalName: table.logicalName, primaryId: table.primaryIdAttribute };
+  return <QueueTargetDialog mode="add" onConfirm={async (queue) => (await addToQueueOp(api, target, queue.id)(id), true)} onClose={onClose} />;
 }

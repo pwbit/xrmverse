@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Metadata;
 
@@ -11,7 +12,7 @@ namespace Xrmd.Schema;
 /// </summary>
 public static class SchemaWebApiBodies
 {
-    /// <summary>A new table with its primary name column (<c>POST EntityDefinitions</c>), with <c>IsActivity</c>, <c>HasNotes</c> and <c>HasActivities</c> when true.</summary>
+    /// <summary>A new table with its primary name column (<c>POST EntityDefinitions</c>), with <c>IsActivity</c>, <c>HasNotes</c>, <c>HasActivities</c> and <c>IsValidForQueue</c> when true.</summary>
     public static JsonObject Entity(SchemaTable table)
     {
         ArgumentNullException.ThrowIfNull(table);
@@ -30,6 +31,7 @@ public static class SchemaWebApiBodies
         if (table.IsActivity) entity.IsActivity = true;
         if (table.HasNotes == true) entity.HasNotes = true;
         if (table.HasActivities == true) entity.HasActivities = true;
+        if (table.IsValidForQueue == true) entity.IsValidForQueue = new BooleanManagedProperty(true);
         // The entity type is not polymorphic, so the serializer writes no @odata.type: state it, as the Web API bodies do.
         var json = new JsonObject { [MetadataSerializer.ODataTypeProperty] = MetadataSerializer.ODataTypePrefix + nameof(EntityMetadata) };
         foreach (var (name, value) in Parse(MetadataSerializer.Serialize(entity))) json[name] = value?.DeepClone();

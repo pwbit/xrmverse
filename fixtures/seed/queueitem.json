@@ -1,0 +1,373 @@
+{
+  "LogicalName": "queueitem",
+  "SchemaName": "QueueItem",
+  "DisplayName": {
+    "LocalizedLabels": [
+      {
+        "Label": "Queue Item",
+        "LanguageCode": 1033
+      }
+    ],
+    "UserLocalizedLabel": {
+      "Label": "Queue Item",
+      "LanguageCode": 1033
+    }
+  },
+  "IsAuditEnabled": {
+    "Value": false,
+    "CanBeChanged": false,
+    "ManagedPropertyLogicalName": "canmodifyauditsettings"
+  },
+  "EntitySetName": "queueitems",
+  "ObjectTypeCode": 2029,
+  "OwnershipType": "None",
+  "PrimaryNameAttribute": "title",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "title",
+      "SchemaName": "Title",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Title",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Title",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 850,
+      "Format": "Text"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "queueid",
+      "SchemaName": "QueueId",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Queue",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Queue",
+          "LanguageCode": 1033
+        }
+      },
+      "Targets": [
+        "queue"
+      ],
+      "RequiredLevel": {
+        "Value": "ApplicationRequired",
+        "CanBeChanged": false
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "objectid",
+      "SchemaName": "ObjectId",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Object",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Object",
+          "LanguageCode": 1033
+        }
+      },
+      "Targets": [],
+      "RequiredLevel": {
+        "Value": "ApplicationRequired",
+        "CanBeChanged": false
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.EntityNameAttributeMetadata",
+      "LogicalName": "objectidtypecode",
+      "SchemaName": "ObjectIdTypeCode",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Regarding Object Type",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Regarding Object Type",
+          "LanguageCode": 1033
+        }
+      },
+      "AttributeOf": "objectid"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "workerid",
+      "SchemaName": "WorkerId",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Worked By",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Worked By",
+          "LanguageCode": 1033
+        }
+      },
+      "Targets": [
+        "systemuser",
+        "team"
+      ]
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.EntityNameAttributeMetadata",
+      "LogicalName": "workeridtype",
+      "SchemaName": "WorkerIdType",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Worker Type",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Worker Type",
+          "LanguageCode": 1033
+        }
+      },
+      "AttributeOf": "workerid"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.DateTimeAttributeMetadata",
+      "LogicalName": "workeridmodifiedon",
+      "SchemaName": "WorkerIdModifiedOn",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Worked On",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Worked On",
+          "LanguageCode": 1033
+        }
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.DateTimeAttributeMetadata",
+      "LogicalName": "enteredon",
+      "SchemaName": "EnteredOn",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Entered Queue",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Entered Queue",
+          "LanguageCode": 1033
+        }
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "priority",
+      "SchemaName": "Priority",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Priority",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Priority",
+          "LanguageCode": 1033
+        }
+      },
+      "MinValue": 0,
+      "MaxValue": 1000000000
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "sender",
+      "SchemaName": "Sender",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "From",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "From",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 250,
+      "Format": "Text"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "torecipients",
+      "SchemaName": "ToRecipients",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "To",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "To",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 500,
+      "Format": "Text"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StateAttributeMetadata",
+      "LogicalName": "statecode",
+      "SchemaName": "StateCode",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Status",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Status",
+          "LanguageCode": 1033
+        }
+      },
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "State",
+        "Options": [
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StateOptionMetadata",
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Active",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Active",
+                "LanguageCode": 1033
+              }
+            },
+            "DefaultStatus": 1
+          },
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StateOptionMetadata",
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Inactive",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Inactive",
+                "LanguageCode": 1033
+              }
+            },
+            "DefaultStatus": 2
+          }
+        ]
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StatusAttributeMetadata",
+      "LogicalName": "statuscode",
+      "SchemaName": "StatusCode",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Status Reason",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Status Reason",
+          "LanguageCode": 1033
+        }
+      },
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Status",
+        "Options": [
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StatusOptionMetadata",
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Active",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Active",
+                "LanguageCode": 1033
+              }
+            },
+            "State": 0
+          },
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StatusOptionMetadata",
+            "Value": 2,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Inactive",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Inactive",
+                "LanguageCode": 1033
+              }
+            },
+            "State": 1
+          }
+        ]
+      }
+    }
+  ],
+  "ManyToOneRelationships": [
+    {
+      "SchemaName": "queue_entries",
+      "ReferencedEntity": "queue",
+      "ReferencingEntity": "queueitem",
+      "ReferencingAttribute": "queueid",
+      "ReferencingEntityNavigationPropertyName": "queueid",
+      "CascadeConfiguration": {
+        "Assign": "NoCascade",
+        "Merge": "NoCascade",
+        "Reparent": "NoCascade",
+        "Share": "NoCascade",
+        "Unshare": "NoCascade",
+        "Archive": "NoCascade",
+        "RollupView": "NoCascade",
+        "Delete": "Cascade"
+      }
+    }
+  ]
+}

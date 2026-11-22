@@ -33,6 +33,7 @@ public static class CliApp
         FieldSecurityCommands.Build,
         HierarchySecurityCommands.Build,
         AccessTeamCommands.Build,
+        QueueCommands.Build,
         CurrencyCommands.Build,
         EnvVarCommands.Build,
         ChangeTrackingCommands.Build,

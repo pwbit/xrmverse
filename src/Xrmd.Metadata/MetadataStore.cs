@@ -97,6 +97,9 @@ public sealed partial class MetadataStore(IDbConnectionFactory factory, IEnumera
         /// <summary>The tables with <c>HasNotes</c>, rebuilt by <see cref="RefreshAll"/> before publishing.</summary>
         public IReadOnlySet<string> NotesTables { get; private set; } = new HashSet<string>(StringComparer.Ordinal);
 
+        /// <summary>The tables with <c>IsValidForQueue</c> (plan 4.1a), rebuilt by <see cref="RefreshAll"/> before publishing.</summary>
+        public IReadOnlySet<string> QueueTables { get; private set; } = new HashSet<string>(StringComparer.Ordinal);
+
         /// <summary>The tables with <c>IsDuplicateDetectionEnabled</c>, rebuilt by <see cref="RefreshAll"/> before publishing.</summary>
         public IReadOnlySet<string> DuplicateDetectionTables { get; private set; } = new HashSet<string>(StringComparer.Ordinal);
 
@@ -110,7 +113,7 @@ public sealed partial class MetadataStore(IDbConnectionFactory factory, IEnumera
             {
                 All = All, AllOptionSets = AllOptionSets, AllManyToMany = AllManyToMany, AllOneToMany = AllOneToMany,
                 Hierarchical = Hierarchical, AccessTeamTables = AccessTeamTables, ChangeTrackingTables = ChangeTrackingTables,
-                ActivityTables = ActivityTables, RegardingTables = RegardingTables, NotesTables = NotesTables,
+                ActivityTables = ActivityTables, RegardingTables = RegardingTables, NotesTables = NotesTables, QueueTables = QueueTables,
                 DuplicateDetectionTables = DuplicateDetectionTables,
             };
             foreach (var (k, v) in ByLogicalName) copy.ByLogicalName[k] = v;
@@ -160,6 +163,7 @@ public sealed partial class MetadataStore(IDbConnectionFactory factory, IEnumera
             ActivityTables = ByLogicalName.Values.Where(ActivitySchema.IsActivityTable).Select(e => e.LogicalName).ToHashSet(StringComparer.Ordinal);
             RegardingTables = ByLogicalName.Values.Where(e => e.HasActivities == true).Select(e => e.LogicalName).ToHashSet(StringComparer.Ordinal);
             NotesTables = ByLogicalName.Values.Where(e => e.HasNotes == true).Select(e => e.LogicalName).ToHashSet(StringComparer.Ordinal);
+            QueueTables = ByLogicalName.Values.Where(e => e.IsValidForQueue?.Value == true).Select(e => e.LogicalName).ToHashSet(StringComparer.Ordinal);
             DuplicateDetectionTables = ByLogicalName.Values.Where(e => e.IsDuplicateDetectionEnabled?.Value == true).Select(e => e.LogicalName)
                 .ToHashSet(StringComparer.Ordinal);
         }
@@ -542,8 +546,10 @@ public sealed partial class MetadataStore(IDbConnectionFactory factory, IEnumera
         var activity = ordinary && e.IsActivity == true;
         if (activity) PrepareCustomActivity(e, name);
         else if (ordinary) DemandNoActivitySettings(e);
-        if (intersectPair is not null && (e.HasActivities == true || e.HasNotes == true))
-            throw new XrmdValidationException($"Entity '{e.LogicalName}' is an intersect entity: it cannot have HasActivities or HasNotes.");
+        if (intersectPair is not null && (e.HasActivities == true || e.HasNotes == true || e.IsValidForQueue?.Value == true))
+            throw new XrmdValidationException($"Entity '{e.LogicalName}' is an intersect entity: it cannot have HasActivities, HasNotes or IsValidForQueue.");
+        // IsValidForQueue (plan 4.1a): stored in one shape (the value, changeable, its managed property name).
+        if (e.IsValidForQueue is { } queueFlag) e.IsValidForQueue = QueueSchema.SettingFlag(queueFlag.Value);
         LogicalNameValidator.EnsureValid(e.LogicalName, "entity");
         if (name is not null) LogicalNameValidator.EnsureValid(name.LogicalName, "attribute");
 
@@ -659,8 +665,10 @@ public sealed partial class MetadataStore(IDbConnectionFactory factory, IEnumera
         // ChangeTrackingEnabled (plan 2.13, ruling C2): an intersect table or one of the ineligible tables cannot have it.
         var tracking = e.ChangeTrackingEnabled == true;
         if (tracking && (intersectPair is not null || !ChangeTrackingSchema.CanBeEnabled(e))) throw TrackingNotAllowed(e.LogicalName);
-        var activityLinks = ordinary && (activity || e.HasActivities == true || e.HasNotes == true);
+        var queues = e.IsValidForQueue?.Value == true;
+        var activityLinks = ordinary && (activity || e.HasActivities == true || e.HasNotes == true || queues);
         if (ordinary) DemandActivitySettingsAllowed(cache, e, e.HasActivities == true, e.HasNotes == true);
+        if (ordinary && queues) DemandQueueSettingAllowed(cache, e);
         // IsDuplicateDetectionEnabled (plan 2.15): stored as a flag; an intersect table or a seeded system table other than
         // account and contact cannot have it.
         var duplicates = e.IsDuplicateDetectionEnabled?.Value == true;
@@ -986,6 +994,12 @@ public sealed partial class MetadataStore(IDbConnectionFactory factory, IEnumera
         var (regardingOn, notesOn) = ActivitySettingChanges(pending.Working, current, changes);
         if (regardingOn) updated.HasActivities = true;
         if (notesOn) updated.HasNotes = true;
+        // IsValidForQueue (plan 4.1a): one-way like HasNotes.
+        var queuesOn = QueueSettingChange(pending.Working, current, changes);
+        if (queuesOn) updated.IsValidForQueue = QueueSchema.SettingFlag(true);
+        // A table without a value that is given false stores it (as IsAuditEnabled does), so that the startup default of the activity
+        // tables (QueueSettingsUpgrade) no longer applies to it (final review I3).
+        else if (changes.IsValidForQueue is { Value: false }) updated.IsValidForQueue ??= QueueSchema.SettingFlag(false);
         // IsDuplicateDetectionEnabled (plan 2.15): only a change is checked, so a retrieved definition sent back passes.
         var duplicates = changes.IsDuplicateDetectionEnabled is { } duplicateFlag
                          && duplicateFlag.Value != (current.IsDuplicateDetectionEnabled?.Value == true) ? duplicateFlag.Value : (bool?)null;
@@ -999,7 +1013,7 @@ public sealed partial class MetadataStore(IDbConnectionFactory factory, IEnumera
         pending.Working.Put(updated, previous: current);
         if (accessTeams == true) await AddRegardingTargetAsync(session, pending.Working, updated.LogicalName, stamp, ct);
         if (tracking == true) await StartTrackingAsync(session, updated.LogicalName, ct);
-        if (regardingOn || notesOn) await SyncActivityLinksAsync(session, pending, ct);
+        if (regardingOn || notesOn || queuesOn) await SyncActivityLinksAsync(session, pending, ct);
         if (duplicates == true) await AddDuplicateRecordTargetAsync(session, pending.Working, updated.LogicalName, stamp, ct);
         // Ruling D11: turning the flag off unpublishes the rules whose base or matching table it is, in this transaction.
         if (duplicates == false) await DuplicateDetectionSchema.UnpublishRulesAsync(session, updated.LogicalName, ct);
@@ -1383,7 +1397,8 @@ public sealed partial class MetadataStore(IDbConnectionFactory factory, IEnumera
         var pending = await EnterAsync(session, ct);
         var entity = pending.Working.ByLogicalName.GetValueOrDefault(entityLogicalName)
                      ?? throw new XrmdValidationException($"Entity '{entityLogicalName}' does not exist.");
-        if (ManyToManyOf(pending.Working, entity.LogicalName) is { } relationship)
+        // A system entity is the 403 first, even when a seeded many-to-many relationship (queuemembership_association) names it.
+        if (!IsSystemEntity(entity) && ManyToManyOf(pending.Working, entity.LogicalName) is { } relationship)
             throw new XrmdFaultException(ErrorCodes.InvalidArgument,
                 $"The component cannot be deleted because it is referenced by relationship '{relationship.SchemaName}'.", 400);
         await DeleteEntityCoreAsync(session, pending, entity, ct);

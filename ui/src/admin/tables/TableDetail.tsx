@@ -22,7 +22,7 @@ import { NewIcon } from '../../shell/icons';
 
 type TabId = 'columns' | 'relationships' | 'views' | 'forms' | 'records';
 
-/** The one-way settings of plan 2.11, with their catalogue keys. */
+/** The one-way settings of plan 2.11 (and plan 4.1a's queues), with their catalogue keys. */
 const ACTIVITY_SETTINGS = {
   HasNotes: {
     label: 'table.notes.enable',
@@ -36,8 +36,17 @@ const ACTIVITY_SETTINGS = {
     confirmTitle: 'table.activities.confirmTitle',
     confirmBody: 'table.activities.confirmBody',
   },
+  IsValidForQueue: {
+    label: 'table.queues.enable',
+    alreadyOn: 'table.queues.alreadyOn',
+    confirmTitle: 'table.queues.confirmTitle',
+    confirmBody: 'table.queues.confirmBody',
+  },
 } as const;
 type ActivitySetting = keyof typeof ACTIVITY_SETTINGS;
+
+/** The tables that cannot be enabled for queues (plan 4.1a, the store's rule besides intersect tables). */
+const QUEUE_REFUSED = new Set(['queue', 'queueitem', 'queuemembership', 'activitypointer', 'activityparty', 'annotation']);
 
 /** A column whose values can be coloured: a choice, choices or status column (`UpdateOptionValue` does not take a state's). */
 const hasColours = (a: AttributeMeta) => (a.kind === 'choice' || a.kind === 'choices') && a.typeName !== 'State';
@@ -87,7 +96,7 @@ export function TableDetail() {
   );
 
   /**
-   * A one-way switch (notes, activities): on, it stays checked and disabled; off, it asks for confirmation first. Shown only
+   * A one-way switch (notes, activities, queues): on, it stays checked and disabled; off, it asks for confirmation first. Shown only
    * when the server reported the setting.
    */
   const activitySwitch = (setting: ActivitySetting, on: boolean | undefined) => {
@@ -171,6 +180,8 @@ export function TableDetail() {
               {activitySwitch('HasNotes', entity.hasNotes)}
               {/* An activity table cannot have activities (plan 2.11 A4): the switch is not offered. */}
               {!entity.isActivity && activitySwitch('HasActivities', entity.hasActivities)}
+              {/* Plan 4.1a: not offered on the tables the server refuses (the queue tables, the pointer, parties, notes; an intersect table is refused by the server). */}
+              {!QUEUE_REFUSED.has(table) && activitySwitch('IsValidForQueue', entity.isValidForQueue)}
               <ConfirmDialog
                 open={confirmSetting?.open ?? false}
                 title={confirmSetting ? t(ACTIVITY_SETTINGS[confirmSetting.setting].confirmTitle) : ''}

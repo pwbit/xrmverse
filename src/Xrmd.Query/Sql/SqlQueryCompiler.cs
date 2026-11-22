@@ -759,6 +759,8 @@ public sealed class SqlQueryCompiler(IMetadataStore store, ISqlDialect dialect, 
                 parts.Add(ParentRecords(owner, parents, depth));
             foreach (var owned in filter.Owned)
                 parts.Add(Conditions.OwnedRecords(ColumnSql(owner, AttributeOf(owner, "ownerid")), owned));
+            foreach (var member in filter.QueueMembers)
+                parts.Add(Conditions.QueueMembers(ColumnSql(owner, AttributeOf(owner, SystemAttributes.PrimaryIdName(owner.Metadata))), member));
             foreach (var path in filter.JsonPaths)
             {
                 var a = AttributeOf(owner, path.Attribute);

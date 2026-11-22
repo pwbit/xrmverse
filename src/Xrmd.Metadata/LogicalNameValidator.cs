@@ -31,7 +31,7 @@ public static partial class LogicalNameValidator
     /// <c>DeleteAuditData</c>), the currency function <c>RetrieveExchangeRate</c> (plan 2.10), the elastic function
     /// <c>ExecuteCosmosSqlQuery</c> (plan #78), the rollup function <c>CalculateRollupField</c> (plan 2.12b), the option value
     /// actions <c>InsertOptionValue</c> and <c>UpdateOptionValue</c> and the refused activity and note
-    /// messages (plan 2.11, <see cref="ActivitySchema.RefusedMessages"/>).
+    /// messages (plan 2.11, <see cref="ActivitySchema.RefusedMessages"/>) and the queue messages (plan 4.1a, <see cref="QueueSchema.Messages"/>).
     /// </summary>
     public static IReadOnlySet<string> ReservedEntitySetNames { get; } = new HashSet<string>(
     [
@@ -51,6 +51,8 @@ public static partial class LogicalNameValidator
         "InsertOptionValue", "UpdateOptionValue",
         // Plan 2.11 (A18): the refused activity and note messages, which the Web API answers as unbound operations.
         .. ActivitySchema.RefusedMessages,
+        // Plan 4.1a: the queue actions (RouteTo is unbound).
+        .. QueueSchema.Messages,
     ], StringComparer.OrdinalIgnoreCase);
 
     /// <summary>True for a valid logical name that is not one of <see cref="ReservedEntitySetNames"/> (ignoring case).</summary>

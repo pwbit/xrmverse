@@ -36,7 +36,7 @@ public static class EmailActions
         {
             routes.MapPost("/" + name, () => Refuse(name));
             routes.MapGet("/" + name + "({parameters})", (string parameters) => Refuse(name));
-            // The bound form (AddRecurrence on appointment, AddToQueue on queue, …), for any entity set (review M2).
+            // The bound form (AddRecurrence on appointment, …), for any entity set (review M2).
             routes.MapPost("/{segment}/" + Ns + "." + name, (string segment) => Refuse(name));
         }
         return parent;

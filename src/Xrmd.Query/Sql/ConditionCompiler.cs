@@ -277,6 +277,14 @@ internal sealed class ConditionCompiler(QueryParameters parameters, QueryContext
         node.Principals.Count == 0 ? "1 = 0" : $"{ownerColumn} IN {GuidList(node.Principals)}";
 
     /// <summary>
+    /// <see cref="QueueMemberNode"/>: <c>{queueKey} IN (SELECT m.[queueid] FROM queuemembership AS m WHERE m.[systemuserid] = @user)</c>.
+    /// </summary>
+    /// <param name="queueKey">Primary key column of the <c>queue</c> scope the node belongs to.</param>
+    public string QueueMembers(string queueKey, QueueMemberNode node) =>
+        $"{queueKey} IN (SELECT m.{Q(QueueSchema.QueueIdColumn)} FROM {DataTable(QueueSchema.QueueMembership)} AS m " +
+        $"WHERE m.{Q("systemuserid")} = {parameters.Add(DbType.Guid, node.UserId)})";
+
+    /// <summary>
     /// <see cref="VersionRangeNode"/>: <c>({column} &gt; CAST(@after AS binary(8)) AND {column} &lt; CAST(@before AS binary(8)))</c>
     /// on the raw rowversion column (plan 2.13). The bounds are bigint parameters cast to <c>binary(8)</c>, whose big-endian order
     /// is the order of the versions, so the predicate stays sargable on <c>IX_{table}_versionnumber</c>

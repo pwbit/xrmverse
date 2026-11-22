@@ -11,7 +11,7 @@ namespace Xrmd.Metadata;
 
 /// <summary>
 /// The <c>sdkmessage</c> / <c>sdkmessagefilter</c> catalog: one message row per entity message, file message, access team
-/// message, change tracking message, currency message, rollup message and SendEmail, and one filter row per (entity message, entity), with stable ids so that every restart and every instance derives the same rows. Idempotent. A deleted
+/// message, change tracking message, currency message, rollup message, SendEmail and the queue messages, and one filter row per (entity message, entity), with stable ids so that every restart and every instance derives the same rows. Idempotent. A deleted
 /// entity takes its filters with it, and the steps (with their images) registered on them.
 /// </summary>
 public sealed class SdkMessageCatalog(IDbConnectionFactory factory, IMetadataStore store, ILogger<SdkMessageCatalog>? logger = null) : IEntityCreatedHandler, IEntityDeletedHandler
@@ -72,6 +72,13 @@ public sealed class SdkMessageCatalog(IDbConnectionFactory factory, IMetadataSto
     public static readonly IReadOnlyList<string> EmailMessages = [ActivitySchema.SendEmailMessage];
 
     /// <summary>
+    /// The queue messages (plan 4.1a): message rows without filters, as AddToQueue takes a record of any queue-enabled table (a step
+    /// registered on one fires for every table; the plug-in sees the record's table, <c>queueitem</c> or <c>queue</c> as
+    /// <c>PrimaryEntityName</c>).
+    /// </summary>
+    public static readonly IReadOnlyList<string> QueueMessages = QueueSchema.Messages;
+
+    /// <summary>
     /// The entity messages of a table (plan 3.4, ruling E6; #76, ruling B9). The two activity tables are not written through
     /// requests (plan 2.11): Learn lists Retrieve, RetrieveMultiple, Associate and Disassociate for <c>activitypointer</c> and
     /// RetrieveMultiple, Associate and Disassociate for <c>activityparty</c>, so no write filter and no step. An elastic table
@@ -114,9 +121,9 @@ public sealed class SdkMessageCatalog(IDbConnectionFactory factory, IMetadataSto
 
     /// <summary>Every message row the catalog writes (<see cref="EntityMessages"/>, <see cref="FileMessages"/>,
     /// <see cref="RecordTeamMessages"/>, <see cref="ChangeTrackingMessages"/>, <see cref="CosmosQueryMessages"/>, <see cref="CurrencyMessages"/>,
-    /// <see cref="RollupMessages"/>, <see cref="EmailMessages"/> and <see cref="BulkMessages"/>).</summary>
+    /// <see cref="RollupMessages"/>, <see cref="EmailMessages"/>, <see cref="QueueMessages"/> and <see cref="BulkMessages"/>).</summary>
     public static readonly IReadOnlyList<string> Messages =
-        [.. EntityMessages, .. FileMessages, .. RecordTeamMessages, .. ChangeTrackingMessages, .. CosmosQueryMessages, .. CurrencyMessages, .. RollupMessages, .. EmailMessages, .. BulkMessages];
+        [.. EntityMessages, .. FileMessages, .. RecordTeamMessages, .. ChangeTrackingMessages, .. CosmosQueryMessages, .. CurrencyMessages, .. RollupMessages, .. EmailMessages, .. QueueMessages, .. BulkMessages];
 
     /// <summary>True for a message the catalog writes (case-insensitive): not a custom action.</summary>
     public static bool IsCatalogMessage(string? name) => Messages.Contains(name ?? "", StringComparer.OrdinalIgnoreCase);

@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Xrmd.Solution.Tests" />
+    <InternalsVisibleTo Include="Xrmd.Integration.Tests" />
   </ItemGroup>
 
   <ItemGroup>

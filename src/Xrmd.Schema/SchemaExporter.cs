@@ -70,6 +70,8 @@ public static class SchemaExporter
             IsActivity = entity.IsActivity == true,
             HasNotes = entity.HasNotes == true ? true : null,
             HasActivities = entity.HasActivities == true ? true : null,
+            // Plan 4.1a, one-way too: written when true, and false for an activity, which is queue-enabled when the key is absent.
+            IsValidForQueue = entity.IsValidForQueue?.Value == true ? true : entity.IsActivity == true ? false : null,
         };
 
         var primary = (entity.Attributes ?? []).FirstOrDefault(a => a.LogicalName == entity.PrimaryNameAttribute) as StringAttributeMetadata

@@ -27,7 +27,8 @@ what xrmverse does and where it stops.
 | Tables | `activitypointer`, `activityparty`, `email`, `task`, `phonecall`, `appointment`, `annotation`, custom activities | Same model; object type codes from memory |
 | `activitypointer` | A stored copy written in the same transaction | **Differs** in storage; same query behaviour |
 | Sending email | `SendEmail` only changes the email's state (until roadmap item 4.1); the sender must be the caller | **Narrower** |
-| Queues, recurring appointments, email attachments, templates | Refused | **Narrower** (see [What is refused](#what-is-refused)) |
+| Queues | Queue items for the activity tables (see [Email and queues](email-and-queues.md)) | Same idea |
+| Recurring appointments, email attachments, templates | Refused | **Narrower** (see [What is refused](#what-is-refused)) |
 | Note attachments | One piece, up to 125 MiB | **Narrower**: no chunked transfer |
 | Posts | Create, read, delete, replies, @mentions; cannot be updated; auto posts refused | **Narrower** (see [Posts](#posts)) |
 | Verification | Several behaviours not verified on a real Dataverse | **Unverified** where stated |
@@ -454,13 +455,11 @@ These messages are answered with a 400 that says why (through the SDK, SOAP and 
 custom API or custom action can take their names: `Book`, `Reschedule`, `AddRecurrence`, `DeliverPromoteEmail`,
 `DeliverIncomingEmail`, `CheckIncomingEmail`, `CheckPromoteEmail`, `BackgroundSendEmail`, `SendEmailFromTemplate`,
 `SendTemplate`, `InstantiateTemplate`, `GetTrackingTokenEmail`, `Rollup`, `Restore`, `AppendRelatedParty`,
-`InitializeAnnotationBlocksUpload`, `InitializeAnnotationBlocksDownload`, and the queue messages `AddToQueue`,
-`PickFromQueue`, `ReleaseToQueue`, `RemoveFromQueue`, `RouteTo`, `RetrieveUserQueues` (these names are from memory and
-arrive with plan 4.1). An `sdkmessage` row with one of these names does not make it run. These names are also reserved as
-entity set names, so a new table, or a table in a solution import, whose entity set is named `Rollup`, `Book` and so on is a
+`InitializeAnnotationBlocksUpload` and `InitializeAnnotationBlocksDownload`. The queue messages run (see [Email and queues](email-and-queues.md)).
+An `sdkmessage` row with one of these names does not make it run. These names are also reserved as entity set names, so a new table, or a table in a solution import, whose entity set is named `Rollup`, `Book` and so on is a
 400.
 
-The tables `activitymimeattachment`, `letter`, `fax`, `recurringappointmentmaster`, `socialactivity`, `queue`, `queueitem`,
+The tables `activitymimeattachment`, `letter`, `fax`, `recurringappointmentmaster`, `socialactivity`,
 `template`, `serviceappointment` and `campaignactivity` are not seeded: they give the usual "entity not found" 400.
 
 ## Surfaces
@@ -491,8 +490,8 @@ None of these is silent: each is refused with an explicit error or stated here.
   2000 characters (possible on `email`, whose `description` is far longer) is cut to 2000, the pointer's declared length;
   what Dataverse's pointer holds in both cases is on the checklist.
 - **Not modelled.** Team-owned and organization-owned custom activities; the party list `partners` and any other party
-  column not listed above; `knowledgearticle` and `queue` records as parties; an address without a record outside `email`;
-  email attachments (`activitymimeattachment`); recurring appointments; queues; any standard column outside the lists above.
+  column not listed above; `knowledgearticle` and `queue` records as parties (a queue is not a party in 4.1a); an address without a record outside `email`;
+  email attachments (`activitymimeattachment`); recurring appointments; any standard column outside the lists above.
   `activityparty` has a `statecode` and `statuscode` like every xrmverse table, which Dataverse's does not.
 - **No email is sent.** `SendEmail` with `IssueSend` true leaves the email Pending Send until plan 4.1. The sender must be the
   caller (no send-as, no queue). The plug-in message is named `SendEmail`; whether Dataverse names it `Send` for plug-ins is

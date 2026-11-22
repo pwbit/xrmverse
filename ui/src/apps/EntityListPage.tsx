@@ -290,7 +290,8 @@ export function EntityListPage({ appId, etn, viewId, title }: EntityListPageProp
   const selectedIds = useMemo(() => (chosenIds.scope === scope ? chosenIds.ids : new Set<string>()), [chosenIds, scope]);
   const onSelect = useCallback((ids: Set<string>) => setChosenIds({ scope, ids }), [scope]);
   const selection: ViewSelection = useMemo(() => ({ selected: selectedIds, onChange: onSelect }), [selectedIds, onSelect]);
-  const selectable = paged && (states.length > 1 || owned || rights.delete);
+  const queueTable = table ? { logicalName: table.logicalName, primaryId: table.primaryId, isValidForQueue: table.isValidForQueue } : undefined;
+  const selectable = paged && (states.length > 1 || owned || rights.delete || queueTable?.isValidForQueue === true || etn === 'queueitem');
   // The statecode of the selection, read with one request each time it changes or the records changed.
   const hasState = states.length > 1;
   const statesKey = `${[...selectedIds].sort().join(',')}\n${refresh}`;
@@ -420,6 +421,7 @@ export function EntityListPage({ appId, etn, viewId, title }: EntityListPageProp
         states={states}
         owned={owned}
         canDelete={rights.delete}
+        queue={queueTable}
         onRefresh={paged ? () => setRefresh((n) => n + 1) : undefined}
         onRun={runOnSelection}
         leading={leading(

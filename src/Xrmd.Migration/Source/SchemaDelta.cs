@@ -120,7 +120,7 @@ public static class SchemaDelta
     {
         var tables = new List<object>();
         foreach (var t in plan.Tables)
-            tables.Add(new { table = t, metadata = await Json(client, $"EntityDefinitions(LogicalName='{t}')?$select=LogicalName,SchemaName,EntitySetName,PrimaryIdAttribute,PrimaryNameAttribute,DisplayName,DisplayCollectionName,Description,OwnershipType,IsActivity,TableType,HasNotes,HasActivities,ChangeTrackingEnabled,IsAuditEnabled", ct) });
+            tables.Add(new { table = t, metadata = await Json(client, $"EntityDefinitions(LogicalName='{t}')?$select=LogicalName,SchemaName,EntitySetName,PrimaryIdAttribute,PrimaryNameAttribute,DisplayName,DisplayCollectionName,Description,OwnershipType,IsActivity,TableType,HasNotes,HasActivities,IsValidForQueue,ChangeTrackingEnabled,IsAuditEnabled", ct) });
 
         var columns = new List<object>();
         foreach (var c in plan.Columns)
