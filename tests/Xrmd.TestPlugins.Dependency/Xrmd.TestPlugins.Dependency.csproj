@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    A library Xrmd.TestPlugins depends on but that is never registered nor deployed next to it: MissingDependencyPlugin
+    uses it to fail like a plug-in whose dependency was not merged into its assembly.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net462</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>..\Xrmd.TestPlugins\xrmd-test.snk</AssemblyOriginatorKeyFile>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+</Project>

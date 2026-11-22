@@ -1,0 +1,22 @@
+<Project>
+  <!--
+    Import from a test project to make the net462 test plug-in assemblies available as Xrmd.TestPlugins.dll,
+    Xrmd.TestPlugins.EarlyBound.dll and Xrmd.TestWorkflowActivities.dll in its output directory without referencing them as
+    normal (net10) dependencies. The restore of Xrmd.TestWorkflowActivities also puts the Microsoft.CrmSdk.Workflow package in
+    the NuGet cache, where the SDK installer tests take it from. Needs $(MSBuildThisFileDirectory) = tests/.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)Xrmd.TestPlugins\Xrmd.TestPlugins.csproj"
+                      ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
+    <ProjectReference Include="$(MSBuildThisFileDirectory)Xrmd.TestPlugins.EarlyBound\Xrmd.TestPlugins.EarlyBound.csproj"
+                      ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
+    <ProjectReference Include="$(MSBuildThisFileDirectory)Xrmd.TestWorkflowActivities\Xrmd.TestWorkflowActivities.csproj"
+                      ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
+    <None Include="$(MSBuildThisFileDirectory)Xrmd.TestPlugins\bin\$(Configuration)\net462\Xrmd.TestPlugins.dll"
+          Link="Xrmd.TestPlugins.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)Xrmd.TestPlugins.EarlyBound\bin\$(Configuration)\net462\Xrmd.TestPlugins.EarlyBound.dll"
+          Link="Xrmd.TestPlugins.EarlyBound.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)Xrmd.TestWorkflowActivities\bin\$(Configuration)\net462\Xrmd.TestWorkflowActivities.dll"
+          Link="Xrmd.TestWorkflowActivities.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Xrmd.Abstractions\Xrmd.Abstractions.csproj" />
+    <ProjectReference Include="..\Xrmd.Core\Xrmd.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.OData.Core" Version="8.4.4" />
+    <PackageReference Include="Microsoft.OData.Edm" Version="8.4.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Xrmd.Mcp" />
+  </ItemGroup>
+
+</Project>

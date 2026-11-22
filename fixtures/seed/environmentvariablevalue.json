@@ -1,0 +1,54 @@
+{
+  "LogicalName": "environmentvariablevalue",
+  "SchemaName": "EnvironmentVariableValue",
+  "EntitySetName": "environmentvariablevalues",
+  "ObjectTypeCode": 381,
+  "OwnershipType": "UserOwned",
+  "PrimaryNameAttribute": "schemaname",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "schemaname",
+      "SchemaName": "SchemaName",
+      "MaxLength": 100
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "value",
+      "SchemaName": "Value",
+      "MaxLength": 2000
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "environmentvariabledefinitionid",
+      "SchemaName": "EnvironmentVariableDefinitionId",
+      "Targets": [
+        "environmentvariabledefinition"
+      ],
+      "RequiredLevel": {
+        "Value": "SystemRequired",
+        "CanBeChanged": false
+      }
+    }
+  ],
+  "ManyToOneRelationships": [
+    {
+      "SchemaName": "environmentvariabledefinition_environmentvariablevalue",
+      "ReferencedEntity": "environmentvariabledefinition",
+      "ReferencingEntity": "environmentvariablevalue",
+      "ReferencingAttribute": "environmentvariabledefinitionid",
+      "ReferencedEntityNavigationPropertyName": "environmentvariabledefinition_environmentvariablevalue",
+      "ReferencingEntityNavigationPropertyName": "EnvironmentVariableDefinitionId",
+      "CascadeConfiguration": {
+        "Assign": "Cascade",
+        "Delete": "Cascade",
+        "Merge": "NoCascade",
+        "Reparent": "Cascade",
+        "Share": "NoCascade",
+        "Unshare": "NoCascade",
+        "Archive": "NoCascade",
+        "RollupView": "NoCascade"
+      }
+    }
+  ]
+}

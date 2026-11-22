@@ -1,0 +1,20 @@
+{
+  "$comment": "appSourceUrl: the Microsoft AppSource offer of xrmverse. Leave it null until the offer is published; the home page then shows a 'coming soon' button. Set it to the offer URL to make the button live. registrationEndpoint: URL of the registration service (POST /api/register); while it is null the registration page is not built and the home button opens the Deploy to Azure docs page. unpublished: docs pages (file names without .md) that stay internal: they are not built, not listed and every link to them is rendered as plain text. repositoryPublic: false while the GitHub repository is private; links to repository files (and 'View this page on GitHub') are then rendered as plain text or left out, because they would 404 for visitors. siteUrl: the public address of the site (https origin, no trailing slash); canonical URLs, Open Graph metadata, sitemap.xml and robots.txt are built from it.",
+  "appSourceUrl": null,
+  "registrationEndpoint": null,
+  "siteUrl": "https://xrmverse.com",
+  "siteTitle": "xrmverse",
+  "tagline": "Dataverse-compatible server, on your metal.",
+  "description": "xrmverse is a server that speaks Microsoft Dataverse's language and that you install on your own servers. Your clients, plug-ins and solutions keep working unchanged.",
+  "repositoryUrl": "https://github.com/pwbit/XRMverse",
+  "defaultBranch": "main",
+  "unpublished": [
+    "status",
+    "azure-marketplace",
+    "development",
+    "website",
+    "legal",
+    "download-registration"
+  ],
+  "repositoryPublic": false
+}

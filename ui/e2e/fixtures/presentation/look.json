@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "theme": {
+    "brandRamp": {
+      "10": "#031a1c", "20": "#052829", "30": "#073637", "40": "#094444",
+      "50": "#0c5352", "60": "#0e615f", "70": "#106f6d", "80": "#127d7a",
+      "90": "#2d8c8a", "100": "#489c99", "110": "#62aba8", "120": "#7dbab8",
+      "130": "#98c9c8", "140": "#b2d8d7", "150": "#cde8e6", "160": "#e8f7f6"
+    },
+    "fontFamily": "Georgia",
+    "density": "comfortable",
+    "colorScheme": "system"
+  },
+  "whiteLabel": { "name": "Harbor Desk", "logo": "lk_/looks/logo.svg" }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "xrmverse",
+  "build": { "dockerfile": "Dockerfile" },
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/node:1": { "version": "22", "pnpmVersion": "none" }
+  },
+  "remoteUser": "vscode",
+  // SQL Server publishes no arm64 image, so the container is amd64 on every host.
+  // The sysctl lets the vscode user bind port 80 for the acceptance tests.
+  "runArgs": ["--platform=linux/amd64", "--sysctl", "net.ipv4.ip_unprivileged_port_start=80"],
+  "containerEnv": { "DOTNET_CLI_TELEMETRY_OPTOUT": "1", "COREPACK_ENABLE_DOWNLOAD_PROMPT": "0" },
+  "forwardPorts": [5000, 5173],
+  "hostRequirements": { "cpus": 4, "memory": "8gb" },
+  "postCreateCommand": ".devcontainer/post-create.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-dotnettools.csharp",
+        "dbaeumer.vscode-eslint",
+        "ms-azuretools.vscode-docker",
+        "editorconfig.editorconfig"
+      ]
+    }
+  }
+}

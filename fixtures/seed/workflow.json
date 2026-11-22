@@ -1,0 +1,809 @@
+{
+  "LogicalName": "workflow",
+  "SchemaName": "Workflow",
+  "IsAuditEnabled": {
+    "Value": false,
+    "CanBeChanged": true,
+    "ManagedPropertyLogicalName": "canmodifyauditsettings"
+  },
+  "EntitySetName": "workflows",
+  "ObjectTypeCode": 4703,
+  "OwnershipType": "UserOwned",
+  "PrimaryNameAttribute": "name",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "name",
+      "SchemaName": "Name",
+      "MaxLength": 100
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "uniquename",
+      "SchemaName": "UniqueName",
+      "MaxLength": 256
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "description",
+      "SchemaName": "Description",
+      "MaxLength": 100000
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "category",
+      "SchemaName": "Category",
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Workflow",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Workflow",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Dialog",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Dialog",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 2,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Business Rule",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Business Rule",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 3,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Action",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Action",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 4,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Business Process Flow",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Business Process Flow",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 5,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Modern Flow",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Modern Flow",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 6,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Desktop Flow",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Desktop Flow",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 7,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "AI Flow",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "AI Flow",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "mode",
+      "SchemaName": "Mode",
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Background",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Background",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Real-time",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Real-time",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "type",
+      "SchemaName": "Type",
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Definition",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Definition",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 2,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Activation",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Activation",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 3,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Template",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Template",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "scope",
+      "SchemaName": "Scope",
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "User",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "User",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 2,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Business Unit",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Business Unit",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 3,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Parent: Child Business Units",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Parent: Child Business Units",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 4,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Organization",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Organization",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "primaryentity",
+      "SchemaName": "PrimaryEntity",
+      "MaxLength": 100
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "xaml",
+      "SchemaName": "Xaml",
+      "MaxLength": 1073741823
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "ondemand",
+      "SchemaName": "OnDemand",
+      "DefaultValue": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "subprocess",
+      "SchemaName": "Subprocess",
+      "DefaultValue": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "triggeroncreate",
+      "SchemaName": "TriggerOnCreate",
+      "DefaultValue": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "triggerondelete",
+      "SchemaName": "TriggerOnDelete",
+      "DefaultValue": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "asyncautodelete",
+      "SchemaName": "AsyncAutoDelete",
+      "DefaultValue": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "syncworkflowlogonfailure",
+      "SchemaName": "SyncWorkflowLogOnFailure",
+      "DefaultValue": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "istransacted",
+      "SchemaName": "IsTransacted",
+      "DefaultValue": true
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "triggeronupdateattributelist",
+      "SchemaName": "TriggerOnUpdateAttributeList",
+      "MaxLength": 1073741823
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "createstage",
+      "SchemaName": "CreateStage",
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 20,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Pre-operation",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Pre-operation",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 40,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Post-operation",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Post-operation",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "updatestage",
+      "SchemaName": "UpdateStage",
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 20,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Pre-operation",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Pre-operation",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 40,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Post-operation",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Post-operation",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "deletestage",
+      "SchemaName": "DeleteStage",
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 20,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Pre-operation",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Pre-operation",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 40,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Post-operation",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Post-operation",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "runas",
+      "SchemaName": "RunAs",
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Owner",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Owner",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Calling User",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Calling User",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "processtriggerscope",
+      "SchemaName": "ProcessTriggerScope",
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Form",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Form",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 2,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Entity",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Entity",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 3,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "All Forms",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "All Forms",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "rank",
+      "SchemaName": "Rank"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "parentworkflowid",
+      "SchemaName": "ParentWorkflowId",
+      "Targets": [
+        "workflow"
+      ]
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "activeworkflowid",
+      "SchemaName": "ActiveWorkflowId",
+      "Targets": [
+        "workflow"
+      ]
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "sdkmessageid",
+      "SchemaName": "SdkMessageId",
+      "Targets": [
+        "sdkmessage"
+      ]
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "inputparameters",
+      "SchemaName": "InputParameters",
+      "MaxLength": 1073741823
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "introducedversion",
+      "SchemaName": "IntroducedVersion",
+      "MaxLength": 48
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "iscustomizable",
+      "SchemaName": "IsCustomizable",
+      "DefaultValue": true
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "xrmverse_unsupportedsteps",
+      "SchemaName": "xrmverse_unsupportedsteps",
+      "MaxLength": 1048576
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "xrmverse_componentxml",
+      "SchemaName": "xrmverse_componentxml",
+      "MaxLength": 1048576,
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "ismanaged",
+      "SchemaName": "IsManaged",
+      "DefaultValue": false,
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StateAttributeMetadata",
+      "LogicalName": "statecode",
+      "SchemaName": "StateCode",
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "State",
+        "Options": [
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StateOptionMetadata",
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Draft",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Draft",
+                "LanguageCode": 1033
+              }
+            },
+            "DefaultStatus": 1
+          },
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StateOptionMetadata",
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Activated",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Activated",
+                "LanguageCode": 1033
+              }
+            },
+            "DefaultStatus": 2
+          }
+        ]
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StatusAttributeMetadata",
+      "LogicalName": "statuscode",
+      "SchemaName": "StatusCode",
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Status",
+        "Options": [
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StatusOptionMetadata",
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Draft",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Draft",
+                "LanguageCode": 1033
+              }
+            },
+            "State": 0
+          },
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StatusOptionMetadata",
+            "Value": 2,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Activated",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Activated",
+                "LanguageCode": 1033
+              }
+            },
+            "State": 1
+          }
+        ]
+      }
+    }
+  ],
+  "ManyToOneRelationships": [
+    {
+      "SchemaName": "workflow_parent_workflow",
+      "ReferencedEntity": "workflow",
+      "ReferencingEntity": "workflow",
+      "ReferencingAttribute": "parentworkflowid",
+      "ReferencedEntityNavigationPropertyName": "workflow_parent_workflow",
+      "ReferencingEntityNavigationPropertyName": "parentworkflowid",
+      "CascadeConfiguration": {
+        "Assign": "NoCascade",
+        "Delete": "Cascade",
+        "Merge": "NoCascade",
+        "Reparent": "NoCascade",
+        "Share": "NoCascade",
+        "Unshare": "NoCascade",
+        "Archive": "NoCascade",
+        "RollupView": "NoCascade"
+      }
+    },
+    {
+      "SchemaName": "workflow_active_workflow",
+      "ReferencedEntity": "workflow",
+      "ReferencingEntity": "workflow",
+      "ReferencingAttribute": "activeworkflowid",
+      "ReferencedEntityNavigationPropertyName": "workflow_active_workflow",
+      "ReferencingEntityNavigationPropertyName": "activeworkflowid",
+      "CascadeConfiguration": {
+        "Assign": "NoCascade",
+        "Delete": "RemoveLink",
+        "Merge": "NoCascade",
+        "Reparent": "NoCascade",
+        "Share": "NoCascade",
+        "Unshare": "NoCascade",
+        "Archive": "NoCascade",
+        "RollupView": "NoCascade"
+      }
+    }
+  ]
+}

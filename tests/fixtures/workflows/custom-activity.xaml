@@ -1,0 +1,47 @@
+<!-- Provisional, hand-written by xrmverse (W25): not exported from Dataverse. Replaced by the parity export (checklist 1h). -->
+<Activity xx:Class="XrmWorkflow3c1d7a5e0b2f4c6aa1f0d9e8c7b6a506"
+          xmlns="http://schemas.microsoft.com/netfx/2009/xaml/activities"
+          xmlns:sdk="clr-namespace:Microsoft.Xrm.Sdk;assembly=Microsoft.Xrm.Sdk, Version=9.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35"
+          xmlns:wf="clr-namespace:Microsoft.Xrm.Sdk.Workflow.Activities;assembly=Microsoft.Xrm.Sdk.Workflow, Version=9.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35"
+          xmlns:sys="clr-namespace:System;assembly=mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089"
+          xmlns:col="clr-namespace:System.Collections.ObjectModel;assembly=mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089"
+          xmlns:ex="clr-namespace:Example.Workflows.Activities;assembly=Example.Workflows, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+          xmlns:xx="http://schemas.microsoft.com/winfx/2006/xaml">
+  <wf:Workflow>
+    <wf:ActivityReference AssemblyQualifiedName="Microsoft.Crm.Workflow.Activities.StepComposite, Microsoft.Crm.Workflow, Version=9.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35" DisplayName="CustomStep1: normalize the name">
+      <wf:ActivityReference.Properties>
+        <col:Collection xx:TypeArguments="Variable" xx:Key="Variables" />
+        <col:Collection xx:TypeArguments="Activity" xx:Key="Activities">
+          <wf:GetEntityProperty Attribute="name" Entity="[InputEntities(&quot;primaryEntity&quot;)]" EntityName="account" Value="[CustomStep1_1]" />
+          <wf:ActivityReference AssemblyQualifiedName="Microsoft.Crm.Workflow.Activities.EvaluateExpression, Microsoft.Crm.Workflow, Version=9.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35" DisplayName="EvaluateExpression">
+            <wf:ActivityReference.Arguments>
+              <InArgument xx:TypeArguments="xx:String" xx:Key="ExpressionOperator">CreateCrmType</InArgument>
+              <InArgument xx:TypeArguments="sys:Object[]" xx:Key="Parameters">[New Object() { Microsoft.Xrm.Sdk.Workflow.WorkflowPropertyType.Integer, "50", "Integer" }]</InArgument>
+              <OutArgument xx:TypeArguments="xx:Object" xx:Key="Result">[CustomStep1_2]</OutArgument>
+            </wf:ActivityReference.Arguments>
+          </wf:ActivityReference>
+          <ex:NormalizeName DisplayName="CustomStep1" MaxLength="[CustomStep1_2]">
+            <ex:NormalizeName.Input>
+              <InArgument xx:TypeArguments="xx:String">[CustomStep1_1]</InArgument>
+            </ex:NormalizeName.Input>
+            <ex:NormalizeName.Normalized>
+              <OutArgument xx:TypeArguments="xx:String">[CustomStep1_Normalized]</OutArgument>
+            </ex:NormalizeName.Normalized>
+          </ex:NormalizeName>
+        </col:Collection>
+      </wf:ActivityReference.Properties>
+    </wf:ActivityReference>
+    <wf:ActivityReference AssemblyQualifiedName="Microsoft.Crm.Workflow.Activities.StepComposite, Microsoft.Crm.Workflow, Version=9.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35" DisplayName="UpdateStep2: store the normalized name">
+      <wf:ActivityReference.Properties>
+        <col:Collection xx:TypeArguments="Variable" xx:Key="Variables" />
+        <col:Collection xx:TypeArguments="Activity" xx:Key="Activities">
+          <Assign xx:TypeArguments="sdk:Entity" To="[UpdatedEntities(&quot;primaryEntity#Temp&quot;)]" Value="[New Entity(&quot;account&quot;)]" />
+          <Assign xx:TypeArguments="sys:Guid" To="[UpdatedEntities(&quot;primaryEntity#Temp&quot;).Id]" Value="[InputEntities(&quot;primaryEntity&quot;).Id]" />
+          <wf:SetEntityProperty Attribute="name" Entity="[UpdatedEntities(&quot;primaryEntity#Temp&quot;)]" EntityName="account" Value="[CustomStep1_Normalized]" />
+          <wf:UpdateEntity DisplayName="UpdateStep2" Entity="[UpdatedEntities(&quot;primaryEntity#Temp&quot;)]" EntityName="account" />
+          <Persist />
+        </col:Collection>
+      </wf:ActivityReference.Properties>
+    </wf:ActivityReference>
+  </wf:Workflow>
+</Activity>

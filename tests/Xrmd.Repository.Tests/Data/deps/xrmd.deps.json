@@ -1,0 +1,118 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v8.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v8.0": {
+      "xrmd/1.0.0": {
+        "dependencies": {
+          "Newtonsoft.Json": "13.0.1",
+          "System.Runtime": "4.3.0",
+          "Acme.Native": "1.0.0",
+          "Microsoft.VisualBasic": "10.3.0",
+          "Acme.FileLicensed": "1.0.0",
+          "Acme.Proprietary": "1.0.0"
+        },
+        "runtime": {
+          "xrmd.dll": {}
+        }
+      },
+      "Newtonsoft.Json/13.0.1": {
+        "runtime": {
+          "lib/net8.0/Newtonsoft.Json.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "System.Runtime/4.3.0": {
+        "dependencies": {
+          "Microsoft.NETCore.Platforms": "1.1.0"
+        }
+      },
+      "Acme.Native/1.0.0": {
+        "native": {
+          "runtimes/linux-x64/native/libacme.so": {
+            "fileVersion": "0.0.0.0"
+          }
+        }
+      },
+      "Microsoft.VisualBasic/10.3.0": {
+        "runtime": {
+          "lib/net8.0/Microsoft.VisualBasic.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "Acme.FileLicensed/1.0.0": {
+        "runtime": {
+          "lib/net8.0/Acme.FileLicensed.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "Acme.Proprietary/1.0.0": {
+        "runtimeTargets": {
+          "runtimes/win-x64/native/Acme.Proprietary.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "xrmd/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "Newtonsoft.Json/13.0.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-x",
+      "path": "newtonsoft.json/13.0.1",
+      "hashPath": "newtonsoft.json.13.0.1.nupkg.sha512"
+    },
+    "System.Runtime/4.3.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-x",
+      "path": "system.runtime/4.3.0",
+      "hashPath": "system.runtime.4.3.0.nupkg.sha512"
+    },
+    "Acme.Native/1.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-x",
+      "path": "acme.native/1.0.0",
+      "hashPath": "acme.native.1.0.0.nupkg.sha512"
+    },
+    "Microsoft.VisualBasic/10.3.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-x",
+      "path": "microsoft.visualbasic/10.3.0",
+      "hashPath": "microsoft.visualbasic.10.3.0.nupkg.sha512"
+    },
+    "Acme.FileLicensed/1.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-x",
+      "path": "acme.filelicensed/1.0.0",
+      "hashPath": "acme.filelicensed.1.0.0.nupkg.sha512"
+    },
+    "Acme.Proprietary/1.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-x",
+      "path": "acme.proprietary/1.0.0",
+      "hashPath": "acme.proprietary.1.0.0.nupkg.sha512"
+    }
+  }
+}

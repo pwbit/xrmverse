@@ -1,0 +1,381 @@
+{
+  "LogicalName": "systemform",
+  "SchemaName": "SystemForm",
+  "IsAuditEnabled": {"Value": false, "CanBeChanged": false, "ManagedPropertyLogicalName": "canmodifyauditsettings"},
+  "EntitySetName": "systemforms",
+  "ObjectTypeCode": 1030,
+  "OwnershipType": "OrganizationOwned",
+  "PrimaryNameAttribute": "name",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "name",
+      "SchemaName": "name",
+      "MaxLength": 100
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "objecttypecode",
+      "SchemaName": "objecttypecode",
+      "MaxLength": 64
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "formxml",
+      "SchemaName": "formxml",
+      "MaxLength": 1048576
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "type",
+      "SchemaName": "type",
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Dashboard",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Dashboard",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "AppointmentBook",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "AppointmentBook",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 2,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Main",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Main",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 3,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "MiniCampaignBO",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "MiniCampaignBO",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 4,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Preview",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Preview",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 5,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Mobile - Express",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Mobile - Express",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 6,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Quick View Form",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Quick View Form",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 7,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Quick Create",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Quick Create",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 8,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Dialog",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Dialog",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 9,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Task Flow Form",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Task Flow Form",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 10,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "InteractionCentricDashboard",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "InteractionCentricDashboard",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 11,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Card",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Card",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 12,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Main - Interactive experience",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Main - Interactive experience",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 13,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Contextual Dashboard",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Contextual Dashboard",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 100,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Other",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Other",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 101,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "MainBackup",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "MainBackup",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 102,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "AppointmentBookBackup",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "AppointmentBookBackup",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 103,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Power BI Dashboard",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Power BI Dashboard",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "description",
+      "SchemaName": "description",
+      "MaxLength": 1048576
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "xrmverse_componentxml",
+      "SchemaName": "xrmverse_componentxml",
+      "MaxLength": 1048576,
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "isdefault",
+      "SchemaName": "IsDefault",
+      "DefaultValue": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "formactivationstate",
+      "SchemaName": "FormActivationState",
+      "DefaultFormValue": 1,
+      "OptionSet": {
+        "IsGlobal": true,
+        "Name": "systemform_formactivationstate",
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Inactive",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Inactive",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Active",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Active",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "ismanaged",
+      "SchemaName": "IsManaged",
+      "DefaultValue": false,
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    }
+  ]
+}

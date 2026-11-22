@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    An early-bound plug-in assembly (net462, strong-named): [assembly: ProxyTypesAssembly] and a generated-style entity
+    class, the shape CrmSvcUtil / pac modelbuilder produce. Kept apart from Xrmd.TestPlugins because the SDK pins every
+    assembly carrying ProxyTypesAssembly for the life of the process.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net462</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>..\Xrmd.TestPlugins\xrmd-test.snk</AssemblyOriginatorKeyFile>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CrmSdk.CoreAssemblies" Version="9.0.2.*" />
+  </ItemGroup>
+
+</Project>

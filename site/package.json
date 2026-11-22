@@ -1,0 +1,17 @@
+{
+  "name": "xrmverse-site",
+  "private": true,
+  "license": "Apache-2.0",
+  "description": "Static generator for the xrmverse website (GitHub Pages): home page and the docs/ pages.",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "marked": "18.1.2",
+    "mermaid": "^12.2.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

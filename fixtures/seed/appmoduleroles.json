@@ -1,0 +1,26 @@
+{
+  "LogicalName": "appmoduleroles",
+  "SchemaName": "AppModuleRoles",
+  "IsAuditEnabled": {
+    "Value": false,
+    "CanBeChanged": false,
+    "ManagedPropertyLogicalName": "canmodifyauditsettings"
+  },
+  "EntitySetName": "appmodulerolescollection",
+  "ObjectTypeCode": 9009,
+  "PrimaryIdAttribute": "appmoduleroleid",
+  "OwnershipType": "OrganizationOwned",
+  "IsIntersect": true,
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.UniqueIdentifierAttributeMetadata",
+      "LogicalName": "appmoduleid",
+      "SchemaName": "appmoduleid"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.UniqueIdentifierAttributeMetadata",
+      "LogicalName": "roleid",
+      "SchemaName": "roleid"
+    }
+  ]
+}

@@ -1,0 +1,95 @@
+{
+  "LogicalName": "role",
+  "SchemaName": "Role",
+  "IsAuditEnabled": {"Value": true, "CanBeChanged": true, "ManagedPropertyLogicalName": "canmodifyauditsettings"},
+  "EntitySetName": "roles",
+  "ObjectTypeCode": 1036,
+  "OwnershipType": "BusinessOwned",
+  "PrimaryNameAttribute": "name",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "name",
+      "SchemaName": "name",
+      "MaxLength": 100
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "businessunitid",
+      "SchemaName": "businessunitid",
+      "Targets": [
+        "businessunit"
+      ]
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.UniqueIdentifierAttributeMetadata",
+      "LogicalName": "roletemplateid",
+      "SchemaName": "roletemplateid",
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "parentrootroleid",
+      "SchemaName": "parentrootroleid",
+      "Targets": [
+        "role"
+      ]
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "isinherited",
+      "SchemaName": "isinherited",
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Team privileges only",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Team privileges only",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Direct User (Basic) access level and Team privileges",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Direct User (Basic) access level and Team privileges",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "description",
+      "SchemaName": "description",
+      "MaxLength": 2000
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "ismanaged",
+      "SchemaName": "IsManaged",
+      "DefaultValue": false,
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    }
+  ]
+}

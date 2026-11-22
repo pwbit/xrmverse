@@ -1,0 +1,198 @@
+{
+  "LogicalName": "account",
+  "SchemaName": "Account",
+  "IsAuditEnabled": {"Value": true, "CanBeChanged": true, "ManagedPropertyLogicalName": "canmodifyauditsettings"},
+  "EntitySetName": "accounts",
+  "ObjectTypeCode": 1,
+  "OwnershipType": "UserOwned",
+  "HasActivities": true,
+  "HasNotes": true,
+  "PrimaryNameAttribute": "name",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "name",
+      "SchemaName": "Name",
+      "MaxLength": 160,
+      "Format": "Text"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "accountnumber",
+      "SchemaName": "AccountNumber",
+      "MaxLength": 20,
+      "Format": "Text"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "telephone1",
+      "SchemaName": "Telephone1",
+      "MaxLength": 50,
+      "Format": "Text"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "emailaddress1",
+      "SchemaName": "EMailAddress1",
+      "MaxLength": 100,
+      "Format": "Email"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "websiteurl",
+      "SchemaName": "WebSiteURL",
+      "MaxLength": 200,
+      "Format": "Url"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "address1_line1",
+      "SchemaName": "Address1_Line1",
+      "MaxLength": 250,
+      "Format": "Text"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "address1_city",
+      "SchemaName": "Address1_City",
+      "MaxLength": 80,
+      "Format": "Text"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "address1_postalcode",
+      "SchemaName": "Address1_PostalCode",
+      "MaxLength": 20,
+      "Format": "Text"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "address1_country",
+      "SchemaName": "Address1_Country",
+      "MaxLength": 80,
+      "Format": "Text"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "parentaccountid",
+      "SchemaName": "ParentAccountId",
+      "Targets": [
+        "account"
+      ]
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "primarycontactid",
+      "SchemaName": "PrimaryContactId",
+      "Targets": [
+        "contact"
+      ]
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "transactioncurrencyid",
+      "SchemaName": "TransactionCurrencyId",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Currency",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Currency",
+          "LanguageCode": 1033
+        }
+      },
+      "Targets": [
+        "transactioncurrency"
+      ],
+      "RequiredLevel": {
+        "Value": "None",
+        "CanBeChanged": true
+      },
+      "IsValidForCreate": true,
+      "IsValidForUpdate": true
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.DecimalAttributeMetadata",
+      "LogicalName": "exchangerate",
+      "SchemaName": "ExchangeRate",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Exchange Rate",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Exchange Rate",
+          "LanguageCode": 1033
+        }
+      },
+      "Precision": 10,
+      "MinValue": 0.0000000001,
+      "MaxValue": 100000000000,
+      "RequiredLevel": {
+        "Value": "None",
+        "CanBeChanged": true
+      },
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    }
+  ],
+  "ManyToOneRelationships": [
+    {
+      "SchemaName": "account_parent_account",
+      "ReferencedEntity": "account",
+      "ReferencingEntity": "account",
+      "ReferencingAttribute": "parentaccountid",
+      "ReferencingEntityNavigationPropertyName": "parentaccountid",
+      "IsHierarchical": true,
+      "CascadeConfiguration": {
+        "Assign": "Cascade",
+        "Delete": "RemoveLink",
+        "Merge": "Cascade",
+        "Reparent": "Cascade",
+        "Share": "Cascade",
+        "Unshare": "Cascade",
+        "Archive": "NoCascade",
+        "RollupView": "NoCascade"
+      }
+    },
+    {
+      "SchemaName": "account_primary_contact",
+      "ReferencedEntity": "contact",
+      "ReferencingEntity": "account",
+      "ReferencingAttribute": "primarycontactid",
+      "ReferencingEntityNavigationPropertyName": "primarycontactid",
+      "CascadeConfiguration": {
+        "Assign": "NoCascade",
+        "Delete": "RemoveLink",
+        "Merge": "Cascade",
+        "Reparent": "NoCascade",
+        "Share": "NoCascade",
+        "Unshare": "NoCascade",
+        "Archive": "NoCascade",
+        "RollupView": "NoCascade"
+      }
+    },
+    {
+      "SchemaName": "transactioncurrency_account",
+      "ReferencedEntity": "transactioncurrency",
+      "ReferencingEntity": "account",
+      "ReferencingAttribute": "transactioncurrencyid",
+      "ReferencingEntityNavigationPropertyName": "transactioncurrencyid",
+      "CascadeConfiguration": {
+        "Assign": "NoCascade",
+        "Delete": "Restrict",
+        "Merge": "NoCascade",
+        "Reparent": "NoCascade",
+        "Share": "NoCascade",
+        "Unshare": "NoCascade",
+        "Archive": "NoCascade",
+        "RollupView": "NoCascade"
+      }
+    }
+  ]
+}

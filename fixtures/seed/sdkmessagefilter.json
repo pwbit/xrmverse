@@ -1,0 +1,52 @@
+{
+  "LogicalName": "sdkmessagefilter",
+  "SchemaName": "sdkmessagefilter",
+  "IsAuditEnabled": {"Value": false, "CanBeChanged": false, "ManagedPropertyLogicalName": "canmodifyauditsettings"},
+  "EntitySetName": "sdkmessagefilters",
+  "ObjectTypeCode": 4607,
+  "OwnershipType": "OrganizationOwned",
+  "PrimaryNameAttribute": "name",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "name",
+      "SchemaName": "name",
+      "MaxLength": 256
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "sdkmessageid",
+      "SchemaName": "sdkmessageid",
+      "Targets": [
+        "sdkmessage"
+      ]
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "primaryobjecttypecode",
+      "SchemaName": "primaryobjecttypecode",
+      "MaxLength": 64
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "secondaryobjecttypecode",
+      "SchemaName": "secondaryobjecttypecode",
+      "MaxLength": 64
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "iscustomprocessingstepallowed",
+      "SchemaName": "iscustomprocessingstepallowed"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "isvisible",
+      "SchemaName": "isvisible"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "availability",
+      "SchemaName": "availability"
+    }
+  ]
+}

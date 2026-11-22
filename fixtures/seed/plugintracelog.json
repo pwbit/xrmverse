@@ -1,0 +1,180 @@
+{
+  "LogicalName": "plugintracelog",
+  "SchemaName": "plugintracelog",
+  "IsAuditEnabled": {"Value": false, "CanBeChanged": false, "ManagedPropertyLogicalName": "canmodifyauditsettings"},
+  "EntitySetName": "plugintracelogs",
+  "ObjectTypeCode": 4619,
+  "OwnershipType": "OrganizationOwned",
+  "PrimaryNameAttribute": "typename",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "typename",
+      "SchemaName": "typename",
+      "MaxLength": 1024
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "messageblock",
+      "SchemaName": "messageblock",
+      "MaxLength": 1048576
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "exceptiondetails",
+      "SchemaName": "exceptiondetails",
+      "MaxLength": 1048576
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "messagename",
+      "SchemaName": "messagename",
+      "MaxLength": 1024
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "primaryentity",
+      "SchemaName": "primaryentity",
+      "MaxLength": 1024
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "mode",
+      "SchemaName": "mode",
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Synchronous",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Synchronous",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Asynchronous",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Asynchronous",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "operationtype",
+      "SchemaName": "operationtype",
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Unknown",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Unknown",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Plug-in",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Plug-in",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 2,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Workflow Activity",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Workflow Activity",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "depth",
+      "SchemaName": "depth"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.UniqueIdentifierAttributeMetadata",
+      "LogicalName": "correlationid",
+      "SchemaName": "correlationid"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.UniqueIdentifierAttributeMetadata",
+      "LogicalName": "requestid",
+      "SchemaName": "requestid"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.UniqueIdentifierAttributeMetadata",
+      "LogicalName": "pluginstepid",
+      "SchemaName": "pluginstepid"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "configuration",
+      "SchemaName": "configuration",
+      "MaxLength": 1048576
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.DateTimeAttributeMetadata",
+      "LogicalName": "performanceexecutionstarttime",
+      "SchemaName": "performanceexecutionstarttime",
+      "Format": "DateAndTime"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "performanceexecutionduration",
+      "SchemaName": "performanceexecutionduration"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "issystemcreated",
+      "SchemaName": "issystemcreated"
+    }
+  ]
+}

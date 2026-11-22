@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Xrmd.Abstractions\Xrmd.Abstractions.csproj" />
+    <ProjectReference Include="..\Xrmd.Core\Xrmd.Core.csproj" />
+    <ProjectReference Include="..\Xrmd.WebApi\Xrmd.WebApi.csproj" />
+    <ProjectReference Include="..\Xrmd.Admin\Xrmd.Admin.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ModelContextProtocol" Version="2.4.0" />
+    <PackageReference Include="ModelContextProtocol.AspNetCore" Version="2.4.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Xrmd.Integration.Tests" />
+  </ItemGroup>
+
+</Project>

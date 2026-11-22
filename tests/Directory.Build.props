@@ -1,0 +1,14 @@
+<Project>
+  <!-- A Directory.Build.props here hides the root one, so import it first. -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <!--
+    Tests keep the Microsoft SDK at runtime (Plan 12, B3). It is compile-only in src/ and installed by customers with
+    'xrmd sdk install'; here it is a direct test dependency that is never shipped. The TestPlugins projects
+    (net462, Microsoft.CrmSdk.CoreAssemblies) and the test workflow activities (net462, Microsoft.CrmSdk.Workflow) do not
+    need it.
+  -->
+  <ItemGroup Condition="!$(MSBuildProjectName.StartsWith('Xrmd.TestPlugins')) And '$(MSBuildProjectName)' != 'Xrmd.TestWorkflowActivities'">
+    <PackageReference Include="Microsoft.PowerPlatform.Dataverse.Client" Version="1.2.27" />
+  </ItemGroup>
+</Project>

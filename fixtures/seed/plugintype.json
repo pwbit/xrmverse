@@ -1,0 +1,68 @@
+{
+  "LogicalName": "plugintype",
+  "SchemaName": "plugintype",
+  "IsAuditEnabled": {"Value": false, "CanBeChanged": false, "ManagedPropertyLogicalName": "canmodifyauditsettings"},
+  "EntitySetName": "plugintypes",
+  "ObjectTypeCode": 4602,
+  "OwnershipType": "OrganizationOwned",
+  "PrimaryNameAttribute": "name",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "typename",
+      "SchemaName": "typename",
+      "MaxLength": 256
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "name",
+      "SchemaName": "name",
+      "MaxLength": 256
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "friendlyname",
+      "SchemaName": "friendlyname",
+      "MaxLength": 256
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "assemblyname",
+      "SchemaName": "assemblyname",
+      "MaxLength": 100
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "description",
+      "SchemaName": "description",
+      "MaxLength": 1048576
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "pluginassemblyid",
+      "SchemaName": "pluginassemblyid",
+      "Targets": [
+        "pluginassembly"
+      ]
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "isworkflowactivity",
+      "SchemaName": "isworkflowactivity"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "workflowactivitygroupname",
+      "SchemaName": "workflowactivitygroupname",
+      "MaxLength": 256
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "ismanaged",
+      "SchemaName": "IsManaged",
+      "DefaultValue": false,
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    }
+  ]
+}

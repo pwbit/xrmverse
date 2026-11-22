@@ -1,0 +1,1042 @@
+{
+  "_comment": "Request bodies produced by src/Xrmd.Schema/SchemaWebApiBodies.cs for the given inputs. Asserted by tests/Xrmd.Schema.Tests/UiFixtureTests.cs and ui/src/admin/tables/schemaBodies.test.ts. Never regenerate from a test; edit by hand with the C# change.",
+  "cases": [
+    {
+      "name": "entity_organization",
+      "kind": "entity",
+      "input": {
+        "name": "xv_project",
+        "label": "Project",
+        "pluralLabel": "Projects",
+        "ownership": "organization",
+        "primaryName": {
+          "name": "xv_name",
+          "label": "Name"
+        }
+      },
+      "expected": {
+        "@odata.type": "Microsoft.Dynamics.CRM.EntityMetadata",
+        "DisplayCollectionName": {
+          "LocalizedLabels": [
+            {
+              "Label": "Projects",
+              "LanguageCode": 1033
+            }
+          ],
+          "UserLocalizedLabel": {
+            "Label": "Projects",
+            "LanguageCode": 1033
+          }
+        },
+        "DisplayName": {
+          "LocalizedLabels": [
+            {
+              "Label": "Project",
+              "LanguageCode": 1033
+            }
+          ],
+          "UserLocalizedLabel": {
+            "Label": "Project",
+            "LanguageCode": 1033
+          }
+        },
+        "LogicalName": "xv_project",
+        "OwnershipType": "OrganizationOwned",
+        "SchemaName": "xv_project",
+        "Attributes": [
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+            "AttributeType": "String",
+            "AttributeTypeName": {
+              "Value": "StringType"
+            },
+            "DisplayName": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Name",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Name",
+                "LanguageCode": 1033
+              }
+            },
+            "IsValidODataAttribute": false,
+            "LogicalName": "xv_name",
+            "SchemaName": "xv_name",
+            "IsPrimaryName": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "entity_user",
+      "kind": "entity",
+      "input": {
+        "name": "acme_task",
+        "label": "Task",
+        "pluralLabel": "Tasks",
+        "ownership": "user",
+        "primaryName": {
+          "name": "acme_name",
+          "label": "Name"
+        }
+      },
+      "expected": {
+        "@odata.type": "Microsoft.Dynamics.CRM.EntityMetadata",
+        "DisplayCollectionName": {
+          "LocalizedLabels": [
+            {
+              "Label": "Tasks",
+              "LanguageCode": 1033
+            }
+          ],
+          "UserLocalizedLabel": {
+            "Label": "Tasks",
+            "LanguageCode": 1033
+          }
+        },
+        "DisplayName": {
+          "LocalizedLabels": [
+            {
+              "Label": "Task",
+              "LanguageCode": 1033
+            }
+          ],
+          "UserLocalizedLabel": {
+            "Label": "Task",
+            "LanguageCode": 1033
+          }
+        },
+        "LogicalName": "acme_task",
+        "OwnershipType": "UserOwned",
+        "SchemaName": "acme_task",
+        "Attributes": [
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+            "AttributeType": "String",
+            "AttributeTypeName": {
+              "Value": "StringType"
+            },
+            "DisplayName": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Name",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Name",
+                "LanguageCode": 1033
+              }
+            },
+            "IsValidODataAttribute": false,
+            "LogicalName": "acme_name",
+            "SchemaName": "acme_name",
+            "IsPrimaryName": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "entity_schema_names",
+      "kind": "entity",
+      "input": {
+        "name": "acme_task",
+        "label": "Task",
+        "pluralLabel": "Tasks",
+        "ownership": "user",
+        "primaryName": {
+          "name": "acme_name",
+          "label": "Name",
+          "schemaName": "acme_Name"
+        },
+        "schemaName": "acme_Task"
+      },
+      "expected": {
+        "@odata.type": "Microsoft.Dynamics.CRM.EntityMetadata",
+        "DisplayCollectionName": {
+          "LocalizedLabels": [
+            {
+              "Label": "Tasks",
+              "LanguageCode": 1033
+            }
+          ],
+          "UserLocalizedLabel": {
+            "Label": "Tasks",
+            "LanguageCode": 1033
+          }
+        },
+        "DisplayName": {
+          "LocalizedLabels": [
+            {
+              "Label": "Task",
+              "LanguageCode": 1033
+            }
+          ],
+          "UserLocalizedLabel": {
+            "Label": "Task",
+            "LanguageCode": 1033
+          }
+        },
+        "LogicalName": "acme_task",
+        "OwnershipType": "UserOwned",
+        "SchemaName": "acme_Task",
+        "Attributes": [
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+            "AttributeType": "String",
+            "AttributeTypeName": {
+              "Value": "StringType"
+            },
+            "DisplayName": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Name",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Name",
+                "LanguageCode": 1033
+              }
+            },
+            "IsValidODataAttribute": false,
+            "LogicalName": "acme_name",
+            "SchemaName": "acme_Name",
+            "IsPrimaryName": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "entity_activity",
+      "kind": "entity",
+      "input": {
+        "name": "xv_sms",
+        "label": "SMS",
+        "pluralLabel": "SMS messages",
+        "ownership": "user",
+        "isActivity": true,
+        "primaryName": {
+          "name": "subject",
+          "label": "Subject"
+        }
+      },
+      "expected": {
+        "@odata.type": "Microsoft.Dynamics.CRM.EntityMetadata",
+        "DisplayCollectionName": {
+          "LocalizedLabels": [
+            {
+              "Label": "SMS messages",
+              "LanguageCode": 1033
+            }
+          ],
+          "UserLocalizedLabel": {
+            "Label": "SMS messages",
+            "LanguageCode": 1033
+          }
+        },
+        "DisplayName": {
+          "LocalizedLabels": [
+            {
+              "Label": "SMS",
+              "LanguageCode": 1033
+            }
+          ],
+          "UserLocalizedLabel": {
+            "Label": "SMS",
+            "LanguageCode": 1033
+          }
+        },
+        "IsActivity": true,
+        "LogicalName": "xv_sms",
+        "OwnershipType": "UserOwned",
+        "SchemaName": "xv_sms",
+        "Attributes": [
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+            "AttributeType": "String",
+            "AttributeTypeName": {
+              "Value": "StringType"
+            },
+            "DisplayName": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Subject",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Subject",
+                "LanguageCode": 1033
+              }
+            },
+            "IsValidODataAttribute": false,
+            "LogicalName": "subject",
+            "SchemaName": "Subject",
+            "IsPrimaryName": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "entity_notes_and_activities",
+      "kind": "entity",
+      "input": {
+        "name": "xv_site",
+        "label": "Site",
+        "ownership": "user",
+        "hasNotes": true,
+        "hasActivities": true,
+        "primaryName": {
+          "name": "xv_name",
+          "label": "Name"
+        }
+      },
+      "expected": {
+        "@odata.type": "Microsoft.Dynamics.CRM.EntityMetadata",
+        "DisplayName": {
+          "LocalizedLabels": [
+            {
+              "Label": "Site",
+              "LanguageCode": 1033
+            }
+          ],
+          "UserLocalizedLabel": {
+            "Label": "Site",
+            "LanguageCode": 1033
+          }
+        },
+        "LogicalName": "xv_site",
+        "OwnershipType": "UserOwned",
+        "SchemaName": "xv_site",
+        "HasNotes": true,
+        "HasActivities": true,
+        "Attributes": [
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+            "AttributeType": "String",
+            "AttributeTypeName": {
+              "Value": "StringType"
+            },
+            "DisplayName": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Name",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Name",
+                "LanguageCode": 1033
+              }
+            },
+            "IsValidODataAttribute": false,
+            "LogicalName": "xv_name",
+            "SchemaName": "xv_name",
+            "IsPrimaryName": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "attribute_string",
+      "kind": "attribute",
+      "input": {
+        "name": "xv_notes",
+        "type": "string",
+        "label": "Notes",
+        "maxLength": 250
+      },
+      "expected": {
+        "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+        "MaxLength": 250,
+        "AttributeType": "String",
+        "AttributeTypeName": {
+          "Value": "StringType"
+        },
+        "DisplayName": {
+          "LocalizedLabels": [
+            {
+              "Label": "Notes",
+              "LanguageCode": 1033
+            }
+          ],
+          "UserLocalizedLabel": {
+            "Label": "Notes",
+            "LanguageCode": 1033
+          }
+        },
+        "IsValidODataAttribute": false,
+        "LogicalName": "xv_notes",
+        "SchemaName": "xv_notes"
+      }
+    },
+    {
+      "name": "attribute_schema_name",
+      "kind": "attribute",
+      "input": {
+        "name": "xv_notes",
+        "type": "string",
+        "label": "Notes",
+        "maxLength": 250,
+        "schemaName": "xv_Notes"
+      },
+      "expected": {
+        "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+        "MaxLength": 250,
+        "AttributeType": "String",
+        "AttributeTypeName": {
+          "Value": "StringType"
+        },
+        "DisplayName": {
+          "LocalizedLabels": [
+            {
+              "Label": "Notes",
+              "LanguageCode": 1033
+            }
+          ],
+          "UserLocalizedLabel": {
+            "Label": "Notes",
+            "LanguageCode": 1033
+          }
+        },
+        "IsValidODataAttribute": false,
+        "LogicalName": "xv_notes",
+        "SchemaName": "xv_Notes"
+      }
+    },
+    {
+      "name": "attribute_string_default_length",
+      "kind": "attribute",
+      "input": {
+        "name": "xv_code",
+        "type": "string",
+        "label": "xv_code"
+      },
+      "expected": {
+        "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+        "AttributeType": "String",
+        "AttributeTypeName": {
+          "Value": "StringType"
+        },
+        "DisplayName": {
+          "LocalizedLabels": [
+            {
+              "Label": "xv_code",
+              "LanguageCode": 1033
+            }
+          ],
+          "UserLocalizedLabel": {
+            "Label": "xv_code",
+            "LanguageCode": 1033
+          }
+        },
+        "IsValidODataAttribute": false,
+        "LogicalName": "xv_code",
+        "SchemaName": "xv_code"
+      }
+    },
+    {
+      "name": "attribute_memo",
+      "kind": "attribute",
+      "input": {
+        "name": "xv_body",
+        "type": "memo",
+        "label": "Body",
+        "maxLength": 4000
+      },
+      "expected": {
+        "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+        "MaxLength": 4000,
+        "AttributeType": "Memo",
+        "AttributeTypeName": {
+          "Value": "MemoType"
+        },
+        "DisplayName": {
+          "LocalizedLabels": [
+            {
+              "Label": "Body",
+              "LanguageCode": 1033
+            }
+          ],
+          "UserLocalizedLabel": {
+            "Label": "Body",
+            "LanguageCode": 1033
+          }
+        },
+        "IsValidODataAttribute": false,
+        "LogicalName": "xv_body",
+        "SchemaName": "xv_body"
+      }
+    },
+    {
+      "name": "attribute_int",
+      "kind": "attribute",
+      "input": {
+        "name": "xv_count",
+        "type": "int",
+        "label": "Count"
+      },
+      "expected": {
+        "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+        "AttributeType": "Integer",
+        "AttributeTypeName": {
+          "Value": "IntegerType"
+        },
+        "DisplayName": {
+          "LocalizedLabels": [
+            {
+              "Label": "Count",
+              "LanguageCode": 1033
+            }
+          ],
+          "UserLocalizedLabel": {
+            "Label": "Count",
+            "LanguageCode": 1033
+          }
+        },
+        "IsValidODataAttribute": false,
+        "LogicalName": "xv_count",
+        "SchemaName": "xv_count"
+      }
+    },
+    {
+      "name": "attribute_decimal",
+      "kind": "attribute",
+      "input": {
+        "name": "xv_rate",
+        "type": "decimal",
+        "label": "Rate",
+        "precision": 4
+      },
+      "expected": {
+        "@odata.type": "Microsoft.Dynamics.CRM.DecimalAttributeMetadata",
+        "Precision": 4,
+        "AttributeType": "Decimal",
+        "AttributeTypeName": {
+          "Value": "DecimalType"
+        },
+        "DisplayName": {
+          "LocalizedLabels": [
+            {
+              "Label": "Rate",
+              "LanguageCode": 1033
+            }
+          ],
+          "UserLocalizedLabel": {
+            "Label": "Rate",
+            "LanguageCode": 1033
+          }
+        },
+        "IsValidODataAttribute": false,
+        "LogicalName": "xv_rate",
+        "SchemaName": "xv_rate"
+      }
+    },
+    {
+      "name": "attribute_money",
+      "kind": "attribute",
+      "input": {
+        "name": "xv_price",
+        "type": "money",
+        "label": "Price"
+      },
+      "expected": {
+        "@odata.type": "Microsoft.Dynamics.CRM.MoneyAttributeMetadata",
+        "AttributeType": "Money",
+        "AttributeTypeName": {
+          "Value": "MoneyType"
+        },
+        "DisplayName": {
+          "LocalizedLabels": [
+            {
+              "Label": "Price",
+              "LanguageCode": 1033
+            }
+          ],
+          "UserLocalizedLabel": {
+            "Label": "Price",
+            "LanguageCode": 1033
+          }
+        },
+        "IsValidODataAttribute": false,
+        "LogicalName": "xv_price",
+        "SchemaName": "xv_price"
+      }
+    },
+    {
+      "name": "attribute_bool",
+      "kind": "attribute",
+      "input": {
+        "name": "xv_flag",
+        "type": "bool",
+        "label": "Flag"
+      },
+      "expected": {
+        "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+        "OptionSet": {
+          "TrueOption": {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Yes",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Yes",
+                "LanguageCode": 1033
+              }
+            },
+            "IsHidden": false
+          },
+          "FalseOption": {
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "No",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "No",
+                "LanguageCode": 1033
+              }
+            },
+            "IsHidden": false
+          }
+        },
+        "AttributeType": "Boolean",
+        "AttributeTypeName": {
+          "Value": "BooleanType"
+        },
+        "DisplayName": {
+          "LocalizedLabels": [
+            {
+              "Label": "Flag",
+              "LanguageCode": 1033
+            }
+          ],
+          "UserLocalizedLabel": {
+            "Label": "Flag",
+            "LanguageCode": 1033
+          }
+        },
+        "IsValidODataAttribute": false,
+        "LogicalName": "xv_flag",
+        "SchemaName": "xv_flag"
+      }
+    },
+    {
+      "name": "attribute_datetime",
+      "kind": "attribute",
+      "input": {
+        "name": "xv_due",
+        "type": "datetime",
+        "label": "Due"
+      },
+      "expected": {
+        "@odata.type": "Microsoft.Dynamics.CRM.DateTimeAttributeMetadata",
+        "AttributeType": "DateTime",
+        "AttributeTypeName": {
+          "Value": "DateTimeType"
+        },
+        "DisplayName": {
+          "LocalizedLabels": [
+            {
+              "Label": "Due",
+              "LanguageCode": 1033
+            }
+          ],
+          "UserLocalizedLabel": {
+            "Label": "Due",
+            "LanguageCode": 1033
+          }
+        },
+        "IsValidODataAttribute": false,
+        "LogicalName": "xv_due",
+        "SchemaName": "xv_due"
+      }
+    },
+    {
+      "name": "attribute_choice",
+      "kind": "attribute",
+      "input": {
+        "name": "xv_prio",
+        "type": "choice",
+        "label": "Priority",
+        "choice": "xv_priority"
+      },
+      "expected": {
+        "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+        "OptionSet": {
+          "Options": [],
+          "IsGlobal": true,
+          "Name": "xv_priority",
+          "OptionSetType": "Picklist"
+        },
+        "AttributeType": "Picklist",
+        "AttributeTypeName": {
+          "Value": "PicklistType"
+        },
+        "DisplayName": {
+          "LocalizedLabels": [
+            {
+              "Label": "Priority",
+              "LanguageCode": 1033
+            }
+          ],
+          "UserLocalizedLabel": {
+            "Label": "Priority",
+            "LanguageCode": 1033
+          }
+        },
+        "IsValidODataAttribute": false,
+        "LogicalName": "xv_prio",
+        "SchemaName": "xv_prio"
+      }
+    },
+    {
+      "name": "attribute_choices",
+      "kind": "attribute",
+      "input": {
+        "name": "xv_tags",
+        "type": "choices",
+        "label": "Tags",
+        "choice": "xv_tagset"
+      },
+      "expected": {
+        "@odata.type": "Microsoft.Dynamics.CRM.MultiSelectPicklistAttributeMetadata",
+        "OptionSet": {
+          "Options": [],
+          "IsGlobal": true,
+          "Name": "xv_tagset",
+          "OptionSetType": "Picklist"
+        },
+        "AttributeType": "Virtual",
+        "AttributeTypeName": {
+          "Value": "MultiSelectPicklistType"
+        },
+        "DisplayName": {
+          "LocalizedLabels": [
+            {
+              "Label": "Tags",
+              "LanguageCode": 1033
+            }
+          ],
+          "UserLocalizedLabel": {
+            "Label": "Tags",
+            "LanguageCode": 1033
+          }
+        },
+        "IsValidODataAttribute": false,
+        "LogicalName": "xv_tags",
+        "SchemaName": "xv_tags"
+      }
+    },
+    {
+      "name": "attribute_file",
+      "kind": "attribute",
+      "input": {
+        "name": "xv_contract",
+        "type": "file",
+        "label": "Contract",
+        "maxSizeInKB": 65536
+      },
+      "expected": {
+        "@odata.type": "Microsoft.Dynamics.CRM.FileAttributeMetadata",
+        "MaxSizeInKB": 65536,
+        "AttributeType": "Virtual",
+        "AttributeTypeName": {
+          "Value": "FileType"
+        },
+        "DisplayName": {
+          "LocalizedLabels": [
+            {
+              "Label": "Contract",
+              "LanguageCode": 1033
+            }
+          ],
+          "UserLocalizedLabel": {
+            "Label": "Contract",
+            "LanguageCode": 1033
+          }
+        },
+        "IsValidODataAttribute": false,
+        "LogicalName": "xv_contract",
+        "SchemaName": "xv_contract",
+        "IsValidForCreate": false,
+        "IsValidForUpdate": false,
+        "RequiredLevel": {
+          "IsValueModified": true,
+          "IsCanBeChangedPropertyModified": true,
+          "Value": "None",
+          "CanBeChanged": true
+        }
+      }
+    },
+    {
+      "name": "attribute_file_default_size",
+      "kind": "attribute",
+      "input": {
+        "name": "xv_contract",
+        "type": "file",
+        "label": "Contract"
+      },
+      "expected": {
+        "@odata.type": "Microsoft.Dynamics.CRM.FileAttributeMetadata",
+        "AttributeType": "Virtual",
+        "AttributeTypeName": {
+          "Value": "FileType"
+        },
+        "DisplayName": {
+          "LocalizedLabels": [
+            {
+              "Label": "Contract",
+              "LanguageCode": 1033
+            }
+          ],
+          "UserLocalizedLabel": {
+            "Label": "Contract",
+            "LanguageCode": 1033
+          }
+        },
+        "IsValidODataAttribute": false,
+        "LogicalName": "xv_contract",
+        "SchemaName": "xv_contract",
+        "IsValidForCreate": false,
+        "IsValidForUpdate": false,
+        "RequiredLevel": {
+          "IsValueModified": true,
+          "IsCanBeChangedPropertyModified": true,
+          "Value": "None",
+          "CanBeChanged": true
+        }
+      }
+    },
+    {
+      "name": "attribute_image",
+      "kind": "attribute",
+      "input": {
+        "name": "xv_logo",
+        "type": "image",
+        "label": "Logo",
+        "maxSizeInKB": 2048,
+        "canStoreFullImage": true,
+        "primary": true
+      },
+      "expected": {
+        "@odata.type": "Microsoft.Dynamics.CRM.ImageAttributeMetadata",
+        "CanStoreFullImage": true,
+        "IsPrimaryImage": true,
+        "MaxSizeInKB": 2048,
+        "AttributeType": "Virtual",
+        "AttributeTypeName": {
+          "Value": "ImageType"
+        },
+        "DisplayName": {
+          "LocalizedLabels": [
+            {
+              "Label": "Logo",
+              "LanguageCode": 1033
+            }
+          ],
+          "UserLocalizedLabel": {
+            "Label": "Logo",
+            "LanguageCode": 1033
+          }
+        },
+        "IsValidODataAttribute": false,
+        "LogicalName": "xv_logo",
+        "SchemaName": "xv_logo"
+      }
+    },
+    {
+      "name": "attribute_image_defaults",
+      "kind": "attribute",
+      "input": {
+        "name": "xv_photo",
+        "type": "image",
+        "label": "Photo"
+      },
+      "expected": {
+        "@odata.type": "Microsoft.Dynamics.CRM.ImageAttributeMetadata",
+        "AttributeType": "Virtual",
+        "AttributeTypeName": {
+          "Value": "ImageType"
+        },
+        "DisplayName": {
+          "LocalizedLabels": [
+            {
+              "Label": "Photo",
+              "LanguageCode": 1033
+            }
+          ],
+          "UserLocalizedLabel": {
+            "Label": "Photo",
+            "LanguageCode": 1033
+          }
+        },
+        "IsValidODataAttribute": false,
+        "LogicalName": "xv_photo",
+        "SchemaName": "xv_photo"
+      }
+    },
+    {
+      "name": "lookup",
+      "kind": "lookup",
+      "input": {
+        "column": {
+          "name": "xv_owner",
+          "type": "lookup",
+          "label": "Owner",
+          "target": "contact"
+        },
+        "table": "xv_project",
+        "relationshipName": "xv_project_xv_owner_contact",
+        "referencedAttribute": "contactid"
+      },
+      "expected": {
+        "@odata.type": "Microsoft.Dynamics.CRM.OneToManyRelationshipMetadata",
+        "ReferencedAttribute": "contactid",
+        "ReferencedEntity": "contact",
+        "ReferencingEntity": "xv_project",
+        "SchemaName": "xv_project_xv_owner_contact",
+        "RelationshipType": "OneToManyRelationship",
+        "Lookup": {
+          "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+          "Targets": [
+            "contact"
+          ],
+          "AttributeType": "Lookup",
+          "AttributeTypeName": {
+            "Value": "LookupType"
+          },
+          "DisplayName": {
+            "LocalizedLabels": [
+              {
+                "Label": "Owner",
+                "LanguageCode": 1033
+              }
+            ],
+            "UserLocalizedLabel": {
+              "Label": "Owner",
+              "LanguageCode": 1033
+            }
+          },
+          "IsValidODataAttribute": false,
+          "LogicalName": "xv_owner",
+          "SchemaName": "xv_owner"
+        }
+      }
+    },
+    {
+      "name": "lookup_schema_name",
+      "kind": "lookup",
+      "input": {
+        "column": {
+          "name": "xv_owner",
+          "type": "lookup",
+          "label": "Owner",
+          "target": "contact",
+          "schemaName": "xv_Owner"
+        },
+        "table": "xv_project",
+        "relationshipName": "xv_project_xv_owner_contact",
+        "referencedAttribute": "contactid"
+      },
+      "expected": {
+        "@odata.type": "Microsoft.Dynamics.CRM.OneToManyRelationshipMetadata",
+        "ReferencedAttribute": "contactid",
+        "ReferencedEntity": "contact",
+        "ReferencingEntity": "xv_project",
+        "SchemaName": "xv_project_xv_owner_contact",
+        "RelationshipType": "OneToManyRelationship",
+        "Lookup": {
+          "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+          "Targets": [
+            "contact"
+          ],
+          "AttributeType": "Lookup",
+          "AttributeTypeName": {
+            "Value": "LookupType"
+          },
+          "DisplayName": {
+            "LocalizedLabels": [
+              {
+                "Label": "Owner",
+                "LanguageCode": 1033
+              }
+            ],
+            "UserLocalizedLabel": {
+              "Label": "Owner",
+              "LanguageCode": 1033
+            }
+          },
+          "IsValidODataAttribute": false,
+          "LogicalName": "xv_owner",
+          "SchemaName": "xv_Owner"
+        }
+      }
+    },
+    {
+      "name": "customer",
+      "kind": "customer",
+      "input": {
+        "column": {
+          "name": "xv_customerid",
+          "type": "customer",
+          "label": "Customer"
+        },
+        "table": "xv_deal"
+      },
+      "expected": {
+        "Lookup": {
+          "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+          "AttributeType": "Lookup",
+          "AttributeTypeName": {
+            "Value": "LookupType"
+          },
+          "DisplayName": {
+            "LocalizedLabels": [
+              {
+                "Label": "Customer",
+                "LanguageCode": 1033
+              }
+            ],
+            "UserLocalizedLabel": {
+              "Label": "Customer",
+              "LanguageCode": 1033
+            }
+          },
+          "IsValidODataAttribute": false,
+          "LogicalName": "xv_customerid",
+          "SchemaName": "xv_customerid"
+        },
+        "OneToManyRelationships": [
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.OneToManyRelationshipMetadata",
+            "ReferencedAttribute": "accountid",
+            "ReferencedEntity": "account",
+            "ReferencingEntity": "xv_deal",
+            "SchemaName": "xv_deal_xv_customerid_account",
+            "RelationshipType": "OneToManyRelationship"
+          },
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.OneToManyRelationshipMetadata",
+            "ReferencedAttribute": "contactid",
+            "ReferencedEntity": "contact",
+            "ReferencingEntity": "xv_deal",
+            "SchemaName": "xv_deal_xv_customerid_contact",
+            "RelationshipType": "OneToManyRelationship"
+          }
+        ]
+      }
+    }
+  ]
+}

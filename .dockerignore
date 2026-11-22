@@ -1,0 +1,13 @@
+**/bin/
+**/obj/
+.git
+.gitignore
+.superpowers/
+**/TestResults/
+docker/.env
+*.md
+!THIRD_PARTY_NOTICES.md
+ui/node_modules
+ui/dist
+ui/test-results
+ui/playwright-report

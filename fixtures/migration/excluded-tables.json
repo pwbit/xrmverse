@@ -1,0 +1,23 @@
+{
+  "categories": {
+    "runtime": "Runtime state of the source environment",
+    "solution": "Comes with the schema phase (solutions)",
+    "not-in-xrmverse": "Feature not available in xrmverse",
+    "not-supported-yet": "Not supported yet by xrmverse: counted, not migrated",
+    "singleton": "Mapped onto the target organization, not copied",
+    "first-party": "Microsoft first-party app",
+    "file-storage": "Comes with the file and image columns"
+  },
+  "tables": {
+    "runtime": ["asyncoperation", "workflowlog", "plugintracelog", "bulkdeletefailure", "bulkdeleteoperation", "importlog", "importfile", "import", "importdata", "processsession", "flowsession", "flowrun", "systemjob", "tracelog", "duplicaterecord", "subscription", "subscriptionsyncinfo", "subscriptiontrackingdeletedobject", "principalobjectaccessreadsnapshot", "recordcountsnapshot", "audit"],
+    "solution": ["solution", "solutioncomponent", "publisher", "publisheraddress", "pluginassembly", "plugintype", "pluginpackage", "sdkmessage", "sdkmessagefilter", "sdkmessageprocessingstep", "sdkmessageprocessingstepimage", "sdkmessageprocessingstepsecureconfig", "savedquery", "systemform", "savedqueryvisualization", "webresource", "workflow", "processtrigger", "customapi", "customapirequestparameter", "customapiresponseproperty", "appmodule", "appmodulecomponent", "appmoduleroles", "sitemap", "environmentvariabledefinition", "customcontrol", "ribboncustomization", "ribbondiff", "entitymap", "attributemap", "serviceendpoint", "connectionreference", "fieldsecurityprofile", "fieldpermission", "role", "roleprivileges", "privilege"],
+    "not-in-xrmverse": ["canvasapp", "flowmachine", "flowmachinegroup", "bot", "botcomponent", "aiplugin", "aimodel", "mailbox", "emailserverprofile", "connector", "connectioninstance", "catalog", "catalogassignment", "processstage", "knowledgearticle", "msdyn_knowledgearticleimage"],
+    "not-supported-yet": ["queue", "queueitem", "recurringappointmentmaster", "activitymimeattachment", "letter", "fax", "serviceappointment", "campaignactivity", "post", "postcomment", "postregarding", "postfollow", "postlike"],
+    "file-storage": ["fileattachment"],
+    "singleton": ["organization", "privilegeobjecttypecodes", "settingdefinition", "timezonedefinition"]
+  },
+  "prefixes": {
+    "first-party": ["msdyn_", "msdynce_", "msdynmkt_", "adx_", "mspp_"]
+  },
+  "optional": []
+}

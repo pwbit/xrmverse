@@ -1,0 +1,55 @@
+{
+  "LogicalName": "organizationsetting",
+  "SchemaName": "OrganizationSetting",
+  "EntitySetName": "organizationsettings",
+  "ObjectTypeCode": 9967,
+  "OwnershipType": "OrganizationOwned",
+  "PrimaryNameAttribute": "displayname",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "displayname",
+      "SchemaName": "DisplayName",
+      "MaxLength": 100
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "uniquename",
+      "SchemaName": "UniqueName",
+      "MaxLength": 100
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "value",
+      "SchemaName": "Value",
+      "MaxLength": 2000
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "settingdefinitionid",
+      "SchemaName": "SettingDefinitionId",
+      "Targets": [
+        "settingdefinition"
+      ]
+    }
+  ],
+  "ManyToOneRelationships": [
+    {
+      "SchemaName": "settingdefinition_organizationsetting",
+      "ReferencedEntity": "settingdefinition",
+      "ReferencingEntity": "organizationsetting",
+      "ReferencingAttribute": "settingdefinitionid",
+      "ReferencingEntityNavigationPropertyName": "settingdefinitionid",
+      "CascadeConfiguration": {
+        "Assign": "NoCascade",
+        "Delete": "Restrict",
+        "Merge": "NoCascade",
+        "Reparent": "NoCascade",
+        "Share": "NoCascade",
+        "Unshare": "NoCascade",
+        "Archive": "NoCascade",
+        "RollupView": "NoCascade"
+      }
+    }
+  ]
+}

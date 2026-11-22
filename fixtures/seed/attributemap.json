@@ -1,0 +1,60 @@
+{
+  "LogicalName": "attributemap",
+  "SchemaName": "AttributeMap",
+  "IsAuditEnabled": {
+    "Value": false,
+    "CanBeChanged": false,
+    "ManagedPropertyLogicalName": "canmodifyauditsettings"
+  },
+  "EntitySetName": "attributemaps",
+  "ObjectTypeCode": 4601,
+  "OwnershipType": "OrganizationOwned",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "entitymapid",
+      "SchemaName": "EntityMapId",
+      "Targets": [
+        "entitymap"
+      ]
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "sourceattributename",
+      "SchemaName": "SourceAttributeName",
+      "MaxLength": 100
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "targetattributename",
+      "SchemaName": "TargetAttributeName",
+      "MaxLength": 100
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "issystem",
+      "SchemaName": "IsSystem",
+      "DefaultValue": false
+    }
+  ],
+  "ManyToOneRelationships": [
+    {
+      "SchemaName": "entity_map_attribute_maps",
+      "ReferencedEntity": "entitymap",
+      "ReferencingEntity": "attributemap",
+      "ReferencingAttribute": "entitymapid",
+      "ReferencingEntityNavigationPropertyName": "entitymapid",
+      "ReferencedEntityNavigationPropertyName": "entity_map_attribute_maps",
+      "CascadeConfiguration": {
+        "Assign": "NoCascade",
+        "Delete": "Cascade",
+        "Merge": "NoCascade",
+        "Reparent": "NoCascade",
+        "Share": "NoCascade",
+        "Unshare": "NoCascade",
+        "Archive": "NoCascade",
+        "RollupView": "NoCascade"
+      }
+    }
+  ]
+}

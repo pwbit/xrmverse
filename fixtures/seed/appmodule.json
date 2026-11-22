@@ -1,0 +1,169 @@
+{
+  "LogicalName": "appmodule",
+  "SchemaName": "AppModule",
+  "IsAuditEnabled": {
+    "Value": false,
+    "CanBeChanged": false,
+    "ManagedPropertyLogicalName": "canmodifyauditsettings"
+  },
+  "EntitySetName": "appmodules",
+  "ObjectTypeCode": 9006,
+  "OwnershipType": "OrganizationOwned",
+  "PrimaryNameAttribute": "name",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "name",
+      "SchemaName": "name",
+      "MaxLength": 100
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "uniquename",
+      "SchemaName": "uniquename",
+      "MaxLength": 400
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "descriptor",
+      "SchemaName": "descriptor",
+      "MaxLength": 1048576
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "description",
+      "SchemaName": "description",
+      "MaxLength": 1048576
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "ismanaged",
+      "SchemaName": "IsManaged",
+      "DefaultValue": false,
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.UniqueIdentifierAttributeMetadata",
+      "LogicalName": "appmoduleidunique",
+      "SchemaName": "appmoduleidunique"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "clienttype",
+      "SchemaName": "clienttype",
+      "MinValue": 1,
+      "MaxValue": 31
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "formfactor",
+      "SchemaName": "formfactor",
+      "MinValue": 1,
+      "MaxValue": 8
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "navigationtype",
+      "SchemaName": "navigationtype",
+      "OptionSet": {
+        "IsGlobal": true,
+        "Name": "appmodule_navigationtype",
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Single session",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Single session",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Multi session",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Multi session",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "url",
+      "SchemaName": "URL",
+      "MaxLength": 200
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.UniqueIdentifierAttributeMetadata",
+      "LogicalName": "webresourceid",
+      "SchemaName": "webresourceid"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.UniqueIdentifierAttributeMetadata",
+      "LogicalName": "welcomepageid",
+      "SchemaName": "welcomepageid"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "appmoduleversion",
+      "SchemaName": "AppModuleVersion",
+      "MaxLength": 48
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "isdefault",
+      "SchemaName": "isdefault",
+      "DefaultValue": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "isfeatured",
+      "SchemaName": "isfeatured",
+      "DefaultValue": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "publisherid",
+      "SchemaName": "publisherid",
+      "Targets": [
+        "publisher"
+      ]
+    }
+  ],
+  "ManyToOneRelationships": [
+    {
+      "SchemaName": "publisher_appmodule",
+      "ReferencedEntity": "publisher",
+      "ReferencingEntity": "appmodule",
+      "ReferencingAttribute": "publisherid",
+      "ReferencingEntityNavigationPropertyName": "publisher_appmodule_appmodule",
+      "CascadeConfiguration": {
+        "Assign": "Cascade",
+        "Delete": "Restrict",
+        "Merge": "NoCascade",
+        "Reparent": "Cascade",
+        "Share": "Cascade",
+        "Unshare": "Cascade",
+        "Archive": "NoCascade",
+        "RollupView": "NoCascade"
+      }
+    }
+  ]
+}

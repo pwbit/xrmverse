@@ -1,0 +1,152 @@
+{
+  "actions": [
+    {
+      "action": "update",
+      "module": "acme-critical",
+      "resolves": [
+        {
+          "id": 1000001,
+          "path": ".>acme-critical",
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "target": "9.0.0",
+      "depth": 1
+    }
+  ],
+  "advisories": {
+    "1000001": {
+      "findings": [
+        {
+          "version": "1.0.0",
+          "paths": [
+            ".>acme-critical"
+          ]
+        },
+        {
+          "version": "1.1.0",
+          "paths": [
+            ".>acme-critical"
+          ]
+        }
+      ],
+      "found_by": null,
+      "deleted": null,
+      "references": "- https://github.com/advisories/GHSA-0000-0000-0003",
+      "created": "2026-07-23T19:38:28.000Z",
+      "id": 1000001,
+      "npm_advisory_id": null,
+      "overview": "Fixture advisory.",
+      "reported_by": null,
+      "title": "Fixture critical advisory",
+      "metadata": null,
+      "cves": [],
+      "access": "public",
+      "severity": "critical",
+      "module_name": "acme-critical",
+      "vulnerable_versions": "<9.0.0",
+      "github_advisory_id": "GHSA-0000-0000-0003",
+      "recommendation": "Upgrade to version 9.0.0 or later",
+      "patched_versions": ">=9.0.0",
+      "updated": "2026-07-23T19:38:29.000Z",
+      "cvss": {
+        "score": 0,
+        "vectorString": null
+      },
+      "cwe": [
+        "CWE-601"
+      ],
+      "url": "https://github.com/advisories/GHSA-0000-0000-0003"
+    },
+    "1000002": {
+      "findings": [
+        {
+          "version": "2.0.0",
+          "paths": [
+            ".>acme-high"
+          ]
+        }
+      ],
+      "found_by": null,
+      "deleted": null,
+      "references": "- https://github.com/advisories/GHSA-0000-0000-0004",
+      "created": "2026-07-23T19:38:28.000Z",
+      "id": 1000002,
+      "npm_advisory_id": null,
+      "overview": "Fixture advisory.",
+      "reported_by": null,
+      "title": "Fixture high advisory",
+      "metadata": null,
+      "cves": [],
+      "access": "public",
+      "severity": "high",
+      "module_name": "acme-high",
+      "vulnerable_versions": "<9.0.0",
+      "github_advisory_id": "GHSA-0000-0000-0004",
+      "recommendation": "Upgrade to version 9.0.0 or later",
+      "patched_versions": ">=9.0.0",
+      "updated": "2026-07-23T19:38:29.000Z",
+      "cvss": {
+        "score": 0,
+        "vectorString": null
+      },
+      "cwe": [
+        "CWE-601"
+      ],
+      "url": "https://github.com/advisories/GHSA-0000-0000-0004"
+    },
+    "1000003": {
+      "findings": [
+        {
+          "version": "3.0.0",
+          "paths": [
+            ".>acme-low"
+          ]
+        }
+      ],
+      "found_by": null,
+      "deleted": null,
+      "references": "- https://github.com/advisories/GHSA-0000-0000-0005",
+      "created": "2026-07-23T19:38:28.000Z",
+      "id": 1000003,
+      "npm_advisory_id": null,
+      "overview": "Fixture advisory.",
+      "reported_by": null,
+      "title": "Fixture low advisory",
+      "metadata": null,
+      "cves": [],
+      "access": "public",
+      "severity": "low",
+      "module_name": "acme-low",
+      "vulnerable_versions": "<9.0.0",
+      "github_advisory_id": "GHSA-0000-0000-0005",
+      "recommendation": "Upgrade to version 9.0.0 or later",
+      "patched_versions": ">=9.0.0",
+      "updated": "2026-07-23T19:38:29.000Z",
+      "cvss": {
+        "score": 0,
+        "vectorString": null
+      },
+      "cwe": [
+        "CWE-601"
+      ],
+      "url": "https://github.com/advisories/GHSA-0000-0000-0005"
+    }
+  },
+  "muted": [],
+  "metadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 1,
+      "moderate": 0,
+      "high": 1,
+      "critical": 1
+    },
+    "dependencies": 101,
+    "devDependencies": 0,
+    "optionalDependencies": 0,
+    "totalDependencies": 101
+  }
+}

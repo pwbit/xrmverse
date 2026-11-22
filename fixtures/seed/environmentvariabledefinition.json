@@ -1,0 +1,224 @@
+{
+  "LogicalName": "environmentvariabledefinition",
+  "SchemaName": "EnvironmentVariableDefinition",
+  "EntitySetName": "environmentvariabledefinitions",
+  "ObjectTypeCode": 380,
+  "OwnershipType": "UserOwned",
+  "PrimaryNameAttribute": "schemaname",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "schemaname",
+      "SchemaName": "SchemaName",
+      "MaxLength": 100,
+      "RequiredLevel": {
+        "Value": "SystemRequired",
+        "CanBeChanged": false
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "displayname",
+      "SchemaName": "DisplayName",
+      "MaxLength": 100
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "description",
+      "SchemaName": "Description",
+      "MaxLength": 2000
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "defaultvalue",
+      "SchemaName": "DefaultValue",
+      "MaxLength": 2000
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "type",
+      "SchemaName": "Type",
+      "DefaultFormValue": 100000000,
+      "OptionSet": {
+        "IsGlobal": false,
+        "Name": "environmentvariabledefinition_type",
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 100000000,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "String",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "String",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 100000001,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Number",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Number",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 100000002,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Boolean",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Boolean",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 100000003,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "JSON",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "JSON",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 100000004,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Data source",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Data source",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 100000005,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Secret",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Secret",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "isrequired",
+      "SchemaName": "IsRequired",
+      "DefaultValue": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "secretstore",
+      "SchemaName": "SecretStore",
+      "DefaultFormValue": 0,
+      "OptionSet": {
+        "IsGlobal": false,
+        "Name": "environmentvariabledefinition_secretstore",
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Azure Key Vault",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Azure Key Vault",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Dataverse",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Dataverse",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "valueschema",
+      "SchemaName": "ValueSchema",
+      "MaxLength": 2000
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "introducedversion",
+      "SchemaName": "IntroducedVersion",
+      "MaxLength": 48
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "hint",
+      "SchemaName": "Hint",
+      "MaxLength": 2000
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "xrmverse_componentxml",
+      "SchemaName": "xrmverse_componentxml",
+      "MaxLength": 1048576,
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "ismanaged",
+      "SchemaName": "IsManaged",
+      "DefaultValue": false,
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    }
+  ]
+}

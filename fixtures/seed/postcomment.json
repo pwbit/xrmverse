@@ -1,0 +1,208 @@
+{
+  "LogicalName": "postcomment",
+  "SchemaName": "PostComment",
+  "DisplayName": {
+    "LocalizedLabels": [
+      {
+        "Label": "Post Comment",
+        "LanguageCode": 1033
+      }
+    ],
+    "UserLocalizedLabel": {
+      "Label": "Post Comment",
+      "LanguageCode": 1033
+    }
+  },
+  "DisplayCollectionName": {
+    "LocalizedLabels": [
+      {
+        "Label": "Post Comments",
+        "LanguageCode": 1033
+      }
+    ],
+    "UserLocalizedLabel": {
+      "Label": "Post Comments",
+      "LanguageCode": 1033
+    }
+  },
+  "IsAuditEnabled": {
+    "Value": false,
+    "CanBeChanged": true,
+    "ManagedPropertyLogicalName": "canmodifyauditsettings"
+  },
+  "EntitySetName": "postcomments",
+  "ObjectTypeCode": 8005,
+  "OwnershipType": "OrganizationOwned",
+  "HasActivities": false,
+  "HasNotes": false,
+  "PrimaryIdAttribute": "postcommentid",
+  "PrimaryNameAttribute": "text",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "text",
+      "SchemaName": "Text",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Text",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Text",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 1000,
+      "Format": "Text",
+      "RequiredLevel": {
+        "Value": "ApplicationRequired",
+        "CanBeChanged": false
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "largetext",
+      "SchemaName": "LargeText",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Large Text",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Large Text",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 1073741823
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "postid",
+      "SchemaName": "PostId",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Post",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Post",
+          "LanguageCode": 1033
+        }
+      },
+      "Targets": [
+        "post"
+      ],
+      "RequiredLevel": {
+        "Value": "SystemRequired",
+        "CanBeChanged": false
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "createdonbehalfby",
+      "SchemaName": "CreatedOnBehalfBy",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Created By (Delegate)",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Created By (Delegate)",
+          "LanguageCode": 1033
+        }
+      },
+      "Targets": [
+        "systemuser"
+      ],
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "organizationid",
+      "SchemaName": "OrganizationId",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Organization",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Organization",
+          "LanguageCode": 1033
+        }
+      },
+      "Targets": [
+        "organization"
+      ],
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "timezoneruleversionnumber",
+      "SchemaName": "TimeZoneRuleVersionNumber",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Time Zone Rule Version",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Time Zone Rule Version",
+          "LanguageCode": 1033
+        }
+      },
+      "MinValue": -1,
+      "MaxValue": 2147483647
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "utcconversiontimezonecode",
+      "SchemaName": "UTCConversionTimeZoneCode",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "UTC Conversion Time Zone",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "UTC Conversion Time Zone",
+          "LanguageCode": 1033
+        }
+      },
+      "MinValue": -1,
+      "MaxValue": 2147483647
+    }
+  ],
+  "ManyToOneRelationships": [
+    {
+      "SchemaName": "Post_Comments",
+      "ReferencedEntity": "post",
+      "ReferencingEntity": "postcomment",
+      "ReferencingAttribute": "postid",
+      "ReferencingEntityNavigationPropertyName": "postid",
+      "CascadeConfiguration": {
+        "Assign": "NoCascade",
+        "Delete": "Cascade",
+        "Merge": "NoCascade",
+        "Reparent": "NoCascade",
+        "Share": "NoCascade",
+        "Unshare": "NoCascade",
+        "Archive": "NoCascade",
+        "RollupView": "NoCascade"
+      }
+    }
+  ]
+}

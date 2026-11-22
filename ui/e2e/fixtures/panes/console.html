@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Console</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 16px; color: #242424; }
+    @media (prefers-color-scheme: dark) { body { color: #f0f0f0; } }
+    button { margin-right: 8px; }
+  </style>
+</head>
+<body>
+  <h1>Console</h1>
+  <p>Count: <output id="count">0</output></p>
+  <button id="increment" type="button">Increment</button>
+  <button id="open-account" type="button">Open account</button>
+  <script>
+    var count = 0;
+    document.getElementById('increment').addEventListener('click', function () {
+      count += 1;
+      document.getElementById('count').textContent = String(count);
+    });
+    // A screen pop: Xrm.Navigation called from a pane acts on the main area.
+    document.getElementById('open-account').addEventListener('click', function () {
+      parent.Xrm.Navigation.openForm({ entityName: 'account' });
+    });
+  </script>
+</body>
+</html>

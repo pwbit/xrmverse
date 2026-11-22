@@ -1,0 +1,293 @@
+{
+  "LogicalName": "customapirequestparameter",
+  "SchemaName": "CustomAPIRequestParameter",
+  "IsAuditEnabled": {
+    "Value": false,
+    "CanBeChanged": false,
+    "ManagedPropertyLogicalName": "canmodifyauditsettings"
+  },
+  "EntitySetName": "customapirequestparameters",
+  "ObjectTypeCode": 9991,
+  "OwnershipType": "UserOwned",
+  "PrimaryNameAttribute": "name",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "name",
+      "SchemaName": "Name",
+      "MaxLength": 100
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "uniquename",
+      "SchemaName": "UniqueName",
+      "MaxLength": 128
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "customapiid",
+      "SchemaName": "CustomAPIId",
+      "Targets": [
+        "customapi"
+      ]
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "type",
+      "SchemaName": "Type",
+      "OptionSet": {
+        "IsGlobal": true,
+        "Name": "customapifieldtype",
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Boolean",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Boolean",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "DateTime",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "DateTime",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 2,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Decimal",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Decimal",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 3,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Entity",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Entity",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 4,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "EntityCollection",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "EntityCollection",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 5,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "EntityReference",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "EntityReference",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 6,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Float",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Float",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 7,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Integer",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Integer",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 8,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Money",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Money",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 9,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Picklist",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Picklist",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 10,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "String",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "String",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 11,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "StringArray",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "StringArray",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 12,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Guid",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Guid",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "isoptional",
+      "SchemaName": "IsOptional"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "logicalentityname",
+      "SchemaName": "LogicalEntityName",
+      "MaxLength": 100
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "description",
+      "SchemaName": "Description",
+      "MaxLength": 300
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "displayname",
+      "SchemaName": "DisplayName",
+      "MaxLength": 100
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "xrmverse_componentxml",
+      "SchemaName": "xrmverse_componentxml",
+      "MaxLength": 1048576,
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    }
+  ],
+  "ManyToOneRelationships": [
+    {
+      "SchemaName": "customapi_customapirequestparameter",
+      "ReferencedEntity": "customapi",
+      "ReferencingEntity": "customapirequestparameter",
+      "ReferencingAttribute": "customapiid",
+      "ReferencedEntityNavigationPropertyName": "CustomAPIRequestParameters",
+      "ReferencingEntityNavigationPropertyName": "CustomAPIId",
+      "CascadeConfiguration": {
+        "Assign": "NoCascade",
+        "Delete": "Cascade",
+        "Merge": "NoCascade",
+        "Reparent": "NoCascade",
+        "Share": "NoCascade",
+        "Unshare": "NoCascade",
+        "Archive": "NoCascade",
+        "RollupView": "NoCascade"
+      }
+    }
+  ]
+}

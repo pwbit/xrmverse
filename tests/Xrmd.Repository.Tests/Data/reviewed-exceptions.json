@@ -1,0 +1,16 @@
+{
+  "exceptions": [
+    {
+      "id": "Acme.Proprietary",
+      "version": "1.0.0",
+      "issue": 101,
+      "reason": "test: proprietary license file"
+    },
+    {
+      "id": "Acme.WebUrl",
+      "version": "1.2.27",
+      "issue": 102,
+      "reason": "test: license URL only"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "LogicalName": "teamroles",
+  "SchemaName": "TeamRoles",
+  "IsAuditEnabled": {"Value": false, "CanBeChanged": false, "ManagedPropertyLogicalName": "canmodifyauditsettings"},
+  "EntitySetName": "teamrolescollection",
+  "ObjectTypeCode": 40,
+  "OwnershipType": "OrganizationOwned",
+  "IsIntersect": true,
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.UniqueIdentifierAttributeMetadata",
+      "LogicalName": "teamid",
+      "SchemaName": "teamid"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.UniqueIdentifierAttributeMetadata",
+      "LogicalName": "roleid",
+      "SchemaName": "roleid"
+    }
+  ]
+}

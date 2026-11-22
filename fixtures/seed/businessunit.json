@@ -1,0 +1,13 @@
+{
+  "LogicalName": "businessunit",
+  "SchemaName": "BusinessUnit",
+  "IsAuditEnabled": {"Value": true, "CanBeChanged": true, "ManagedPropertyLogicalName": "canmodifyauditsettings"},
+  "EntitySetName": "businessunits",
+  "ObjectTypeCode": 10,
+  "OwnershipType": "BusinessOwned",
+  "PrimaryNameAttribute": "name",
+  "Attributes": [
+    { "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata", "LogicalName": "name", "SchemaName": "Name", "MaxLength": 160 },
+    { "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata", "LogicalName": "parentbusinessunitid", "SchemaName": "ParentBusinessUnitId", "Targets": ["businessunit"] }
+  ]
+}

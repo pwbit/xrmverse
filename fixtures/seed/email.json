@@ -1,0 +1,1041 @@
+{
+  "LogicalName": "email",
+  "SchemaName": "Email",
+  "DisplayName": {
+    "LocalizedLabels": [
+      {
+        "Label": "Email",
+        "LanguageCode": 1033
+      }
+    ],
+    "UserLocalizedLabel": {
+      "Label": "Email",
+      "LanguageCode": 1033
+    }
+  },
+  "IsAuditEnabled": {
+    "Value": true,
+    "CanBeChanged": true,
+    "ManagedPropertyLogicalName": "canmodifyauditsettings"
+  },
+  "EntitySetName": "emails",
+  "ObjectTypeCode": 4202,
+  "OwnershipType": "UserOwned",
+  "IsActivity": true,
+  "HasActivities": false,
+  "HasNotes": true,
+  "PrimaryIdAttribute": "activityid",
+  "PrimaryNameAttribute": "subject",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "subject",
+      "SchemaName": "Subject",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Subject",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Subject",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 800,
+      "Format": "Text"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.EntityNameAttributeMetadata",
+      "LogicalName": "activitytypecode",
+      "SchemaName": "ActivityTypeCode",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Activity Type",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Activity Type",
+          "LanguageCode": 1033
+        }
+      },
+      "RequiredLevel": {
+        "Value": "SystemRequired",
+        "CanBeChanged": false
+      },
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "description",
+      "SchemaName": "Description",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Description",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Description",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 1073741823
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "regardingobjectid",
+      "SchemaName": "RegardingObjectId",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Regarding",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Regarding",
+          "LanguageCode": 1033
+        }
+      },
+      "Targets": []
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.EntityNameAttributeMetadata",
+      "LogicalName": "regardingobjecttypecode",
+      "SchemaName": "RegardingObjectTypeCode",
+      "AttributeOf": "regardingobjectid"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.DateTimeAttributeMetadata",
+      "LogicalName": "scheduledstart",
+      "SchemaName": "ScheduledStart",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Start Date",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Start Date",
+          "LanguageCode": 1033
+        }
+      },
+      "Format": "DateAndTime"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.DateTimeAttributeMetadata",
+      "LogicalName": "scheduledend",
+      "SchemaName": "ScheduledEnd",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Due Date",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Due Date",
+          "LanguageCode": 1033
+        }
+      },
+      "Format": "DateAndTime"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.DateTimeAttributeMetadata",
+      "LogicalName": "actualstart",
+      "SchemaName": "ActualStart",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Actual Start",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Actual Start",
+          "LanguageCode": 1033
+        }
+      },
+      "Format": "DateAndTime"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.DateTimeAttributeMetadata",
+      "LogicalName": "actualend",
+      "SchemaName": "ActualEnd",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Actual End",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Actual End",
+          "LanguageCode": 1033
+        }
+      },
+      "Format": "DateAndTime"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "scheduleddurationminutes",
+      "SchemaName": "ScheduledDurationMinutes",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Scheduled Duration",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Scheduled Duration",
+          "LanguageCode": 1033
+        }
+      },
+      "MinValue": 0,
+      "MaxValue": 2147483647
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "actualdurationminutes",
+      "SchemaName": "ActualDurationMinutes",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Actual Duration",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Actual Duration",
+          "LanguageCode": 1033
+        }
+      },
+      "MinValue": 0,
+      "MaxValue": 2147483647
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "prioritycode",
+      "SchemaName": "PriorityCode",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Priority",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Priority",
+          "LanguageCode": 1033
+        }
+      },
+      "DefaultFormValue": 1,
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Low",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Low",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Normal",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Normal",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 2,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "High",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "High",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "isbilled",
+      "SchemaName": "IsBilled",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Billed",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Billed",
+          "LanguageCode": 1033
+        }
+      },
+      "DefaultValue": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "isworkflowcreated",
+      "SchemaName": "IsWorkflowCreated",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Created by Workflow",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Created by Workflow",
+          "LanguageCode": 1033
+        }
+      },
+      "DefaultValue": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "isregularactivity",
+      "SchemaName": "IsRegularActivity",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Regular Activity",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Regular Activity",
+          "LanguageCode": 1033
+        }
+      },
+      "DefaultValue": true,
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "transactioncurrencyid",
+      "SchemaName": "TransactionCurrencyId",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Currency",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Currency",
+          "LanguageCode": 1033
+        }
+      },
+      "Targets": [
+        "transactioncurrency"
+      ],
+      "RequiredLevel": {
+        "Value": "None",
+        "CanBeChanged": true
+      },
+      "IsValidForCreate": true,
+      "IsValidForUpdate": true
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.DecimalAttributeMetadata",
+      "LogicalName": "exchangerate",
+      "SchemaName": "ExchangeRate",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Exchange Rate",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Exchange Rate",
+          "LanguageCode": 1033
+        }
+      },
+      "Precision": 10,
+      "MinValue": 1e-10,
+      "MaxValue": 100000000000,
+      "RequiredLevel": {
+        "Value": "None",
+        "CanBeChanged": true
+      },
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "directioncode",
+      "SchemaName": "DirectionCode",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Direction",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Direction",
+          "LanguageCode": 1033
+        }
+      },
+      "DefaultValue": true
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "trackingtoken",
+      "SchemaName": "TrackingToken",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Tracking Token",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Tracking Token",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 50,
+      "Format": "Text"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.DateTimeAttributeMetadata",
+      "LogicalName": "senton",
+      "SchemaName": "SentOn",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Date Sent",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Date Sent",
+          "LanguageCode": 1033
+        }
+      },
+      "Format": "DateAndTime",
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "messageid",
+      "SchemaName": "MessageId",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Message ID",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Message ID",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 320,
+      "Format": "Text"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "from",
+      "SchemaName": "From",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "From",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "From",
+          "LanguageCode": 1033
+        }
+      },
+      "Targets": [
+        "account",
+        "contact",
+        "systemuser"
+      ],
+      "AttributeType": "PartyList"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "to",
+      "SchemaName": "To",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "To",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "To",
+          "LanguageCode": 1033
+        }
+      },
+      "Targets": [
+        "account",
+        "contact",
+        "systemuser"
+      ],
+      "AttributeType": "PartyList"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "cc",
+      "SchemaName": "Cc",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Cc",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Cc",
+          "LanguageCode": 1033
+        }
+      },
+      "Targets": [
+        "account",
+        "contact",
+        "systemuser"
+      ],
+      "AttributeType": "PartyList"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "bcc",
+      "SchemaName": "Bcc",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Bcc",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Bcc",
+          "LanguageCode": 1033
+        }
+      },
+      "Targets": [
+        "account",
+        "contact",
+        "systemuser"
+      ],
+      "AttributeType": "PartyList"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "related",
+      "SchemaName": "Related",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Related",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Related",
+          "LanguageCode": 1033
+        }
+      },
+      "Targets": [
+        "account",
+        "contact",
+        "systemuser"
+      ],
+      "AttributeType": "PartyList"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "correlatedsubjectchanged",
+      "SchemaName": "correlatedsubjectchanged",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Correlated subject changed",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Correlated subject changed",
+          "LanguageCode": 1033
+        }
+      },
+      "DefaultValue": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "deliveryprioritycode",
+      "SchemaName": "DeliveryPriorityCode",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Delivery Priority",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Delivery Priority",
+          "LanguageCode": 1033
+        }
+      },
+      "DefaultFormValue": 1,
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Low",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Low",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Normal",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Normal",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 2,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "High",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "High",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "followemailuserpreference",
+      "SchemaName": "FollowEmailUserPreference",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Following",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Following",
+          "LanguageCode": 1033
+        }
+      },
+      "DefaultValue": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "isduplicatesenderunresolved",
+      "SchemaName": "IsDuplicateSenderUnresolved",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Is Duplicate Sender Unresolved",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Is Duplicate Sender Unresolved",
+          "LanguageCode": 1033
+        }
+      },
+      "DefaultValue": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "notifications",
+      "SchemaName": "Notifications",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Notifications",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Notifications",
+          "LanguageCode": 1033
+        }
+      },
+      "DefaultFormValue": 0,
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "None",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "None",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "The message was saved as a Microsoft Dynamics 365 email record, but not all the attachments could be saved with it. An attachment cannot be saved if it is blocked or if its file type is invalid.",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "The message was saved as a Microsoft Dynamics 365 email record, but not all the attachments could be saved with it. An attachment cannot be saved if it is blocked or if its file type is invalid.",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 2,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Truncated body.",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Truncated body.",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StateAttributeMetadata",
+      "LogicalName": "statecode",
+      "SchemaName": "StateCode",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Status",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Status",
+          "LanguageCode": 1033
+        }
+      },
+      "RequiredLevel": {
+        "Value": "SystemRequired",
+        "CanBeChanged": false
+      },
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "State",
+        "Options": [
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StateOptionMetadata",
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Open",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Open",
+                "LanguageCode": 1033
+              }
+            },
+            "DefaultStatus": 1
+          },
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StateOptionMetadata",
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Completed",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Completed",
+                "LanguageCode": 1033
+              }
+            },
+            "DefaultStatus": 2
+          },
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StateOptionMetadata",
+            "Value": 2,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Canceled",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Canceled",
+                "LanguageCode": 1033
+              }
+            },
+            "DefaultStatus": 5
+          }
+        ]
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StatusAttributeMetadata",
+      "LogicalName": "statuscode",
+      "SchemaName": "StatusCode",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Status Reason",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Status Reason",
+          "LanguageCode": 1033
+        }
+      },
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Status",
+        "Options": [
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StatusOptionMetadata",
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Draft",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Draft",
+                "LanguageCode": 1033
+              }
+            },
+            "State": 0
+          },
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StatusOptionMetadata",
+            "Value": 8,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Failed",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Failed",
+                "LanguageCode": 1033
+              }
+            },
+            "State": 0
+          },
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StatusOptionMetadata",
+            "Value": 2,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Completed",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Completed",
+                "LanguageCode": 1033
+              }
+            },
+            "State": 1
+          },
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StatusOptionMetadata",
+            "Value": 3,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Sent",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Sent",
+                "LanguageCode": 1033
+              }
+            },
+            "State": 1
+          },
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StatusOptionMetadata",
+            "Value": 4,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Received",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Received",
+                "LanguageCode": 1033
+              }
+            },
+            "State": 1
+          },
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StatusOptionMetadata",
+            "Value": 6,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Pending Send",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Pending Send",
+                "LanguageCode": 1033
+              }
+            },
+            "State": 1
+          },
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StatusOptionMetadata",
+            "Value": 7,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Sending",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Sending",
+                "LanguageCode": 1033
+              }
+            },
+            "State": 1
+          },
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StatusOptionMetadata",
+            "Value": 5,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Canceled",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Canceled",
+                "LanguageCode": 1033
+              }
+            },
+            "State": 2
+          }
+        ]
+      }
+    }
+  ],
+  "ManyToOneRelationships": [
+    {
+      "SchemaName": "TransactionCurrency_Email",
+      "ReferencedEntity": "transactioncurrency",
+      "ReferencingEntity": "email",
+      "ReferencingAttribute": "transactioncurrencyid",
+      "ReferencingEntityNavigationPropertyName": "transactioncurrencyid",
+      "CascadeConfiguration": {
+        "Assign": "NoCascade",
+        "Delete": "Restrict",
+        "Merge": "NoCascade",
+        "Reparent": "NoCascade",
+        "Share": "NoCascade",
+        "Unshare": "NoCascade",
+        "Archive": "NoCascade",
+        "RollupView": "NoCascade"
+      }
+    }
+  ]
+}

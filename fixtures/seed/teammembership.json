@@ -1,0 +1,21 @@
+{
+  "LogicalName": "teammembership",
+  "SchemaName": "TeamMembership",
+  "IsAuditEnabled": {"Value": false, "CanBeChanged": false, "ManagedPropertyLogicalName": "canmodifyauditsettings"},
+  "EntitySetName": "teammemberships",
+  "ObjectTypeCode": 23,
+  "OwnershipType": "OrganizationOwned",
+  "IsIntersect": true,
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.UniqueIdentifierAttributeMetadata",
+      "LogicalName": "teamid",
+      "SchemaName": "teamid"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.UniqueIdentifierAttributeMetadata",
+      "LogicalName": "systemuserid",
+      "SchemaName": "systemuserid"
+    }
+  ]
+}

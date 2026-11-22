@@ -1,0 +1,152 @@
+  xrmd-{{ORG}}:
+    image: ${XRMD_IMAGE:?set XRMD_IMAGE in .env}
+    restart: unless-stopped
+#{{SQL_BEGIN}}
+    user: "1654:1654"   # the image's APP_UID; the backups volume is group-writable for this gid (see backups-init)
+#{{SQL_END}}
+#{{EXTERNAL_BEGIN}}
+    user: "1654:1654"   # the image's APP_UID, owner of /var/lib/xrmd/files and /var/lib/xrmd/backups in the image
+#{{EXTERNAL_END}}
+#{{POSTGRES_BEGIN}}
+    user: "1654:1654"   # the image's APP_UID, owner of /var/lib/xrmd/files and /var/lib/xrmd/backups in the image
+    depends_on:
+      postgres:
+        condition: service_healthy
+#{{IDPPG_BEGIN}}
+      secrets-init:
+        condition: service_completed_successfully
+#{{IDPPG_END}}
+#{{POSTGRES_END}}
+#{{SQL_BEGIN}}
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      backups-init:
+        condition: service_completed_successfully
+#{{IDPSQL_BEGIN}}
+      secrets-init:
+        condition: service_completed_successfully
+#{{IDPSQL_END}}
+#{{SQL_END}}
+#{{IDPEXT_BEGIN}}
+    depends_on:
+      secrets-init:
+        condition: service_completed_successfully
+#{{IDPEXT_END}}
+    volumes:
+      # Blobs of file and image columns (Files__FileSystem__Root defaults to this path). Shared by every organization:
+      # blob keys are prefixed by the database name.
+      - files:/var/lib/xrmd/files
+      # The Microsoft SDK installed by `xrmd sdk install --dir <this directory>` (XRMD_SDK_DIR in the image); read-only, never in the image.
+      - ./sdk:/var/lib/xrmd/sdk:ro
+#{{IDP_BEGIN}}
+      # This organization's own secrets folder (never another's): the one-shot initial administrator password written by
+      # `xrmd server init --auth local`; the server deletes it after use.
+      - ./secrets/{{ORG}}:/run/xrmd/secrets
+#{{IDP_END}}
+#{{TDS_BEGIN}}
+      # This organization's own SQL endpoint certificate folder (never another's), filled by the tds-certs service.
+      - ./tds/{{ORG}}:/run/xrmd/tds:ro
+#{{TDS_END}}
+#{{SQL_BEGIN}}
+      # Org backup/restore (Admin API): the files archive is written beside the SQL Server .bak, at the same path.
+      - backups:/var/opt/mssql/backup
+#{{SQL_END}}
+#{{EXTERNAL_BEGIN}}
+      # Org backup/restore (Admin API): the files archive (.files.tar). The SQL Server .bak stays on the SQL Server host.
+      - backups:/var/lib/xrmd/backups
+#{{EXTERNAL_END}}
+#{{POSTGRES_BEGIN}}
+      # Org backup/restore (Admin API): pg_dump's .dump, run in this container, and the files archive (.files.tar) beside it.
+      - backups:/var/lib/xrmd/backups
+#{{POSTGRES_END}}
+#{{PORTKEY_BEGIN}}
+    ports:
+#{{PORTKEY_END}}
+#{{PORTS_BEGIN}}
+      # Loopback only by default. To expose: set XRMD_BIND=0.0.0.0 in .env.
+      - "${XRMD_BIND:-127.0.0.1}:${ORG_{{ORG_KEY}}_PORT:?set ORG_{{ORG_KEY}}_PORT in .env}:5000"
+#{{PORTS_END}}
+#{{TDS_BEGIN}}
+      # The SQL (TDS) endpoint, on every address by default (XRMD_TDS_BIND in .env); clients connect to <host>,<port> with TLS.
+      - "${XRMD_TDS_BIND:-0.0.0.0}:${ORG_{{ORG_KEY}}_TDS_PORT:?set ORG_{{ORG_KEY}}_TDS_PORT in .env}:5558"
+#{{TDS_END}}
+#{{EDGE_BEGIN}}
+    networks:
+      - default   # the other services (SQL Server)
+      - edge      # the proxy, whose address alone is trusted
+#{{EDGE_END}}
+    environment:
+#{{SQL_BEGIN}}
+      ConnectionStrings__Org: "Server=sqlserver;Database={{ORG}};User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True"
+#{{SQL_END}}
+#{{EXTERNAL_BEGIN}}
+      # The external SQL Server of SQL_CONNECTION (which sets no database); the database is the organization.
+      ConnectionStrings__Org: "${SQL_CONNECTION:?set SQL_CONNECTION in .env};Database={{ORG}}"
+      Admin__FilesBackupDirectory: /var/lib/xrmd/backups
+#{{EXTERNAL_END}}
+#{{EXTSQL_BEGIN}}
+      # Where the external SQL Server writes and reads the .bak files, as a path on the SQL Server host (e.g. D:\Backups on Windows).
+      Admin__BackupDirectory: ${SQL_BACKUP_DIRECTORY:-/var/opt/mssql/backup}
+#{{EXTSQL_END}}
+#{{POSTGRES_BEGIN}}
+      # The bundled PostgreSQL: an Npgsql connection string, whose database is the organization.
+      ConnectionStrings__Org: "Host=postgres;Database={{ORG}};Username=postgres;Password=${POSTGRES_PASSWORD}"
+#{{POSTGRES_END}}
+#{{PG_BEGIN}}
+      # The organizations' engine (STORAGE_PROVIDER in .env, `xrmd server init --database postgresql`).
+      Storage__Provider: PostgreSql
+#{{PG_END}}
+      Auth__Mode: ${AUTH_MODE:-Development}
+      # Each organization has its own audience: a token of one organization is rejected by the others.
+#{{LOCAL_BEGIN}}
+      # ORG_<ORG>_AUDIENCE (Entra: the API's Application ID URI) overrides the default, the organization's local URL.
+      Auth__Audience: "${ORG_{{ORG_KEY}}_AUDIENCE:-http://localhost:${ORG_{{ORG_KEY}}_PORT:?set ORG_{{ORG_KEY}}_PORT in .env}/}"
+#{{LOCAL_END}}
+#{{PUBLIC_BEGIN}}
+      # ORG_<ORG>_AUDIENCE (Entra: the API's Application ID URI) overrides the default, the organization's public URL.
+      Auth__Audience: "${ORG_{{ORG_KEY}}_AUDIENCE:-https://{{HOST}}/}"
+#{{PUBLIC_END}}
+#{{IDP_BEGIN}}
+      Idp__InitialAdminPasswordFile: /run/xrmd/secrets/admin-password
+#{{IDP_END}}
+#{{TDS_BEGIN}}
+      # The SQL (TDS) endpoint: SQL logins of the local identity provider, over TLS with the public host's certificate
+      # (copied by tds-certs; the server reloads it when it changes).
+      Tds__Port: 5558
+      Tds__CertificatePath: /run/xrmd/tds/{{HOST}}.crt
+      Tds__PrivateKeyPath: /run/xrmd/tds/{{HOST}}.key
+#{{TDS_END}}
+      Auth__TenantId: ${AUTH_TENANT_ID:-}
+      Auth__DevSigningKey: ${AUTH_DEV_SIGNING_KEY:-}
+      # Web admin sign-in with Entra: the SPA app registration's client id and the API scope (see README, Web admin)
+      Ui__Entra__ClientId: ${UI_ENTRA_CLIENT_ID:-}
+      Ui__Entra__Scope: ${UI_ENTRA_SCOPE:-}
+#{{PROXY_BEGIN}}
+      # Forwarded headers (X-Forwarded-Proto, -Host, -For) are honored only from the proxy, and only for the public host.
+      Proxy__TrustedProxies: "{{TRUSTED_PROXIES}}"
+      Proxy__AllowedHosts: {{HOST}}
+#{{PROXY_END}}
+      Seed__OrgName: {{ORG}}
+      Seed__AdminObjectId: ${ORG_{{ORG_KEY}}_ADMIN_OBJECT_ID:?set ORG_{{ORG_KEY}}_ADMIN_OBJECT_ID (GUID) in .env}
+      Seed__AdminName: ${SEED_ADMIN_NAME:-Administrator}
+      Seed__BaseCurrency: ${SEED_BASE_CURRENCY:-}
+      # File and image columns: empty = file-system store at /var/lib/xrmd/files; FILES_STORE=S3Compatible needs the FILES_S3_* values, FILES_STORE=AzureBlob the FILES_AZURE_* values
+      Files__Store: ${FILES_STORE:-}
+      Files__FileSystem__Root: ${FILES_ROOT:-}
+      Files__S3__ServiceUrl: ${FILES_S3_SERVICE_URL:-}
+      Files__S3__Bucket: ${FILES_S3_BUCKET:-}
+      Files__S3__AccessKey: ${FILES_S3_ACCESS_KEY:-}
+      Files__S3__SecretKey: ${FILES_S3_SECRET_KEY:-}
+      Files__S3__Region: ${FILES_S3_REGION:-}
+      Files__S3__ForcePathStyle: ${FILES_S3_FORCE_PATH_STYLE:-}
+      Files__Azure__ConnectionString: ${FILES_AZURE_CONNECTION_STRING:-}
+      Files__Azure__ServiceUri: ${FILES_AZURE_SERVICE_URI:-}
+      Files__Azure__Container: ${FILES_AZURE_CONTAINER:-}
+      AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-}
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/5000 && printf 'GET /healthz HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && head -n1 <&3 | grep -q ' 200 '"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s

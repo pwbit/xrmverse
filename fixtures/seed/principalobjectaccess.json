@@ -1,0 +1,45 @@
+{
+  "LogicalName": "principalobjectaccess",
+  "SchemaName": "PrincipalObjectAccess",
+  "IsAuditEnabled": {"Value": false, "CanBeChanged": false, "ManagedPropertyLogicalName": "canmodifyauditsettings"},
+  "EntitySetName": "principalobjectaccessset",
+  "ObjectTypeCode": 11,
+  "OwnershipType": "OrganizationOwned",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.UniqueIdentifierAttributeMetadata",
+      "LogicalName": "principalid",
+      "SchemaName": "principalid"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "principaltypecode",
+      "SchemaName": "principaltypecode"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.UniqueIdentifierAttributeMetadata",
+      "LogicalName": "objectid",
+      "SchemaName": "objectid"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "objecttypecode",
+      "SchemaName": "objecttypecode"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "accessrightsmask",
+      "SchemaName": "accessrightsmask"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "inheritedaccessrightsmask",
+      "SchemaName": "inheritedaccessrightsmask"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.DateTimeAttributeMetadata",
+      "LogicalName": "changedon",
+      "SchemaName": "changedon"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+xrmverse
+Copyright 2026 Power Builders Italia S.r.l.
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+The names "xrmverse" and "xrmd", and the xrmverse logos, are trademarks of Power Builders Italia S.r.l. The Apache License
+does not grant permission to use them, except as required for reasonable and customary use in describing the origin of
+the work (see TRADEMARKS.md).
+
+xrmverse is an independent project and is not affiliated with, endorsed by or sponsored by Microsoft. Microsoft,
+Dataverse, Dynamics 365 and Power Apps are trademarks of the Microsoft group of companies.
+
+This product includes third-party software, distributed under its own licenses, listed with their copyright notices in
+THIRD_PARTY_NOTICES.md. Not all of it is under the Apache License; in particular Microsoft.Data.SqlClient.SNI.runtime is
+distributed under the Microsoft Software License Terms included with that package.
+
+This product does not include the Microsoft Power Apps / Dynamics 365 SDK assemblies or SQL Server. You download them
+yourself and accept their license terms directly with Microsoft.

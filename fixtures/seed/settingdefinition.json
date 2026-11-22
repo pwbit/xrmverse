@@ -1,0 +1,28 @@
+{
+  "LogicalName": "settingdefinition",
+  "SchemaName": "SettingDefinition",
+  "EntitySetName": "settingdefinitions",
+  "ObjectTypeCode": 9966,
+  "OwnershipType": "OrganizationOwned",
+  "PrimaryNameAttribute": "displayname",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "displayname",
+      "SchemaName": "DisplayName",
+      "MaxLength": 100
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "uniquename",
+      "SchemaName": "UniqueName",
+      "MaxLength": 100
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "defaultvalue",
+      "SchemaName": "DefaultValue",
+      "MaxLength": 2000
+    }
+  ]
+}

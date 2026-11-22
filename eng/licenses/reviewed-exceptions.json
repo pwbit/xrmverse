@@ -1,0 +1,11 @@
+{
+  "_comment": "Shipped packages that need review but are allowed while an open license review issue covers them. Each entry covers one exact version. Only add an entry when a license review issue exists, and never remove one without the issue being decided (spec section 13).",
+  "exceptions": [
+    {
+      "id": "Microsoft.Data.SqlClient.SNI.runtime",
+      "version": "7.1.0",
+      "issue": 15,
+      "reason": "Native SNI runtime of Microsoft.Data.SqlClient ships under the MICROSOFT SOFTWARE LICENSE TERMS file, not an SPDX license; under legal review."
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <LangVersion>latest</LangVersion>
+    <!-- Project license (owner decision 2026-11-17, guardrails section 11). -->
+    <Authors>Power Builders Italia S.r.l.</Authors>
+    <Company>Power Builders Italia S.r.l.</Company>
+    <Copyright>Copyright 2026 Power Builders Italia S.r.l.</Copyright>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageProjectUrl>https://xrmverse.com</PackageProjectUrl>
+  </PropertyGroup>
+
+  <!-- Issue #15: Microsoft.Data.SqlClient.SNI.runtime (the native Windows SNI library of SqlClient) ships under Microsoft's
+       proprietary terms. SqlClient uses its managed networking on every platform instead, as it already does on Linux and
+       macOS, so the native library is never loaded and is excluded from every output. ExcludeAssets does not flow through
+       project references, hence the reference in every project. eng/check-no-sdk.sh blocks Microsoft.Data.SqlClient.SNI.dll
+       in shipped artifacts. The version is the one Microsoft.Data.SqlClient 7.1.1 depends on: keep them aligned. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient.SNI.runtime" Version="7.1.0" ExcludeAssets="all" PrivateAssets="all" />
+    <RuntimeHostConfigurationOption Include="Switch.Microsoft.Data.SqlClient.UseManagedNetworkingOnWindows" Value="true" />
+  </ItemGroup>
+</Project>

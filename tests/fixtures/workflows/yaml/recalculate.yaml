@@ -1,0 +1,18 @@
+kind: action
+id: 9df696a1-e6de-f111-84e8-002248872b66
+name: Recalculate
+entity: xrmv_order
+message: xrmv_Recalculate
+arguments:
+  - { name: Increment, direction: input, type: decimal, required: true, description: New Argument }
+  - { name: Total, direction: output, type: decimal, required: true, description: New Argument }
+steps:
+  - update:
+      record: primary
+      set:
+        xrmv_amount: { add: [{ field: xrmv_amount }, { arg: Increment }] }
+  - setOutput: { argument: Total, value: { field: xrmv_amount }, description: 'Total\' }
+  - if:
+      when: { arg: Increment, op: lt, value: 0 }
+      then:
+        - stop: { status: canceled }

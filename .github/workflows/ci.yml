@@ -1,0 +1,283 @@
+name: ci
+
+# Pull request checks (Plan 10, Task 3): build and tests, the third-party license check and the vulnerability gate.
+#
+# Kept frugal (the Actions budget is limited):
+# - changes to documentation and the website only (docs/, site/, *.md) start no run; the nightly run covers them;
+# - a new push to a pull request cancels the run of the previous one;
+# - a push to main (code already tested by its pull request) builds and runs the unit tests only;
+#   the integration tests run on pull requests, every night (when main changed) and on demand;
+# - the integration tests on PostgreSQL (plan 2.7a) run every night (when main changed) and on demand only;
+# - the integration tests run as parallel shards (eng/test-shard.sh);
+# - the web admin is rebuilt only when ui/ changes (its build output is cached by the hash of ui/);
+# - the license check runs when dependencies change and every night; the vulnerability gate on every pull request
+#   (legal guardrails L.6), every night, and on pushes to main that change dependencies.
+
+on:
+  pull_request:
+    paths-ignore: ["docs/**", "site/**", "**/*.md"]
+  push:
+    branches: [main]
+    paths-ignore: ["docs/**", "site/**", "**/*.md"]
+  schedule:
+    - cron: "30 2 * * *"   # every night, 02:30 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  # What this run has to do: whether dependencies changed (license and vulnerability gates) and whether the
+  # nightly run has anything new to test.
+  scope:
+    name: scope
+    runs-on: ubuntu-latest
+    outputs:
+      deps: ${{ steps.scope.outputs.deps }}
+      integration: ${{ steps.scope.outputs.integration }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Changed files
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          deps=true
+          integration=true
+          case "$EVENT" in
+            pull_request)
+              # The merge commit's first parent is the base branch: the diff is the pull request's.
+              changed="$(git diff --name-only HEAD^1 HEAD)" ;;
+            push)
+              integration=false
+              if git fetch --depth=1 origin "$BEFORE" 2>/dev/null; then
+                changed="$(git diff --name-only "$BEFORE" HEAD)"
+              else
+                changed=""; deps=true
+              fi ;;
+            schedule)
+              # Nothing merged in the last 25 hours: the previous night already tested this commit.
+              if (( $(date +%s) - $(git log -1 --format=%ct) > 90000 )); then integration=false; fi
+              changed="" ;;
+            *) changed="" ;;
+          esac
+          if [[ "$EVENT" == pull_request || ( "$EVENT" == push && -n "$changed" ) ]]; then
+            if grep -qE '\.(csproj|props|targets)$|^global\.json$|^ui/(package\.json|pnpm-lock\.yaml)$|^eng/licenses|^tools/Xrmd\.Licenses/|^THIRD_PARTY_NOTICES\.md$|^\.github/workflows/ci\.yml$' <<<"$changed"; then
+              deps=true
+            else
+              deps=false
+            fi
+          fi
+          echo "deps=$deps" >> "$GITHUB_OUTPUT"
+          echo "integration=$integration" >> "$GITHUB_OUTPUT"
+          echo "event=$EVENT deps=$deps integration=$integration"
+
+  # The web admin: tests, type check and build, skipped when the build of this ui/ is already cached.
+  # Its build output (ui/dist) is linked into the host, and HostStaticWebAssetsTests needs it.
+  ui:
+    name: web admin
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cached build of this web admin
+        id: dist
+        uses: actions/cache@v4
+        with:
+          path: ui/dist
+          key: ui-dist-${{ hashFiles('ui/**') }}
+      - uses: pnpm/action-setup@v4
+        if: steps.dist.outputs.cache-hit != 'true'
+        with:
+          package_json_file: ui/package.json   # version from "packageManager" (pnpm 10)
+      - uses: actions/setup-node@v4
+        if: steps.dist.outputs.cache-hit != 'true'
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ui/pnpm-lock.yaml
+      - name: Web admin
+        if: steps.dist.outputs.cache-hit != 'true'
+        run: |
+          pnpm -C ui install --frozen-lockfile
+          pnpm -C ui test
+          pnpm -C ui typecheck
+          pnpm -C ui build
+
+  # Build and every test project except the integration tests (they run in the integration job).
+  build-test:
+    name: build and test
+    needs: scope
+    # The nightly run builds only when main changed since the previous night.
+    if: github.event_name != 'schedule' || needs.scope.outputs.integration == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: NuGet cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets', 'global.json') }}
+          restore-keys: nuget-
+      - name: Build
+        run: dotnet build
+      - name: Test (all projects but the integration tests)
+        run: |
+          failed=0
+          for project in tests/*/*.Tests.csproj; do
+            [[ "$project" == */Xrmd.Integration.Tests.csproj ]] && continue
+            dotnet test "$project" --no-build --filter "Category!=Acceptance" || failed=1
+          done
+          exit $failed
+      - name: No Microsoft SDK in shipped artifacts
+        run: eng/check-no-sdk.sh
+
+  # The integration tests (SQL Server with Testcontainers), split over parallel shards.
+  integration:
+    name: integration tests (${{ matrix.shard }}/4)
+    needs: [scope, ui]
+    if: needs.scope.outputs.integration == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      # The integration tests (SQL Server container, backups, one database per test host) ran the hosted
+      # runner out of disk; drop preinstalled toolchains this job never uses (Android SDK, GHC, CodeQL).
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h /
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: NuGet cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets', 'global.json') }}
+          restore-keys: nuget-
+      - name: Web admin build
+        uses: actions/cache/restore@v4
+        with:
+          path: ui/dist
+          key: ui-dist-${{ hashFiles('ui/**') }}
+          fail-on-cache-miss: true
+      - name: Build
+        run: dotnet build tests/Xrmd.Integration.Tests
+      - name: Test (integration tests start SQL Server with Testcontainers)
+        run: |
+          shard="$(eng/test-shard.sh tests/Xrmd.Integration.Tests ${{ matrix.shard }} 4)"
+          dotnet test tests/Xrmd.Integration.Tests --no-build --filter "Category!=Acceptance&($shard)"
+
+  # The integration tests on PostgreSQL (plan 2.7a, XRMD_TEST_PROVIDER=postgres; PostgreSQL 16 with Testcontainers), every night and
+  # on demand only, never on pull requests or pushes: the same shards and the same tests (since plan 2.7b PostgreSQL runs every feature).
+  postgres:
+    name: postgres integration tests (${{ matrix.shard }}/4)
+    needs: [scope, ui]
+    if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && needs.scope.outputs.integration == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      # As the integration job: room on the hosted runner's disk for the database containers.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h /
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: NuGet cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets', 'global.json') }}
+          restore-keys: nuget-
+      - name: Web admin build
+        uses: actions/cache/restore@v4
+        with:
+          path: ui/dist
+          key: ui-dist-${{ hashFiles('ui/**') }}
+          fail-on-cache-miss: true
+      # Plan 2.7b, Task 9: pg_dump and pg_restore for the backup tests, PostgreSQL 18 against the PostgreSQL 16 of the tests, as the
+      # server image runs them (an older server refuses settings pg_restore 18 sets; PgTools tolerates only those). From the
+      # PostgreSQL apt repository (PGDG), its signing key pinned by fingerprint as the image's was: CI ships nothing, the image
+      # builds the same tools from source.
+      - name: PostgreSQL 18 client tools
+        run: |
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc -o /tmp/pgdg.asc
+          export GNUPGHOME="$(mktemp -d)"
+          gpg --batch --quiet --import /tmp/pgdg.asc
+          gpg --batch --export B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8 | sudo tee /usr/share/keyrings/pgdg.gpg > /dev/null
+          test -s /usr/share/keyrings/pgdg.gpg
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/keyrings/pgdg.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends postgresql-client-18
+          /usr/lib/postgresql/18/bin/pg_dump --version
+      - name: Build
+        run: dotnet build tests/Xrmd.Integration.Tests
+      - name: Test (integration tests start PostgreSQL with Testcontainers)
+        env:
+          XRMD_TEST_PROVIDER: postgres
+          XRMD_TEST_PG_TOOLS: /usr/lib/postgresql/18/bin
+        run: |
+          shard="$(eng/test-shard.sh tests/Xrmd.Integration.Tests ${{ matrix.shard }} 4)"
+          dotnet test tests/Xrmd.Integration.Tests --no-build --filter "Category!=Acceptance&($shard)"
+
+  licenses:
+    name: third-party licenses
+    needs: scope
+    if: needs.scope.outputs.deps == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: ui/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ui/pnpm-lock.yaml
+      - name: License check and notices up to date
+        run: eng/licenses.sh check --notices THIRD_PARTY_NOTICES.md
+
+  # Legal guardrails L.6: the dependency scan runs on every pull request (and every night).
+  vulnerabilities:
+    name: vulnerable dependencies
+    needs: scope
+    if: github.event_name != 'push' || needs.scope.outputs.deps == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: ui/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Fail on High or Critical advisories (NuGet and npm prod)
+        run: eng/licenses.sh vulnerabilities

@@ -1,0 +1,66 @@
+{
+  "LogicalName": "copilotsynonyms",
+  "SchemaName": "CopilotSynonyms",
+  "EntitySetName": "copilotsynonyms",
+  "ObjectTypeCode": 9963,
+  "OwnershipType": "UserOwned",
+  "PrimaryNameAttribute": "name",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "name",
+      "SchemaName": "Name",
+      "MaxLength": 100
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "columnlogicalname",
+      "SchemaName": "ColumnLogicalName",
+      "MaxLength": 100,
+      "RequiredLevel": {
+        "Value": "ApplicationRequired",
+        "CanBeChanged": true,
+        "ManagedPropertyLogicalName": "canmodifyrequirementlevelsettings"
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "synonyms",
+      "SchemaName": "Synonyms",
+      "MaxLength": 1000
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "description",
+      "SchemaName": "Description",
+      "MaxLength": 1000
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "skillentity",
+      "SchemaName": "SkillEntity",
+      "Targets": [
+        "dvtablesearchentity"
+      ]
+    }
+  ],
+  "ManyToOneRelationships": [
+    {
+      "SchemaName": "dvtablesearchentity_copilotsynonyms",
+      "ReferencedEntity": "dvtablesearchentity",
+      "ReferencingEntity": "copilotsynonyms",
+      "ReferencingAttribute": "skillentity",
+      "ReferencingEntityNavigationPropertyName": "skillentity",
+      "CascadeConfiguration": {
+        "Assign": "NoCascade",
+        "Delete": "Cascade",
+        "Merge": "NoCascade",
+        "Reparent": "NoCascade",
+        "Share": "NoCascade",
+        "Unshare": "NoCascade",
+        "Archive": "NoCascade",
+        "RollupView": "NoCascade"
+      }
+    }
+  ]
+}

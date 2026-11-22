@@ -1,0 +1,23 @@
+  # The only service published outside loopback (PROXY_BIND, default every address): TLS on 443 for every public host of
+  # Caddyfile, and 80, which redirects to 443 (and answers ACME HTTP-01 challenges with TLS_MODE=acme).
+  proxy:
+    image: {{CADDY_IMAGE}}
+    restart: unless-stopped
+    ports:
+      - "${PROXY_BIND:-0.0.0.0}:80:80"
+      - "${PROXY_BIND:-0.0.0.0}:443:443"
+    volumes:
+      # Rewritten in place by `xrmd server org add|remove`, which then runs `caddy reload` in this container.
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates, ACME account and local CA (TLS_MODE=internal).
+      - caddy-data:/data
+#{{FILES_BEGIN}}
+      # The certificate pair of TLS_MODE=files (server.crt, server.key).
+      - ./certs:/certs:ro
+#{{FILES_END}}
+    networks:
+      edge:
+        # The organizations trust forwarded headers from this address only (Proxy__TrustedProxies).
+        ipv4_address: {{PROXY_ADDRESS}}
+    depends_on:
+{{DEPENDS_ON}}

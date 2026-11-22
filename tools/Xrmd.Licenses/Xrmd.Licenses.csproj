@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Third-party notices, license check and SBOM (Plan 10, Task 1). No PackageReference on purpose (ruling P1):
+    the tool that checks the dependencies must not add any.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Xrmd.Licenses</RootNamespace>
+  </PropertyGroup>
+
+</Project>

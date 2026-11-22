@@ -1,0 +1,190 @@
+{
+  "LogicalName": "transactioncurrency",
+  "SchemaName": "TransactionCurrency",
+  "EntitySetName": "transactioncurrencies",
+  "ObjectTypeCode": 9105,
+  "OwnershipType": "OrganizationOwned",
+  "PrimaryNameAttribute": "currencyname",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "currencyname",
+      "SchemaName": "CurrencyName",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Currency Name",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Currency Name",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 100,
+      "Format": "Text",
+      "RequiredLevel": {
+        "Value": "SystemRequired",
+        "CanBeChanged": false,
+        "ManagedPropertyLogicalName": "canmodifyrequirementlevelsettings"
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "isocurrencycode",
+      "SchemaName": "ISOCurrencyCode",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Currency Code",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Currency Code",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 5,
+      "Format": "Text",
+      "RequiredLevel": {
+        "Value": "SystemRequired",
+        "CanBeChanged": false,
+        "ManagedPropertyLogicalName": "canmodifyrequirementlevelsettings"
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "currencysymbol",
+      "SchemaName": "CurrencySymbol",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Currency Symbol",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Currency Symbol",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 10,
+      "Format": "Text",
+      "RequiredLevel": {
+        "Value": "SystemRequired",
+        "CanBeChanged": false,
+        "ManagedPropertyLogicalName": "canmodifyrequirementlevelsettings"
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "currencyprecision",
+      "SchemaName": "CurrencyPrecision",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Currency Precision",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Currency Precision",
+          "LanguageCode": 1033
+        }
+      },
+      "MinValue": 0,
+      "MaxValue": 4,
+      "RequiredLevel": {
+        "Value": "SystemRequired",
+        "CanBeChanged": false,
+        "ManagedPropertyLogicalName": "canmodifyrequirementlevelsettings"
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.DecimalAttributeMetadata",
+      "LogicalName": "exchangerate",
+      "SchemaName": "ExchangeRate",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Exchange Rate",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Exchange Rate",
+          "LanguageCode": 1033
+        }
+      },
+      "Precision": 12,
+      "MinValue": 0.000000000001,
+      "MaxValue": 100000000000,
+      "RequiredLevel": {
+        "Value": "SystemRequired",
+        "CanBeChanged": false,
+        "ManagedPropertyLogicalName": "canmodifyrequirementlevelsettings"
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "currencytype",
+      "SchemaName": "CurrencyType",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Currency Type",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Currency Type",
+          "LanguageCode": 1033
+        }
+      },
+      "RequiredLevel": {
+        "Value": "SystemRequired",
+        "CanBeChanged": false,
+        "ManagedPropertyLogicalName": "canmodifyrequirementlevelsettings"
+      },
+      "OptionSet": {
+        "IsGlobal": true,
+        "Name": "transactioncurrency_currencytype",
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "System",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "System",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Custom",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Custom",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

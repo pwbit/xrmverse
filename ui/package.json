@@ -1,0 +1,51 @@
+{
+  "name": "xrmverse-ui",
+  "description": "xrmverse web admin. xrmverse is an independent project and is not affiliated with, endorsed by or sponsored by Microsoft. Microsoft, Dataverse, Dynamics 365 and Power Apps are trademarks of the Microsoft group of companies.",
+  "private": true,
+  "license": "Apache-2.0",
+  "version": "0.0.0",
+  "type": "module",
+  "packageManager": "pnpm@10.28.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p e2e",
+    "e2e": "playwright test"
+  },
+  "dependencies": {
+    "@azure/msal-browser": "5.29.0",
+    "@codemirror/commands": "6.11.1",
+    "@codemirror/lang-yaml": "6.1.3",
+    "@codemirror/language": "6.13.1",
+    "@codemirror/lint": "6.9.8",
+    "@codemirror/state": "6.7.6",
+    "@codemirror/view": "6.43.15",
+    "@fluentui/react-charts": "9.3.29",
+    "@fluentui/react-components": "9.75.1",
+    "@fluentui/react-datepicker-compat": "0.6.40",
+    "@fluentui/react-icons": "2.0.345",
+    "@fluentui/react-timepicker-compat": "0.4.42",
+    "@fontsource-variable/sora": "5.3.0",
+    "@lezer/highlight": "1.2.5",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-router-dom": "6.30.6",
+    "yaml": "2.9.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.0",
+    "@testing-library/jest-dom": "6.10.0",
+    "@testing-library/react": "16.3.3",
+    "@testing-library/user-event": "14.6.8",
+    "@types/node": "22.20.5",
+    "@types/react": "18.3.31",
+    "@types/react-dom": "18.3.7",
+    "@vitejs/plugin-react": "4.7.0",
+    "jsdom": "26.1.0",
+    "msw": "2.7.3",
+    "typescript": "5.9.3",
+    "vite": "6.4.5",
+    "vitest": "3.2.7"
+  }
+}

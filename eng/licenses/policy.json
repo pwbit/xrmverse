@@ -1,0 +1,31 @@
+{
+  "_comment": "License policy of the guardrails, spec section 4 (Plan 10, Global Constraints and ruling P4). SPDX ids are compared case-insensitively; a trailing * matches any suffix. allowedFor lists licenses allowed only for the packages whose id matches one of its patterns: OFL-1.1 for font packages only (user decision 2026-11-14, guardrails sections 4 and 6, #11, #102, #154). PostgreSQL (the PostgreSQL License, Npgsql) is allowed since 2026-11-19 (#279, plan 2.7a ruling P13). A license that is neither allowed nor forbidden needs review. packageOverrides correct the copyright or project URL that one exact package version states, with the source of the correction.",
+  "allowed": [ "MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "PostgreSQL", "ISC", "MS-PL", "Unlicense", "0BSD" ],
+  "allowedFor": { "OFL-1.1": [ "@fontsource/*", "@fontsource-variable/*" ] },
+  "review": [ "MPL-2.0", "LGPL-*", "EPL-*", "LicenseRef-*" ],
+  "forbidden": [ "GPL-*", "AGPL-*", "SSPL-*", "BUSL-*" ],
+  "forbiddenInExpression": [ "Commons-Clause" ],
+  "deniedPackages": [
+    { "id": "FluentAssertions", "minVersion": "8.0.0", "reason": "FluentAssertions 8.x is commercial (spec section 4); stay on 6.x." }
+  ],
+  "licenseUrls": {
+    "https://github.com/dotnet/corefx/blob/master/LICENSE.TXT": "MIT",
+    "http://go.microsoft.com/fwlink/?LinkId=329770": "LicenseRef-MS-NET-Library"
+  },
+  "packageOverrides": [
+    {
+      "id": "@fontsource-variable/sora",
+      "version": "5.3.0",
+      "copyright": "Copyright 2019 The Sora Project Authors (https://github.com/sora-xor/sora-font)",
+      "projectUrl": "https://github.com/sora-xor/sora-font",
+      "source": "LICENSE inside the npm package and site/assets/fonts/OFL-Sora.txt; package.json author is the fontsource packager (Google Inc.), checked 2026-11-14."
+    },
+    {
+      "id": "UiPath.Workflow.Runtime",
+      "version": "6.0.3",
+      "copyright": "Copyright (c) .NET Foundation and Contributors",
+      "projectUrl": "https://github.com/UiPath/CoreWF",
+      "source": "The nuspec has no <copyright> (its authors are 'System.Activities') and no license file; copyright from the LICENSE of https://github.com/UiPath/CoreWF (develop, master and main branches), checked 2026-11-12."
+    }
+  ]
+}

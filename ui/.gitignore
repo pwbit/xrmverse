@@ -1,0 +1,7 @@
+node_modules
+dist
+e2e/.results
+e2e/.host.log
+e2e/.host-local.log
+e2e/.host-*.log
+e2e/.run-state.json

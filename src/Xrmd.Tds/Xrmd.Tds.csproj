@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Meziantou.Framework.TdsServer" Version="2.0.19" />
+    <!-- A hard dependency of TdsServer, proprietary: restored for the dependency graph only, never compiled against or
+         shipped (plan 3.3, ruling T11, issue #46). eng/check-no-sdk.sh refuses its DLL in every artifact. -->
+    <PackageReference Include="Microsoft.SqlServer.Management.SqlParser" Version="180.9.0" ExcludeAssets="all" />
+    <!-- MIT: parses the SQL of a batch into a syntax tree that the translator walks (plan 3.3, ruling T1). -->
+    <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="180.140.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Xrmd.Query\Xrmd.Query.csproj" />
+    <!-- The query executor, the caller resolution and the security caches (plan 3.3, Task 3). -->
+    <ProjectReference Include="..\Xrmd.Core\Xrmd.Core.csproj" />
+  </ItemGroup>
+
+</Project>

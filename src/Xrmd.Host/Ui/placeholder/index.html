@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>xrmverse - web admin not built</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 4rem auto; padding: 0 1rem; line-height: 1.5; }
+    code { background: #8882; padding: .1rem .35rem; border-radius: .25rem; }
+  </style>
+</head>
+<body>
+  <h1>The web admin has not been built</h1>
+  <p>This xrmd host is running, but the web admin shell was not found in its UI folder.</p>
+  <p>Build it from the repository root with <code>pnpm -C ui build</code>, then rebuild or republish the host
+    so that <code>ui/dist</code> is copied to <code>wwwroot</code>, or point <code>Ui:RootPath</code> at the build output.</p>
+  <p>The Web API, Admin API and MCP endpoints are not affected.</p>
+</body>
+</html>

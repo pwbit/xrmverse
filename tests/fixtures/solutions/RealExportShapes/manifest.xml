@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Overlay>
+  <RootComponent type="20" behavior="0" parentId="{6b1c3f4e-1a2b-4c3d-8e9f-0a1b2c3d4e01}" />
+  <MissingDependencies>
+    <MissingDependency>
+      <Required type="1" schemaName="xv_ledger" displayName="Ledger" solution="LedgerBase (1.0.0.0)">
+        <package appName="xv_Ledger" version="1.0.0.0">xv_LedgerAnchor (1.0.0.0)</package>
+      </Required>
+      <Dependent type="80" schemaName="xv_fixtureapp" displayName="Fixture App" />
+    </MissingDependency>
+    <MissingDependency>
+      <Required type="2" schemaName="xv_ledgerid" displayName="Ledger" parentSchemaName="xv_ledger" parentDisplayName="Ledger" solution="LedgerBase (1.0.0.0)" />
+      <Dependent type="60" id="{0a1b2c3d-0000-4000-8000-000000000001}" displayName="Information" parentDisplayName="Project" />
+    </MissingDependency>
+    <MissingDependency>
+      <Required type="connectionreference" id.connectionreferencelogicalname="xv_sharedconnection" displayName="Shared connection" solution="LedgerBase (1.0.0.0)" />
+      <Dependent type="29" id="{0a1b2c3d-0000-4000-8000-000000000002}" displayName="Pick next task" />
+    </MissingDependency>
+    <MissingDependency>
+      <Required type="SettingDefinition" id.uniquename="xv_SettingOne" displayName="Setting one" solution="LedgerBase (1.0.0.0)" />
+      <Dependent type="AppSetting" id.parentappmoduleid.uniquename="xv_fixtureapp" id.settingdefinitionid.uniquename="xv_SettingOne" displayName="Setting one" />
+    </MissingDependency>
+    <MissingDependency>
+      <Required type="20" id="{0a1b2c3d-0000-4000-8000-000000000003}" parentId="{0a1b2c3d-0000-4000-8000-000000000004}" displayName="Ledger reader" solution="LedgerBase (1.0.0.0)" />
+      <Dependent type="62" schemaName="xv_fixtureapp" displayName="Fixture App" />
+    </MissingDependency>
+  </MissingDependencies>
+</Overlay>

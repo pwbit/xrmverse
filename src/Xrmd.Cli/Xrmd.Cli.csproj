@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>xrmd</AssemblyName>
+    <!-- A development build has no release version (ServerImage maps it to xrmd:local); release.yml passes -p:Version=<tag>. -->
+    <Version>0.0.0-dev</Version>
+    <RootNamespace>Xrmd.Cli</RootNamespace>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>xrmd</ToolCommandName>
+    <PackageId>xrmd</PackageId>
+    <Description>xrmd: command line for administering an xrmverse server (Dataverse-compatible, on-prem). xrmverse is an independent project and is not affiliated with, endorsed by or sponsored by Microsoft. Microsoft, Dataverse, Dynamics 365 and Power Apps are trademarks of the Microsoft group of companies.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Xrmd.Schema\Xrmd.Schema.csproj" />
+    <ProjectReference Include="..\Xrmd.Migration\Xrmd.Migration.csproj" />
+    <!-- Plan 2.7b, ruling Q7: the direct restore of `org restore` on PostgreSQL (PgTools and the server-level SQL of PostgresDatabases). -->
+    <ProjectReference Include="..\Xrmd.Storage.PostgreSql\Xrmd.Storage.PostgreSql.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.1" />
+    <PackageReference Include="Microsoft.Identity.Client" Version="4.92.0" />
+    <PackageReference Include="ModelContextProtocol.Core" Version="2.4.0" />
+    <PackageReference Include="System.CommandLine" Version="2.0.14" />
+    <PackageReference Include="System.Reflection.MetadataLoadContext" Version="10.0.15" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.16.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\THIRD_PARTY_NOTICES.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\NOTICE" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Templates\*" LogicalName="Xrmd.Cli.Templates.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Xrmd.Cli.Tests" />
+  </ItemGroup>
+
+</Project>

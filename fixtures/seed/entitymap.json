@@ -1,0 +1,26 @@
+{
+  "LogicalName": "entitymap",
+  "SchemaName": "EntityMap",
+  "IsAuditEnabled": {
+    "Value": false,
+    "CanBeChanged": false,
+    "ManagedPropertyLogicalName": "canmodifyauditsettings"
+  },
+  "EntitySetName": "entitymaps",
+  "ObjectTypeCode": 4600,
+  "OwnershipType": "OrganizationOwned",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "sourceentityname",
+      "SchemaName": "SourceEntityName",
+      "MaxLength": 100
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "targetentityname",
+      "SchemaName": "TargetEntityName",
+      "MaxLength": 100
+    }
+  ]
+}

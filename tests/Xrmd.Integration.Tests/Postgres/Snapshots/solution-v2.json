@@ -1,0 +1,51 @@
+{
+  "solutions": [
+    "xm_base | 2.0.0.0 | managed True"
+  ],
+  "solutioncomponent": [
+    "xm_base | 1 | xm_item | behavior 0",
+    "xm_base | 2 | xm_item.xm_code | behavior 0",
+    "xm_base | 2 | xm_item.xm_extra | behavior 0",
+    "xm_base | 2 | xm_item.xm_name | behavior 0",
+    "xm_base | 26 | Active Items | behavior 0",
+    "xm_base | 61 | xm_/scripts/item.js | behavior 0",
+    "xm_base | 9 | xm_status | behavior 0",
+    "xm_base | 90 | Xrmd.TestPlugins.ContextRecorderPlugin | behavior 0",
+    "xm_base | 91 | Xrmd.TestPlugins | behavior 0",
+    "xm_base | 92 | Xrmd.TestPlugins.ContextRecorderPlugin: Update of xm_item | behavior 0"
+  ],
+  "component_layer": [
+    "1 | xm_item | xm_base | order 1024 | 2497 chars, sha256 36de66c69b80bf4e",
+    "2 | xm_item.xm_code | xm_base | order 1024 | 2360 chars, sha256 bbe501f893c3c143",
+    "2 | xm_item.xm_extra | xm_base | order 1024 | 2364 chars, sha256 0853477c7bcf9192",
+    "2 | xm_item.xm_itemid | xm_base | order 1024 | 2196 chars, sha256 b325f47547b037ee",
+    "2 | xm_item.xm_name | xm_base | order 1024 | 2393 chars, sha256 befd6dea92257830",
+    "26 | Active Items | xm_base | order 1024 | 2573 chars, sha256 aff4b2c7e2028de3",
+    "61 | xm_/scripts/item.js | xm_base | order 1024 | 1107 chars, sha256 87f227c4cdcf28f8",
+    "9 | xm_status | xm_base | order 1024 | 1487 chars, sha256 f26295594e0b5e6c",
+    "90 | Xrmd.TestPlugins.ContextRecorderPlugin | xm_base | order 1024 | 1216 chars, sha256 65a4037aff818d40",
+    "91 | Xrmd.TestPlugins | xm_base | order 1024 | 1216 chars, sha256 65a4037aff818d40",
+    "92 | Xrmd.TestPlugins.ContextRecorderPlugin: Update of xm_item | xm_base | order 1024 | 1758 chars, sha256 66e02f0d69780d20"
+  ],
+  "solution_rank": [
+    "xm_base | 1 | 0"
+  ],
+  "metadata": {
+    "xm_item": [
+      "createdby",
+      "createdon",
+      "modifiedby",
+      "modifiedon",
+      "owningbusinessunit",
+      "owningteam",
+      "owninguser",
+      "statecode",
+      "statuscode",
+      "versionnumber",
+      "xm_code",
+      "xm_extra",
+      "xm_itemid",
+      "xm_name"
+    ]
+  }
+}

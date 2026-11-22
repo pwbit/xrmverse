@@ -1,0 +1,2 @@
+# The XAML files of a real Dataverse export: kept byte for byte (CRLF line ends included).
+*.xaml -text

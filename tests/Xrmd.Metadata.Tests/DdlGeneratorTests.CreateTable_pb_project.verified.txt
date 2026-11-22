@@ -1,0 +1,20 @@
+﻿CREATE TABLE [data].[pb_project] (
+    [pb_projectid] uniqueidentifier NOT NULL CONSTRAINT [PK_pb_project] PRIMARY KEY,
+    [pb_name] nvarchar(200) NULL,
+    [pb_budget] decimal(19,4) NULL,
+    [pb_budget_base] decimal(19,4) NULL,
+    [ownerid] uniqueidentifier NULL,
+    [owneridtype] int NULL,
+    [transactioncurrencyid] uniqueidentifier NULL,
+    [exchangerate] decimal(23,10) NULL,
+    [createdon] datetime2 NULL,
+    [createdby] uniqueidentifier NULL,
+    [modifiedon] datetime2 NULL,
+    [modifiedby] uniqueidentifier NULL,
+    [owninguser] uniqueidentifier NULL,
+    [owningteam] uniqueidentifier NULL,
+    [owningbusinessunit] uniqueidentifier NULL,
+    [statecode] int NULL,
+    [statuscode] int NULL,
+    [versionnumber] rowversion
+);

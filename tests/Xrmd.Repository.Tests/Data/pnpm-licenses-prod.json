@@ -1,0 +1,94 @@
+{
+  "MIT": [
+    {
+      "name": "react",
+      "versions": [
+        "18.3.1"
+      ],
+      "paths": [
+        "/repo/ui/node_modules/.pnpm/react@18.3.1/node_modules/react"
+      ],
+      "license": "MIT",
+      "homepage": "https://react.dev/",
+      "description": "test"
+    },
+    {
+      "name": "@fluentui/react-components",
+      "versions": [
+        "9.75.1"
+      ],
+      "paths": [
+        "/repo/ui/node_modules/.pnpm/@fluentui+react-components@9.75.1/node_modules/@fluentui/react-components"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/microsoft/fluentui#readme",
+      "description": "test"
+    },
+    {
+      "name": "@emotion/hash",
+      "versions": [
+        "0.9.2"
+      ],
+      "paths": [
+        "npm/emotion-hash"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/emotion-js/emotion",
+      "description": "test"
+    }
+  ],
+  "Apache-2.0": [
+    {
+      "name": "@swc/helpers",
+      "versions": [
+        "0.5.24"
+      ],
+      "paths": [
+        "/repo/ui/node_modules/.pnpm/@swc+helpers@0.5.24/node_modules/@swc/helpers"
+      ],
+      "license": "Apache-2.0",
+      "author": "강동윤",
+      "homepage": "https://swc.rs",
+      "description": "test"
+    }
+  ],
+  "0BSD": [
+    {
+      "name": "tslib",
+      "versions": [
+        "2.8.1"
+      ],
+      "paths": [
+        "/repo/ui/node_modules/.pnpm/tslib@2.8.1/node_modules/tslib"
+      ],
+      "license": "0BSD",
+      "author": "Microsoft Corp.",
+      "homepage": "https://www.typescriptlang.org/",
+      "description": "test"
+    }
+  ],
+  "ISC": [
+    {
+      "name": "nocopy-a",
+      "versions": [
+        "1.0.0"
+      ],
+      "paths": [
+        "npm/nocopy-a"
+      ],
+      "license": "ISC",
+      "description": "test"
+    },
+    {
+      "name": "nocopy-b",
+      "versions": [
+        "1.0.0"
+      ],
+      "paths": [
+        "npm/nocopy-b"
+      ],
+      "license": "ISC",
+      "description": "test"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+  <metadata>
+    <id>Acme.Native</id>
+    <version>1.0.0</version>
+    <authors>Acme Native Team</authors>
+    <license type="expression">Apache-2.0 OR MIT</license>
+    <projectUrl>https://example.com/acme-native</projectUrl>
+  </metadata>
+</package>

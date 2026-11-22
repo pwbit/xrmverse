@@ -1,0 +1,214 @@
+{
+  "LogicalName": "duplicaterule",
+  "SchemaName": "DuplicateRule",
+  "EntitySetName": "duplicaterules",
+  "ObjectTypeCode": 4414,
+  "OwnershipType": "UserOwned",
+  "PrimaryNameAttribute": "name",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "name",
+      "SchemaName": "Name",
+      "MaxLength": 160,
+      "RequiredLevel": {
+        "Value": "ApplicationRequired",
+        "CanBeChanged": true,
+        "ManagedPropertyLogicalName": "canmodifyrequirementlevelsettings"
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "baseentityname",
+      "SchemaName": "BaseEntityName",
+      "MaxLength": 160,
+      "RequiredLevel": {
+        "Value": "ApplicationRequired",
+        "CanBeChanged": true,
+        "ManagedPropertyLogicalName": "canmodifyrequirementlevelsettings"
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "matchingentityname",
+      "SchemaName": "MatchingEntityName",
+      "MaxLength": 160,
+      "RequiredLevel": {
+        "Value": "ApplicationRequired",
+        "CanBeChanged": true,
+        "ManagedPropertyLogicalName": "canmodifyrequirementlevelsettings"
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "description",
+      "SchemaName": "Description",
+      "MaxLength": 2000
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "excludeinactiverecords",
+      "SchemaName": "ExcludeInactiveRecords",
+      "DefaultValue": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "iscasesensitive",
+      "SchemaName": "IsCaseSensitive",
+      "DefaultValue": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "uniquename",
+      "SchemaName": "UniqueName",
+      "MaxLength": 100
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "baseentitytypecode",
+      "SchemaName": "BaseEntityTypeCode",
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Picklist",
+        "Options": []
+      },
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "matchingentitytypecode",
+      "SchemaName": "MatchingEntityTypeCode",
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Picklist",
+        "Options": []
+      },
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "baseentitymatchcodetable",
+      "SchemaName": "BaseEntityMatchCodeTable",
+      "MaxLength": 50,
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "matchingentitymatchcodetable",
+      "SchemaName": "MatchingEntityMatchCodeTable",
+      "MaxLength": 50,
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StateAttributeMetadata",
+      "LogicalName": "statecode",
+      "SchemaName": "StateCode",
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "State",
+        "Options": [
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StateOptionMetadata",
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Inactive",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Inactive",
+                "LanguageCode": 1033
+              }
+            },
+            "DefaultStatus": 0
+          },
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StateOptionMetadata",
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Active",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Active",
+                "LanguageCode": 1033
+              }
+            },
+            "DefaultStatus": 2
+          }
+        ]
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StatusAttributeMetadata",
+      "LogicalName": "statuscode",
+      "SchemaName": "StatusCode",
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Status",
+        "Options": [
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StatusOptionMetadata",
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Unpublished",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Unpublished",
+                "LanguageCode": 1033
+              }
+            },
+            "State": 0
+          },
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StatusOptionMetadata",
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Publishing",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Publishing",
+                "LanguageCode": 1033
+              }
+            },
+            "State": 0
+          },
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StatusOptionMetadata",
+            "Value": 2,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Published",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Published",
+                "LanguageCode": 1033
+              }
+            },
+            "State": 1
+          }
+        ]
+      }
+    }
+  ]
+}

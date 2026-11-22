@@ -1,0 +1,13 @@
+kind: businessRule
+id: 216fa344-e5de-f111-84e8-002248872b66
+name: New business rule
+description: Click to add description
+entity: xrmv_order
+steps:
+  - if:
+      description: New Condition
+      when: { field: xrmv_amount, op: null }
+      then:
+        - setValue: { field: xrmv_status, value: 128830001, description: New Action }
+      else:
+        - showError: { field: xrmv_status, message: fdsfds, description: New Action }

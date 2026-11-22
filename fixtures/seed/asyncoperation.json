@@ -1,0 +1,545 @@
+{
+  "LogicalName": "asyncoperation",
+  "SchemaName": "asyncoperation",
+  "IsAuditEnabled": {"Value": false, "CanBeChanged": false, "ManagedPropertyLogicalName": "canmodifyauditsettings"},
+  "EntitySetName": "asyncoperations",
+  "ObjectTypeCode": 4700,
+  "OwnershipType": "UserOwned",
+  "PrimaryNameAttribute": "name",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "name",
+      "SchemaName": "name",
+      "MaxLength": 256
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "operationtype",
+      "SchemaName": "operationtype",
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "System Event",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "System Event",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 7,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Duplicate Detection Rule Publish",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Duplicate Detection Rule Publish",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 8,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Bulk Duplicate Detection",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Bulk Duplicate Detection",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 10,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Workflow",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Workflow",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 57,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Calculate Rollup Field",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Calculate Rollup Field",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 58,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Mass Calculate Rollup Field",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Mass Calculate Rollup Field",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 203,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Import Solution Async Operation",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Import Solution Async Operation",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 207,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Delete And Promote",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Delete And Promote",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 208,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Uninstall Solution",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Uninstall Solution",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 211,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Stage And Upgrade",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Stage And Upgrade",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 99010,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Migration Import",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Migration Import",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "messagename",
+      "SchemaName": "messagename",
+      "MaxLength": 256
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "primaryentitytype",
+      "SchemaName": "primaryentitytype",
+      "MaxLength": 64
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "data",
+      "SchemaName": "data",
+      "MaxLength": 1073741823
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "message",
+      "SchemaName": "message",
+      "MaxLength": 1048576
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "friendlymessage",
+      "SchemaName": "friendlymessage",
+      "MaxLength": 1048576
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.UniqueIdentifierAttributeMetadata",
+      "LogicalName": "correlationid",
+      "SchemaName": "correlationid"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "depth",
+      "SchemaName": "depth"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "retrycount",
+      "SchemaName": "retrycount"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "errorcode",
+      "SchemaName": "errorcode"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.DateTimeAttributeMetadata",
+      "LogicalName": "postponeuntil",
+      "SchemaName": "postponeuntil",
+      "Format": "DateAndTime"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.DateTimeAttributeMetadata",
+      "LogicalName": "startedon",
+      "SchemaName": "startedon",
+      "Format": "DateAndTime"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.DateTimeAttributeMetadata",
+      "LogicalName": "completedon",
+      "SchemaName": "completedon",
+      "Format": "DateAndTime"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "recurrencepattern",
+      "SchemaName": "recurrencepattern",
+      "MaxLength": 256
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.DateTimeAttributeMetadata",
+      "LogicalName": "recurrencestarttime",
+      "SchemaName": "recurrencestarttime",
+      "Format": "DateAndTime"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "owningextensionid",
+      "SchemaName": "owningextensionid",
+      "Targets": [
+        "sdkmessageprocessingstep"
+      ]
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.UniqueIdentifierAttributeMetadata",
+      "LogicalName": "regardingobjectid",
+      "SchemaName": "regardingobjectid"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "workflowactivationid",
+      "SchemaName": "WorkflowActivationId",
+      "Targets": [
+        "workflow"
+      ]
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.UniqueIdentifierAttributeMetadata",
+      "LogicalName": "xrmverse_importjobid",
+      "SchemaName": "xrmverse_importjobid"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StateAttributeMetadata",
+      "LogicalName": "statecode",
+      "SchemaName": "StateCode",
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "State",
+        "Options": [
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StateOptionMetadata",
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Ready",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Ready",
+                "LanguageCode": 1033
+              }
+            },
+            "DefaultStatus": 0
+          },
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StateOptionMetadata",
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Suspended",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Suspended",
+                "LanguageCode": 1033
+              }
+            },
+            "DefaultStatus": 10
+          },
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StateOptionMetadata",
+            "Value": 2,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Locked",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Locked",
+                "LanguageCode": 1033
+              }
+            },
+            "DefaultStatus": 20
+          },
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StateOptionMetadata",
+            "Value": 3,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Completed",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Completed",
+                "LanguageCode": 1033
+              }
+            },
+            "DefaultStatus": 30
+          }
+        ]
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StatusAttributeMetadata",
+      "LogicalName": "statuscode",
+      "SchemaName": "StatusCode",
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Status",
+        "Options": [
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StatusOptionMetadata",
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Waiting For Resources",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Waiting For Resources",
+                "LanguageCode": 1033
+              }
+            },
+            "State": 0
+          },
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StatusOptionMetadata",
+            "Value": 10,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Waiting",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Waiting",
+                "LanguageCode": 1033
+              }
+            },
+            "State": 1
+          },
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StatusOptionMetadata",
+            "Value": 20,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "In Progress",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "In Progress",
+                "LanguageCode": 1033
+              }
+            },
+            "State": 2
+          },
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StatusOptionMetadata",
+            "Value": 21,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Pausing",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Pausing",
+                "LanguageCode": 1033
+              }
+            },
+            "State": 2
+          },
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StatusOptionMetadata",
+            "Value": 22,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Canceling",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Canceling",
+                "LanguageCode": 1033
+              }
+            },
+            "State": 2
+          },
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StatusOptionMetadata",
+            "Value": 30,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Succeeded",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Succeeded",
+                "LanguageCode": 1033
+              }
+            },
+            "State": 3
+          },
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StatusOptionMetadata",
+            "Value": 31,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Failed",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Failed",
+                "LanguageCode": 1033
+              }
+            },
+            "State": 3
+          },
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StatusOptionMetadata",
+            "Value": 32,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Canceled",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Canceled",
+                "LanguageCode": 1033
+              }
+            },
+            "State": 3
+          }
+        ]
+      }
+    }
+  ],
+  "ManyToOneRelationships": [
+    {
+      "SchemaName": "Workflow_AsyncOperations",
+      "ReferencedEntity": "workflow",
+      "ReferencingEntity": "asyncoperation",
+      "ReferencingAttribute": "workflowactivationid",
+      "ReferencedEntityNavigationPropertyName": "Workflow_AsyncOperations",
+      "ReferencingEntityNavigationPropertyName": "workflowactivationid",
+      "CascadeConfiguration": {
+        "Assign": "NoCascade",
+        "Delete": "RemoveLink",
+        "Merge": "NoCascade",
+        "Reparent": "NoCascade",
+        "Share": "NoCascade",
+        "Unshare": "NoCascade",
+        "Archive": "NoCascade",
+        "RollupView": "NoCascade"
+      }
+    }
+  ]
+}

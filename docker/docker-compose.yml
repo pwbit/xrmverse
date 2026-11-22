@@ -1,0 +1,113 @@
+# Usage: cp docker/.env.example docker/.env  (edit it), then
+#   docker compose -f docker/docker-compose.yml --env-file docker/.env up --build
+services:
+  # One-shot: the named backups volume is created root-owned (0755) because the mssql image has no
+  # /var/opt/mssql/backup, while SQL Server runs as the non-root mssql user (uid 10001). Without this chown
+  # BACKUP DATABASE fails with "Operating system error 5 (Access is denied.)". The directory is also written by xrmd (uid
+  # 1654, the aspnet image's APP_UID), which puts the .files.tar of an org backup beside the .bak: hence owner mssql, group 1654, mode 2770.
+  backups-init:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    platform: linux/amd64
+    user: "0:0"
+    entrypoint: ["sh", "-c", "chown 10001:1654 /var/opt/mssql/backup && chmod 2770 /var/opt/mssql/backup"]
+    volumes:
+      - backups:/var/opt/mssql/backup
+    restart: "no"
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    platform: linux/amd64   # emulated on Apple Silicon
+    environment:
+      # Y only after you have read and accepted the SQL Server license terms of MSSQL_PID's edition (docs/sql-server-editions.md).
+      ACCEPT_EULA: ${ACCEPT_EULA:?read the SQL Server license terms (docs/sql-server-editions.md), then set ACCEPT_EULA=Y in docker/.env}
+      # SQL Server edition or product key; Express when unset. See README, "SQL Server editions".
+      MSSQL_PID: ${MSSQL_PID:-Express}
+      MSSQL_SA_PASSWORD: ${SA_PASSWORD:?set SA_PASSWORD in docker/.env}
+    depends_on:
+      backups-init:
+        condition: service_completed_successfully
+    volumes:
+      - mssql-data:/var/opt/mssql
+      # Org backup/restore (Admin API) reads and writes here; the mssql image has no such directory
+      # (backups-init makes the volume writable by SQL Server).
+      - backups:/var/opt/mssql/backup
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  xrmd:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    user: "1654:1654"   # the image's APP_UID; the backups volume is group-writable for this gid (see backups-init)
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      backups-init:
+        condition: service_completed_successfully
+    volumes:
+      # Blobs of file and image columns (Files__FileSystem__Root defaults to this path).
+      - files:/var/lib/xrmd/files
+      # The Microsoft SDK assemblies, installed with `xrmd sdk install` (default ~/.xrmd/sdk); never part of the image.
+      - ${XRMD_SDK_HOST_DIR:-${HOME}/.xrmd/sdk}:/var/lib/xrmd/sdk:ro
+      # Org backup/restore (Admin API): the files archive is written beside the SQL Server .bak, at the same path.
+      - backups:/var/opt/mssql/backup
+      # SQL (TDS) endpoint, read-only (AUTH_MODE=Local: SQL logins of the local identity provider). Uncomment this line, the port
+      # below and the Tds__* settings: ./tds holds a PEM certificate and its unencrypted key, readable by uid 1654 (e.g. group 1654,
+      # mode 0640). TLS is required: inside the container the endpoint never runs without a certificate.
+      # `xrmd server init --auth local --tds-port 5558` generates this wiring (and the certificate copies) for you.
+      # - ./tds:/run/xrmd/tds:ro
+    ports:
+      # Loopback only by default. To expose: set XRMD_BIND=0.0.0.0 in docker/.env.
+      - "${XRMD_BIND:-127.0.0.1}:5000:5000"
+      # SQL (TDS) endpoint: TDS_PORT on XRMD_TDS_BIND (every address by default); clients connect to <host>,<port>.
+      # - "${XRMD_TDS_BIND:-0.0.0.0}:${TDS_PORT:-5558}:5558"
+    environment:
+      # The database is created at startup if missing (see DatabaseBootstrapper).
+      ConnectionStrings__Org: "Server=sqlserver;Database=xrmverse;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True"
+      Auth__Mode: ${AUTH_MODE:-Development}   # Entra | Development | Local (the server's own identity provider; needs an https AUTH_AUDIENCE)
+      Auth__Audience: ${AUTH_AUDIENCE:-http://localhost:5000/}
+      # AUTH_MODE=Local: path (inside the container, e.g. a mounted file) of a one-shot file with the initial administrator's password; the server deletes it after use.
+      # This file mounts no secrets folder: add a volume for it yourself (e.g. `- ./secrets:/run/xrmd/secrets` and IDP_INITIAL_ADMIN_PASSWORD_FILE=/run/xrmd/secrets/admin-password), readable by uid 1654.
+      # `xrmd server init --auth local` generates this wiring for you.
+      Idp__InitialAdminPasswordFile: ${IDP_INITIAL_ADMIN_PASSWORD_FILE:-}
+      # SQL (TDS) endpoint (see the tds volume above): off while Tds__Port is not set.
+      # Tds__Port: 5558
+      # Tds__CertificatePath: /run/xrmd/tds/server.crt
+      # Tds__PrivateKeyPath: /run/xrmd/tds/server.key
+      Auth__TenantId: ${AUTH_TENANT_ID:-}
+      Auth__DevSigningKey: ${AUTH_DEV_SIGNING_KEY:-}  # required (>= 32 chars) when AUTH_MODE=Development; the host refuses to start without it
+      # Web admin sign-in with Entra: the SPA app registration's client id and the API scope (see README, Web admin)
+      Ui__Entra__ClientId: ${UI_ENTRA_CLIENT_ID:-}
+      Ui__Entra__Scope: ${UI_ENTRA_SCOPE:-}
+      Seed__OrgName: ${SEED_ORG_NAME:-xrmd}
+      Seed__AdminObjectId: ${SEED_ADMIN_OBJECT_ID:?set SEED_ADMIN_OBJECT_ID (GUID) in docker/.env}
+      Seed__AdminName: ${SEED_ADMIN_NAME:-Administrator}
+      Seed__BaseCurrency: ${SEED_BASE_CURRENCY:-}
+      # File and image columns: empty = file-system store at /var/lib/xrmd/files; FILES_STORE=S3Compatible needs the FILES_S3_* values, FILES_STORE=AzureBlob the FILES_AZURE_* values
+      Files__Store: ${FILES_STORE:-}
+      Files__FileSystem__Root: ${FILES_ROOT:-}
+      Files__S3__ServiceUrl: ${FILES_S3_SERVICE_URL:-}
+      Files__S3__Bucket: ${FILES_S3_BUCKET:-}
+      Files__S3__AccessKey: ${FILES_S3_ACCESS_KEY:-}
+      Files__S3__SecretKey: ${FILES_S3_SECRET_KEY:-}
+      Files__S3__Region: ${FILES_S3_REGION:-}
+      Files__S3__ForcePathStyle: ${FILES_S3_FORCE_PATH_STYLE:-}
+      Files__Azure__ConnectionString: ${FILES_AZURE_CONNECTION_STRING:-}
+      Files__Azure__ServiceUri: ${FILES_AZURE_SERVICE_URI:-}
+      Files__Azure__Container: ${FILES_AZURE_CONTAINER:-}
+      AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-}
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/5000 && printf 'GET /healthz HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && head -n1 <&3 | grep -q ' 200 '"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+
+volumes:
+  mssql-data:
+  backups:
+  files:

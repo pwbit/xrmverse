@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "parameters": "--vulnerable --include-transitive",
+  "sources": [
+    "https://api.nuget.org/v3/index.json"
+  ],
+  "projects": [
+    {
+      "path": "/repo/src/Xrmd.Abstractions/Xrmd.Abstractions.csproj"
+    },
+    {
+      "path": "/repo/tools/Xrmd.Licenses/Xrmd.Licenses.csproj"
+    }
+  ]
+}

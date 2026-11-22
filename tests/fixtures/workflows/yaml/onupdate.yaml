@@ -1,0 +1,25 @@
+kind: workflow
+id: bc9a625b-e4de-f111-84e8-002248872b66
+name: OnUpdate
+entity: xrmv_order
+mode: background
+scope: organization
+autoDelete: true
+trigger:
+  update: { columns: [xrmv_status] }
+steps:
+  - wait:
+      until: { field: xrmv_amount, op: gt, value: 100 }
+      then:
+        - sendEmail:
+            set:
+              to: { field: primarycontactid, related: xrmv_accountid }
+              regardingobjectid: { record: primary }
+              correlatedsubjectchanged: false
+              deliveryprioritycode: 1
+              directioncode: true
+              followemailuserpreference: false
+              isduplicatesenderunresolved: false
+              notifications: 0
+              prioritycode: 1
+              transactioncurrencyid: { lookup: transactioncurrency, id: 692363f0-a3da-f111-84e8-3833c5c48caf, name: Euro }

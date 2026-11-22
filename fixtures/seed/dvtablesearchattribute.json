@@ -1,0 +1,64 @@
+{
+  "LogicalName": "dvtablesearchattribute",
+  "SchemaName": "DVTableSearchAttribute",
+  "EntitySetName": "dvtablesearchattributes",
+  "ObjectTypeCode": 9962,
+  "OwnershipType": "UserOwned",
+  "PrimaryNameAttribute": "name",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "name",
+      "SchemaName": "Name",
+      "MaxLength": 100,
+      "RequiredLevel": {
+        "Value": "ApplicationRequired",
+        "CanBeChanged": true,
+        "ManagedPropertyLogicalName": "canmodifyrequirementlevelsettings"
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "dvtablesearchentity",
+      "SchemaName": "DVTableSearchEntity",
+      "Targets": [
+        "dvtablesearchentity"
+      ]
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "attributelogicalname",
+      "SchemaName": "AttributeLogicalName",
+      "MaxLength": 128
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "issearchable",
+      "SchemaName": "IsSearchable"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "isretrievable",
+      "SchemaName": "IsRetrievable"
+    }
+  ],
+  "ManyToOneRelationships": [
+    {
+      "SchemaName": "dvtablesearchentity_dvtablesearchattribute",
+      "ReferencedEntity": "dvtablesearchentity",
+      "ReferencingEntity": "dvtablesearchattribute",
+      "ReferencingAttribute": "dvtablesearchentity",
+      "ReferencingEntityNavigationPropertyName": "dvtablesearchentity",
+      "CascadeConfiguration": {
+        "Assign": "NoCascade",
+        "Delete": "Cascade",
+        "Merge": "NoCascade",
+        "Reparent": "NoCascade",
+        "Share": "NoCascade",
+        "Unshare": "NoCascade",
+        "Archive": "NoCascade",
+        "RollupView": "NoCascade"
+      }
+    }
+  ]
+}

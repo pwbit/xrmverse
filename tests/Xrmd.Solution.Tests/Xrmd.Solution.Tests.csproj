@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="10.1.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="FluentAssertions" Version="6.12.2" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.1">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <Using Include="Xrmd.TestSupport" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Xrmd.Solution\Xrmd.Solution.csproj" />
+  </ItemGroup>
+
+  <!-- The solution fixture folder and the zip builder shared with Xrmd.Integration.Tests. -->
+  <ItemGroup>
+    <Compile Include="..\Shared\SolutionFixtureZip.cs" Link="Shared\SolutionFixtureZip.cs" />
+    <Compile Include="..\Shared\PrivateFixtures.cs" Link="Shared\PrivateFixtures.cs" />
+    <Compile Include="..\Xrmd.Integration.Tests\ManagedTestSolution.cs" Link="Shared\ManagedTestSolution.cs" />
+    <None Include="..\fixtures\solutions\**\*" LinkBase="fixtures\solutions" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Plan 2.14: the solution builder of classic processes and their XAML fixtures. -->
+    <Compile Include="..\Shared\WorkflowSolutionBuilder.cs" Link="Shared\WorkflowSolutionBuilder.cs" />
+    <None Include="..\fixtures\workflows\*.xaml" LinkBase="fixtures\workflows" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\fixtures\workflows\real\*.xaml" LinkBase="fixtures\workflows\real" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Plan 2.12a: the fixture solution with calculated columns and their XAML fixtures. -->
+    <Compile Include="..\Shared\CalculatedSolutionFixture.cs" Link="Shared\CalculatedSolutionFixture.cs" />
+    <None Include="..\fixtures\calculated\*.xaml" LinkBase="fixtures\calculated" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Import Project="..\TestPlugins.props" />
+
+</Project>

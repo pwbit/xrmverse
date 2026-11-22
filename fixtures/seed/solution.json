@@ -1,0 +1,60 @@
+{
+  "LogicalName": "solution",
+  "SchemaName": "Solution",
+  "IsAuditEnabled": {"Value": false, "CanBeChanged": false, "ManagedPropertyLogicalName": "canmodifyauditsettings"},
+  "EntitySetName": "solutions",
+  "ObjectTypeCode": 7100,
+  "OwnershipType": "OrganizationOwned",
+  "PrimaryNameAttribute": "friendlyname",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "friendlyname",
+      "SchemaName": "friendlyname",
+      "MaxLength": 256
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "uniquename",
+      "SchemaName": "uniquename",
+      "MaxLength": 65
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "version",
+      "SchemaName": "version",
+      "MaxLength": 256
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "ismanaged",
+      "SchemaName": "ismanaged"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "publisherid",
+      "SchemaName": "publisherid",
+      "Targets": [
+        "publisher"
+      ]
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "description",
+      "SchemaName": "description",
+      "MaxLength": 1048576
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.DateTimeAttributeMetadata",
+      "LogicalName": "installedon",
+      "SchemaName": "installedon",
+      "Format": "DateAndTime"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "xrmverse_unsupportedxml",
+      "SchemaName": "xrmverse_unsupportedxml",
+      "MaxLength": 1048576
+    }
+  ]
+}

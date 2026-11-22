@@ -1,0 +1,8 @@
+ACME SOFTWARE LICENSE TERMS
+
+ACME PROPRIETARY RUNTIME
+
+These license terms are an agreement between Acme and you.
+```
+A fenced block inside the license text.
+```

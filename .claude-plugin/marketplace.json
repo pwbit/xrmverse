@@ -1,0 +1,11 @@
+{
+  "name": "xrmverse",
+  "owner": { "name": "Power Builders Italia" },
+  "plugins": [
+    {
+      "name": "xrmd",
+      "source": "./",
+      "description": "Skills for the xrmd CLI: server, security, schema, solutions, extensions, data and migration from Dataverse."
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+# The process the canvas scenario of workflow-studio.spec.ts builds, written by hand in the 2.21 format
+# (docs/workflow-authoring.md). The spec applies it under a name of its own and compares both exports.
+# new_revenue (money) and new_description (multiple lines of text) are columns the spec adds to account:
+# the seeded account table has no revenue and no description column.
+kind: workflow
+name: Studio E2E reference
+entity: account
+mode: realtime
+trigger:
+  create: true
+  update: { columns: [name] }
+steps:
+  - if:
+      when: { field: new_revenue, op: gt, value: 1000 }
+      then:
+        - update:
+            record: primary
+            set:
+              new_description: big
+      else:
+        - create:
+            entity: task
+            set:
+              subject: check

@@ -1,0 +1,234 @@
+{
+  "environment": "a licensed test environment",
+  "solution": "xrmCalcTest",
+  "table": "xrmv_calcorder",
+  "run": "2026-11-19T08:45Z",
+  "user_language": "it-IT (1040)",
+  "definitions_as_stored": {
+    "xrmv_fxsum": "xrmv_amount * xrmv_qty",
+    "xrmv_fxtext": "xrmv_code & \"x\"",
+    "xrmv_fxdiv": "xrmv_amount / xrmv_qty",
+    "xrmv_fxround": "Round(xrmv_amount / 7, 2)",
+    "xrmv_fxmod": "Mod(-7, 3)",
+    "xrmv_fxlen": "Len(Trim(\"  a  b \"))",
+    "xrmv_fxacc": "xrmv_AccountId.name",
+    "xrmv_fxpad": "Text(xrmv_qty, \"000\")",
+    "xrmv_fxlabel": "Upper(xrmv_code) & \"-\" & Text(xrmv_qty, \"0\")",
+    "xrmv_fxzero": "If(Blank() = 0, 1, 0)",
+    "xrmv_fxdivz": "xrmv_amount / 0 + 1"
+  },
+  "source_type_mask": {
+    "xrmv_fxacc": 2,
+    "others": 1
+  },
+  "refused": {
+    "Weekday(xrmv_startedon)": "0x8004023b: refused at definition, Weekday of a User local date would need a time zone conversion (startedon is UserLocal)",
+    "xrmv_accountid.name": "0x80040216: generic unexpected error (logical lookup name; the navigation property xrmv_AccountId works)",
+    "xrmv_accountid.'Account Name'": "0x80040216",
+    "leading '=' in FormulaDefinition via Web API": "0x8004023b: unexpected characters",
+    "',' argument separator with an Italian user": "0x8004023b: an operator expected (the API parses in the user's locale; ';' accepted and stored as ',')"
+  },
+  "rows": [
+    {
+      "code": "ORD-001",
+      "amount": 1500,
+      "qty": 3,
+      "account": "Contoso test Child",
+      "fxsum": 4500,
+      "fxtext": "ORD-001x",
+      "fxdiv": 500,
+      "fxround": 214.29,
+      "fxmod": 2,
+      "fxlen": 3,
+      "fxacc": "Contoso test Child",
+      "fxpad": "003",
+      "fxlabel": "ORD-001-3",
+      "fxzero": 0,
+      "fxdivz": null
+    },
+    {
+      "code": "ORD-002",
+      "amount": 400,
+      "qty": 0,
+      "account": "Contoso test parent",
+      "fxsum": 0,
+      "fxtext": "ORD-002x",
+      "fxdiv": null,
+      "fxround": 57.14,
+      "fxmod": 2,
+      "fxlen": 3,
+      "fxacc": "Contoso test parent",
+      "fxpad": "000",
+      "fxlabel": "ORD-002-0",
+      "fxzero": 0,
+      "fxdivz": null
+    },
+    {
+      "code": "ORD-003",
+      "amount": null,
+      "qty": 1,
+      "account": null,
+      "fxsum": 0,
+      "fxtext": "ORD-003x",
+      "fxdiv": 0,
+      "fxround": 0,
+      "fxmod": 2,
+      "fxlen": 3,
+      "fxacc": null,
+      "fxpad": "001",
+      "fxlabel": "ORD-003-1",
+      "fxzero": 0,
+      "fxdivz": null
+    },
+    {
+      "code": "AB",
+      "amount": null,
+      "qty": 2,
+      "account": "Fabrikam test",
+      "fxsum": 0,
+      "fxtext": "ABx",
+      "fxdiv": 0,
+      "fxround": 0,
+      "fxmod": 2,
+      "fxlen": 3,
+      "fxacc": "Fabrikam test",
+      "fxpad": "002",
+      "fxlabel": "AB-2",
+      "fxzero": 0,
+      "fxdivz": null
+    },
+    {
+      "code": "ORD-005",
+      "amount": 300,
+      "qty": 1,
+      "account": "Contoso test Child",
+      "fxsum": 300,
+      "fxtext": "ORD-005x",
+      "fxdiv": 300,
+      "fxround": 42.86,
+      "fxmod": 2,
+      "fxlen": 3,
+      "fxacc": "Contoso test Child",
+      "fxpad": "001",
+      "fxlabel": "ORD-005-1",
+      "fxzero": 0,
+      "fxdivz": null
+    },
+    {
+      "code": "ORD-006",
+      "amount": null,
+      "qty": 2,
+      "account": "Contoso test Child",
+      "fxsum": 0,
+      "fxtext": "ORD-006x",
+      "fxdiv": 0,
+      "fxround": 0,
+      "fxmod": 2,
+      "fxlen": 3,
+      "fxacc": "Contoso test Child",
+      "fxpad": "002",
+      "fxlabel": "ORD-006-2",
+      "fxzero": 0,
+      "fxdivz": null
+    },
+    {
+      "code": "ORD-007",
+      "amount": 150,
+      "qty": 1,
+      "account": "Contoso test parent",
+      "fxsum": 150,
+      "fxtext": "ORD-007x",
+      "fxdiv": 150,
+      "fxround": 21.43,
+      "fxmod": 2,
+      "fxlen": 3,
+      "fxacc": "Contoso test parent",
+      "fxpad": "001",
+      "fxlabel": "ORD-007-1",
+      "fxzero": 0,
+      "fxdivz": null
+    },
+    {
+      "name": "Q1 blank",
+      "code": null,
+      "amount": null,
+      "qty": null,
+      "account": null,
+      "fxsum": 0,
+      "fxtext": "x",
+      "fxdiv": null,
+      "fxround": 0,
+      "fxmod": 2,
+      "fxlen": 3,
+      "fxacc": null,
+      "fxpad": "000",
+      "fxlabel": "-0",
+      "fxzero": 0,
+      "fxdivz": null
+    }
+  ],
+  "followup": {
+    "note": "Recorded after the first run on the same rows (findings 10 and 11): a formula reading a failed formula column, and Max with blank arguments. SourceTypeMask not recorded.",
+    "definitions": {
+      "xrmv_fxchain": "xrmv_fxdiv + 1",
+      "xrmv_fxmax": "Max(Blank(), -5)",
+      "xrmv_fxmaxa": "Max(xrmv_amount, -5)"
+    },
+    "columns": [
+      "code",
+      "fxchain",
+      "fxmax",
+      "fxmaxa"
+    ],
+    "rows": [
+      [
+        "ORD-001",
+        501,
+        -5,
+        1500
+      ],
+      [
+        "ORD-002",
+        1,
+        -5,
+        400
+      ],
+      [
+        "ORD-003",
+        1,
+        -5,
+        -5
+      ],
+      [
+        "AB",
+        1,
+        -5,
+        -5
+      ],
+      [
+        "ORD-005",
+        301,
+        -5,
+        300
+      ],
+      [
+        "ORD-006",
+        1,
+        -5,
+        -5
+      ],
+      [
+        "ORD-007",
+        151,
+        -5,
+        150
+      ],
+      [
+        "Q1 blank",
+        1,
+        -5,
+        -5
+      ]
+    ]
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "LogicalName": "systemuserroles",
+  "SchemaName": "SystemUserRoles",
+  "IsAuditEnabled": {"Value": false, "CanBeChanged": false, "ManagedPropertyLogicalName": "canmodifyauditsettings"},
+  "EntitySetName": "systemuserrolescollection",
+  "ObjectTypeCode": 15,
+  "OwnershipType": "OrganizationOwned",
+  "IsIntersect": true,
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.UniqueIdentifierAttributeMetadata",
+      "LogicalName": "systemuserid",
+      "SchemaName": "systemuserid"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.UniqueIdentifierAttributeMetadata",
+      "LogicalName": "roleid",
+      "SchemaName": "roleid"
+    }
+  ]
+}

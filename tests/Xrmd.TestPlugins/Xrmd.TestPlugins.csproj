@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Deliberately net462 and strong-named: the realistic shape of an existing Dataverse plug-in assembly. -->
+  <PropertyGroup>
+    <TargetFramework>net462</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>xrmd-test.snk</AssemblyOriginatorKeyFile>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CrmSdk.CoreAssemblies" Version="9.0.2.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Not deployed with the plug-in assembly: see MissingDependencyPlugin. -->
+    <ProjectReference Include="..\Xrmd.TestPlugins.Dependency\Xrmd.TestPlugins.Dependency.csproj" />
+  </ItemGroup>
+
+</Project>

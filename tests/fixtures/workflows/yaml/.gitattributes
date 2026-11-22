@@ -1,0 +1,2 @@
+# Canonical YAML text: LF line ends on every platform (the tests compare text).
+*.yaml text eol=lf

@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Auditing (plan 13): action codes, organization settings, policy, change data codec and writer. No package of its own:
+       the SDK types come through Xrmd.Abstractions (compile time only, legal guardrails §3). -->
+  <ItemGroup>
+    <ProjectReference Include="..\Xrmd.Abstractions\Xrmd.Abstractions.csproj" />
+    <ProjectReference Include="..\Xrmd.Metadata\Xrmd.Metadata.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Xrmd.Audit.Tests" />
+  </ItemGroup>
+
+</Project>

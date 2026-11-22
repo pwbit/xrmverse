@@ -1,0 +1,8 @@
+// Form script of xv_project (xrmverse fixture: stored, never served).
+var Xrmverse = Xrmverse || {};
+Xrmverse.Project = {
+    onLoad: function (executionContext) {
+        var formContext = executionContext.getFormContext();
+        formContext.getAttribute("xv_name").setRequiredLevel("required");
+    }
+};

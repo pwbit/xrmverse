@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "theme": { "density": "comfortable" },
+  "whiteLabel": { "name": "Board Desk" },
+  "views": {
+    "{5B1E7C20-3D4F-4A61-9B80-2C3D4E5F6A01}": {
+      "default": "kanban",
+      "kanban": { "groupBy": "statuscode" },
+      "calendar": { "start": "createdon", "end": "modifiedon" },
+      "cards": {}
+    }
+  },
+  "forms": {
+    "{5B1E7C20-3D4F-4A61-9B80-2C3D4E5F6A03}": {
+      "subgrids": {
+        "Contacts": { "kanban": { "groupBy": "statuscode" }, "cards": {} }
+      }
+    }
+  }
+}

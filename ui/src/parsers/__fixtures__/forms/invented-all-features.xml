@@ -1,0 +1,123 @@
+<form>
+  <tabs>
+    <tab name="general" id="{11111111-0000-0000-0000-000000000001}" expanded="true" showlabel="true" verticallayout="true">
+      <labels>
+        <label description="Generale" languagecode="1040" />
+        <label description="General" languagecode="1033" />
+      </labels>
+      <columns>
+        <column width="100%">
+          <sections>
+            <section name="main" showlabel="true" columns="2" celllabelposition="Top" id="{11111111-0000-0000-0000-000000000002}">
+              <labels>
+                <label description="Main" languagecode="1033" />
+              </labels>
+              <rows>
+                <row>
+                  <cell id="{11111111-0000-0000-0000-000000000003}" colspan="2">
+                    <labels>
+                      <label description="Name" languagecode="1033" />
+                    </labels>
+                    <control id="name" classid="{4273EDBD-AC1D-40d3-9FB2-095C621B552D}" datafieldname="name" uniqueid="{22222222-0000-0000-0000-000000000001}" />
+                  </cell>
+                </row>
+                <row>
+                  <cell id="{11111111-0000-0000-0000-000000000004}" showlabel="false">
+                    <labels>
+                      <label description="Spacer" languagecode="1033" />
+                    </labels>
+                  </cell>
+                  <cell id="{11111111-0000-0000-0000-000000000005}" visible="false">
+                    <labels>
+                      <label description="Hidden cell" languagecode="1033" />
+                    </labels>
+                    <control id="hiddenfield" classid="{4273EDBD-AC1D-40d3-9FB2-095C621B552D}" datafieldname="hiddenfield" />
+                  </cell>
+                </row>
+                <row>
+                  <cell id="{11111111-0000-0000-0000-000000000006}" colspan="2" rowspan="4">
+                    <labels>
+                      <label description="Primary contact" languagecode="1033" />
+                    </labels>
+                    <control id="contactcard" classid="{5C5600E0-1D6E-4205-A272-BE80DA87FD42}" datafieldname="primarycontactid">
+                      <parameters>
+                        <QuickForms>&lt;QuickForms&gt;&lt;QuickFormIds&gt;&lt;QuickFormId entityname="contact"&gt;{33333333-0000-0000-0000-000000000001}&lt;/QuickFormId&gt;&lt;/QuickFormIds&gt;&lt;/QuickForms&gt;</QuickForms>
+                      </parameters>
+                    </control>
+                  </cell>
+                </row>
+                <row>
+                  <cell id="{11111111-0000-0000-0000-000000000007}">
+                    <labels>
+                      <label description="Progress" languagecode="1033" />
+                    </labels>
+                    <control id="progress" classid="{C3EFE0C3-0EC6-42be-8349-CBD9079DFD8E}" datafieldname="progress" uniqueid="{22222222-0000-0000-0000-000000000002}" />
+                  </cell>
+                  <cell id="{11111111-0000-0000-0000-000000000008}">
+                    <labels>
+                      <label description="Mystery" languagecode="1033" />
+                    </labels>
+                    <control id="mystery" classid="{99999999-9999-9999-9999-999999999999}" />
+                  </cell>
+                </row>
+              </rows>
+            </section>
+            <section name="secret" showlabel="false" visible="false" columns="1" id="{11111111-0000-0000-0000-000000000009}">
+              <labels>
+                <label description="Secret" languagecode="1033" />
+              </labels>
+              <rows />
+            </section>
+          </sections>
+        </column>
+      </columns>
+    </tab>
+    <tab name="hiddentab" id="{11111111-0000-0000-0000-00000000000a}" visible="false" expanded="true" showlabel="true">
+      <labels>
+        <label description="Hidden" languagecode="1033" />
+      </labels>
+      <columns>
+        <column width="100%">
+          <sections />
+        </column>
+      </columns>
+    </tab>
+  </tabs>
+  <header id="header" columns="1111" celllabelposition="Top">
+    <rows>
+      <row>
+        <cell id="{44444444-0000-0000-0000-000000000001}">
+          <labels>
+            <label description="Owner" languagecode="1033" />
+          </labels>
+          <control id="header_ownerid" classid="{270BD3DB-D9AF-4782-9025-509E298DEC0A}" datafieldname="ownerid" />
+        </cell>
+      </row>
+    </rows>
+  </header>
+  <footer id="footer">
+    <rows>
+      <row>
+        <cell id="{55555555-0000-0000-0000-000000000001}">
+          <labels>
+            <label description="Modified on" languagecode="1033" />
+          </labels>
+          <control id="footer_modifiedon" classid="{5B773807-9FB2-42db-97C3-7A91EFF8ADFF}" datafieldname="modifiedon" disabled="true" />
+        </cell>
+      </row>
+    </rows>
+  </footer>
+  <controlDescriptions>
+    <controlDescription forControl="{22222222-0000-0000-0000-000000000002}">
+      <customControl name="inv_Invented.ProgressBar" formFactor="0">
+        <parameters>
+          <value>progress</value>
+        </parameters>
+      </customControl>
+    </controlDescription>
+  </controlDescriptions>
+  <DisplayConditions FallbackForm="true" Order="3">
+    <Role Id="{66666666-0000-0000-0000-000000000001}" />
+    <Role Id="{66666666-0000-0000-0000-000000000002}" />
+  </DisplayConditions>
+</form>

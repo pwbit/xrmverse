@@ -1,0 +1,219 @@
+{
+  "LogicalName": "annotation",
+  "SchemaName": "Annotation",
+  "DisplayName": {
+    "LocalizedLabels": [
+      {
+        "Label": "Note",
+        "LanguageCode": 1033
+      }
+    ],
+    "UserLocalizedLabel": {
+      "Label": "Note",
+      "LanguageCode": 1033
+    }
+  },
+  "IsAuditEnabled": {
+    "Value": true,
+    "CanBeChanged": true,
+    "ManagedPropertyLogicalName": "canmodifyauditsettings"
+  },
+  "EntitySetName": "annotations",
+  "ObjectTypeCode": 5,
+  "OwnershipType": "UserOwned",
+  "PrimaryNameAttribute": "subject",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "subject",
+      "SchemaName": "Subject",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Title",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Title",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 500,
+      "Format": "Text"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "notetext",
+      "SchemaName": "NoteText",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Description",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Description",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 100000
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "filename",
+      "SchemaName": "FileName",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "File Name",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "File Name",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 255,
+      "Format": "Text"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "mimetype",
+      "SchemaName": "MimeType",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Mime Type",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Mime Type",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 256,
+      "Format": "Text"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "documentbody",
+      "SchemaName": "DocumentBody",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Document",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Document",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 1073741823,
+      "Format": "TextArea"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "filesize",
+      "SchemaName": "FileSize",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "File Size (Bytes)",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "File Size (Bytes)",
+          "LanguageCode": 1033
+        }
+      },
+      "MinValue": 0,
+      "MaxValue": 1000000000,
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "isdocument",
+      "SchemaName": "IsDocument",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Is Document",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Is Document",
+          "LanguageCode": 1033
+        }
+      },
+      "DefaultValue": false,
+      "RequiredLevel": {
+        "Value": "SystemRequired",
+        "CanBeChanged": false
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "langid",
+      "SchemaName": "LangId",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Language",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Language",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 2,
+      "Format": "Text"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "objectid",
+      "SchemaName": "ObjectId",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Regarding",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Regarding",
+          "LanguageCode": 1033
+        }
+      },
+      "Targets": []
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.EntityNameAttributeMetadata",
+      "LogicalName": "objecttypecode",
+      "SchemaName": "ObjectTypeCode",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Object Type",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Object Type",
+          "LanguageCode": 1033
+        }
+      },
+      "AttributeOf": "objectid"
+    }
+  ]
+}

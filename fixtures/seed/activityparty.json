@@ -1,0 +1,465 @@
+{
+  "LogicalName": "activityparty",
+  "SchemaName": "ActivityParty",
+  "DisplayName": {
+    "LocalizedLabels": [
+      {
+        "Label": "Activity Party",
+        "LanguageCode": 1033
+      }
+    ],
+    "UserLocalizedLabel": {
+      "Label": "Activity Party",
+      "LanguageCode": 1033
+    }
+  },
+  "IsAuditEnabled": {
+    "Value": false,
+    "CanBeChanged": false,
+    "ManagedPropertyLogicalName": "canmodifyauditsettings"
+  },
+  "EntitySetName": "activityparties",
+  "ObjectTypeCode": 135,
+  "OwnershipType": "None",
+  "PrimaryNameAttribute": "partyidname",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "partyidname",
+      "SchemaName": "PartyIdName",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Party Name",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Party Name",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 4000,
+      "Format": "Text",
+      "AttributeOf": "partyid",
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "activityid",
+      "SchemaName": "ActivityId",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Activity",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Activity",
+          "LanguageCode": 1033
+        }
+      },
+      "Targets": [
+        "activitypointer"
+      ]
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "partyid",
+      "SchemaName": "PartyId",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Party",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Party",
+          "LanguageCode": 1033
+        }
+      },
+      "Targets": [
+        "account",
+        "contact",
+        "systemuser"
+      ]
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.EntityNameAttributeMetadata",
+      "LogicalName": "partyobjecttypecode",
+      "SchemaName": "PartyObjectTypeCode",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Party Type",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Party Type",
+          "LanguageCode": 1033
+        }
+      },
+      "AttributeOf": "partyid"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "participationtypemask",
+      "SchemaName": "ParticipationTypeMask",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Participation Type",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Participation Type",
+          "LanguageCode": 1033
+        }
+      },
+      "RequiredLevel": {
+        "Value": "SystemRequired",
+        "CanBeChanged": false
+      },
+      "OptionSet": {
+        "IsGlobal": true,
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Sender",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Sender",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 2,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "To Recipient",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "To Recipient",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 3,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "CC Recipient",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "CC Recipient",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 4,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "BCC Recipient",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "BCC Recipient",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 5,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Required Attendee",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Required Attendee",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 6,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Optional Attendee",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Optional Attendee",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 7,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Organizer",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Organizer",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 8,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Regarding",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Regarding",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 9,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Owner",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Owner",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 10,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Resource",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Resource",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 11,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Customer",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Customer",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 12,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Chat Participant",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Chat Participant",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 13,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Related",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Related",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ],
+        "Name": "activityparty_participationtypemask"
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "addressused",
+      "SchemaName": "AddressUsed",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Address",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Address",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 320,
+      "Format": "Text"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "ispartydeleted",
+      "SchemaName": "IsPartyDeleted",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Party Deleted",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Party Deleted",
+          "LanguageCode": 1033
+        }
+      },
+      "DefaultValue": false,
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "ownerid",
+      "SchemaName": "OwnerId",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Owner",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Owner",
+          "LanguageCode": 1033
+        }
+      },
+      "Targets": [
+        "systemuser",
+        "team"
+      ],
+      "AttributeType": "Owner",
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    }
+  ],
+  "ManyToOneRelationships": [
+    {
+      "SchemaName": "account_activity_parties",
+      "ReferencedEntity": "account",
+      "ReferencingEntity": "activityparty",
+      "ReferencingAttribute": "partyid",
+      "ReferencingEntityNavigationPropertyName": "partyid_account",
+      "CascadeConfiguration": {
+        "Assign": "NoCascade",
+        "Delete": "NoCascade",
+        "Merge": "NoCascade",
+        "Reparent": "NoCascade",
+        "Share": "NoCascade",
+        "Unshare": "NoCascade",
+        "Archive": "NoCascade",
+        "RollupView": "NoCascade"
+      }
+    },
+    {
+      "SchemaName": "contact_activity_parties",
+      "ReferencedEntity": "contact",
+      "ReferencingEntity": "activityparty",
+      "ReferencingAttribute": "partyid",
+      "ReferencingEntityNavigationPropertyName": "partyid_contact",
+      "CascadeConfiguration": {
+        "Assign": "NoCascade",
+        "Delete": "NoCascade",
+        "Merge": "NoCascade",
+        "Reparent": "NoCascade",
+        "Share": "NoCascade",
+        "Unshare": "NoCascade",
+        "Archive": "NoCascade",
+        "RollupView": "NoCascade"
+      }
+    },
+    {
+      "SchemaName": "system_user_activity_parties",
+      "ReferencedEntity": "systemuser",
+      "ReferencingEntity": "activityparty",
+      "ReferencingAttribute": "partyid",
+      "ReferencingEntityNavigationPropertyName": "partyid_systemuser",
+      "CascadeConfiguration": {
+        "Assign": "NoCascade",
+        "Delete": "NoCascade",
+        "Merge": "NoCascade",
+        "Reparent": "NoCascade",
+        "Share": "NoCascade",
+        "Unshare": "NoCascade",
+        "Archive": "NoCascade",
+        "RollupView": "NoCascade"
+      }
+    },
+    {
+      "SchemaName": "activitypointer_activity_parties",
+      "ReferencedEntity": "activitypointer",
+      "ReferencingEntity": "activityparty",
+      "ReferencingAttribute": "activityid",
+      "ReferencingEntityNavigationPropertyName": "activityid_activitypointer",
+      "CascadeConfiguration": {
+        "Assign": "NoCascade",
+        "Delete": "Cascade",
+        "Merge": "NoCascade",
+        "Reparent": "NoCascade",
+        "Share": "NoCascade",
+        "Unshare": "NoCascade",
+        "Archive": "NoCascade",
+        "RollupView": "NoCascade"
+      }
+    }
+  ]
+}

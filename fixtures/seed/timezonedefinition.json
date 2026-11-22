@@ -1,0 +1,44 @@
+{
+  "LogicalName": "timezonedefinition",
+  "SchemaName": "TimeZoneDefinition",
+  "IsAuditEnabled": {"Value": false, "CanBeChanged": false, "ManagedPropertyLogicalName": "canmodifyauditsettings"},
+  "EntitySetName": "timezonedefinitions",
+  "ObjectTypeCode": 4810,
+  "OwnershipType": "None",
+  "PrimaryNameAttribute": "userinterfacename",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "userinterfacename",
+      "SchemaName": "UserInterfaceName",
+      "MaxLength": 100
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "timezonecode",
+      "SchemaName": "TimeZoneCode",
+      "MinValue": -2147483648,
+      "MaxValue": 2147483647
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "standardname",
+      "SchemaName": "StandardName",
+      "MaxLength": 100
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "bias",
+      "SchemaName": "Bias",
+      "MinValue": -2147483648,
+      "MaxValue": 2147483647
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "retiredorder",
+      "SchemaName": "RetiredOrder",
+      "MinValue": -2147483648,
+      "MaxValue": 2147483647
+    }
+  ]
+}

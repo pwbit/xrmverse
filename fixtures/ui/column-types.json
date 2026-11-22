@@ -1,0 +1,22 @@
+{
+  "_comment": "SchemaColumnTypes.Names (src/Xrmd.Schema/SchemaColumnTypes.cs), in order, and the MaxSizeInKB default and range of file and image columns (src/Xrmd.Metadata/FileColumns.cs). Asserted by tests/Xrmd.Schema.Tests/UiFixtureTests.cs and ui/src/admin/tables/columnTypes.test.ts. Never regenerate from a test.",
+  "names": [
+    "string",
+    "memo",
+    "int",
+    "decimal",
+    "money",
+    "bool",
+    "datetime",
+    "choice",
+    "choices",
+    "lookup",
+    "customer",
+    "file",
+    "image"
+  ],
+  "maxSizeInKB": {
+    "file": { "default": 32768, "min": 1, "max": 10485760 },
+    "image": { "default": 10240, "min": 1, "max": 30720 }
+  }
+}

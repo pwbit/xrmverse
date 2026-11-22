@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Xrmd.Abstractions\Xrmd.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- SdkProperty: the solution reader sets the server-owned metadata properties of the SDK types it builds. -->
+    <InternalsVisibleTo Include="Xrmd.Solution" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Migrations\*.sql" />
+    <!-- Plan 2.7a, ruling P6: the PostgreSQL migrations (the 0018 baseline, then one file per SQL Server migration). -->
+    <EmbeddedResource Include="Migrations\PostgreSql\*.sql" LogicalName="Xrmd.Metadata.Migrations.PostgreSql.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\..\fixtures\seed\*.json" LogicalName="Xrmd.Metadata.Seed.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <!-- A missing fixtures/seed folder (e.g. not copied into a Docker build) must break the build, not startup seeding. -->
+  <Target Name="EnsureSeedFixtures" BeforeTargets="BeforeBuild">
+    <ItemGroup>
+      <SeedFixture Include="..\..\fixtures\seed\*.json" />
+    </ItemGroup>
+    <Error Condition="'@(SeedFixture)' == ''" Text="No seed fixtures found in fixtures/seed/*.json; they are embedded as resources and required by SystemSeed." />
+  </Target>
+
+</Project>

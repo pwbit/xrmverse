@@ -1,0 +1,9 @@
+{
+  "name": "xrmd",
+  "description": "Skills that teach Claude to install, administer and script an xrmverse server with the xrmd CLI.",
+  "version": "0.1.0",
+  "author": { "name": "Power Builders Italia S.r.l." },
+  "homepage": "https://xrmverse.com",
+  "repository": "https://github.com/pwbit/xrmverse",
+  "license": "Apache-2.0"
+}

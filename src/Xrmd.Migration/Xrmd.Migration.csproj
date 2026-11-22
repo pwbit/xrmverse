@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Xrmd.Migration</RootNamespace>
+    <Description>xrmverse migration package format (encrypted .xrmpkg). Base class library only: no Microsoft SDK.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\fixtures\migration\excluded-tables.json" LogicalName="Xrmd.Migration.ExcludedTables.json" />
+  </ItemGroup>
+
+  <!-- The tables xrmverse has out of the box (one seed file each): standard Dataverse tables outside this list are not exported. -->
+  <Target Name="XrmverseTableList" BeforeTargets="BeforeBuild">
+    <ItemGroup>
+      <_XrmverseSeedTable Include="..\..\fixtures\seed\*.json" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(IntermediateOutputPath)xrmverse-tables.txt" Lines="@(_XrmverseSeedTable->'%(Filename)')" Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <EmbeddedResource Include="$(IntermediateOutputPath)xrmverse-tables.txt" LogicalName="Xrmd.Migration.XrmverseTables.txt" />
+      <FileWrites Include="$(IntermediateOutputPath)xrmverse-tables.txt" />
+    </ItemGroup>
+  </Target>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Xrmd.Migration.Tests" />
+    <InternalsVisibleTo Include="Xrmd.Cli.Tests" />
+  </ItemGroup>
+
+</Project>

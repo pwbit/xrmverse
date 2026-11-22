@@ -1,0 +1,170 @@
+{
+  "LogicalName": "usersettings",
+  "SchemaName": "UserSettings",
+  "EntitySetName": "usersettingscollection",
+  "ObjectTypeCode": 150,
+  "OwnershipType": "UserOwned",
+  "PrimaryIdAttribute": "systemuserid",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "transactioncurrencyid",
+      "SchemaName": "TransactionCurrencyId",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Currency",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Currency",
+          "LanguageCode": 1033
+        }
+      },
+      "Targets": [
+        "transactioncurrency"
+      ]
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "uilanguageid",
+      "SchemaName": "UILanguageId",
+      "MinValue": 0,
+      "MaxValue": 2147483647
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "paginglimit",
+      "SchemaName": "PagingLimit",
+      "MinValue": 0,
+      "MaxValue": 2147483647
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "timezonecode",
+      "SchemaName": "TimeZoneCode",
+      "MinValue": -2147483648,
+      "MaxValue": 2147483647
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "dateformatstring",
+      "SchemaName": "DateFormatString",
+      "MaxLength": 255
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "timeformatstring",
+      "SchemaName": "TimeFormatString",
+      "MaxLength": 255
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "dateseparator",
+      "SchemaName": "DateSeparator",
+      "MaxLength": 5
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "timeseparator",
+      "SchemaName": "TimeSeparator",
+      "MaxLength": 5
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "amdesignator",
+      "SchemaName": "AMDesignator",
+      "MaxLength": 25
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "pmdesignator",
+      "SchemaName": "PMDesignator",
+      "MaxLength": 25
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "xrmverse_renderer",
+      "SchemaName": "xrmverse_Renderer",
+      "MaxLength": 100
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "xrmverse_colorscheme",
+      "SchemaName": "xrmverse_ColorScheme",
+      "DefaultFormValue": 0,
+      "OptionSet": {
+        "IsGlobal": true,
+        "Name": "xrmverse_colorscheme",
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "System",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "System",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Light",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Light",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 2,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Dark",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Dark",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "ManyToOneRelationships": [
+    {
+      "SchemaName": "transactioncurrency_usersettings",
+      "ReferencedEntity": "transactioncurrency",
+      "ReferencingEntity": "usersettings",
+      "ReferencingAttribute": "transactioncurrencyid",
+      "ReferencingEntityNavigationPropertyName": "transactioncurrencyid",
+      "CascadeConfiguration": {
+        "Assign": "NoCascade",
+        "Delete": "NoCascade",
+        "Merge": "NoCascade",
+        "Reparent": "NoCascade",
+        "Share": "NoCascade",
+        "Unshare": "NoCascade",
+        "Archive": "NoCascade",
+        "RollupView": "NoCascade"
+      }
+    }
+  ]
+}

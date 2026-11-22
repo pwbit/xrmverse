@@ -1,0 +1,73 @@
+{
+  "LogicalName": "duplicaterecord",
+  "SchemaName": "DuplicateRecord",
+  "EntitySetName": "duplicaterecords",
+  "ObjectTypeCode": 4415,
+  "OwnershipType": "UserOwned",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "asyncoperationid",
+      "SchemaName": "AsyncOperationId",
+      "Targets": [
+        "asyncoperation"
+      ]
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "baserecordid",
+      "SchemaName": "BaseRecordId",
+      "Targets": []
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "duplicaterecordid",
+      "SchemaName": "DuplicateRecordId",
+      "Targets": []
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "duplicateruleid",
+      "SchemaName": "DuplicateRuleId",
+      "Targets": [
+        "duplicaterule"
+      ]
+    }
+  ],
+  "ManyToOneRelationships": [
+    {
+      "SchemaName": "AsyncOperation_DuplicateBaseRecord",
+      "ReferencedEntity": "asyncoperation",
+      "ReferencingEntity": "duplicaterecord",
+      "ReferencingAttribute": "asyncoperationid",
+      "ReferencingEntityNavigationPropertyName": "asyncoperationid",
+      "CascadeConfiguration": {
+        "Assign": "NoCascade",
+        "Delete": "Cascade",
+        "Merge": "NoCascade",
+        "Reparent": "NoCascade",
+        "Share": "NoCascade",
+        "Unshare": "NoCascade",
+        "Archive": "NoCascade",
+        "RollupView": "NoCascade"
+      }
+    },
+    {
+      "SchemaName": "DuplicateRule_DuplicateBaseRecord",
+      "ReferencedEntity": "duplicaterule",
+      "ReferencingEntity": "duplicaterecord",
+      "ReferencingAttribute": "duplicateruleid",
+      "ReferencingEntityNavigationPropertyName": "duplicateruleid",
+      "CascadeConfiguration": {
+        "Assign": "NoCascade",
+        "Delete": "RemoveLink",
+        "Merge": "NoCascade",
+        "Reparent": "NoCascade",
+        "Share": "NoCascade",
+        "Unshare": "NoCascade",
+        "Archive": "NoCascade",
+        "RollupView": "NoCascade"
+      }
+    }
+  ]
+}

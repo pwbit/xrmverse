@@ -1,0 +1,14 @@
+
+{{HOST}} {
+#{{FILES_BEGIN}}
+	tls /certs/server.crt /certs/server.key
+#{{FILES_END}}
+#{{INTERNAL_BEGIN}}
+	tls internal
+#{{INTERNAL_END}}
+	# The server's limit for a solution import or a file upload ({{BODY_LIMIT_TEXT}}), in bytes.
+	request_body {
+		max_size {{BODY_LIMIT}}
+	}
+	reverse_proxy {{UPSTREAM}}
+}

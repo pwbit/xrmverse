@@ -1,0 +1,60 @@
+{
+  "LogicalName": "copilotglossaryterm",
+  "SchemaName": "CopilotGlossaryTerm",
+  "EntitySetName": "copilotglossaryterms",
+  "ObjectTypeCode": 9964,
+  "OwnershipType": "UserOwned",
+  "PrimaryNameAttribute": "name",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "name",
+      "SchemaName": "Name",
+      "MaxLength": 100
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "term",
+      "SchemaName": "Term",
+      "MaxLength": 100,
+      "RequiredLevel": {
+        "Value": "ApplicationRequired",
+        "CanBeChanged": true,
+        "ManagedPropertyLogicalName": "canmodifyrequirementlevelsettings"
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "description",
+      "SchemaName": "Description",
+      "MaxLength": 1000
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "skill",
+      "SchemaName": "Skill",
+      "Targets": [
+        "dvtablesearch"
+      ]
+    }
+  ],
+  "ManyToOneRelationships": [
+    {
+      "SchemaName": "dvtablesearch_copilotglossaryterm",
+      "ReferencedEntity": "dvtablesearch",
+      "ReferencingEntity": "copilotglossaryterm",
+      "ReferencingAttribute": "skill",
+      "ReferencingEntityNavigationPropertyName": "skill",
+      "CascadeConfiguration": {
+        "Assign": "NoCascade",
+        "Delete": "Cascade",
+        "Merge": "NoCascade",
+        "Reparent": "NoCascade",
+        "Share": "NoCascade",
+        "Unshare": "NoCascade",
+        "Archive": "NoCascade",
+        "RollupView": "NoCascade"
+      }
+    }
+  ]
+}

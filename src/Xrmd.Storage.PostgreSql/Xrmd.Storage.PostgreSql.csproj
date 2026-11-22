@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Plan 2.7a, ruling P3: the PostgreSQL storage provider. The only project of src/ that references Npgsql (license
+       PostgreSQL, allowed by guardrails section 4 since ruling P13, #279), and since plan 2.7b (Task 8) its Entity Framework
+       Core provider (same license), for the local identity provider's store; Relational is pinned to the host's EF Core. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Xrmd.Abstractions\Xrmd.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql" Version="10.0.3" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.15" />
+  </ItemGroup>
+
+</Project>

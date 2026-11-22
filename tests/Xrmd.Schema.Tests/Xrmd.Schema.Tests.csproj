@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="10.1.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="FluentAssertions" Version="6.12.2" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.1">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\fixtures\ui\*.json" LinkBase="fixtures\ui" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Plan 2.12a: the XAML fixtures of calculated columns (the calculated: key). -->
+    <None Include="..\fixtures\calculated\*.xaml" LinkBase="fixtures\calculated" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Plan 2.12b: the real rollup XAML (the rollup: key). -->
+    <None Include="..\fixtures\rollup\real\*.xaml" LinkBase="fixtures\rollup\real" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\fixtures\rollup\real\designer\*.xaml" LinkBase="fixtures\rollup\real\designer" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\fixtures\workflows\yaml\*.yaml" LinkBase="fixtures\workflows\yaml" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Xrmd.Schema\Xrmd.Schema.csproj" />
+    <!-- Test only: the in-memory org applies the plan with the store's helpers and checks it against the server's rules. -->
+    <ProjectReference Include="..\..\src\Xrmd.Solution\Xrmd.Solution.csproj" />
+  </ItemGroup>
+
+</Project>

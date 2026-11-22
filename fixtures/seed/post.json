@@ -1,0 +1,533 @@
+{
+  "LogicalName": "post",
+  "SchemaName": "Post",
+  "DisplayName": {
+    "LocalizedLabels": [
+      {
+        "Label": "Post",
+        "LanguageCode": 1033
+      }
+    ],
+    "UserLocalizedLabel": {
+      "Label": "Post",
+      "LanguageCode": 1033
+    }
+  },
+  "DisplayCollectionName": {
+    "LocalizedLabels": [
+      {
+        "Label": "Posts",
+        "LanguageCode": 1033
+      }
+    ],
+    "UserLocalizedLabel": {
+      "Label": "Posts",
+      "LanguageCode": 1033
+    }
+  },
+  "IsAuditEnabled": {
+    "Value": false,
+    "CanBeChanged": true,
+    "ManagedPropertyLogicalName": "canmodifyauditsettings"
+  },
+  "EntitySetName": "posts",
+  "ObjectTypeCode": 8000,
+  "OwnershipType": "OrganizationOwned",
+  "HasActivities": false,
+  "HasNotes": false,
+  "PrimaryIdAttribute": "postid",
+  "PrimaryNameAttribute": "text",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "text",
+      "SchemaName": "Text",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Text",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Text",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 2000,
+      "Format": "Text",
+      "RequiredLevel": {
+        "Value": "ApplicationRequired",
+        "CanBeChanged": false
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "largetext",
+      "SchemaName": "LargeText",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Large Text",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Large Text",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 1073741823
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "regardingobjectid",
+      "SchemaName": "RegardingObjectId",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Regarding",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Regarding",
+          "LanguageCode": 1033
+        }
+      },
+      "Targets": [],
+      "RequiredLevel": {
+        "Value": "SystemRequired",
+        "CanBeChanged": false
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.EntityNameAttributeMetadata",
+      "LogicalName": "regardingobjecttypecode",
+      "SchemaName": "RegardingObjectTypeCode",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Regarding Type",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Regarding Type",
+          "LanguageCode": 1033
+        }
+      },
+      "AttributeOf": "regardingobjectid"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "source",
+      "SchemaName": "Source",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Source",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Source",
+          "LanguageCode": 1033
+        }
+      },
+      "DefaultFormValue": 2,
+      "OptionSet": {
+        "Name": "post_source",
+        "IsGlobal": false,
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Auto Post",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Auto Post",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 2,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Manual Post",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Manual Post",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 3,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "ActionHub Post",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "ActionHub Post",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "type",
+      "SchemaName": "Type",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Type",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Type",
+          "LanguageCode": 1033
+        }
+      },
+      "DefaultFormValue": 1,
+      "OptionSet": {
+        "Name": "post_type",
+        "IsGlobal": false,
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Check-in",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Check-in",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 2,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Idea",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Idea",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 3,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "News",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "News",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 4,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Private Message",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Private Message",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 5,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Question",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Question",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 6,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Re-post",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Re-post",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 7,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Status",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Status",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "postregardingid",
+      "SchemaName": "PostRegardingId",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Post Regarding",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Post Regarding",
+          "LanguageCode": 1033
+        }
+      },
+      "Targets": [
+        "postregarding"
+      ],
+      "IsValidForRead": false,
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "regardingobjectownerid",
+      "SchemaName": "RegardingObjectOwnerId",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Regarding Owner",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Regarding Owner",
+          "LanguageCode": 1033
+        }
+      },
+      "Targets": [
+        "systemuser",
+        "team"
+      ],
+      "AttributeType": "Owner",
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.EntityNameAttributeMetadata",
+      "LogicalName": "regardingobjectowneridtype",
+      "SchemaName": "RegardingObjectOwnerIdType",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Regarding Owner Type",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Regarding Owner Type",
+          "LanguageCode": 1033
+        }
+      },
+      "AttributeOf": "regardingobjectownerid"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "regardingobjectowningbusinessunit",
+      "SchemaName": "RegardingObjectOwningBusinessUnit",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Regarding Owning Business Unit",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Regarding Owning Business Unit",
+          "LanguageCode": 1033
+        }
+      },
+      "Targets": [
+        "businessunit"
+      ],
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "createdonbehalfby",
+      "SchemaName": "CreatedOnBehalfBy",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Created By (Delegate)",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Created By (Delegate)",
+          "LanguageCode": 1033
+        }
+      },
+      "Targets": [
+        "systemuser"
+      ],
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "modifiedonbehalfby",
+      "SchemaName": "ModifiedOnBehalfBy",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Modified By (Delegate)",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Modified By (Delegate)",
+          "LanguageCode": 1033
+        }
+      },
+      "Targets": [
+        "systemuser"
+      ],
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "organizationid",
+      "SchemaName": "OrganizationId",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Organization",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Organization",
+          "LanguageCode": 1033
+        }
+      },
+      "Targets": [
+        "organization"
+      ],
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "timezoneruleversionnumber",
+      "SchemaName": "TimeZoneRuleVersionNumber",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Time Zone Rule Version",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Time Zone Rule Version",
+          "LanguageCode": 1033
+        }
+      },
+      "MinValue": -1,
+      "MaxValue": 2147483647
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "utcconversiontimezonecode",
+      "SchemaName": "UTCConversionTimeZoneCode",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "UTC Conversion Time Zone",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "UTC Conversion Time Zone",
+          "LanguageCode": 1033
+        }
+      },
+      "MinValue": -1,
+      "MaxValue": 2147483647
+    }
+  ],
+  "ManyToOneRelationships": [
+    {
+      "SchemaName": "post_PostRegardings",
+      "ReferencedEntity": "postregarding",
+      "ReferencingEntity": "post",
+      "ReferencingAttribute": "postregardingid",
+      "ReferencingEntityNavigationPropertyName": "postregardingid",
+      "CascadeConfiguration": {
+        "Assign": "NoCascade",
+        "Delete": "Cascade",
+        "Merge": "NoCascade",
+        "Reparent": "NoCascade",
+        "Share": "NoCascade",
+        "Unshare": "NoCascade",
+        "Archive": "NoCascade",
+        "RollupView": "NoCascade"
+      }
+    }
+  ]
+}

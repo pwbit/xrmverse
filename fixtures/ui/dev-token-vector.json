@@ -1,0 +1,9 @@
+{
+  "_comment": "Fixed vector shared by ui/src/shell/auth/devToken.test.ts and tests/Xrmd.Integration.Tests/UiDevTokenTests.cs. Token produced with the algorithm of docker/dev-token.sh (HS256, iss xrmverse-dev, exp = nbf + 3600). Never regenerate from a test.",
+  "signingKey": "vector-signing-key-0123456789-abcdefghijklmnop",
+  "objectId": "00000000-0000-0000-0000-000000000001",
+  "name": "Administrator",
+  "audience": "http://localhost:5000/",
+  "nbf": 1700000000,
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJ4cm12ZXJzZS1kZXYiLCJhdWQiOiJodHRwOi8vbG9jYWxob3N0OjUwMDAvIiwib2lkIjoiMDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAxIiwibmFtZSI6IkFkbWluaXN0cmF0b3IiLCJuYmYiOjE3MDAwMDAwMDAsImV4cCI6MTcwMDAwMzYwMH0.iD8Umm_sSR-V0kpTu9bHRmWe85GKTX4wdqDV6YHgK3A"
+}

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+  <metadata>
+    <id>FluentAssertions</id>
+    <version>6.12.2</version>
+    <authors>Dennis Doomen,Jonas Nyrup</authors>
+    <license type="expression">Apache-2.0</license>
+    <projectUrl>https://www.fluentassertions.com/</projectUrl>
+    <copyright>Copyright Dennis Doomen 2010-2023</copyright>
+  </metadata>
+</package>

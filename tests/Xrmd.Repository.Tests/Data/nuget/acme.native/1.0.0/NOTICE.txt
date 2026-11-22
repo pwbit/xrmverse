@@ -1,0 +1,4 @@
+Acme Native
+Copyright 2024 The Acme Native Authors
+
+This product includes software developed at Acme (https://example.com/).

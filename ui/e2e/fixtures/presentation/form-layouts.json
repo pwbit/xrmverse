@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "theme": { "density": "comfortable" },
+  "whiteLabel": { "name": "Layout Desk" },
+  "forms": {
+    "{5B1E7C20-3D4F-4A61-9B80-2C3D4E5F6B01}": {
+      "layout": "wizard",
+      "grid": {
+        "general": {
+          "identity": { "col": 1, "span": 6, "row": 1 },
+          "contact": { "col": 7, "span": 6, "row": 1 },
+          "activity": { "col": 1, "span": 12, "row": 2 }
+        }
+      },
+      "timeline": { "appearance": "cards", "density": "comfortable" },
+      "background": { "sections": { "contact": "yellow" }, "fields": { "telephone1": "#c7e8ff" } }
+    }
+  }
+}

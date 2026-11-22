@@ -1,0 +1,238 @@
+{
+  "LogicalName": "appmodulecomponent",
+  "SchemaName": "AppModuleComponent",
+  "IsAuditEnabled": {
+    "Value": false,
+    "CanBeChanged": false,
+    "ManagedPropertyLogicalName": "canmodifyauditsettings"
+  },
+  "EntitySetName": "appmodulecomponents",
+  "ObjectTypeCode": 9007,
+  "OwnershipType": "OrganizationOwned",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "appmoduleidunique",
+      "SchemaName": "appmoduleidunique",
+      "Targets": [
+        "appmodule"
+      ]
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "componenttype",
+      "SchemaName": "componenttype",
+      "OptionSet": {
+        "IsGlobal": true,
+        "Name": "appmodulecomponent_componenttype",
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Entities",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Entities",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 26,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Views",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Views",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 29,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Business Process Flows",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Business Process Flows",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 48,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Command (Ribbon) for Forms, Grids, sub grids",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Command (Ribbon) for Forms, Grids, sub grids",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 59,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Charts",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Charts",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 60,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Forms",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Forms",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 62,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Sitemap",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Sitemap",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.UniqueIdentifierAttributeMetadata",
+      "LogicalName": "objectid",
+      "SchemaName": "objectid"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "rootcomponentbehavior",
+      "SchemaName": "rootcomponentbehavior",
+      "OptionSet": {
+        "IsGlobal": true,
+        "Name": "appmodulecomponent_rootcomponentbehavior",
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Include Subcomponents",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Include Subcomponents",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Do not include subcomponents",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Do not include subcomponents",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 2,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Include As Shell Only",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Include As Shell Only",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.UniqueIdentifierAttributeMetadata",
+      "LogicalName": "rootappmodulecomponentid",
+      "SchemaName": "rootappmodulecomponentid"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "ismetadata",
+      "SchemaName": "ismetadata",
+      "DefaultValue": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "exempt",
+      "SchemaName": "exempt",
+      "DefaultValue": false
+    }
+  ],
+  "ManyToOneRelationships": [
+    {
+      "SchemaName": "appmodule_appmodulecomponent",
+      "ReferencedEntity": "appmodule",
+      "ReferencingEntity": "appmodulecomponent",
+      "ReferencingAttribute": "appmoduleidunique",
+      "ReferencingEntityNavigationPropertyName": "appmoduleid",
+      "ReferencedEntityNavigationPropertyName": "appmodule_appmodulecomponent",
+      "CascadeConfiguration": {
+        "Assign": "Cascade",
+        "Delete": "Cascade",
+        "Merge": "NoCascade",
+        "Reparent": "Cascade",
+        "Share": "Cascade",
+        "Unshare": "Cascade",
+        "Archive": "NoCascade",
+        "RollupView": "NoCascade"
+      }
+    }
+  ]
+}

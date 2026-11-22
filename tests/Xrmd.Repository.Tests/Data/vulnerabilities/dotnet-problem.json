@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "parameters": "--vulnerable --include-transitive",
+  "problems": [
+    {
+      "project": "/repo/src/Xrmd.Host/Xrmd.Host.csproj",
+      "level": "error",
+      "text": "No assets file was found for `/repo/src/Xrmd.Host/Xrmd.Host.csproj`. Please run restore before running this command."
+    }
+  ],
+  "sources": [
+    "https://api.nuget.org/v3/index.json"
+  ],
+  "projects": [
+    {
+      "path": "/repo/src/Xrmd.Host/Xrmd.Host.csproj"
+    }
+  ]
+}

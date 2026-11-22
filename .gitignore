@@ -1,0 +1,10 @@
+bin/
+obj/
+*.user
+.vs/
+TestResults/
+*.received.*
+.superpowers/
+docker/.env
+site/node_modules/
+_site/

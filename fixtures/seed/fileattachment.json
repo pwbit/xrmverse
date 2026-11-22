@@ -1,0 +1,46 @@
+{
+  "LogicalName": "fileattachment",
+  "SchemaName": "FileAttachment",
+  "IsAuditEnabled": {"Value": false, "CanBeChanged": false, "ManagedPropertyLogicalName": "canmodifyauditsettings"},
+  "EntitySetName": "fileattachments",
+  "ObjectTypeCode": 55,
+  "OwnershipType": "None",
+  "PrimaryNameAttribute": "filename",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "filename",
+      "SchemaName": "FileName",
+      "MaxLength": 255
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "mimetype",
+      "SchemaName": "MimeType",
+      "MaxLength": 256
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BigIntAttributeMetadata",
+      "LogicalName": "filesizeinbytes",
+      "SchemaName": "FileSizeInBytes"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "regardingfieldname",
+      "SchemaName": "RegardingFieldName",
+      "MaxLength": 255
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "objecttypecode",
+      "SchemaName": "ObjectTypeCode",
+      "MaxLength": 64
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "objectid",
+      "SchemaName": "ObjectId",
+      "Targets": []
+    }
+  ]
+}

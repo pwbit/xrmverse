@@ -1,0 +1,39 @@
+{
+  "LogicalName": "systemuser",
+  "SchemaName": "SystemUser",
+  "IsAuditEnabled": {"Value": true, "CanBeChanged": true, "ManagedPropertyLogicalName": "canmodifyauditsettings"},
+  "EntitySetName": "systemusers",
+  "ObjectTypeCode": 8,
+  "OwnershipType": "BusinessOwned",
+  "PrimaryNameAttribute": "fullname",
+  "Attributes": [
+    { "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata", "LogicalName": "fullname", "SchemaName": "FullName", "MaxLength": 200 },
+    { "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata", "LogicalName": "domainname", "SchemaName": "DomainName", "MaxLength": 1024 },
+    { "@odata.type": "Microsoft.Dynamics.CRM.UniqueIdentifierAttributeMetadata", "LogicalName": "azureactivedirectoryobjectid", "SchemaName": "AzureActiveDirectoryObjectId" },
+    { "@odata.type": "Microsoft.Dynamics.CRM.UniqueIdentifierAttributeMetadata", "LogicalName": "applicationid", "SchemaName": "ApplicationId" },
+    { "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata", "LogicalName": "businessunitid", "SchemaName": "BusinessUnitId", "Targets": ["businessunit"] },
+    { "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata", "LogicalName": "isdisabled", "SchemaName": "IsDisabled" },
+    { "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata", "LogicalName": "parentsystemuserid", "SchemaName": "ParentSystemUserId", "Targets": ["systemuser"] },
+    { "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata", "LogicalName": "internalemailaddress", "SchemaName": "InternalEMailAddress", "MaxLength": 100, "Format": "Email" }
+  ],
+  "ManyToOneRelationships": [
+    {
+      "SchemaName": "user_parent_user",
+      "ReferencedEntity": "systemuser",
+      "ReferencingEntity": "systemuser",
+      "ReferencingAttribute": "parentsystemuserid",
+      "ReferencingEntityNavigationPropertyName": "parentsystemuserid",
+      "IsHierarchical": true,
+      "CascadeConfiguration": {
+        "Assign": "NoCascade",
+        "Delete": "RemoveLink",
+        "Merge": "NoCascade",
+        "Reparent": "NoCascade",
+        "Share": "NoCascade",
+        "Unshare": "NoCascade",
+        "Archive": "NoCascade",
+        "RollupView": "NoCascade"
+      }
+    }
+  ]
+}

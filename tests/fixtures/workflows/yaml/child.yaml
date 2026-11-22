@@ -1,0 +1,9 @@
+kind: workflow
+id: 0fe1b782-e5de-f111-84e8-002248872b66
+name: Child
+entity: xrmv_order
+mode: realtime
+scope: organization
+childProcess: true
+steps:
+  - stop: { status: canceled }

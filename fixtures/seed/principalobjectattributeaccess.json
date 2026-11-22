@@ -1,0 +1,52 @@
+{
+  "LogicalName": "principalobjectattributeaccess",
+  "SchemaName": "PrincipalObjectAttributeAccess",
+  "IsAuditEnabled": {
+    "Value": false,
+    "CanBeChanged": false,
+    "ManagedPropertyLogicalName": "canmodifyauditsettings"
+  },
+  "EntitySetName": "principalobjectattributeaccessset",
+  "ObjectTypeCode": 44,
+  "OwnershipType": "OrganizationOwned",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.UniqueIdentifierAttributeMetadata",
+      "LogicalName": "attributeid",
+      "SchemaName": "AttributeId"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "objectid",
+      "SchemaName": "ObjectId",
+      "Targets": []
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "objecttypecode",
+      "SchemaName": "ObjectTypeCode",
+      "MaxLength": 64
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "principalid",
+      "SchemaName": "PrincipalId",
+      "Targets": [
+        "systemuser",
+        "team"
+      ]
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "readaccess",
+      "SchemaName": "ReadAccess",
+      "DefaultValue": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "updateaccess",
+      "SchemaName": "UpdateAccess",
+      "DefaultValue": false
+    }
+  ]
+}

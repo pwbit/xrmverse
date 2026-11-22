@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Xrmd.Abstractions\Xrmd.Abstractions.csproj" />
+    <ProjectReference Include="..\Xrmd.Storage.PostgreSql\Xrmd.Storage.PostgreSql.csproj" />
+    <ProjectReference Include="..\Xrmd.WebApi\Xrmd.WebApi.csproj" />
+    <ProjectReference Include="..\Xrmd.Security\Xrmd.Security.csproj" />
+    <ProjectReference Include="..\Xrmd.Admin\Xrmd.Admin.csproj" />
+    <ProjectReference Include="..\Xrmd.Mcp\Xrmd.Mcp.csproj" />
+    <ProjectReference Include="..\Xrmd.Files\Xrmd.Files.csproj" />
+    <ProjectReference Include="..\Xrmd.Tds\Xrmd.Tds.csproj" />
+    <ProjectReference Include="..\Xrmd.Workflows\Xrmd.Workflows.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.15" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.15" />
+    <PackageReference Include="OpenIddict.AspNetCore" Version="7.8.0" />
+    <PackageReference Include="OpenIddict.EntityFrameworkCore" Version="7.8.0" />
+    <!-- Plan 3.3, ruling T11: the proprietary SqlParser reaches this project through Meziantou.Framework.TdsServer (Xrmd.Tds),
+         and ExcludeAssets does not flow through a project reference when another path brings the package: excluded here
+         too, so that its DLL is never in the output (eng/check-no-sdk.sh). -->
+    <PackageReference Include="Microsoft.SqlServer.Management.SqlParser" Version="180.9.0" ExcludeAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Ui\placeholder\index.html" LogicalName="Xrmd.Host.Ui.placeholder.index.html" />
+  </ItemGroup>
+
+  <!-- The web admin build (pnpm -C ui build) is served from wwwroot; without it the host serves a placeholder page.
+       None, not Content: a Content link under wwwroot becomes a static web asset on .NET 10, and the Development host then
+       fails at startup on the manifest's wwwroot content root, which does not exist in the project folder. -->
+  <ItemGroup Condition="Exists('$(MSBuildProjectDirectory)\..\..\ui\dist')">
+    <None Include="..\..\ui\dist\**" Link="wwwroot\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Xrmd.Integration.Tests" />
+  </ItemGroup>
+
+</Project>

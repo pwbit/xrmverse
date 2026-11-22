@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "parameters": "--include-transitive",
+  "problems": [],
+  "projects": [
+    {
+      "path": "/repo/src/Xrmd.Cli/Xrmd.Cli.csproj",
+      "frameworks": [
+        {
+          "framework": "net8.0",
+          "topLevelPackages": [
+            {
+              "id": "Newtonsoft.Json",
+              "requestedVersion": "13.0.1",
+              "resolvedVersion": "13.0.1"
+            }
+          ],
+          "transitivePackages": [
+            {
+              "id": "System.Runtime",
+              "resolvedVersion": "4.3.0"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "/repo/src/Xrmd.Abstractions/Xrmd.Abstractions.csproj"
+    },
+    {
+      "path": "/repo/tests/Xrmd.Cli.Tests/Xrmd.Cli.Tests.csproj",
+      "frameworks": [
+        {
+          "framework": "net8.0",
+          "topLevelPackages": [
+            {
+              "id": "FluentAssertions",
+              "requestedVersion": "6.12.2",
+              "resolvedVersion": "6.12.2"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

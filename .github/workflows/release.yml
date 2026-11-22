@@ -1,0 +1,263 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  # A manual run builds and scans everything (image included) and pushes, signs and releases nothing.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# The image-publish job (image) scans the built image for the four blocked Microsoft assemblies (the three SDK ones and
+# SqlParser) before pushing it, as the release job scans its
+# assets with eng/check-no-sdk.sh --artifacts. It pushes the version tag only (never :latest) and only on a v* tag; the GHCR package
+# stays private and the release stays a draft until the maintainer publishes them by hand.
+jobs:
+  # Release blockers (ruling P8, spec §10): a High or Critical advisory, a license violation or stale notices stop the
+  # release before anything is built. Known-exploited vulnerabilities (CISA KEV) are checked by hand (release checklist).
+  scan:
+    name: vulnerabilities and licenses
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: ui/package.json   # version from "packageManager" (pnpm 10)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Fail on High or Critical advisories (NuGet and npm prod)
+        run: eng/licenses.sh vulnerabilities
+      - name: License check and notices up to date
+        run: eng/licenses.sh check --notices THIRD_PARTY_NOTICES.md
+      - name: No Microsoft SDK in shipped artifacts
+        run: eng/check-no-sdk.sh
+
+  sbom:
+    name: CycloneDX SBOMs
+    needs: [scan]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: ui/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Version from the tag
+        id: version
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"; else echo "value=0.0.0-dev" >> "$GITHUB_OUTPUT"; fi
+      - name: Write the SBOMs of the CLI and of the server image
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          mkdir -p sbom
+          eng/licenses.sh sbom --scope cli --version "${VERSION}" --out "sbom/xrmd-cli-${VERSION}.cdx.json"
+          eng/licenses.sh sbom --scope server --version "${VERSION}" --out "sbom/xrmd-server-${VERSION}.cdx.json"
+          cp THIRD_PARTY_NOTICES.md sbom/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xrmd-sbom
+          path: sbom/*
+          if-no-files-found: error
+
+  publish:
+    name: publish ${{ matrix.rid }}
+    needs: [scan]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { rid: win-x64, os: ubuntu-latest }
+          - { rid: osx-arm64, os: macos-latest }
+          - { rid: osx-x64, os: macos-latest }
+          - { rid: linux-x64, os: ubuntu-latest }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Version from the tag
+        id: version
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"; else echo "value=0.0.0-dev" >> "$GITHUB_OUTPUT"; fi
+      - name: Publish single-file executable
+        run: >
+          dotnet publish src/Xrmd.Cli -c Release -r ${{ matrix.rid }} --self-contained
+          -p:PublishSingleFile=true -p:Version=${{ steps.version.outputs.value }} -o out/${{ matrix.rid }}
+      - name: Archive
+        run: |
+          mkdir -p dist
+          cp THIRD_PARTY_NOTICES.md LICENSE NOTICE out/${{ matrix.rid }}/
+          # The self-contained executable embeds the .NET runtime pack: ship its license and notices (spec §10).
+          # The version is the one the publish restored (obj/project.assets.json), never hardcoded.
+          rid="${{ matrix.rid }}"
+          pack="Microsoft.NETCore.App.Runtime.${rid}"
+          runtime_version="$(jq -r --arg n "${pack}" '[.. | objects | select(.name? == $n) | .version][0] | gsub("[\\[\\] ]"; "") | split(",")[0]' src/Xrmd.Cli/obj/project.assets.json)"
+          runtime_dir="${NUGET_PACKAGES:-$HOME/.nuget/packages}/$(echo "${pack}" | tr '[:upper:]' '[:lower:]')/${runtime_version}"
+          cp "${runtime_dir}/LICENSE.TXT" out/${rid}/dotnet-runtime-LICENSE.txt
+          cp "${runtime_dir}/THIRD-PARTY-NOTICES.TXT" out/${rid}/dotnet-runtime-THIRD-PARTY-NOTICES.txt
+          if [ "${rid}" = "win-x64" ]; then
+            (cd out/${rid} && zip -j ../../dist/xrmd-${rid}.zip xrmd.exe LICENSE NOTICE THIRD_PARTY_NOTICES.md dotnet-runtime-LICENSE.txt dotnet-runtime-THIRD-PARTY-NOTICES.txt)
+          else
+            tar -C out/${rid} -czf dist/xrmd-${rid}.tar.gz xrmd LICENSE NOTICE THIRD_PARTY_NOTICES.md dotnet-runtime-LICENSE.txt dotnet-runtime-THIRD-PARTY-NOTICES.txt
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xrmd-${{ matrix.rid }}
+          path: dist/*
+          if-no-files-found: error
+
+  pack:
+    name: pack dotnet tool
+    needs: [scan]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Version from the tag
+        id: version
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"; else echo "value=0.0.0-dev" >> "$GITHUB_OUTPUT"; fi
+      - name: Pack
+        run: dotnet pack src/Xrmd.Cli -c Release -p:Version=${{ steps.version.outputs.value }} -o nupkg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xrmd-nupkg
+          path: nupkg/*.nupkg
+          if-no-files-found: error
+
+  # The server image ghcr.io/pwbit/xrmd:<version> and its offline archive. Built and scanned on every run;
+  # pushed and signed only on a v* tag. Only this job may write packages or request an OIDC token (keyless signing).
+  image:
+    name: server image
+    needs: [scan, sbom]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write   # push the image to GHCR with the workflow token
+      id-token: write   # keyless cosign signature (Sigstore OIDC); no key or secret is stored
+    env:
+      IMAGE: ghcr.io/pwbit/xrmd
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Version from the tag
+        id: version
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"; else echo "value=0.0.0-dev" >> "$GITHUB_OUTPUT"; fi
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: ${{ env.IMAGE }}:${{ steps.version.outputs.value }}
+          # Links the GHCR package to this repository, so the workflow token may push it.
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+      # Plan 12, legal condition 2: the image is scanned itself, before anything leaves the runner.
+      - name: No Microsoft SDK in the image
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          id="$(docker create "${IMAGE}:${VERSION}")"
+          mkdir -p image-fs
+          docker export "${id}" | tar -x -C image-fs
+          docker rm "${id}" > /dev/null
+          bash eng/check-no-sdk.sh --tree image-fs
+      - uses: docker/login-action@v3
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push the version tag
+        id: push
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          docker push "${IMAGE}:${VERSION}"
+          digest="$(docker inspect --format '{{index .RepoDigests 0}}' "${IMAGE}:${VERSION}" | cut -d@ -f2)"
+          test -n "${digest}"
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+      # The offline archive holds the xrmd image only; SQL Server and Caddy are pulled by the customer from their owners.
+      - name: Offline archive
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          mkdir -p dist
+          docker save "${IMAGE}:${VERSION}" | gzip > "dist/xrmd-server-${VERSION}-linux-amd64.tar.gz"
+          (cd dist && sha256sum "xrmd-server-${VERSION}-linux-amd64.tar.gz" > "xrmd-server-${VERSION}-linux-amd64.tar.gz.sha256")
+      - uses: actions/upload-artifact@v4
+        with:
+          name: server-image
+          path: dist/*
+          if-no-files-found: error
+      - uses: sigstore/cosign-installer@v3
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        with:
+          cosign-release: v2.4.1
+      - uses: actions/download-artifact@v4
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        with:
+          name: xrmd-sbom
+          path: sbom
+      - name: Sign the image and attach the SBOM
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          cosign sign --yes "${IMAGE}@${DIGEST}"
+          cosign attest --type cyclonedx --yes --predicate "sbom/xrmd-server-${VERSION}.cdx.json" "${IMAGE}@${DIGEST}"
+
+  release:
+    name: attach to the GitHub release
+    needs: [scan, publish, pack, sbom, image]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write   # attach files to the GitHub release; no other secret or token is used
+    steps:
+      - uses: actions/checkout@v4   # eng/check-no-sdk.sh
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: xrmd-*
+          path: assets
+          merge-multiple: true
+      # The offline image archive is a docker save, not a single-file CLI: it is scanned in the image job (the image
+      # filesystem), so it is kept out of the folder check-no-sdk.sh --artifacts looks at.
+      - uses: actions/download-artifact@v4
+        with:
+          name: server-image
+          path: image-assets
+      - name: Offline archive matches its checksum
+        run: (cd image-assets && sha256sum -c ./*.sha256)
+      # Plan 12, legal condition 2: the files handed to customers are scanned themselves, not a sibling build. Every RID
+      # archive (its single-file xrmd / xrmd.exe) and the tool package; fails closed when any of them is missing.
+      - name: No Microsoft SDK in the release assets
+        run: bash eng/check-no-sdk.sh --artifacts assets
+      # Archives, the dotnet tool package, the two SBOMs (xrmd-cli-<version>.cdx.json, xrmd-server-<version>.cdx.json) and THIRD_PARTY_NOTICES.md.
+      # Plus the offline server image (xrmd-server-<version>-linux-amd64.tar.gz) and its .sha256. A draft: the maintainer
+      # publishes it (and the GHCR package) by hand.
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            assets/*
+            image-assets/*

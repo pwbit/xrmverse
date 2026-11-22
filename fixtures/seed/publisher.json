@@ -1,0 +1,40 @@
+{
+  "LogicalName": "publisher",
+  "SchemaName": "Publisher",
+  "IsAuditEnabled": {"Value": false, "CanBeChanged": false, "ManagedPropertyLogicalName": "canmodifyauditsettings"},
+  "EntitySetName": "publishers",
+  "ObjectTypeCode": 7101,
+  "OwnershipType": "OrganizationOwned",
+  "PrimaryNameAttribute": "friendlyname",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "friendlyname",
+      "SchemaName": "friendlyname",
+      "MaxLength": 256
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "uniquename",
+      "SchemaName": "uniquename",
+      "MaxLength": 256
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "customizationprefix",
+      "SchemaName": "customizationprefix",
+      "MaxLength": 8
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "customizationoptionvalueprefix",
+      "SchemaName": "customizationoptionvalueprefix"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "description",
+      "SchemaName": "description",
+      "MaxLength": 1048576
+    }
+  ]
+}

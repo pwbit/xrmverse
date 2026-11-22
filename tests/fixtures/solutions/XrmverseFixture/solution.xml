@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ImportExportXml version="9.2.24093.200" SolutionPackageVersion="9.2" languagecode="1033" generatedBy="CrmLive" OrganizationVersion="9.2.24093.200" OrganizationSchemaType="Standard" CRMServerServiceabilityVersion="9.2.24093.00200" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <SolutionManifest>
+    <UniqueName>XrmverseFixture</UniqueName>
+    <LocalizedNames>
+      <LocalizedName description="Xrmverse Fixture" languagecode="1033" />
+      <LocalizedName description="Fixture Xrmverse" languagecode="1040" />
+    </LocalizedNames>
+    <Descriptions>
+      <Description description="The hand-written solution of the xrmverse tests." languagecode="1033" />
+    </Descriptions>
+    <Version>1.0.0.0</Version>
+    <Managed>0</Managed>
+    <Publisher>
+      <UniqueName>xrmverse</UniqueName>
+      <LocalizedNames>
+        <LocalizedName description="xrmverse" languagecode="1033" />
+        <LocalizedName description="xrmverse" languagecode="1040" />
+      </LocalizedNames>
+      <Descriptions />
+      <EMailAddress xsi:nil="true"></EMailAddress>
+      <SupportingWebsiteUrl xsi:nil="true"></SupportingWebsiteUrl>
+      <CustomizationPrefix>xv</CustomizationPrefix>
+      <CustomizationOptionValuePrefix>10000</CustomizationOptionValuePrefix>
+      <Addresses>
+        <Address>
+          <AddressNumber>1</AddressNumber>
+          <AddressTypeCode>1</AddressTypeCode>
+          <City xsi:nil="true"></City>
+          <County xsi:nil="true"></County>
+          <Country xsi:nil="true"></Country>
+          <Fax xsi:nil="true"></Fax>
+          <FreightTermsCode xsi:nil="true"></FreightTermsCode>
+          <ImportSequenceNumber xsi:nil="true"></ImportSequenceNumber>
+          <Latitude xsi:nil="true"></Latitude>
+          <Line1 xsi:nil="true"></Line1>
+          <Line2 xsi:nil="true"></Line2>
+          <Line3 xsi:nil="true"></Line3>
+          <Longitude xsi:nil="true"></Longitude>
+          <Name xsi:nil="true"></Name>
+          <PostalCode xsi:nil="true"></PostalCode>
+          <PostOfficeBox xsi:nil="true"></PostOfficeBox>
+          <PrimaryContactName xsi:nil="true"></PrimaryContactName>
+          <ShippingMethodCode>1</ShippingMethodCode>
+          <StateOrProvince xsi:nil="true"></StateOrProvince>
+          <Telephone1 xsi:nil="true"></Telephone1>
+          <Telephone2 xsi:nil="true"></Telephone2>
+          <Telephone3 xsi:nil="true"></Telephone3>
+          <TimeZoneRuleVersionNumber xsi:nil="true"></TimeZoneRuleVersionNumber>
+          <UPSZone xsi:nil="true"></UPSZone>
+          <UTCOffset xsi:nil="true"></UTCOffset>
+          <UTCConversionTimeZoneCode xsi:nil="true"></UTCConversionTimeZoneCode>
+        </Address>
+      </Addresses>
+    </Publisher>
+    <RootComponents>
+      <RootComponent type="1" schemaName="xv_project" behavior="0" />
+      <RootComponent type="1" schemaName="xv_tag" behavior="0" />
+      <RootComponent type="1" schemaName="xv_task" behavior="0" />
+      <RootComponent type="9" schemaName="xv_priority" behavior="0" />
+      <RootComponent type="20" id="{6b1c3f4e-1a2b-4c3d-8e9f-0a1b2c3d4e01}" behavior="0" />
+      <RootComponent type="61" schemaName="xv_/scripts/project.js" behavior="0" />
+      <RootComponent type="62" schemaName="xv_fixtureapp" behavior="0" />
+      <RootComponent type="80" schemaName="xv_fixtureapp" behavior="0" />
+      <RootComponent type="91" id="{6b1c3f4e-1a2b-4c3d-8e9f-0a1b2c3d4e10}" schemaName="Xrmd.TestPlugins, Version=1.0.0.0, Culture=neutral, PublicKeyToken=a15f04ad73430aaf" behavior="0" />
+      <RootComponent type="92" id="{6b1c3f4e-1a2b-4c3d-8e9f-0a1b2c3d4e21}" behavior="0" />
+      <RootComponent type="92" id="{6b1c3f4e-1a2b-4c3d-8e9f-0a1b2c3d4e22}" behavior="0" />
+    </RootComponents>
+    <MissingDependencies />
+  </SolutionManifest>
+</ImportExportXml>

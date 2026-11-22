@@ -1,0 +1,29 @@
+name: devcontainer
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".devcontainer/**"
+      - ".github/workflows/devcontainer.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # The integration tests (SQL Server container, backups) need the disk; drop preinstalled toolchains
+      # this job never uses (same step as ci.yml).
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h /
+      - uses: actions/checkout@v4
+      # Same filter as ci.yml: the acceptance tests accept the SQL Server terms, so they are run by hand (issue #60).
+      - name: Build the dev container and run the tests inside it
+        uses: devcontainers/ci@v0.3
+        with:
+          push: never
+          runCmd: dotnet test --filter "Category!=Acceptance"

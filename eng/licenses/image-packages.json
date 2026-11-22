@@ -1,0 +1,14 @@
+{
+  "_comment": "Third-party software built into the server image outside NuGet and npm (plan 2.7b, ruling Q9; Task 9 fix round 1), stated by hand: no package manager file lists it. docker/Dockerfile builds the PostgreSQL client tools from the official source tarball (PG_VERSION, pinned with its SHA-256) and copies only pg_dump, pg_restore and libpq into the image, with PostgreSQL's COPYRIGHT at /usr/share/doc/postgresql/COPYRIGHT; no distribution package is installed for them. The version below must equal PG_VERSION of the Dockerfile (LicensesTests checks it). Copyright from COPYRIGHT and the pg_dump sources (the notice of Philip Warner is a condition of its use), checked 2026-11-21. OpenSSL, zlib, zstd and LZ4, which the tools link, are libraries of the aspnet base image and are not added by xrmverse.",
+  "packages": [
+    {
+      "ecosystem": "generic",
+      "id": "postgresql",
+      "version": "18.7",
+      "description": "PostgreSQL client tools pg_dump and pg_restore, and the libpq library",
+      "license": "PostgreSQL",
+      "copyright": "Portions Copyright (c) 1996-2026, PostgreSQL Global Development Group\nPortions Copyright (c) 1994, The Regents of the University of California\nCopyright (c) 2000, Philip Warner (pg_dump): rights are granted to use this software in any way so long as this notice is not removed. The author is not responsible for loss or damages that may result from its use.",
+      "projectUrl": "https://www.postgresql.org/"
+    }
+  ]
+}

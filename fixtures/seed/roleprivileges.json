@@ -1,0 +1,26 @@
+{
+  "LogicalName": "roleprivileges",
+  "SchemaName": "RolePrivileges",
+  "IsAuditEnabled": {"Value": false, "CanBeChanged": false, "ManagedPropertyLogicalName": "canmodifyauditsettings"},
+  "EntitySetName": "roleprivilegescollection",
+  "ObjectTypeCode": 12,
+  "OwnershipType": "OrganizationOwned",
+  "IsIntersect": true,
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.UniqueIdentifierAttributeMetadata",
+      "LogicalName": "roleid",
+      "SchemaName": "roleid"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.UniqueIdentifierAttributeMetadata",
+      "LogicalName": "privilegeid",
+      "SchemaName": "privilegeid"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "privilegedepthmask",
+      "SchemaName": "privilegedepthmask"
+    }
+  ]
+}

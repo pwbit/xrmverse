@@ -1,0 +1,218 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`formXml snapshots > invented form with every feature 1`] = `
+{
+  "entity": "account",
+  "events": [],
+  "fallback": true,
+  "footer": [
+    {
+      "colSpan": 1,
+      "control": {
+        "attribute": "modifiedon",
+        "disabled": true,
+        "id": "footer_modifiedon",
+        "kind": "field",
+      },
+      "id": "{55555555-0000-0000-0000-000000000001}",
+      "labels": {
+        "1033": "Modified on",
+      },
+      "rowSpan": 1,
+      "showLabel": true,
+      "visible": true,
+    },
+  ],
+  "hasScripts": false,
+  "header": [
+    {
+      "colSpan": 1,
+      "control": {
+        "attribute": "ownerid",
+        "disabled": false,
+        "id": "header_ownerid",
+        "kind": "field",
+      },
+      "id": "{44444444-0000-0000-0000-000000000001}",
+      "labels": {
+        "1033": "Owner",
+      },
+      "rowSpan": 1,
+      "showLabel": true,
+      "visible": true,
+    },
+  ],
+  "id": "{00000000-0000-0000-0000-000000000001}",
+  "isDefault": false,
+  "libraries": [],
+  "name": "invented-all-features.xml",
+  "navigation": [],
+  "order": 3,
+  "roles": [
+    "66666666-0000-0000-0000-000000000001",
+    "66666666-0000-0000-0000-000000000002",
+  ],
+  "tabs": [
+    {
+      "columns": [
+        {
+          "sections": [
+            {
+              "columns": 2,
+              "labelPosition": "top",
+              "labels": {
+                "1033": "Main",
+              },
+              "name": "main",
+              "rows": [
+                [
+                  {
+                    "colSpan": 2,
+                    "control": {
+                      "attribute": "name",
+                      "disabled": false,
+                      "id": "name",
+                      "kind": "field",
+                    },
+                    "id": "{11111111-0000-0000-0000-000000000003}",
+                    "labels": {
+                      "1033": "Name",
+                    },
+                    "rowSpan": 1,
+                    "showLabel": true,
+                    "visible": true,
+                  },
+                ],
+                [
+                  {
+                    "colSpan": 1,
+                    "id": "{11111111-0000-0000-0000-000000000004}",
+                    "labels": {
+                      "1033": "Spacer",
+                    },
+                    "rowSpan": 1,
+                    "showLabel": false,
+                    "visible": true,
+                  },
+                  {
+                    "colSpan": 1,
+                    "control": {
+                      "attribute": "hiddenfield",
+                      "disabled": false,
+                      "id": "hiddenfield",
+                      "kind": "field",
+                    },
+                    "id": "{11111111-0000-0000-0000-000000000005}",
+                    "labels": {
+                      "1033": "Hidden cell",
+                    },
+                    "rowSpan": 1,
+                    "showLabel": true,
+                    "visible": false,
+                  },
+                ],
+                [
+                  {
+                    "colSpan": 2,
+                    "control": {
+                      "forms": {
+                        "contact": "{33333333-0000-0000-0000-000000000001}",
+                      },
+                      "id": "contactcard",
+                      "kind": "quickview",
+                      "lookupAttribute": "primarycontactid",
+                    },
+                    "id": "{11111111-0000-0000-0000-000000000006}",
+                    "labels": {
+                      "1033": "Primary contact",
+                    },
+                    "rowSpan": 4,
+                    "showLabel": true,
+                    "visible": true,
+                  },
+                ],
+                [
+                  {
+                    "colSpan": 1,
+                    "control": {
+                      "attribute": "progress",
+                      "customControl": {
+                        "name": "inv_Invented.ProgressBar",
+                        "parameters": {
+                          "value": {
+                            "static": false,
+                            "value": "progress",
+                          },
+                        },
+                      },
+                      "disabled": false,
+                      "id": "progress",
+                      "kind": "field",
+                    },
+                    "id": "{11111111-0000-0000-0000-000000000007}",
+                    "labels": {
+                      "1033": "Progress",
+                    },
+                    "rowSpan": 1,
+                    "showLabel": true,
+                    "visible": true,
+                  },
+                  {
+                    "colSpan": 1,
+                    "control": {
+                      "classId": "{99999999-9999-9999-9999-999999999999}",
+                      "id": "mystery",
+                      "kind": "unknown",
+                    },
+                    "id": "{11111111-0000-0000-0000-000000000008}",
+                    "labels": {
+                      "1033": "Mystery",
+                    },
+                    "rowSpan": 1,
+                    "showLabel": true,
+                    "visible": true,
+                  },
+                ],
+              ],
+              "showLabel": true,
+              "visible": true,
+            },
+            {
+              "columns": 1,
+              "labelPosition": "left",
+              "labels": {
+                "1033": "Secret",
+              },
+              "name": "secret",
+              "rows": [],
+              "showLabel": false,
+              "visible": false,
+            },
+          ],
+          "width": "100%",
+        },
+      ],
+      "labels": {
+        "1033": "General",
+        "1040": "Generale",
+      },
+      "name": "general",
+      "visible": true,
+    },
+    {
+      "columns": [
+        {
+          "sections": [],
+          "width": "100%",
+        },
+      ],
+      "labels": {
+        "1033": "Hidden",
+      },
+      "name": "hiddentab",
+      "visible": false,
+    },
+  ],
+  "type": 2,
+}
+`;

@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="10.1.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="FluentAssertions" Version="6.12.2" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.1">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Xrmd.Cli\Xrmd.Cli.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Shared\PublishedApps.cs" Link="Shared\PublishedApps.cs" />
+    <Compile Include="..\Xrmd.Migration.Tests\SyntheticPackage.cs" Link="Shared\SyntheticPackage.cs" />
+    <Compile Include="..\Xrmd.Migration.Tests\Source\FakeDataverse.cs" Link="Shared\FakeDataverse.cs" />
+    <Compile Include="..\Xrmd.Migration.Tests\Source\FakeEnvironment.cs" Link="Shared\FakeEnvironment.cs" />
+    <Compile Include="..\Xrmd.Migration.Tests\Source\SolutionZip.cs" Link="Shared\SolutionZip.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Renderings of the CLI before host routing (Review Focus 1); never regenerate them from the current renderer. -->
+    <None Include="Golden\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Import Project="..\TestPlugins.props" />
+
+</Project>

@@ -1,0 +1,16 @@
+kind: workflow
+id: 3e1f0307-d8de-f111-84e8-002248872b66
+name: OnCreate
+entity: xrmv_order
+mode: realtime
+scope: organization
+trigger:
+  create: true
+steps:
+  - create:
+      entity: task
+      set:
+        subject: TEST
+        regardingobjectid: { record: primary }
+        prioritycode: 1
+  - startChild: { workflow: Child }

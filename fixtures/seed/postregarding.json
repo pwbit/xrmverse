@@ -1,0 +1,165 @@
+{
+  "LogicalName": "postregarding",
+  "SchemaName": "PostRegarding",
+  "DisplayName": {
+    "LocalizedLabels": [
+      {
+        "Label": "Post Regarding",
+        "LanguageCode": 1033
+      }
+    ],
+    "UserLocalizedLabel": {
+      "Label": "Post Regarding",
+      "LanguageCode": 1033
+    }
+  },
+  "DisplayCollectionName": {
+    "LocalizedLabels": [
+      {
+        "Label": "Post Regardings",
+        "LanguageCode": 1033
+      }
+    ],
+    "UserLocalizedLabel": {
+      "Label": "Post Regardings",
+      "LanguageCode": 1033
+    }
+  },
+  "IsAuditEnabled": {
+    "Value": false,
+    "CanBeChanged": true,
+    "ManagedPropertyLogicalName": "canmodifyauditsettings"
+  },
+  "EntitySetName": "postregardings",
+  "ObjectTypeCode": 8002,
+  "OwnershipType": "OrganizationOwned",
+  "HasActivities": false,
+  "HasNotes": false,
+  "PrimaryIdAttribute": "postregardingid",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "regardingobjectid",
+      "SchemaName": "RegardingObjectId",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Regarding",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Regarding",
+          "LanguageCode": 1033
+        }
+      },
+      "Targets": [],
+      "RequiredLevel": {
+        "Value": "SystemRequired",
+        "CanBeChanged": false
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.EntityNameAttributeMetadata",
+      "LogicalName": "regardingobjecttypecode",
+      "SchemaName": "RegardingObjectTypeCode",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Regarding Type",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Regarding Type",
+          "LanguageCode": 1033
+        }
+      },
+      "AttributeOf": "regardingobjectid"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "regardingobjectownerid",
+      "SchemaName": "RegardingObjectOwnerId",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Regarding Owner",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Regarding Owner",
+          "LanguageCode": 1033
+        }
+      },
+      "Targets": [
+        "systemuser",
+        "team"
+      ],
+      "AttributeType": "Owner",
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.EntityNameAttributeMetadata",
+      "LogicalName": "regardingobjectowneridtype",
+      "SchemaName": "RegardingObjectOwnerIdType",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Regarding Owner Type",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Regarding Owner Type",
+          "LanguageCode": 1033
+        }
+      },
+      "AttributeOf": "regardingobjectownerid"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "regardingobjectowningbusinessunit",
+      "SchemaName": "RegardingObjectOwningBusinessUnit",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Regarding Owning Business Unit",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Regarding Owning Business Unit",
+          "LanguageCode": 1033
+        }
+      },
+      "Targets": [
+        "businessunit"
+      ],
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.DateTimeAttributeMetadata",
+      "LogicalName": "latestmanualpostmodifiedon",
+      "SchemaName": "LatestManualPostModifiedOn",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Latest Manual Post Modified On",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Latest Manual Post Modified On",
+          "LanguageCode": 1033
+        }
+      },
+      "Format": "DateAndTime",
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    }
+  ]
+}

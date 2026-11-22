@@ -1,0 +1,80 @@
+{
+  "LogicalName": "appsetting",
+  "SchemaName": "AppSetting",
+  "EntitySetName": "appsettings",
+  "ObjectTypeCode": 9965,
+  "OwnershipType": "OrganizationOwned",
+  "PrimaryNameAttribute": "displayname",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "displayname",
+      "SchemaName": "DisplayName",
+      "MaxLength": 100
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "uniquename",
+      "SchemaName": "UniqueName",
+      "MaxLength": 100
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "value",
+      "SchemaName": "Value",
+      "MaxLength": 2000
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "parentappmoduleid",
+      "SchemaName": "ParentAppModuleId",
+      "Targets": [
+        "appmodule"
+      ]
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "settingdefinitionid",
+      "SchemaName": "SettingDefinitionId",
+      "Targets": [
+        "settingdefinition"
+      ]
+    }
+  ],
+  "ManyToOneRelationships": [
+    {
+      "SchemaName": "appmodule_appsetting_parentappmoduleid",
+      "ReferencedEntity": "appmodule",
+      "ReferencingEntity": "appsetting",
+      "ReferencingAttribute": "parentappmoduleid",
+      "ReferencingEntityNavigationPropertyName": "parentappmoduleid",
+      "CascadeConfiguration": {
+        "Assign": "NoCascade",
+        "Delete": "Cascade",
+        "Merge": "NoCascade",
+        "Reparent": "NoCascade",
+        "Share": "NoCascade",
+        "Unshare": "NoCascade",
+        "Archive": "NoCascade",
+        "RollupView": "NoCascade"
+      }
+    },
+    {
+      "SchemaName": "settingdefinition_appsetting",
+      "ReferencedEntity": "settingdefinition",
+      "ReferencingEntity": "appsetting",
+      "ReferencingAttribute": "settingdefinitionid",
+      "ReferencingEntityNavigationPropertyName": "settingdefinitionid",
+      "CascadeConfiguration": {
+        "Assign": "NoCascade",
+        "Delete": "Restrict",
+        "Merge": "NoCascade",
+        "Reparent": "NoCascade",
+        "Share": "NoCascade",
+        "Unshare": "NoCascade",
+        "Archive": "NoCascade",
+        "RollupView": "NoCascade"
+      }
+    }
+  ]
+}

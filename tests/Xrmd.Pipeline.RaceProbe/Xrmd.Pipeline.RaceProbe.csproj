@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Child process of LoadContextRaceTests: races the SDK's lazy known-types initialization against plug-in loads in a
+    fresh process (that initialization happens once per process, so each attempt needs its own).
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Xrmd.Pipeline\Xrmd.Pipeline.csproj" />
+  </ItemGroup>
+
+</Project>

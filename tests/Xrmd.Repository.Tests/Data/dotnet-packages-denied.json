@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "parameters": "--include-transitive",
+  "problems": [],
+  "projects": [
+    {
+      "path": "/repo/src/Xrmd.Cli/Xrmd.Cli.csproj",
+      "frameworks": [
+        {
+          "framework": "net8.0",
+          "topLevelPackages": [
+            {
+              "id": "Newtonsoft.Json",
+              "requestedVersion": "13.0.1",
+              "resolvedVersion": "13.0.1"
+            }
+          ],
+          "transitivePackages": [
+            {
+              "id": "System.Runtime",
+              "resolvedVersion": "4.3.0"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "/repo/src/Xrmd.Abstractions/Xrmd.Abstractions.csproj"
+    },
+    {
+      "path": "/repo/tests/Xrmd.Cli.Tests/Xrmd.Cli.Tests.csproj",
+      "frameworks": [
+        {
+          "framework": "net8.0",
+          "topLevelPackages": [
+            {
+              "id": "FluentAssertions",
+              "requestedVersion": "8.0.0",
+              "resolvedVersion": "8.0.0"
+            },
+            {
+              "id": "Acme.GplHelper",
+              "requestedVersion": "1.0.0",
+              "resolvedVersion": "1.0.0"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Xrmd.Abstractions\Xrmd.Abstractions.csproj" />
+    <ProjectReference Include="..\Xrmd.Metadata\Xrmd.Metadata.csproj" />
+    <ProjectReference Include="..\Xrmd.Security\Xrmd.Security.csproj" />
+    <ProjectReference Include="..\Xrmd.Pipeline\Xrmd.Pipeline.csproj" />
+    <ProjectReference Include="..\Xrmd.Workflows\Xrmd.Workflows.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Xrmd.Solution.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.1" />
+  </ItemGroup>
+
+</Project>

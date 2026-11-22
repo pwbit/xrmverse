@@ -1,0 +1,31 @@
+{
+  "LogicalName": "userentityuisettings",
+  "SchemaName": "UserEntityUISettings",
+  "IsAuditEnabled": {
+    "Value": false,
+    "CanBeChanged": false,
+    "ManagedPropertyLogicalName": "canmodifyauditsettings"
+  },
+  "EntitySetName": "userentityuisettingsset",
+  "ObjectTypeCode": 2500,
+  "OwnershipType": "UserOwned",
+  "PrimaryIdAttribute": "userentityuisettingsid",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "objecttypecode",
+      "SchemaName": "ObjectTypeCode",
+      "MaxLength": 128,
+      "RequiredLevel": {
+        "Value": "SystemRequired",
+        "CanBeChanged": false
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "lastviewedformxml",
+      "SchemaName": "LastViewedFormXml",
+      "MaxLength": 1048576
+    }
+  ]
+}
