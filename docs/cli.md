@@ -110,12 +110,12 @@ external SQL Server and the single-instance guard. Notes about the generated fil
   prints the build command (`docker build -f docker/Dockerfile -t xrmd:local .` from the repository root). `--image` chooses
   another one, and `server upgrade --to <version>` moves the tag before pulling. `server up`/`upgrade` add the key, with a
   notice, to a `.env` written before it existed.
-- `server upgrade --to latest` (or `--latest`) asks GitHub for the newest release of `pwbit/xrmverse-releases`,
-  pre-releases included, and continues as `--to <that version>`: `.env` always gets an exact version, never `latest`. It
+- `server upgrade --to latest` (or `--latest`) asks GitHub for the newest release of `pwbit/xrmverse` (and of
+  `pwbit/xrmverse-releases`, which holds the releases up to 0.1.10), pre-releases included, and continues as `--to <that version>`: `.env` always gets an exact version, never `latest`. It
   stops before changing anything (exit 5) when that release is newer than the CLI: install that CLI first, or pass
   `--allow-cli-mismatch`. Offline or when GitHub does not answer it exits 6 (1 for an error answer) and asks for
   `--to <version>`. `server versions` lists the releases, newest first, and marks the version in `.env` (`installed`)
-  and the CLI's (`cli`). Both send one anonymous request to `api.github.com`, only when you run them.
+  and the CLI's (`cli`). Both send two anonymous requests to `api.github.com`, only when you run them.
 - Each organization's audience is `http://localhost:<port>/` unless `ORG_<ORG>_AUDIENCE` is set. With Entra the
   audience **must** equal the API's Application ID URI (the audience of the tokens): set `ORG_<ORG>_AUDIENCE` when
   that is not the organization's URL, and `AUTH_TENANT_ID` to the tenant GUID (see [Development token](getting-started.md#development-token-auth_modedevelopment)).

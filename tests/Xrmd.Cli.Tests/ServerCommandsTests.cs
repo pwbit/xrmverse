@@ -244,10 +244,14 @@ public class ServerCommandsTests : IDisposable
         File.ReadAllText(Path.Combine(_dir, ".env")).Should().NotContain("xrmd:latest");
         runner.Calls.Should().NotBeEmpty();
         cli.Err.ToString().Should().Contain("The newest release is 0.1.0-preview.10");
-        var github = cli.Handler.Requests.Single(r => r.RequestUri!.Host == "api.github.com");
-        github.RequestUri!.AbsolutePath.Should().Be("/repos/pwbit/xrmverse-releases/releases");
-        github.Headers.UserAgent.ToString().Should().Be("xrmd-cli/1.0");
-        github.Headers.Authorization.Should().BeNull();
+        var github = cli.Handler.Requests.Where(r => r.RequestUri!.Host == "api.github.com").ToList();
+        github.Select(r => r.RequestUri!.AbsolutePath).Should()
+            .Equal("/repos/pwbit/xrmverse/releases", "/repos/pwbit/xrmverse-releases/releases");
+        github.Should().AllSatisfy(r =>
+        {
+            r.Headers.UserAgent.ToString().Should().Be("xrmd-cli/1.0");
+            r.Headers.Authorization.Should().BeNull();
+        });
     }
 
     [Fact]

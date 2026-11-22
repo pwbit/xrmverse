@@ -6,7 +6,7 @@
   "siteTitle": "xrmverse",
   "tagline": "Dataverse-compatible server, on your metal.",
   "description": "xrmverse is a server that speaks Microsoft Dataverse's language and that you install on your own servers. Your clients, plug-ins and solutions keep working unchanged.",
-  "repositoryUrl": "https://github.com/pwbit/XRMverse",
+  "repositoryUrl": "https://github.com/pwbit/xrmverse",
   "defaultBranch": "main",
   "unpublished": [
     "status",
@@ -16,5 +16,5 @@
     "legal",
     "download-registration"
   ],
-  "repositoryPublic": false
+  "repositoryPublic": true
 }
