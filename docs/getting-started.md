@@ -23,8 +23,24 @@ For a server that other people will use (host names, certificates, Entra ID, bac
 |---|---|
 | Docker with Compose | On Apple Silicon the SQL Server image runs under emulation (see [Notes](#notes)) |
 | The `xrmd` CLI | See [CLI xrmd](cli.md); not needed for the repository compose file path |
-| Access to the server image | While the image is private (preview), `docker login ghcr.io` first with a token that has `read:packages` |
+| Access to the server image | `ghcr.io/pwbit/xrmd:0.1.10` is public; no GHCR login is needed. An [offline archive](#public-release-and-image-access) and source builds are alternatives |
 | Your acceptance of two sets of license terms | SQL Server's (see [SQL Server editions](sql-server-editions.md)) and the Microsoft SDK's (see [Installing the Microsoft SDK](microsoft-sdk.md)); both questions default to no |
+
+## Public release and image access
+
+The public v0.1.10 CLI archives, server archive and checksums are on
+[xrmverse-releases](https://github.com/pwbit/xrmverse-releases/releases/tag/v0.1.10), separately from the source repository.
+See [installing the CLI](install.md#2-install-the-cli); it is not published to NuGet.org, Homebrew or winget.
+The current source tree may contain features newer than the released binaries.
+
+The server image `ghcr.io/pwbit/xrmd:0.1.10` is public and supports anonymous pulls; no `docker login` is needed.
+For an offline transfer, download `xrmd-server-0.1.10-linux-amd64.tar.gz` and its `.sha256` from the same release, verify the
+checksum (`sha256sum -c <file>.sha256`, or `shasum -a 256 -c <file>.sha256` on macOS), then run
+`docker load -i xrmd-server-0.1.10-linux-amd64.tar.gz`. This loads the tag the v0.1.10 CLI expects; `server up`
+can use the loaded image without pulling it. SQL Server and the Microsoft SDK still require separate downloads
+and your acceptance of their terms. See [offline installation and verification limits](install.md#9-offline-install).
+
+Alternatively, build from the public source with the .NET 10 SDK and Docker, as shown below.
 
 ## With the `xrmd` CLI
 
@@ -74,12 +90,22 @@ One process per database is enforced by another lock (`xrmd-instance`, see [Mult
 
 ## From a clone
 
+```bash
+git clone https://github.com/pwbit/xrmverse.git
+cd xrmverse
+```
+
+Install the .NET 10 SDK and Docker with Compose v2 first. This path builds xrmverse locally, without access to its GHCR package.
+
 A development CLI (`dotnet run --project src/Xrmd.Cli --` from the repository root) has no release version: `server init`
 writes `XRMD_IMAGE=xrmd:local` and prints the command that builds it. Build the image first, then run the same commands:
 
 ```bash
 docker build -f docker/Dockerfile -t xrmd:local .
 dotnet run --project src/Xrmd.Cli -- server init --dir ./xrmd-server
+dotnet run --project src/Xrmd.Cli -- sdk install --dir ./xrmd-server
+dotnet run --project src/Xrmd.Cli -- server up --dir ./xrmd-server
+curl --fail http://localhost:5001/healthz
 ```
 
 ## Without the CLI (repository compose file)
@@ -88,7 +114,8 @@ dotnet run --project src/Xrmd.Cli -- server init --dir ./xrmd-server
 it is what the development token script below targets.
 
 ```bash
-cp docker/.env.example docker/.env      # then set SA_PASSWORD and AUTH_DEV_SIGNING_KEY (openssl rand -hex 32); MSSQL_PID: see SQL Server editions
+cp docker/.env.example docker/.env      # set a strong SA_PASSWORD and AUTH_DEV_SIGNING_KEY (openssl rand -hex 32)
+# Read the SQL Server terms and set ACCEPT_EULA=Y in docker/.env only if you accept them (MSSQL_PID defaults to Express).
 xrmd sdk install                        # the Microsoft SDK into ~/.xrmd/sdk, after you accept Microsoft's license terms (asks; default no)
 docker compose -f docker/docker-compose.yml --env-file docker/.env up --build -d
 curl http://localhost:5000/healthz      # -> ok

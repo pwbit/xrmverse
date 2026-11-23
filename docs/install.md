@@ -32,9 +32,12 @@ flowchart LR
 | [10. Backup, upgrade and uninstall](#10-backup-upgrade-and-uninstall) | Day-to-day operations |
 | [11. Not supported yet](#11-not-supported-yet) | Platforms and channels not offered |
 
-> **Preview.** Releases are drafts and the server image on GHCR is private until the maintainers publish them
-> (a publication decision). Until then you need read access to the repository's packages:
-> `docker login ghcr.io` with a token that has `read:packages`.
+> **Public downloads.** The v0.1.10 CLI and server archive are available from
+> [xrmverse-releases](https://github.com/pwbit/xrmverse-releases/releases/tag/v0.1.10), separately from the source repository.
+> The server image `ghcr.io/pwbit/xrmd:0.1.10` is also public and can be pulled without a GHCR login. For offline
+> transfer, use the release's server archive and checksum with `docker load` before `server up`
+> (see [Offline install](#9-offline-install)). Downloading an archive does not verify a registry signature.
+> The source tree may be ahead of the release.
 
 ## 1. Requirements
 

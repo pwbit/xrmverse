@@ -4,9 +4,47 @@
 >
 > xrmverse is an independent project and is not affiliated with, endorsed by or sponsored by Microsoft. Microsoft, Dataverse, Dynamics 365 and Power Apps are trademarks of the Microsoft group of companies.
 
-![xrmverse - Dataverse-compatible server, on your meta.](https://github.com/pwbit/xrmverse/blob/main/docs/images/xrmverse-logo-dark-bg-1200.png)
+![xrmverse — Dataverse-compatible server, on your metal.](docs/images/xrmverse-logo-dark-bg-1200.png)
 
-**Status as of November 23, 2026**: phases 1 (MVP), 2 (platform), 3 (extensibility and UI) and 4 (email and queues) are complete, the last item of phase 2 being PostgreSQL organizations with every feature of SQL Server ones and the last item of phase 3 the workflow studio (3.7); SDK independence (S.2 to S.4) is next; the migration from Dataverse is done (M1–M6) and accepted on a real Dataverse environment; releases are public (latest `v0.1.10`) under the Apache License 2.0.
+**Run Dataverse-compatible applications on infrastructure you control.**
+
+Keep your data on your own servers, reuse familiar APIs and .NET plug-ins, and manage the platform with a CLI or AI agents through MCP. xrmverse is open source under Apache 2.0, with no xrmverse per-user or per-capacity license fee. Infrastructure and third-party license terms still apply.
+
+**[Quick Start](#quick-start)** · **[Try a local demo](#try-a-local-demo)** · **[Download v0.1.10](https://github.com/pwbit/xrmverse-releases/releases/tag/v0.1.10)** · **[Compatibility](docs/dataverse-comparison.md)** · **[Known limits](docs/known-issues.md)** · **[Documentation](#documentation)**
+
+Compatibility has a defined scope: supported clients, plug-ins and solution components are described in the documentation; this is not a guarantee that every Dataverse application runs unchanged. Microsoft first-party Dynamics 365 solutions are not supported. Power Automate, canvas apps, Copilot in Power Apps and Power Pages are not replacements provided by xrmverse.
+
+## Quick Start
+
+For a local evaluation, you need Docker Engine/Desktop with Compose v2 and the **released `xrmd` CLI** for your machine. The server image is Linux x86-64; Apple Silicon uses emulation. Download the matching CLI archive from [v0.1.10](https://github.com/pwbit/xrmverse-releases/releases/tag/v0.1.10), verify it against that release's `SHA256SUMS`, extract it and put `xrmd` on your PATH. See [installation and checksum instructions](docs/install.md#2-install-the-cli). NuGet.org, Homebrew and winget installation are not available yet.
+
+The public CLI binaries currently live in **`pwbit/xrmverse-releases`**, separately from this source repository. The matching server image, **`ghcr.io/pwbit/xrmd:0.1.10`**, is public and can be pulled without a GHCR login:
+
+```bash
+docker pull ghcr.io/pwbit/xrmd:0.1.10
+xrmd server init --dir ./xrmd-server
+xrmd sdk install --dir ./xrmd-server
+xrmd server up --dir ./xrmd-server
+curl --fail http://localhost:5001/healthz
+```
+
+`init` asks you to accept SQL Server's license terms; `sdk install` asks for Microsoft's SDK terms. Accept only after reading them; both default to no. The Microsoft SDK is installed by you and is not shipped in xrmverse. If `init` already installed it, the separate SDK step is unnecessary. SQL Server Express is the default; the server still needs Internet access to fetch third-party dependencies. For an offline image download, use the public server archive and checksum described in [Offline install](docs/install.md#9-offline-install); checksums detect corruption, not release authenticity.
+
+Expected result: `/healthz` returns `ok`. This is development authentication for evaluation on your machine; use [Installing xrmverse](docs/install.md) for production identity, TLS and backups. For a source build or troubleshooting, see [Getting started](docs/getting-started.md).
+
+## Try a local demo
+
+After the Quick Start:
+
+1. Open `http://localhost:5001/manage`. Sign in with the `AUTH_DEV_SIGNING_KEY` from your local `xrmd-server/.env`, the seeded administrator object id `00000000-0000-0000-0000-000000000001` and a display name. Keep the signing key private. See [web admin sign-in](docs/web-admin.md#signing-in).
+2. Browse **Tables** and **Solutions** to inspect the organization. For an app demo, import a solution you own that includes an app, its forms and views, then open `http://localhost:5001/apps`. A fresh organization is not a preloaded sample app. See [Model-driven apps](docs/model-driven-apps.md).
+3. To evaluate a migration, follow the separate [migration guide](docs/migration.md) with a licensed source environment and test data. Migration is not part of this local walkthrough.
+
+This is a guided local demo; no hosted demo or video is linked here. Share reproducible feedback through [GitHub Issues](https://github.com/pwbit/xrmverse/issues), following the [contribution guide](CONTRIBUTING.md). Report security vulnerabilities through [SECURITY.md](SECURITY.md).
+
+## Project status
+
+**Status as of November 23, 2026**: phases 1 (MVP), 2 (platform), 3 (extensibility and UI) and 4 (email and queues) are complete, the last item of phase 2 being PostgreSQL organizations with every feature of SQL Server ones and the last item of phase 3 the workflow studio (3.7); SDK independence (S.2 to S.4) is next; the migration from Dataverse is done (M1–M6) and accepted on a real Dataverse environment; the latest public binary release is [`v0.1.10`](https://github.com/pwbit/xrmverse-releases/releases/tag/v0.1.10) in the separate releases repository. The roadmap below describes the source tree, which can be ahead of those binaries.
 
 This page is the entry point: what xrmverse is, why it exists and where it is going. Everything else is in the [documentation](#documentation), one page per topic.
 
@@ -16,10 +54,10 @@ To try it, start with [Getting started](docs/getting-started.md).
 
 xrmverse is a server that **speaks Microsoft Dataverse's language** and that you install **on your own servers**, instead of running in the Microsoft cloud.
 
-To the tools you already use, it is Dataverse:
-- code built on `ServiceClient` / `IOrganizationService` and on the Web API connects without changes;
+Within the [documented compatibility scope](docs/dataverse-comparison.md):
+- code built on `ServiceClient` / `IOrganizationService` and on the Web API can connect through the supported interfaces (see [connection requirements](docs/getting-started.md#notes));
 - existing **.NET plugins** run in the same pipeline (PreValidation, PreOperation, PostOperation);
-- `pac`, XrmToolBox and the Plugin Registration Tool connect as they would to a Dataverse environment;
+- XrmToolBox and the Plugin Registration Tool use the supported SDK connection path; `pac` support depends on the authentication mode and operation (the [local identity provider](docs/local-idp.md) does not support `pac`);
 - **solutions** import and export in the native format.
 
 Underneath, though, are your SQL Server, your network and your rules.
@@ -36,7 +74,7 @@ The name comes from **xRM** ("anything Relationship Management"), the term the D
 | **Works offline** | No mandatory cloud dependency, with the local IdP. |
 | **No per-user or per-capacity licensing** | The cost is the infrastructure, not the number of users or GB. |
 | **Reused skills** | Dataverse developers and consultants work with the same tools, the same SDK and the same solutions. |
-| **Porting without rewriting** | Existing plugins, solutions and (in phase 3) Model-driven apps run without changes. |
+| **Reuse existing applications** | Run supported plug-ins and solution components, including model-driven apps; check the compatibility guide and test your own application before migrating. |
 | **Direct database access** | Backup, restore, monitoring and analysis handled by your DBA with familiar tools. |
 | **Complete, cross-platform CLI** | Manage environments, tables, solutions and plugins from Windows, macOS and Linux. |
 | **Schema as code** | `xrmd apply schema.yaml`: the schema versioned in Git and applied in CI. |
@@ -151,6 +189,7 @@ The documentation is in English and lives in [`docs/`](docs/), one page per topi
 | Page | What it covers |
 |---|---|
 | [Development](docs/development.md) | Building and testing the repository, acceptance tests |
+| [Community launch drafts](docs/community-launch.md) | Proposed launch copy, demo recording plan and feedback paths |
 
 
 ## License

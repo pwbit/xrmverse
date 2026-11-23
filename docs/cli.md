@@ -20,7 +20,7 @@ the server's Web API, Admin API or MCP endpoint **as the signed-in user**: the C
 
 | Task | How | Chapter |
 |---|---|---|
-| Install the CLI | `dotnet tool install --global xrmd` or a release executable | [Install](#install) |
+| Install the CLI | Public release executable or downloaded local tool package | [Install](#install) |
 | Set up a server | `xrmd server init`, `up` | [Set up a server](#set-up-a-server) |
 | Upgrade the server | `xrmd server upgrade --to latest` or `--to <version>` | [Set up a server](#set-up-a-server) |
 | Sign in | `xrmd auth login` | [Profiles and authentication](#profiles-and-authentication) |
@@ -31,13 +31,19 @@ the server's Web API, Admin API or MCP endpoint **as the signed-in user**: the C
 
 ## Install
 
+Download a self-contained CLI archive for your platform (`win-x64`, `osx-arm64`, `osx-x64`, `linux-x64`) from
+the [public v0.1.10 release](https://github.com/pwbit/xrmverse-releases/releases/tag/v0.1.10).
+Verify it against that release's `SHA256SUMS`, extract it and put the executable on your PATH;
+see [Installing xrmverse](install.md#2-install-the-cli) for the Linux commands. No .NET runtime is needed for these archives.
+
+The release also carries a `xrmd` nupkg. For a local tool-package install, download it to a directory you control, then:
+
 ```bash
-dotnet tool install --global xrmd              # from a nupkg: --add-source <dir>; requires the .NET 10 runtime
+dotnet tool install --global xrmd --version 0.1.10 --add-source /path/to/downloaded-package
 ```
 
-Self-contained single-file executables (`win-x64`, `osx-arm64`, `osx-x64`, `linux-x64`) are attached to every GitHub
-release of a `v*` tag, together with the `xrmd` nupkg; `packaging/homebrew/xrmd.rb.template` is the Homebrew formula
-template used for the macOS archives. Nothing is published to nuget.org.
+This tool-package path requires the .NET 10 runtime. Nothing is published to NuGet.org; Homebrew and winget are not
+available yet. `packaging/homebrew/xrmd.rb.template` is a formula template, not a published tap.
 
 ## Command groups
 
