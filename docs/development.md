@@ -104,6 +104,37 @@ are compared with `tests/fixtures/sdk-free-baseline.json` (the steps that still 
 `tests/fixtures/sdk-free-assemblies.json`. A step that fails and is not in the baseline is a regression; a step in the baseline
 that now passes must be removed from it, so the lists only shrink. See [SDK-free servers](microsoft-sdk.md#sdk-free-servers).
 
+### SDK usage counter
+
+`tests/Xrmd.Repository.Tests/SdkUsageTests.cs` counts, per project, the `.cs` files under `src/` that use the
+`Microsoft.Xrm.Sdk*`, `Microsoft.Crm.Sdk*` or `Microsoft.PowerPlatform.Dataverse*` namespaces: a using directive (also `global`,
+alias and `static`) or a fully qualified name in code (`Microsoft.Xrm.Sdk.Entity`, also after `global::`). Comments and string
+literals do not count (strings hold wire-format names such as the package id or workflow XAML namespaces). It compares the
+counts with `tests/fixtures/sdk-usage-baseline.json`. The count of a project may only go down. When it goes down, lower its
+number in the baseline in the same pull request; when it goes up, the test fails. The test reads `git ls-files`, so a new file
+must be `git add`ed before the test sees it.
+
+### Xrmd.Model
+
+`src/Xrmd.Model` has no references. Its metadata types (namespace `Xrmd.Model.Metadata`: tables, columns, choice sets,
+relationships) have names of their own; their property and enum names are the Web API names, because they are the JSON
+contract. `[WireType]` holds the Web API type name of a type, as `@odata.type` carries it. For the same input JSON, including
+partial JSON with missing keys, empty objects or `null` values, `MetadataJson` writes the same JSON as `MetadataSerializer` of
+`Xrmd.Metadata` (the SDK serializer): the defaults of the model types are those of the SDK types. `Privileges` and
+`Keys[].AsyncJob.KeyAttributes` are the exception: the SDK serializer cannot read them at all.
+`tests/Xrmd.Metadata.Tests/Golden/ModelParityTests.cs` checks this on the raw seed tables, on every variant of the complete
+golden files with one key dropped, one object emptied or one value set to `null`, and on new instances of each type.
+
+Golden files in `tests/fixtures/metadata-golden/` pin that JSON: `tables` (the seed tables) and `full` (per type a `full`, an
+`.empty` and an `.omitted` file). They are regenerated only from the SDK serializer, never from `MetadataJson`. To regenerate
+them, run `XRMD_UPDATE_GOLDEN=1 dotnet test tests/Xrmd.Metadata.Tests --filter FullyQualifiedName~MetadataGoldenTests`. That
+run deletes the whole `tests/fixtures/metadata-golden/` folder, writes every file again, and then fails on purpose, so that the
+files are reviewed before they are committed. A change of a golden file is a change of the JSON contract: review it.
+
+`SdkMetadataBridge` (`src/Xrmd.Metadata`) converts between the SDK types and the model by a JSON round trip. It is the SDK edge
+that the server uses while the SDK is still in the process; a table with `Privileges` or `Keys[].AsyncJob` cannot be converted
+to the SDK side (stored metadata never has them).
+
 ## Tests on PostgreSQL
 
 The integration tests run on SQL Server by default. `XRMD_TEST_PROVIDER` chooses the engine of the run:

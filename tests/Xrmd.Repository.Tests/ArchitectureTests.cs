@@ -11,7 +11,7 @@ namespace Xrmd.Repository.Tests;
 /// </summary>
 public sealed class ArchitectureTests
 {
-    private static readonly string RepoRoot = FindRepoRoot();
+    internal static readonly string RepoRoot = FindRepoRoot();
 
     private static readonly string[] DataverseClientAllowed =
     {
@@ -40,6 +40,19 @@ public sealed class ArchitectureTests
         var violations = DataverseClientViolations(LoadBuildFiles());
 
         violations.Should().BeEmpty("Microsoft.PowerPlatform.Dataverse.Client may be referenced only by Xrmd.Abstractions and Xrmd.Schema (spec §3)");
+    }
+
+    [Fact]
+    public void Model_project_has_no_references()
+    {
+        var model = "src/Xrmd.Model/Xrmd.Model.csproj";
+        var files = LoadBuildFiles();
+
+        // The inherited SNI runtime reference of Directory.Build.props is not in the csproj, so it does not count here.
+        files.Should().Contain(f => f.Path == model, "the SDK-free model project exists");
+        files.Single(f => f.Path == model).Packages.Should().BeEmpty("Xrmd.Model has no package reference (S.2b1)");
+        XDocument.Parse(File.ReadAllText(Path.Combine(RepoRoot, model))).Descendants()
+            .Where(e => e.Name.LocalName == "ProjectReference").Should().BeEmpty("Xrmd.Model has no project reference (S.2b1)");
     }
 
     [Fact]
@@ -567,7 +580,7 @@ public sealed class ArchitectureTests
             .Select(p => new BuildFile(p, ParsePackageIds(File.ReadAllText(Path.Combine(RepoRoot, p)))))
             .ToList();
 
-    private static List<string> GitLsFiles(params string[] pathspecs)
+    internal static List<string> GitLsFiles(params string[] pathspecs)
     {
         var psi = new ProcessStartInfo("git")
         {

@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Xrmd.Abstractions\Xrmd.Abstractions.csproj" />
+    <ProjectReference Include="..\Xrmd.Model\Xrmd.Model.csproj" />
   </ItemGroup>
 
   <ItemGroup>

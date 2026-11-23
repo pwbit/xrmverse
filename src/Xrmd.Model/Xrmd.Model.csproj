@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- SDK-free metadata model (S.2b1): no PackageReference and no ProjectReference of its own (ArchitectureTests pins it). -->
+
+</Project>

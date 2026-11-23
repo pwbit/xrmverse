@@ -15,6 +15,7 @@ WORKDIR /src
 # Restore first (cached while project files and props are unchanged)
 COPY xrmverse.sln Directory.Build.props ./
 COPY src/Xrmd.Abstractions/*.csproj src/Xrmd.Abstractions/
+COPY src/Xrmd.Model/*.csproj src/Xrmd.Model/
 COPY src/Xrmd.Metadata/*.csproj src/Xrmd.Metadata/
 COPY src/Xrmd.Audit/*.csproj src/Xrmd.Audit/
 COPY src/Xrmd.Query/*.csproj src/Xrmd.Query/

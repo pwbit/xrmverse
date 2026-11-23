@@ -31,6 +31,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- S.2b1 Task 2: the golden metadata JSON, pinned byte for byte (see Golden/MetadataCorpus.cs). -->
+    <None Include="..\fixtures\metadata-golden\**\*.json" LinkBase="fixtures\metadata-golden" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Compile Include="..\Shared\FakeComputedColumns.cs" Link="Shared\FakeComputedColumns.cs" />
     <Compile Include="..\Shared\FakeRollupColumns.cs" Link="Shared\FakeRollupColumns.cs" />
   </ItemGroup>
