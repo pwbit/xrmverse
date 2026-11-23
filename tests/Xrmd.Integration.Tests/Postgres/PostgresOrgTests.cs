@@ -67,7 +67,7 @@ public sealed class PostgresOrgTests(PostgresFixture fx) : IClassFixture<Postgre
         fx.App.Services.GetRequiredService<IOrgProvisioner>().Should().BeOfType<PostgresOrgProvisioner>();
         var database = TestProvider.DatabaseOf(fx.ConnectionString);
         (await ScalarAsync<string>(database, "SELECT extname::text FROM pg_extension WHERE extname = 'citext'")).Should().Be("citext");
-        (await ScalarAsync<long>(database, "SELECT COUNT(*) FROM meta.schema_version")).Should().Be(SchemaMigrator.PostgresBaselineVersion + 1, "the baseline (versions 1-18) and migration 0019");
+        (await ScalarAsync<long>(database, "SELECT COUNT(*) FROM meta.schema_version")).Should().Be(SchemaMigrator.PostgresBaselineVersion + 2, "the baseline (versions 1-18) and migrations 0019 and 0020");
     }
 
     [Fact]
@@ -82,12 +82,12 @@ public sealed class PostgresOrgTests(PostgresFixture fx) : IClassFixture<Postgre
         created["database"]!.GetValue<string>().Should().Be(name);
         var adminUserId = created["adminUserId"]!.GetValue<Guid>();
 
-        // Ruling P5: UTF-8, ICU, root locale; the citext extension; migrated to the baseline and 0019 and seeded with its administrator.
+        // Ruling P5: UTF-8, ICU, root locale; the citext extension; migrated to the baseline, 0019 and 0020 and seeded with its administrator.
         (await ScalarAsync<string>(PostgresDatabasesName,
             $"SELECT pg_encoding_to_char(encoding)::text || '/' || datlocprovider::text || '/' || daticulocale FROM pg_database WHERE datname = '{name}'"))
             .Should().Be("UTF8/i/und");
         (await ScalarAsync<string>(name, "SELECT extname::text FROM pg_extension WHERE extname = 'citext'")).Should().Be("citext");
-        (await ScalarAsync<int>(name, "SELECT MAX(version) FROM meta.schema_version")).Should().Be(19);
+        (await ScalarAsync<int>(name, "SELECT MAX(version) FROM meta.schema_version")).Should().Be(20);
         (await ScalarAsync<Guid>(name, $"SELECT systemuserid FROM data.systemuser WHERE azureactivedirectoryobjectid = '{adminOid}'")).Should().Be(adminUserId);
         (await ScalarAsync<long>(name, $"""
             SELECT COUNT(*) FROM data.systemuserroles ur JOIN data.role r ON r.roleid = ur.roleid
@@ -96,7 +96,7 @@ public sealed class PostgresOrgTests(PostgresFixture fx) : IClassFixture<Postgre
 
         var list = (await JsonAsync(await AsAdminAsync(HttpMethod.Get, "/admin/orgs"), HttpStatusCode.OK))!.AsArray();
         var zenith = list.Single(o => o!["database"]!.GetValue<string>() == name)!;
-        zenith["schemaVersion"]!.GetValue<int>().Should().Be(19);
+        zenith["schemaVersion"]!.GetValue<int>().Should().Be(20);
         zenith["served"]!.GetValue<bool>().Should().BeFalse();
         zenith["name"]!.GetValue<string>().Should().Be(name);
         list.Single(o => o!["database"]!.GetValue<string>() == TestProvider.DatabaseOf(fx.ConnectionString))!["served"]!.GetValue<bool>().Should().BeTrue();

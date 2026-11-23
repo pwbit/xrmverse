@@ -4,6 +4,7 @@ using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
 using Xrmd.Admin;
+using Xrmd.Abstractions.Storage;
 using Xrmd.Core;
 using Xrmd.Core.Mail;
 using Xrmd.Metadata;
@@ -547,5 +548,201 @@ public sealed class MailboxTests(XrmdFixture fx)
         {
             await TestProvider.DropDatabaseAsync(fx.ConnectionString, database);
         }
+    }
+
+    // ---- plan 4.1c, task 3: the receiver and the delivery user ----
+
+    private Task<Guid> ProfileAsync() => Admin.CreateAsync(new Entity("emailserverprofile")
+    {
+        ["name"] = "Inbox " + _tag, ["servertype"] = new OptionSetValue(4), ["outgoingserverlocation"] = "smtp.example.com",
+        ["outgoingauthenticationprotocol"] = new OptionSetValue(3), ["outgoingcredentialretrieval"] = new OptionSetValue(0),
+        ["incomingserverlocation"] = "imap.example.com",
+    });
+
+    private async Task<MailboxReceiver> ReceiverAsync(Guid mailbox)
+    {
+        using var scope = fx.App.Services.CreateScope();
+        await using var conn = await TestProvider.OpenAsync(fx.ConnectionString);
+        return (await Mailboxes.ResolveReceiverAsync(new DataSession(conn, null), mailbox, default))!;
+    }
+
+    private async Task<Caller> DeliveryUserAsync(Guid mailbox)
+    {
+        await using var conn = await TestProvider.OpenAsync(fx.ConnectionString);
+        var s = new DataSession(conn, null);
+        var receiver = (await Mailboxes.ResolveReceiverAsync(s, mailbox, default))!;
+        return await Mailboxes.DeliveryUserAsync(s, receiver, default);
+    }
+
+    private Task SetMailboxAsync(Guid mailbox, string sets) =>
+        TestSql.ExecAsync(fx.ConnectionString, $"UPDATE data.mailbox SET {sets} WHERE mailboxid = @id", ("@id", mailbox));
+
+    [Fact]
+    public async Task Receiver_CanReceive_OnlyWhenApprovedTestedEnabledAndServerSide()
+    {
+        var (user, _) = await NewUserAsync("Rita " + _tag, $"rita.{_tag}@example.com");
+        var mailbox = (await MailboxOfAsync("systemuser", user)).Id;
+        var profile = await ProfileAsync();
+
+        var receiver = await ReceiverAsync(mailbox);
+        receiver.CanReceive.Should().BeFalse("a new mailbox is disabled");
+        receiver.Address.Should().Be($"rita.{_tag}@example.com");
+        receiver.OwnerId.Should().Be(user);
+        receiver.OwnerTable.Should().Be("systemuser");
+        receiver.QueueId.Should().BeNull();
+
+        await Admin.UpdateAsync(new Entity("systemuser", user) { ["emailrouteraccessapproval"] = new OptionSetValue(1) });
+        await Admin.UpdateAsync(new Entity("mailbox", mailbox)
+        {
+            ["emailserverprofile"] = new EntityReference("emailserverprofile", profile), ["incomingemaildeliverymethod"] = new OptionSetValue(2),
+            ["enabledforincomingemail"] = true,
+        });
+        (await ReceiverAsync(mailbox)).CanReceive.Should().BeFalse("the incoming test has not succeeded");
+
+        await SetMailboxAsync(mailbox, "incomingemailstatus = 1");
+        var ready = await ReceiverAsync(mailbox);
+        ready.CanReceive.Should().BeTrue();
+        ready.ProfileId.Should().Be(profile);
+        ready.IncomingStatus.Should().Be(1);
+        ready.DeliveryMethod.Should().Be(2);
+
+        var broken = new (string Sets, string Why)[]
+        {
+            ("incomingemailstatus = 2", "failed test"), ("incomingemaildeliverymethod = 0", "no server-side method"),
+            ("enabledforincomingemail = " + TestSql.False, "disabled"), ("emailserverprofile = NULL", "no profile"),
+            ("statecode = 1, statuscode = 2", "inactive"),
+        };
+        foreach (var (sets, why) in broken)
+        {
+            await SetMailboxAsync(mailbox, "incomingemailstatus = 1, incomingemaildeliverymethod = 2, enabledforincomingemail = " + TestSql.True
+                + $", emailserverprofile = '{profile}', statecode = 0, statuscode = 1");
+            (await ReceiverAsync(mailbox)).CanReceive.Should().BeTrue();
+            await SetMailboxAsync(mailbox, sets);
+            (await ReceiverAsync(mailbox)).CanReceive.Should().BeFalse(why);
+        }
+        await SetMailboxAsync(mailbox, "incomingemailstatus = 1, incomingemaildeliverymethod = 2, enabledforincomingemail = " + TestSql.True
+            + $", emailserverprofile = '{profile}', statecode = 0, statuscode = 1");
+        await Admin.UpdateAsync(new Entity("systemuser", user) { ["emailrouteraccessapproval"] = new OptionSetValue(3) });
+        (await ReceiverAsync(mailbox)).CanReceive.Should().BeFalse("the address is not approved");
+
+        using var scope = fx.App.Services.CreateScope();
+        await using var conn = await TestProvider.OpenAsync(fx.ConnectionString);
+        (await Mailboxes.ResolveReceiverAsync(new DataSession(conn, null), Guid.NewGuid(), default)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Receiver_Filter_UserDefault2_QueueDefault0()
+    {
+        var (user, _) = await NewUserAsync("Filter " + _tag, $"filter.{_tag}@example.com");
+        var userMailbox = (await MailboxOfAsync("systemuser", user)).Id;
+        var queue = await NewQueueAsync("Intake " + _tag, $"intake.{_tag}@example.com");
+        var queueMailbox = (await MailboxOfAsync("queue", queue)).Id;
+
+        (await ReceiverAsync(userMailbox)).Filter.Should().Be(MailSchema.UserFilterDefault).And.Be(2);
+        var received = await ReceiverAsync(queueMailbox);
+        received.Filter.Should().Be(MailSchema.QueueFilterDefault).And.Be(0);
+        received.QueueId.Should().Be(queue);
+
+        await TestSql.ExecAsync(fx.ConnectionString, "UPDATE data.usersettings SET incomingemailfilteringmethod = 4 WHERE systemuserid = @id", ("@id", user));
+        await TestSql.ExecAsync(fx.ConnectionString, "UPDATE data.queue SET incomingemailfilteringmethod = 3 WHERE queueid = @id", ("@id", queue));
+        (await ReceiverAsync(userMailbox)).Filter.Should().Be(4);
+        (await ReceiverAsync(queueMailbox)).Filter.Should().Be(3);
+
+        await TestSql.ExecAsync(fx.ConnectionString, "UPDATE data.usersettings SET incomingemailfilteringmethod = NULL WHERE systemuserid = @id", ("@id", user));
+        await TestSql.ExecAsync(fx.ConnectionString, "UPDATE data.queue SET incomingemailfilteringmethod = NULL WHERE queueid = @id", ("@id", queue));
+        (await ReceiverAsync(userMailbox)).Filter.Should().Be(2, "no value: the user default");
+        (await ReceiverAsync(queueMailbox)).Filter.Should().Be(0, "no value: the queue default");
+    }
+
+    [Fact]
+    public async Task DeliveryUser_TeamOwnedQueue_IsTeamAdministrator()
+    {
+        var (admin, _) = await NewUserAsync("Team admin " + _tag);
+        var team = await Admin.CreateAsync(new Entity("team")
+        {
+            ["name"] = "Desk " + _tag, ["teamtype"] = new OptionSetValue(0), ["administratorid"] = new EntityReference("systemuser", admin),
+            ["businessunitid"] = new EntityReference("businessunit", await RootBusinessUnitAsync(fx)),
+        });
+        var queue = (await Admin.RetrieveAsync("team", team, new ColumnSet("queueid"))).GetAttributeValue<EntityReference>("queueid").Id;
+        var mailbox = (await MailboxOfAsync("queue", queue)).Id;
+
+        var receiver = await ReceiverAsync(mailbox);
+        receiver.OwnerTable.Should().Be("team");
+        receiver.OwnerId.Should().Be(team);
+        var caller = await DeliveryUserAsync(mailbox);
+        caller.UserId.Should().Be(admin);
+        caller.BusinessUnitId.Should().Be(await RootBusinessUnitAsync(fx));
+
+        // A user's own mailbox: that user.
+        var (user, _) = await NewUserAsync("Own box " + _tag, $"ownbox.{_tag}@example.com");
+        (await DeliveryUserAsync((await MailboxOfAsync("systemuser", user)).Id)).UserId.Should().Be(user);
+    }
+
+    [Fact]
+    public async Task DeliveryUser_TeamWithoutAdministrator_FailsWithReason()
+    {
+        var team = await Admin.CreateAsync(new Entity("team")
+        {
+            ["name"] = "Orphans " + _tag, ["teamtype"] = new OptionSetValue(0),
+            ["businessunitid"] = new EntityReference("businessunit", await RootBusinessUnitAsync(fx)),
+        });
+        var queue = (await Admin.RetrieveAsync("team", team, new ColumnSet("queueid"))).GetAttributeValue<EntityReference>("queueid").Id;
+        var mailbox = (await MailboxOfAsync("queue", queue)).Id;
+        await TestSql.ExecAsync(fx.ConnectionString, "UPDATE data.team SET administratorid = NULL WHERE teamid = @id", ("@id", team));
+
+        var ex = await FluentActions.Awaiting(() => DeliveryUserAsync(mailbox)).Should().ThrowAsync<MailSetupException>();
+        ex.Which.Message.Should().Contain("administrator").And.Contain(team.ToString());
+    }
+
+    [Fact]
+    public async Task DeliveryUser_DisabledUser_FailsWithReason()
+    {
+        var (user, _) = await NewUserAsync("Gone " + _tag, $"gone.{_tag}@example.com");
+        var mailbox = (await MailboxOfAsync("systemuser", user)).Id;
+        (await DeliveryUserAsync(mailbox)).UserId.Should().Be(user);
+        await TestSql.ExecAsync(fx.ConnectionString, $"UPDATE data.systemuser SET isdisabled = {TestSql.True} WHERE systemuserid = @id", ("@id", user));
+
+        var ex = await FluentActions.Awaiting(() => DeliveryUserAsync(mailbox)).Should().ThrowAsync<MailSetupException>();
+        ex.Which.Message.Should().Contain("disabled").And.Contain(user.ToString());
+    }
+
+    [Fact]
+    public async Task IncomingSettingChange_ResetsIncomingStatus()
+    {
+        var (user, _) = await NewUserAsync("Reset " + _tag, $"reset.{_tag}@example.com");
+        var mailbox = (await MailboxOfAsync("systemuser", user)).Id;
+        var profile = await ProfileAsync();
+        var other = await ProfileAsync();
+
+        async Task<int> StatusAsync() => Convert.ToInt32(await TestSql.ScalarAsync(fx.ConnectionString, "SELECT incomingemailstatus FROM data.mailbox WHERE mailboxid = @id", ("@id", mailbox)));
+        async Task TestedAsync() => await SetMailboxAsync(mailbox, "incomingemailstatus = 1");
+
+        // Not a change: the same value, or a column that is not an incoming setting.
+        await Admin.UpdateAsync(new Entity("mailbox", mailbox) { ["emailserverprofile"] = new EntityReference("emailserverprofile", profile) });
+        await TestedAsync();
+        await Admin.UpdateAsync(new Entity("mailbox", mailbox) { ["emailserverprofile"] = new EntityReference("emailserverprofile", profile) });
+        (await StatusAsync()).Should().Be(1, "the same profile again is no change");
+        await Admin.UpdateAsync(new Entity("mailbox", mailbox) { ["name"] = "Renamed " + _tag });
+        (await StatusAsync()).Should().Be(1);
+
+        var changes = new (string Name, Entity Change)[]
+        {
+            ("profile", new Entity("mailbox", mailbox) { ["emailserverprofile"] = new EntityReference("emailserverprofile", other) }),
+            ("user name", new Entity("mailbox", mailbox) { ["username"] = "reset@example.com" }),
+            ("password", new Entity("mailbox", mailbox) { ["password"] = "new-password" }),
+            ("delivery method", new Entity("mailbox", mailbox) { ["incomingemaildeliverymethod"] = new OptionSetValue(2) }),
+            ("enabled", new Entity("mailbox", mailbox) { ["enabledforincomingemail"] = true }),
+        };
+        foreach (var (name, change) in changes)
+        {
+            await TestedAsync();
+            await Admin.UpdateAsync(change);
+            (await StatusAsync()).Should().Be(0, $"a changed {name} must be tested again");
+        }
+
+        // The owner's own delivery method reaches the mailbox the same way.
+        await TestedAsync();
+        await Admin.UpdateAsync(new Entity("systemuser", user) { ["incomingemaildeliverymethod"] = new OptionSetValue(0) });
+        (await StatusAsync()).Should().Be(1, "unchanged owner value");
     }
 }

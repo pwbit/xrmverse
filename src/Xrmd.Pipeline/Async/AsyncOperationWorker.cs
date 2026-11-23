@@ -463,7 +463,7 @@ public sealed class AsyncOperationWorker(IServiceProvider services, AsyncOperati
     private static XrmdPluginExecutionContext Rebuild(RemoteExecutionContext queued, Job job, PluginStep step, Caller owner,
         Guid initiating, IReadOnlyDictionary<Guid, Guid> objectIds)
     {
-        return new XrmdPluginExecutionContext
+        var context = new XrmdPluginExecutionContext
         {
             MessageName = queued.MessageName,
             InputParameters = queued.InputParameters ?? new ParameterCollection(),
@@ -496,6 +496,10 @@ public sealed class AsyncOperationWorker(IServiceProvider services, AsyncOperati
             InitiatingUserAzureActiveDirectoryObjectId = objectIds.GetValueOrDefault(initiating),
             InitiatingUserAgent = queued.InitiatingUserAgent,
         };
+        // Plan 4.1c: the queued row is written by the server only, so the reserved shared variables it holds (a mailbox delivery's) are
+        // the server's: the plug-in may read them, not change them; its own requests never carry them (they start a new invocation).
+        ReservedSharedVariables.SnapshotChain(context);
+        return context;
     }
 
     /// <summary>The <c>azureactivedirectoryobjectid</c> of each of the two users that has one.</summary>

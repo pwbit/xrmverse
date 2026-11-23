@@ -17,14 +17,19 @@ public enum MailProviderKind
 /// <summary>
 /// The profiles xrmverse accepts (plan 4.1b): SMTP is server type 4 with outgoing protocol Basic (Auto Detect is stored as Basic)
 /// and credentials by a user or queue, or in the profile; Graph is server type 0 with outgoing protocol OAuth, credentials through
-/// Microsoft Entra ID and a Public or Automatic authority. Anything else is a 400 that names the value.
+/// Microsoft Entra ID and a Public or Automatic authority. The incoming side (plan 4.1c) accepts the same: IMAP is Basic (Auto Detect is
+/// stored as Basic) with credentials by a user or queue or in the profile; Graph is OAuth with Microsoft Entra ID, an absent value taking
+/// the outgoing one. Anything else is a 400 that names the value.
 /// </summary>
 /// <remarks>That Exchange Online is server type 0 is from memory, not from Learn (the Learn pages list the values only): checklist 2.</remarks>
 public static class ProfileRules
 {
     /// <summary>The columns the rules read.</summary>
     public static readonly IReadOnlyList<string> Columns =
-        ["servertype", "outgoingauthenticationprotocol", "outgoingcredentialretrieval", "serverauthority"];
+        [
+            "servertype", "outgoingauthenticationprotocol", "outgoingcredentialretrieval", "serverauthority",
+            "incomingauthenticationprotocol", "incomingcredentialretrieval",
+        ];
 
     private static readonly Dictionary<int, string> ServerTypes = new()
     {
@@ -67,6 +72,13 @@ public static class ProfileRules
                 if (retrieval is not (MailSchema.CredentialsByUserOrQueue or MailSchema.CredentialsInProfile))
                     throw Refused(name, $"outgoing credential retrieval {Describe(Retrievals, retrieval)} is not supported for SMTP; use 0 (by a user or queue) or 1 (in the profile)");
                 merged["outgoingauthenticationprotocol"] = new OptionSetValue(MailSchema.ProtocolBasic);
+                var incomingProtocol = Value(merged, "incomingauthenticationprotocol");
+                if (incomingProtocol is not (null or MailSchema.ProtocolBasic or MailSchema.ProtocolAutoDetect))
+                    throw Refused(name, $"incoming authentication protocol {Describe(Protocols, incomingProtocol.Value)} is not supported for SMTP; use Basic (3)");
+                var incomingRetrieval = Value(merged, "incomingcredentialretrieval");
+                if (incomingRetrieval is not (null or MailSchema.CredentialsByUserOrQueue or MailSchema.CredentialsInProfile))
+                    throw Refused(name, $"incoming credential retrieval {Describe(Retrievals, incomingRetrieval.Value)} is not supported for SMTP; use 0 (by a user or queue) or 1 (in the profile)");
+                if (incomingProtocol is MailSchema.ProtocolAutoDetect) merged["incomingauthenticationprotocol"] = new OptionSetValue(MailSchema.ProtocolBasic);
                 return MailProviderKind.Smtp;
             case MailSchema.ServerTypeExchange:
                 if (protocol != MailSchema.ProtocolOAuth)
@@ -75,6 +87,14 @@ public static class ProfileRules
                     throw Refused(name, $"outgoing credential retrieval {Describe(Retrievals, retrieval)} is not supported for Microsoft Graph; use 7 (OAuth with Microsoft Entra ID)");
                 if (authority is not (MailSchema.AuthorityPublic or MailSchema.AuthorityAutomatic))
                     throw Refused(name, $"server authority {Describe(Authorities, authority)} is not supported; use 0 (Public) or 3 (Automatic)");
+                var graphProtocol = Value(merged, "incomingauthenticationprotocol") ?? protocol;
+                if (graphProtocol != MailSchema.ProtocolOAuth)
+                    throw Refused(name, $"incoming authentication protocol {Describe(Protocols, graphProtocol)} is not supported for Microsoft Graph; use OAuth (4)");
+                var graphRetrieval = Value(merged, "incomingcredentialretrieval") ?? retrieval;
+                if (graphRetrieval != MailSchema.CredentialsEntraOAuth)
+                    throw Refused(name, $"incoming credential retrieval {Describe(Retrievals, graphRetrieval)} is not supported for Microsoft Graph; use 7 (OAuth with Microsoft Entra ID)");
+                merged["incomingauthenticationprotocol"] = new OptionSetValue(graphProtocol);
+                merged["incomingcredentialretrieval"] = new OptionSetValue(graphRetrieval);
                 return MailProviderKind.Graph;
             default:
                 throw Refused(name, $"server type {Describe(ServerTypes, serverType)} is not supported; use 4 (IMAP/SMTP) for SMTP or 0 (Exchange Server) for Microsoft Graph");

@@ -21,6 +21,7 @@ context, the same stages and the same services.
 | Doomed transactions | A few read-only calls do not doom it; calls after it is doomed still run, then roll back | **Differs** in detail (see [Sandbox and limits](#sandbox-and-limits)) |
 | Custom actions over the Web API | Not served (SDK and SOAP only) | **Narrower** (custom APIs are served) |
 | Steps on elastic `*Multiple` messages | Refused | **Narrower** |
+| Incoming email deliveries | Run as the delivery user at depth 1, with the reserved shared variable `xrmverse_MailboxDeliveryId`; stage 10 inside the import's transaction | **Extra** variable; **Differs** for stage 10 (see [Incoming email deliveries](#incoming-email-deliveries)) |
 
 ### Tasks at a glance
 
@@ -92,6 +93,31 @@ See [Activities and notes](activities.md).
 - The refused activity messages (`Book`, `Rollup`, `InitializeAnnotationBlocksUpload`, …, see
   [What is refused](activities.md#what-is-refused)) are refused before any step runs, also when the organization has an
   `sdkmessage` row with that name, and no custom API can take their names.
+
+### Incoming email deliveries
+
+Each message a mailbox receives is imported through the pipeline (see [Incoming email](email-and-queues.md#incoming-email)):
+the `email` Create, one `activitymimeattachment` Create per attachment, a note `annotation` Create when attachments were
+left out, and, for a queue's mailbox, `AddToQueue`, whose nested `queueitem` Create (depth 2, `ParentContext` the
+`AddToQueue`) fires the `queueitem` Create steps. The steps see:
+
+- **`Depth` 1, no `ParentContext`**, and `UserId` = `InitiatingUserId` = the delivery user (the mailbox's owning user, or the
+  administrator of the team that owns it); never SYSTEM.
+- **`SharedVariables["xrmverse_MailboxDeliveryId"]`**: the mailbox id as a string (`D` format), an **xrmverse extension**. Every
+  context of the delivery has it in its own `SharedVariables`, the nested `queueitem` Create included, so a guard reads its
+  own context, not `ParentContext`. An asynchronous step of a delivery sees it in its context too.
+- **Reserved.** The variable is the server's. No SDK, SOAP or Web API parameter maps to it (a `tag` does not reach it), and a
+  synchronous plug-in or workflow step that adds, changes or removes it fails the message with 400 `InvalidArgument`. The
+  requests a plug-in makes, synchronous or asynchronous, do not carry it.
+- **Server values.** `senton`, `correlationmethod` and `emailsender` are written by the core at stage 30: they are not in the
+  `Target` of the email Create, and the post-image has them.
+- **One message, one transaction.** Every step of the delivery, stage 10 (PreValidation) included, runs inside the import's
+  transaction: a step that fails rolls back the whole message (its email, attachments and queue item), and the
+  synchronization tries the message again (see [Synchronization](email-and-queues.md#synchronization)). At the first level
+  of an ordinary request, stage 10 runs outside the transaction.
+
+How a contact center guard uses the variable is in
+[Building a delivery guard](email-and-queues.md#building-a-delivery-guard).
 
 ### Registration validation
 

@@ -8,37 +8,31 @@ using Xrmd.Files;
 
 namespace Xrmd.Integration.Tests;
 
-/// <summary>The SMTP provider against <see cref="GreenMail"/>, and against <see cref="FakeSmtpServer"/> for what GreenMail cannot do.</summary>
-public sealed class SmtpProviderTests : IAsyncLifetime
+/// <summary>
+/// The SMTP provider against <see cref="GreenMail"/> (one container for the class, a fresh recipient per test), and against
+/// <see cref="FakeSmtpServer"/> for what GreenMail cannot do.
+/// </summary>
+public sealed class SmtpProviderTests(GreenMailFixture mail) : IClassFixture<GreenMailFixture>
 {
-    private GreenMail? _greenMail;
-
-    public async Task InitializeAsync() => _greenMail = await GreenMail.StartAsync();
-
-    public async Task DisposeAsync()
-    {
-        if (_greenMail is not null)
-        {
-            await _greenMail.DisposeAsync();
-        }
-    }
+    private GreenMail GreenMail => mail.Server;
 
     private MailProfile Profile(int? port = null) =>
-        new(_greenMail!.Hostname, port ?? _greenMail.SmtpPort, UseSsl: false, Protocol: 3, null, null, 0);
+        new(GreenMail.Hostname, port ?? GreenMail.SmtpPort, UseSsl: false, Protocol: 3, null, null, 0);
 
     private static MailCredentials Creds(string password = "secret") => new("sender", password, null);
 
     [Fact]
     public async Task Send_ArrivesAtGreenMail_WithAttachment()
     {
+        var rcpt = await GreenMail.NewUserAsync();
         var id = MimeBuilder.NewMessageId("sender@example.com");
         var message = MimeBuilder.Build(new OutgoingMail(
-            id, new MailAddress("sender@example.com", "Sender"), [new MailAddress("rcpt@example.com")], [], [], "Quarterly numbers",
+            id, new MailAddress("sender@example.com", "Sender"), [new MailAddress(rcpt.Address)], [], [], "Quarterly numbers",
             "<p>See attached</p>", [new AttachmentContent("n.txt", "text/plain", null, new MemoryStream(Encoding.UTF8.GetBytes("42")))]));
 
         await new SmtpMailProvider(allowInsecure: true).SendAsync(message, Profile(), Creds(), default);
 
-        var inbox = await _greenMail!.RecipientInboxAsync();
+        var inbox = await GreenMail.InboxAsync(rcpt);
 
         inbox.Should().ContainSingle();
         var received = inbox[0];
@@ -145,12 +139,18 @@ public sealed class SmtpProviderTests : IAsyncLifetime
     [Fact]
     public async Task Test_ChecksConnectAndLogin_WithoutSending()
     {
-        await new SmtpMailProvider(allowInsecure: true).TestAsync("sender@example.com", Profile(), Creds(), default);
+        // The mailbox under test is a fresh GreenMail user: a probe message sent to (or from) its address would land in its inbox. No other
+        // test of this class sends to sender@example.com either, so a probe to the sender's own address would show there.
+        var mailbox = await GreenMail.NewUserAsync();
+        await new SmtpMailProvider(allowInsecure: true).TestAsync(mailbox.Address, Profile(), Creds(), default);
 
         await using var server = FakeSmtpServer.Start(mailReply: "250 ok");
-        var bad = () => new SmtpMailProvider(allowInsecure: true).TestAsync("sender@example.com", new MailProfile("127.0.0.1", server.Port, false, 3, null, null, 0), Creds("wrong"), default);
+        var bad = () => new SmtpMailProvider(allowInsecure: true).TestAsync(mailbox.Address, new MailProfile("127.0.0.1", server.Port, false, 3, null, null, 0), Creds("wrong"), default);
         (await bad.Should().ThrowAsync<MailSendException>()).Which.Transient.Should().BeFalse();
 
-        (await _greenMail!.RecipientInboxAsync(atLeast: 0, TimeSpan.Zero)).Should().BeEmpty();
+        (await GreenMail.InboxAsync(mailbox, atLeast: 1, TimeSpan.FromSeconds(1))).Should().BeEmpty("the test sends nothing to the mailbox");
+        (await GreenMail.InboxAsync(new MailUser(GreenMail.SenderUser, GreenMail.SenderPassword, "sender@example.com"), atLeast: 1, TimeSpan.FromSeconds(1)))
+            .Should().BeEmpty("the test sends nothing to the sender either");
+        server.Commands.Should().NotContain(["MAIL", "RCPT", "DATA"]);
     }
 }

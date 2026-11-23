@@ -37,27 +37,33 @@ public static class TrackingTokens
     }
 
     /// <summary>
-    /// The tracking token that <paramref name="subject"/> already carries in the organization's current format (the
-    /// <c>trackingprefix</c> followed by at least <c>trackingtokeniddigits</c> digits, the last one in the subject), or null when it
-    /// carries none or tracking tokens are off. An email sent again after a failure keeps the token it was given (final review M2).
+    /// Every tracking token that <paramref name="subject"/> carries in the format of <paramref name="prefix"/> and
+    /// <paramref name="digits"/> (the prefix followed by at least <c>trackingtokeniddigits</c> digits, and no further digit), the last
+    /// one in the subject first; empty when it carries none. A subject may quote the tokens of other emails (a reply, a forward), so a
+    /// caller decides which one is meant.
     /// </summary>
-    public static async Task<string?> FindInSubjectAsync(DataSession s, string? subject, CancellationToken ct)
+    public static IReadOnlyList<string> FindAllInSubject(string? subject, string prefix, int digits)
+    {
+        if (string.IsNullOrEmpty(subject) || string.IsNullOrEmpty(prefix)) return [];
+        var matches = Regex.Matches(subject,
+            Regex.Escape(prefix) + "[0-9]{" + Math.Clamp(digits, 1, 20).ToString(CultureInfo.InvariantCulture) + ",}(?![0-9])",
+            RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+        var tokens = new List<string>(matches.Count);
+        for (var i = matches.Count - 1; i >= 0; i--) tokens.Add(matches[i].Value);
+        return tokens;
+    }
+
+    /// <summary>
+    /// The organization's current token format: its <c>trackingprefix</c> and <c>trackingtokeniddigits</c> (0 to 20); null when
+    /// tracking tokens are off (no prefix).
+    /// </summary>
+    public static async Task<(string Prefix, int Digits)?> FormatAsync(DataSession s, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(s);
-        if (string.IsNullOrEmpty(subject)) return null;
-        string? prefix;
-        int digits;
-        await using (var cmd = s.Command(s.Dialect.Limit($"SELECT trackingprefix, trackingtokeniddigits FROM {s.DataTable("organization")}", "1")))
-        {
-            await using var rd = await cmd.ExecuteReaderAsync(ct);
-            if (!await rd.ReadAsync(ct)) return null;
-            prefix = rd.IsDBNull(0) ? null : rd.GetString(0);
-            digits = rd.IsDBNull(1) ? 0 : Math.Clamp(rd.GetInt32(1), 0, 20);
-        }
-        if (string.IsNullOrEmpty(prefix)) return null;
-        var matches = Regex.Matches(subject, Regex.Escape(prefix) + "[0-9]{" + Math.Max(digits, 1).ToString(CultureInfo.InvariantCulture) + ",}(?![0-9])",
-            RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
-        return matches.Count == 0 ? null : matches[^1].Value;
+        await using var cmd = s.Command(s.Dialect.Limit($"SELECT trackingprefix, trackingtokeniddigits FROM {s.DataTable("organization")}", "1"));
+        await using var rd = await cmd.ExecuteReaderAsync(ct);
+        if (!await rd.ReadAsync(ct) || rd.IsDBNull(0) || rd.GetString(0) is not { Length: > 0 } prefix) return null;
+        return (prefix, rd.IsDBNull(1) ? 0 : Math.Clamp(rd.GetInt32(1), 0, 20));
     }
 
     /// <summary>True when tracking tokens are on (the organization has a <c>trackingprefix</c>).</summary>

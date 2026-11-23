@@ -24,11 +24,64 @@ internal sealed record MailConnection(MailProviderKind Kind, MailProfile Profile
 /// </summary>
 internal static class MailConnections
 {
-    /// <summary>The connection of the mailbox <paramref name="mailboxId"/> on the profile <paramref name="profileId"/>.</summary>
+    /// <summary>The connection of the mailbox <paramref name="mailboxId"/> on the profile <paramref name="profileId"/>, for sending.</summary>
     /// <param name="owner">The mailbox's owner as the texts name it (<c>systemuser {id}</c>).</param>
+    /// <remarks>
+    /// With <c>usesamesettingsforoutgoingconnections</c> true on an SMTP profile whose incoming server is set, the outgoing credentials are
+    /// the incoming ones (plan 4.1c): the credential retrieval, user name and <c>incomingpassword</c>. A profile without an incoming server
+    /// keeps its own outgoing settings (the flag defaults to true, so it cannot tell on its own).
+    /// </remarks>
     /// <exception cref="MailSetupException">The profile is missing, inactive or not accepted.</exception>
     public static async Task<MailConnection> ResolveAsync(DataSession s, CoreOperations core, Guid mailboxId, Guid profileId, string owner,
         CancellationToken ct)
+    {
+        var (row, kind) = await LoadAsync(s, core, mailboxId, profileId, owner, ct);
+        var profile = new MailProfile(row.GetAttributeValue<string>("outgoingserverlocation"), row.GetAttributeValue<int?>("outgoingportnumber"),
+            row.GetAttributeValue<bool?>("outgoingusessl") ?? false, row.GetAttributeValue<OptionSetValue>("outgoingauthenticationprotocol")?.Value,
+            row.GetAttributeValue<string>("exchangeonlinetenantid"), row.GetAttributeValue<string>("oauthclientid"),
+            row.GetAttributeValue<OptionSetValue>("serverauthority")?.Value ?? MailSchema.AuthorityPublic);
+        MailCredentials credentials;
+        var sameSettings = row.GetAttributeValue<bool?>("usesamesettingsforoutgoingconnections") == true
+                           && !string.IsNullOrWhiteSpace(row.GetAttributeValue<string>("incomingserverlocation"));
+        if (kind == MailProviderKind.Graph)
+            credentials = new MailCredentials(null, null, await MailSecrets.ReadAsync(s, row.Id, "oauthclientsecret", ct));
+        else if (sameSettings)
+            credentials = await ImapCredentialsAsync(s, row, mailboxId, ct);
+        else if (row.GetAttributeValue<OptionSetValue>("outgoingcredentialretrieval")?.Value == MailSchema.CredentialsInProfile)
+            credentials = new MailCredentials(row.GetAttributeValue<string>("outgoingusername"), await MailSecrets.ReadAsync(s, row.Id, "outgoingpassword", ct), null);
+        else
+            credentials = new MailCredentials(await MailboxUserNameAsync(s, mailboxId, ct), await MailSecrets.ReadAsync(s, mailboxId, "password", ct), null);
+        return new MailConnection(kind, profile, credentials);
+    }
+
+    /// <summary>
+    /// The connection of the mailbox <paramref name="mailboxId"/> on the profile <paramref name="profileId"/>, for receiving (plan 4.1c): the
+    /// profile's <c>incomingserverlocation</c>, <c>incomingportnumber</c> and <c>incomingusessl</c> (true when unset), and the credentials by the
+    /// incoming retrieval (the profile's <c>incomingusername</c> and <c>incomingpassword</c>, or the mailbox's); a Graph profile uses the client secret.
+    /// </summary>
+    /// <exception cref="MailSetupException">The profile is missing, inactive or not accepted.</exception>
+    public static async Task<MailConnection> ResolveIncomingAsync(DataSession s, CoreOperations core, Guid mailboxId, Guid profileId, string owner,
+        CancellationToken ct)
+    {
+        var (row, kind) = await LoadAsync(s, core, mailboxId, profileId, owner, ct);
+        var profile = new MailProfile(row.GetAttributeValue<string>("incomingserverlocation"), row.GetAttributeValue<int?>("incomingportnumber"),
+            row.GetAttributeValue<bool?>("incomingusessl") ?? true, row.GetAttributeValue<OptionSetValue>("incomingauthenticationprotocol")?.Value,
+            row.GetAttributeValue<string>("exchangeonlinetenantid"), row.GetAttributeValue<string>("oauthclientid"),
+            row.GetAttributeValue<OptionSetValue>("serverauthority")?.Value ?? MailSchema.AuthorityPublic);
+        var credentials = kind == MailProviderKind.Graph
+            ? new MailCredentials(null, null, await MailSecrets.ReadAsync(s, row.Id, "oauthclientsecret", ct))
+            : await ImapCredentialsAsync(s, row, mailboxId, ct);
+        return new MailConnection(kind, profile, credentials);
+    }
+
+    /// <summary>The credentials of the incoming side of an SMTP/IMAP profile: in the profile, or the mailbox's.</summary>
+    private static async Task<MailCredentials> ImapCredentialsAsync(DataSession s, Entity row, Guid mailboxId, CancellationToken ct) =>
+        row.GetAttributeValue<OptionSetValue>("incomingcredentialretrieval")?.Value == MailSchema.CredentialsInProfile
+            ? new MailCredentials(row.GetAttributeValue<string>("incomingusername"), await MailSecrets.ReadAsync(s, row.Id, "incomingpassword", ct), null)
+            : new MailCredentials(await MailboxUserNameAsync(s, mailboxId, ct), await MailSecrets.ReadAsync(s, mailboxId, "password", ct), null);
+
+    private static async Task<(Entity Row, MailProviderKind Kind)> LoadAsync(DataSession s, CoreOperations core, Guid mailboxId, Guid profileId,
+        string owner, CancellationToken ct)
     {
         Entity row;
         try
@@ -36,7 +89,8 @@ internal static class MailConnections
             row = await core.RetrieveAsync(s, Caller.Internal, MailSchema.EmailServerProfile, profileId, new ColumnSet(
                 "name", "servertype", "outgoingserverlocation", "outgoingportnumber", "outgoingusessl", "outgoingusername",
                 "outgoingauthenticationprotocol", "outgoingcredentialretrieval", "serverauthority", "exchangeonlinetenantid", "oauthclientid",
-                "statecode"), ct);
+                "incomingserverlocation", "incomingportnumber", "incomingusessl", "incomingusername", "incomingauthenticationprotocol",
+                "incomingcredentialretrieval", "usesamesettingsforoutgoingconnections", "statecode"), ct);
         }
         catch (XrmdFaultException ex) when (ex.ErrorCode == ErrorCodes.ObjectDoesNotExist)
         {
@@ -44,27 +98,14 @@ internal static class MailConnections
         }
         if (row.GetAttributeValue<OptionSetValue>("statecode")?.Value is { } profileState and not 0)
             throw new MailSetupException($"The email server profile '{row.GetAttributeValue<string>("name")}' is inactive (statecode {profileState}).");
-        MailProviderKind kind;
         try
         {
-            kind = ProfileRules.Validate(row);
+            return (row, ProfileRules.Validate(row));
         }
         catch (XrmdFaultException ex)
         {
             throw new MailSetupException(ex.Message);
         }
-        var profile = new MailProfile(row.GetAttributeValue<string>("outgoingserverlocation"), row.GetAttributeValue<int?>("outgoingportnumber"),
-            row.GetAttributeValue<bool?>("outgoingusessl") ?? false, row.GetAttributeValue<OptionSetValue>("outgoingauthenticationprotocol")?.Value,
-            row.GetAttributeValue<string>("exchangeonlinetenantid"), row.GetAttributeValue<string>("oauthclientid"),
-            row.GetAttributeValue<OptionSetValue>("serverauthority")?.Value ?? MailSchema.AuthorityPublic);
-        MailCredentials credentials;
-        if (kind == MailProviderKind.Graph)
-            credentials = new MailCredentials(null, null, await MailSecrets.ReadAsync(s, row.Id, "oauthclientsecret", ct));
-        else if (row.GetAttributeValue<OptionSetValue>("outgoingcredentialretrieval")?.Value == MailSchema.CredentialsInProfile)
-            credentials = new MailCredentials(row.GetAttributeValue<string>("outgoingusername"), await MailSecrets.ReadAsync(s, row.Id, "outgoingpassword", ct), null);
-        else
-            credentials = new MailCredentials(await MailboxUserNameAsync(s, mailboxId, ct), await MailSecrets.ReadAsync(s, mailboxId, "password", ct), null);
-        return new MailConnection(kind, profile, credentials);
     }
 
     private static async Task<string?> MailboxUserNameAsync(DataSession s, Guid mailbox, CancellationToken ct)

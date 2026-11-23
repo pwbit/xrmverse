@@ -488,16 +488,26 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
     /// writes the record with an Update run through <paramref name="nested"/>, so the Update steps fire and the guard checks it)
     /// and DeleteFile (the same Update, clearing the column).
     /// </remarks>
+    public Task<OrganizationResponse> ExecuteCoreAsync(OrganizationRequest request, Caller caller, DataSession session,
+        NestedRequest? nested, CancellationToken ct) =>
+        ExecuteCoreAsync(request, caller, session, nested, null, ct);
+
+    /// <inheritdoc cref="ExecuteCoreAsync(OrganizationRequest, Caller, DataSession, NestedRequest?, CancellationToken)"/>
+    /// <param name="serverSetValues">Plan 4.1c: the columns the server writes on a Create (<see cref="CreateAsync"/>); null otherwise.</param>
+    /// <exception cref="InvalidOperationException"><paramref name="serverSetValues"/> on a message other than Create.</exception>
     public async Task<OrganizationResponse> ExecuteCoreAsync(OrganizationRequest request, Caller caller, DataSession session,
-        NestedRequest? nested, CancellationToken ct)
+        NestedRequest? nested, IReadOnlyDictionary<string, object?>? serverSetValues, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
+        if (serverSetValues is not null
+            && (CoreMessages.TryGetValue(request.RequestName ?? "", out var serverMessage) ? serverMessage : request.RequestName) != "Create")
+            throw new InvalidOperationException($"Server values are written on a Create only, not on '{request.RequestName}'.");
         // Message names are case-insensitive (as in the step registry): switch on the canonical name.
         switch (CoreMessages.TryGetValue(request.RequestName ?? "", out var canonical) ? canonical : request.RequestName)
         {
             case "Create":
                 var created = Parameter<Entity>(request, "Target");
-                var id = await CreateAsync(session, caller, created, ct, DetectDuplicates(request));
+                var id = await CreateAsync(session, caller, created, ct, DetectDuplicates(request), serverSetValues);
                 if (ComponentType.OfRow(created) is { } componentType)
                     await tracker.TrackAsync(session, componentType, id, SolutionUniqueName(request), ct, markActive: caller != Caller.Internal);
                 await MarkParentChangedAsync(session, caller, created.LogicalName, id, null, ct);
@@ -1234,7 +1244,12 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
     /// <exception cref="XrmdFaultException">InvalidArgument (400) for invalid input; ObjectDoesNotExist (404) for a
     /// lookup or party to a missing record; DuplicateRecord (412) when the id is taken or a unique index refuses a value;
     /// DuplicateRecordsFound (412) when the duplicate check finds a duplicate.</exception>
-    public async Task<Guid> CreateAsync(DataSession s, Caller caller, Entity entity, CancellationToken ct, bool detectDuplicates = false)
+    /// <param name="serverSetValues">Plan 4.1c: columns the server writes besides the caller's values (such as <c>email.senton</c> of
+    /// an incoming email), set after <paramref name="entity"/> is validated, so a column not valid for Create may be among them; the
+    /// caller's entity never holds them. Null for a caller's Create.</param>
+    /// <exception cref="InvalidOperationException"><paramref name="serverSetValues"/> names a column the table does not have.</exception>
+    public async Task<Guid> CreateAsync(DataSession s, Caller caller, Entity entity, CancellationToken ct, bool detectDuplicates = false,
+        IReadOnlyDictionary<string, object?>? serverSetValues = null)
     {
         var (m, attrs) = ValidateWrite(entity, isCreate: true);
         // Plan 3.5 UI-1g: the refusals of the post tables, on the values after the plug-ins.
@@ -1257,6 +1272,11 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
         // Plan 4.1b: the write-only mail secrets have no column; they are stored after the row is written.
         var mailSecrets = MailSecrets.Take(ref entity, m);
         var row = WritableValues(entity, attrs, isCreate: true);
+        if (serverSetValues is not null)
+            foreach (var (name, value) in serverSetValues)
+                row[name] = attrs.ContainsKey(name)
+                    ? value
+                    : throw new InvalidOperationException($"The server value '{name}' is not a column of '{m.LogicalName}'.");
         row[pk] = id;
         if (m.LogicalName == MailSchema.EmailServerProfile) ApplyProfileRules(row, null);
         Mailboxes.DemandSupportedDeliveryMethods(row, m.LogicalName);
@@ -1363,13 +1383,17 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
         if (store.GetEntity(CurrencySchema.UserSettings) is not { } settings) return;
         // #131 (ruling Z2): UTC and the en-US formats, for the columns the table has.
         var defaults = TimeZoneSchema.UserSettingsDefaults.Where(d => settings.Attributes?.Any(a => a.LogicalName == d.Column) == true).ToList();
+        // Plan 4.1c: the user's incoming email filtering, From contacts and accounts, when the table has the column.
+        var filtering = settings.Attributes?.Any(a => a.LogicalName == MailSchema.FilteringMethodColumn) == true
+            ? (Column: ", " + MailSchema.FilteringMethodColumn, Value: ", " + MailSchema.UserFilterDefault.ToString(System.Globalization.CultureInfo.InvariantCulture))
+            : (Column: "", Value: "");
         await s.KeyLockAsync(CurrencySchema.UserSettings, userId, ct);
         await using var cmd = s.Command($"""
             INSERT INTO {s.DataTable(CurrencySchema.UserSettings)} ({s.Quote(SystemAttributes.PrimaryIdName(settings))}, ownerid,
                 owneridtype, owninguser, owningbusinessunit, createdon, createdby, modifiedon, modifiedby, statecode, statuscode,
-                {AppModuleSchema.PagingLimit}, {AppModuleSchema.UserColorScheme}{string.Concat(defaults.Select(d => ", " + d.Column))})
+                {AppModuleSchema.PagingLimit}, {AppModuleSchema.UserColorScheme}{filtering.Column}{string.Concat(defaults.Select(d => ", " + d.Column))})
             SELECT u.systemuserid, u.systemuserid, @_type, u.systemuserid, u.businessunitid,
-                {s.Dialect.UtcNow}, @_by, {s.Dialect.UtcNow}, @_by, 0, 1, {AppModuleSchema.DefaultPagingLimit}, {AppModuleSchema.DefaultColorScheme}{string.Concat(defaults.Select((_, i) => $", @_tz{i}"))}
+                {s.Dialect.UtcNow}, @_by, {s.Dialect.UtcNow}, @_by, 0, 1, {AppModuleSchema.DefaultPagingLimit}, {AppModuleSchema.DefaultColorScheme}{filtering.Value}{string.Concat(defaults.Select((_, i) => $", @_tz{i}"))}
             FROM {s.DataTable(SystemUser)} u WHERE u.systemuserid = {IdParameter}
                 AND NOT EXISTS (SELECT 1 FROM {s.DataTable(CurrencySchema.UserSettings)} s{s.Dialect.LockHint(RowLock.UpdateRange)}
                     WHERE s.{s.Quote(SystemAttributes.PrimaryIdName(settings))} = u.systemuserid)
@@ -1642,6 +1666,14 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
             Mailboxes.DemandNotServerMaintained(row, storedMailbox, caller);
             Mailboxes.DemandOwnerUnchanged(row, storedMailbox);
         }
+        // Plan 4.1c: changed incoming settings send incomingemailstatus back to Not Run; the sync state is then forgotten after the UPDATE.
+        var incomingReset = false;
+        if (m.LogicalName == MailSchema.Mailbox)
+        {
+            var statusSent = row.Contains("incomingemailstatus");
+            await Mailboxes.ApplyIncomingChangeAsync(s, row, id, mailSecrets, ct);
+            incomingReset = !statusSent && row.Contains("incomingemailstatus");
+        }
         // Plan 4.1b: a changed address of a user or queue sends its approval back to Pending Approval (the mailbox follows after the UPDATE).
         var mailboxTracked = m.LogicalName is SystemUser or QueueSchema.Queue && !MigrationScope.IsActive && store.GetEntity(MailSchema.Mailbox) is not null;
         var addressChanged = mailboxTracked && await Mailboxes.ApplyAddressChangeAsync(s, m.LogicalName, id, row, ct);
@@ -1716,6 +1748,9 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
         await MailSecrets.StoreAsync(s, id, mailSecrets, ct);
         // Plan 4.1b, task 7: testemailconfigurationscheduled true queues the mailbox's test, in this transaction.
         if (!MigrationScope.IsActive) await MailboxTestJob.EnqueueIfScheduledAsync(s, caller, JobQueue, m.LogicalName, id, row, ct);
+        // Plan 4.1c, task 9: another server or account may be read now: the next sync starts again from processemailreceivedafter (the
+        // message keys keep what was imported from coming in twice), and a pass still running writes nothing (final review M2).
+        if (incomingReset) await MailboxSyncState.ResetAsync(s, id, ct);
         if (mailboxTracked) await Mailboxes.SyncAsync(s, m.LogicalName, id, row, addressChanged, ct, store, deliveryChanged);
         if (writes is not null && !MigrationScope.IsActive) await writes.OnWrittenAsync(s, m.LogicalName, id, ct); // plan 2.14 (W10)
         if (activity) await WriteActivityRowsAsync(s, m, id, partyLists!, isCreate: false, ct);
@@ -1894,9 +1929,13 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
         if (stored is not null) foreach (var (name, value) in stored.Attributes) merged[name] = value;
         foreach (var (name, value) in row.Attributes) merged[name] = value;
         ProfileRules.Validate(merged);
-        var protocol = merged.GetAttributeValue<OptionSetValue>("outgoingauthenticationprotocol");
-        if (protocol is not null && protocol.Value != stored?.GetAttributeValue<OptionSetValue>("outgoingauthenticationprotocol")?.Value)
-            row["outgoingauthenticationprotocol"] = protocol;
+        // The values the rules settled on (Auto Detect stored as Basic, an absent Graph incoming side taking the outgoing one).
+        foreach (var column in new[] { "outgoingauthenticationprotocol", "incomingauthenticationprotocol", "incomingcredentialretrieval" })
+        {
+            var settled = merged.GetAttributeValue<OptionSetValue>(column);
+            if (settled is not null && settled.Value != stored?.GetAttributeValue<OptionSetValue>(column)?.Value)
+                row[column] = settled;
+        }
     }
 
     /// <summary>The note body of a write (plan 2.11, A16): <see cref="Given"/> false when the write does not carry <c>documentbody</c>.</summary>
@@ -2033,7 +2072,7 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
     }
 
     /// <summary><c>organization.maxuploadfilesize</c>, its default (5 MB) when not set.</summary>
-    private static async Task<int> MaxUploadFileSizeAsync(DataSession s, CancellationToken ct)
+    internal static async Task<int> MaxUploadFileSizeAsync(DataSession s, CancellationToken ct)
     {
         await using var cmd = s.Command(
             s.Dialect.Limit($"SELECT {s.Quote(ActivitySchema.MaxUploadFileSize)} FROM {s.DataTable("organization")}", "1"));
@@ -2187,6 +2226,10 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
             if (m.LogicalName == CustomControlSchema.Table) await CustomControlFiles.DeleteRowsAsync(s, id, ct);
             // Plan 4.1b: the write-only mail secrets go with their record, in this transaction.
             if (MailSecrets.HasSecrets(m.LogicalName)) await MailSecrets.DeleteAsync(s, id, ct);
+            // Plan 4.1c: an email's message keys go with it, in this transaction.
+            if (m.LogicalName == ActivitySchema.Email) await MailMessageKeys.DeleteAsync(s, id, ct);
+            // Plan 4.1c, task 9: a mailbox's sync state goes with it (its sync job ends at its next run).
+            if (m.LogicalName == MailSchema.Mailbox) await MailboxSyncState.DeleteAsync(s, id, ct);
             var images = m.LogicalName == StepTable ? await DeleteStepImagesAsync(s, id, ct) : [];
             if (ComponentType.OfTable(m.LogicalName) is not null) await tracker.RemoveDeletedAsync(s, [id, .. images], ct);
             if (parentComponent is not null) await MarkParentChangedAsync(s, caller, m.LogicalName, id, parentComponent, ct);

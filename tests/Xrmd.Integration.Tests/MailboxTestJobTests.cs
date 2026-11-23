@@ -22,10 +22,12 @@ namespace Xrmd.Integration.Tests;
 /// Plan 4.1b, task 7: writing <c>mailbox.testemailconfigurationscheduled</c> true (the owner of the mailbox or a System Administrator)
 /// queues one <see cref="MailboxTestJob"/>, which tests the mailbox's profile and credentials (<see cref="IMailProvider.TestAsync"/>),
 /// records the outcome on the mailbox and sets the flag back to false; and <c>GetTrackingTokenEmail</c> hands out the next tracking
-/// token. The provider is a recording fake here; the jobs run directly, as the worker runs them.
+/// token. The provider is a recording fake here; the jobs run directly, as the worker runs them. Plan 4.1c, task 9: the incoming side is
+/// tested against GreenMail's IMAP (one container for the class, a fresh user per test) when the mailbox receives by Server-Side
+/// Synchronization, and a success schedules the mailbox's sync.
 /// </summary>
 [Collection("xrmd")]
-public sealed class MailboxTestJobTests(XrmdFixture fx) : IAsyncLifetime
+public sealed class MailboxTestJobTests(XrmdFixture fx, GreenMailFixture mail) : IClassFixture<GreenMailFixture>, IAsyncLifetime
 {
     private const string Secret = "s3cret-relay-password";
     private const string Api = "/api/data/v9.2/";
@@ -40,7 +42,8 @@ public sealed class MailboxTestJobTests(XrmdFixture fx) : IAsyncLifetime
 
     private async Task ResetAsync()
     {
-        await TestSql.ExecAsync(fx.ConnectionString, $"DELETE FROM data.asyncoperation WHERE operationtype = {AsyncOperationQueue.MailboxTest}");
+        await TestSql.ExecAsync(fx.ConnectionString,
+            $"DELETE FROM data.asyncoperation WHERE operationtype IN ({AsyncOperationQueue.MailboxTest}, {AsyncOperationQueue.MailboxSync})");
         await TestSql.ExecAsync(fx.ConnectionString,
             "UPDATE data.organization SET trackingprefix = NULL, trackingtokeniddigits = NULL, nexttrackingnumber = NULL, maximumtrackingnumber = NULL");
     }
@@ -123,15 +126,40 @@ public sealed class MailboxTestJobTests(XrmdFixture fx) : IAsyncLifetime
         await TestSql.ScalarAsync(fx.ConnectionString, $"SELECT {column} FROM data.mailbox WHERE mailboxid = @id", ("@id", mailbox));
 
     /// <summary>Runs the (only) test job of <paramref name="mailbox"/> as the worker does: as its owner.</summary>
-    private async Task<AsyncOperationRun> RunAsync(Guid mailbox, FakeProvider fake)
+    private async Task<AsyncOperationRun> RunAsync(Guid mailbox, FakeProvider fake, bool imap = false)
     {
-        var job = (await JobsAsync(mailbox)).Should().ContainSingle().Subject;
+        var job = (await JobsAsync(mailbox)).Should().ContainSingle(j => j.State != 3).Subject;
         using var scope = fx.App.Services.CreateScope();
         var run = new AsyncOperationRun(job.Id, new Caller(job.Owner, job.BusinessUnit), job.Owner, job.Data);
+        // Without an incoming provider, a call for one throws: the outgoing-only tests prove the incoming side is left alone.
+        var providers = imap ? new MailProviders(fake, fake, new ImapMailProvider(allowInsecure: true)) : new MailProviders(fake, fake);
         await new MailboxTestJob(fx.App.Services.GetRequiredService<IDbConnectionFactory>(), scope.ServiceProvider.GetRequiredService<CoreOperations>(),
-            new MailProviders(fake, fake)).RunAsync(run, CancellationToken.None);
+            providers, fx.App.Services.GetRequiredService<AsyncOperationQueue>()).RunAsync(run, CancellationToken.None);
+        await TestSql.ExecAsync(fx.ConnectionString, "UPDATE data.asyncoperation SET statecode = 3, statuscode = 30 WHERE asyncoperationid = @id", ("@id", job.Id));
         return run;
     }
+
+    /// <summary>The mailbox of <paramref name="user"/> set up to send and to receive from a new GreenMail user (credentials in the profile).</summary>
+    private async Task<(Guid Mailbox, MailUser Inbox)> SetUpIncomingAsync(User user, string? password = null)
+    {
+        var mailbox = await SetUpAsync(user);
+        var inbox = await mail.Server.NewUserAsync();
+        var profile = (await Admin.RetrieveAsync("mailbox", mailbox, new ColumnSet("emailserverprofile"))).GetAttributeValue<EntityReference>("emailserverprofile");
+        await Admin.UpdateAsync(new Entity("emailserverprofile", profile.Id)
+        {
+            ["incomingserverlocation"] = mail.Server.Hostname, ["incomingportnumber"] = mail.Server.ImapPort, ["incomingusessl"] = false,
+            ["incomingcredentialretrieval"] = new OptionSetValue(1), ["incomingusername"] = inbox.Login, ["incomingpassword"] = password ?? inbox.Password,
+            ["usesamesettingsforoutgoingconnections"] = false,
+        });
+        await Admin.UpdateAsync(new Entity("mailbox", mailbox) { ["incomingemaildeliverymethod"] = new OptionSetValue(2), ["enabledforincomingemail"] = true });
+        return (mailbox, inbox);
+    }
+
+    private async Task<List<(Guid Owner, string? Data, int State)>> SyncJobsAsync(Guid mailbox) =>
+        [.. (await TestSql.RowsAsync(fx.ConnectionString,
+                $"SELECT ownerid, data, statecode FROM data.asyncoperation WHERE regardingobjectid = @id AND operationtype = {AsyncOperationQueue.MailboxSync}",
+                ("@id", mailbox)))
+            .Select(r => ((Guid)r[0]!, r[1] as string, Convert.ToInt32(r[2])))];
 
     // ---- the mailbox test ----
 
@@ -208,6 +236,73 @@ public sealed class MailboxTestJobTests(XrmdFixture fx) : IAsyncLifetime
         Convert.ToInt32(await MailboxColumnAsync(mailbox, "outgoingemailstatus")).Should().Be(2);
         ((string)(await MailboxColumnAsync(mailbox, "lastsyncerror"))!).Should().Contain("approved");
         Convert.ToBoolean(await MailboxColumnAsync(mailbox, "testemailconfigurationscheduled")).Should().BeFalse();
+    }
+
+    // ---- the incoming test (plan 4.1c) ----
+
+    [Fact]
+    public async Task IncomingTest_Success_SetsStatus_AndSchedulesSync()
+    {
+        var user = await UserAsync("Inga");
+        var (mailbox, inbox) = await SetUpIncomingAsync(user);
+        Convert.ToInt32(await MailboxColumnAsync(mailbox, "incomingemailstatus")).Should().Be(0);
+        await user.Service.UpdateAsync(Schedule(mailbox));
+
+        var fake = new FakeProvider();
+        var run = await RunAsync(mailbox, fake, imap: true);
+
+        Convert.ToInt32(await MailboxColumnAsync(mailbox, "incomingemailstatus")).Should().Be(1);
+        Convert.ToInt32(await MailboxColumnAsync(mailbox, "outgoingemailstatus")).Should().Be(1);
+        (await MailboxColumnAsync(mailbox, "lastsyncerror")).Should().BeNull();
+        Convert.ToBoolean(await MailboxColumnAsync(mailbox, "testemailconfigurationscheduled")).Should().BeFalse();
+        run.CompletionMessage.Should().Contain("incoming email test succeeded").And.NotContain(inbox.Password);
+        var job = (await SyncJobsAsync(mailbox)).Should().ContainSingle().Subject;
+        job.Owner.Should().Be(user.Id, "the sync runs as the delivery user");
+        job.Data.Should().Be(MailboxSyncJob.DataOf(mailbox));
+        job.State.Should().Be(0);
+
+        // A second successful test while the sync job waits adds none.
+        await user.Service.UpdateAsync(Schedule(mailbox));
+        await RunAsync(mailbox, fake, imap: true);
+        (await SyncJobsAsync(mailbox)).Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task IncomingTest_WrongPassword_SetsFailure()
+    {
+        var user = await UserAsync("Ivo");
+        var (mailbox, _) = await SetUpIncomingAsync(user, password: "not-the-password");
+        await user.Service.UpdateAsync(Schedule(mailbox));
+
+        var run = await RunAsync(mailbox, new FakeProvider(), imap: true);
+
+        Convert.ToInt32(await MailboxColumnAsync(mailbox, "incomingemailstatus")).Should().Be(2);
+        Convert.ToInt32(await MailboxColumnAsync(mailbox, "outgoingemailstatus")).Should().Be(1, "the outgoing side passed");
+        var error = (string)(await MailboxColumnAsync(mailbox, "lastsyncerror"))!;
+        error.Should().Contain("IMAP authentication failed").And.NotContain("not-the-password");
+        (await MailboxColumnAsync(mailbox, "lastsyncerroroccurredon")).Should().NotBeNull();
+        run.CompletionMessage.Should().Contain("incoming email test failed").And.Contain("IMAP authentication failed").And.NotContain("not-the-password");
+        (await SyncJobsAsync(mailbox)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Test_OutgoingOnly_UnchangedFrom4_1b()
+    {
+        var user = await UserAsync("Otto");
+        var mailbox = await SetUpAsync(user);
+        // Enabled for incoming email, but not by Server-Side Synchronization: the incoming side is not tested.
+        await Admin.UpdateAsync(new Entity("mailbox", mailbox) { ["enabledforincomingemail"] = true });
+        await user.Service.UpdateAsync(Schedule(mailbox));
+
+        var fake = new FakeProvider();
+        var run = await RunAsync(mailbox, fake);
+
+        fake.Calls.Should().ContainSingle();
+        run.CompletionMessage.Should().Be($"The outgoing email test of the mailbox {mailbox} succeeded.");
+        Convert.ToInt32(await MailboxColumnAsync(mailbox, "outgoingemailstatus")).Should().Be(1);
+        Convert.ToInt32(await MailboxColumnAsync(mailbox, "incomingemailstatus")).Should().Be(0, "the incoming status is left as it is");
+        (await MailboxColumnAsync(mailbox, "lastsyncerror")).Should().BeNull();
+        (await SyncJobsAsync(mailbox)).Should().BeEmpty();
     }
 
     [Fact]

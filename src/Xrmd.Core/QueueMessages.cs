@@ -23,8 +23,9 @@ namespace Xrmd.Core;
 /// <remarks>
 /// Run by the pipeline, a message writes its items and memberships through the <see cref="NestedRequest"/> as the Create, Update and
 /// Delete of <c>queueitem</c> and the Associate of <c>queuemembership_association</c>: their steps fire one level deeper, with the
-/// queue message as their parent context, and the security guard checks each (decision 4). Without one (<see cref="EnsureItemAsync"/>
-/// from the server's own work) the same writes go straight to the core operations: no step fires and no privilege is checked.
+/// queue message as their parent context, and the security guard checks each (decision 4). Without one (the server's own work, such as
+/// the deactivation of a record's items) the same writes go straight to the core operations: no step fires and no privilege is checked.
+/// An incoming email reaches its queue through AddToQueue run by the pipeline (plan 4.1c, <c>IncomingEmailImporter</c>).
 /// </remarks>
 public sealed class QueueMessages
 {
@@ -33,6 +34,9 @@ public sealed class QueueMessages
     private const string QueueId = QueueSchema.QueueIdColumn;
     private const string StateCode = "statecode", StatusCode = "statuscode", Title = "title", EnteredOn = "enteredon";
     private const string SystemUser = "systemuser", QueueViewType = "queueviewtype";
+
+    /// <summary>The <c>statuscode</c> of an active item (<c>statecode</c> 0).</summary>
+    private const int ActiveItemStatus = 1;
 
     /// <summary>The columns of <c>QueueItemProperties</c> the message sets itself, so the given ones are ignored.</summary>
     private static readonly HashSet<string> ServerColumns = new(StringComparer.Ordinal)
@@ -105,21 +109,6 @@ public sealed class QueueMessages
             default:
                 throw new NotSupportedException($"Request '{request.RequestName}' is not a queue message.");
         }
-    }
-
-    /// <summary>
-    /// AddToQueue without a pipeline (plan 4.1c places incoming email with it): <paramref name="target"/>'s active item in the
-    /// destination queue, created or moved there as AddToQueue does, written directly (no step fires, no privilege is checked).
-    /// </summary>
-    /// <returns>The id of the item.</returns>
-    /// <exception cref="XrmdFaultException">The faults of AddToQueue.</exception>
-    public Task<Guid> EnsureItemAsync(DataSession s, Caller caller, EntityReference target, Guid destinationQueueId, Entity? properties,
-        CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(s);
-        ArgumentNullException.ThrowIfNull(caller);
-        ArgumentNullException.ThrowIfNull(target);
-        return PlaceAsync(s, new Writer(_core, s, caller, null), target, destinationQueueId, null, properties, ct);
     }
 
     /// <summary>
@@ -363,6 +352,51 @@ public sealed class QueueMessages
             }, ct);
     }
 
+    /// <summary>The ids of the active items of <paramref name="record"/>, oldest first: those its deactivation would write.</summary>
+    internal static async Task<IReadOnlyList<Guid>> ActiveItemIdsAsync(DataSession s, Guid record, CancellationToken ct) =>
+        [.. (await ActiveItemsAsync(s, record, ct)).Select(i => i.Id)];
+
+    /// <summary>
+    /// The items an email's SendEmail deactivated, made active again when its send failed (#333; that Dataverse puts them back is
+    /// from memory, plan 4.1c checklist 14). Each item is written by the core Update as <paramref name="caller"/> (the sender, as the
+    /// deactivation): no queue item step fires and no privilege is checked. Its queue and worker are kept. An item is left as it is
+    /// when it no longer exists, is already active, its queue is inactive, or its record already has another active item (ruling
+    /// R15, checked per item under the record's lock; a received email excepted).
+    /// </summary>
+    /// <returns>The number of items made active.</returns>
+    internal async Task<int> ReactivateItemsAsync(DataSession s, Caller caller, IReadOnlyList<Guid> items, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+        ArgumentNullException.ThrowIfNull(caller);
+        ArgumentNullException.ThrowIfNull(items);
+        var reactivated = 0;
+        foreach (var item in items.Distinct())
+        {
+            Guid? queue = null;
+            await using (var cmd = s.Command(
+                             $"SELECT {StateCode}, {s.Quote(QueueId)} FROM {s.DataTable(Item)} WHERE queueitemid = @id"))
+            {
+                cmd.AddParameter("@id", DbType.Guid, item);
+                await using var rd = await cmd.ExecuteReaderAsync(ct);
+                if (!await rd.ReadAsync(ct) || rd.IsDBNull(0)
+                    || Convert.ToInt32(rd.GetValue(0), System.Globalization.CultureInfo.InvariantCulture) == 0) continue;
+                if (!rd.IsDBNull(1)) queue = rd.GetGuid(1);
+            }
+            if (queue is not { } queueId || !await IsActiveQueueAsync(s, queueId, ct)) continue;
+            var stored = await _core.RetrieveAsync(s, Caller.Internal, Item, item, new ColumnSet(QueueSchema.ObjectId), ct);
+            if (stored.GetAttributeValue<EntityReference>(QueueSchema.ObjectId) is not { } record
+                || _store.GetEntity(record.LogicalName ?? "") is not { } table) continue;
+            var locked = await LockRecordAsync(s, table, record.Id, ct);
+            if (!IsReceivedEmail(table, locked.Status) && (await ActiveItemsAsync(s, record.Id, ct)).Any(i => i.Id != item)) continue;
+            await _core.UpdateAsync(s, caller, new Entity(Item, item)
+            {
+                [StateCode] = new OptionSetValue(0), [StatusCode] = new OptionSetValue(ActiveItemStatus),
+            }, ct);
+            reactivated++;
+        }
+        return reactivated;
+    }
+
     /// <summary>The Delete of a queue (plan 4.1a): refused while the queue holds active items, which must be moved or deactivated first.</summary>
     /// <exception cref="XrmdFaultException">400 when an active item is in the queue.</exception>
     internal static async Task DemandNoActiveItemsAsync(DataSession s, Guid queue, CancellationToken ct)
@@ -382,6 +416,15 @@ public sealed class QueueMessages
         var row = await _core.RetrieveAsync(s, Caller.Internal, principal.LogicalName, principal.Id, new ColumnSet(QueueId), ct);
         return row.GetAttributeValue<EntityReference>(QueueId)?.Id
                ?? throw XrmdFaultException.InvalidArgument($"The {principal.LogicalName} {principal.Id} has no default queue to route to.");
+    }
+
+    /// <summary>True when the queue exists and is active.</summary>
+    private static async Task<bool> IsActiveQueueAsync(DataSession s, Guid queue, CancellationToken ct)
+    {
+        await using var cmd = s.Command($"SELECT {StateCode} FROM {s.DataTable(QueueTable)} WHERE {s.Quote(QueueId)} = @id");
+        cmd.AddParameter("@id", DbType.Guid, queue);
+        var state = await cmd.ExecuteScalarAsync(ct);
+        return state is not null && (state is DBNull || Convert.ToInt32(state, System.Globalization.CultureInfo.InvariantCulture) == 0);
     }
 
     /// <summary>The queue must exist (404) and be active (400).</summary>

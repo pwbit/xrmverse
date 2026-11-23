@@ -185,6 +185,18 @@ public sealed class SqlServerDialectTests
     }
 
     [Fact]
+    public void InsertIfAbsent_checks_the_key_under_UPDLOCK_HOLDLOCK_then_inserts()
+    {
+        D.InsertIfAbsent("meta.mail_message", ["messagekey"], ["emailid", "incoming"], "SELECT @k AS messagekey, @e AS emailid, @i AS incoming")
+            .Should().Be("""
+                INSERT INTO meta.mail_message ([messagekey], [emailid], [incoming])
+                SELECT a.[messagekey], a.[emailid], a.[incoming] FROM (SELECT @k AS messagekey, @e AS emailid, @i AS incoming) AS a
+                WHERE NOT EXISTS (SELECT 1 FROM meta.mail_message p WITH (UPDLOCK, HOLDLOCK) WHERE p.[messagekey] = a.[messagekey]);
+                """);
+        FluentActions.Invoking(() => D.InsertIfAbsent("t", [], ["a"], "SELECT 1 AS a")).Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
     public void Upsert_is_a_MERGE_with_HOLDLOCK()
     {
         D.Upsert("[data].[activitypointer]", ["activityid"], ["activitytypecode", "subject"], "SELECT a.[activityid] FROM x a")

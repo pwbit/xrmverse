@@ -508,6 +508,23 @@ public sealed partial class PostgresDialect : ISqlDialect
                $"ON CONFLICT ({string.Join(", ", keyColumns.Select(Quote))}) {action};";
     }
 
+    /// <summary>
+    /// <c>INSERT INTO t (k…, c…) SELECT a.k…, a.c… FROM (source) AS a WHERE true ON CONFLICT (k…) DO NOTHING;</c>. The key columns need a
+    /// unique index or primary key.
+    /// </summary>
+    public string InsertIfAbsent(string table, IReadOnlyList<string> keyColumns, IReadOnlyList<string> columns, string source)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(table);
+        ArgumentNullException.ThrowIfNull(keyColumns);
+        ArgumentNullException.ThrowIfNull(columns);
+        ArgumentException.ThrowIfNullOrEmpty(source);
+        if (keyColumns.Count == 0) throw new ArgumentException("At least one key column is required.", nameof(keyColumns));
+        var insert = keyColumns.Concat(columns).ToList();
+        return $"INSERT INTO {table} ({string.Join(", ", insert.Select(Quote))})\n" +
+               $"SELECT {string.Join(", ", insert.Select(c => "a." + Quote(c)))} FROM ({source}) AS a WHERE true\n" +
+               $"ON CONFLICT ({string.Join(", ", keyColumns.Select(Quote))}) DO NOTHING;";
+    }
+
     // ---- text, dates, functions -----------------------------------------------------------------------------------------------
 
     /// <summary>

@@ -251,6 +251,18 @@ public sealed class PostgresDialectTests
     }
 
     [Fact]
+    public void InsertIfAbsent_is_an_INSERT_ON_CONFLICT_DO_NOTHING()
+    {
+        D.InsertIfAbsent("meta.mail_message", ["messagekey"], ["emailid", "incoming"], "SELECT @k AS messagekey, @e AS emailid, @i AS incoming")
+            .Should().Be("""
+                INSERT INTO meta.mail_message ("messagekey", "emailid", "incoming")
+                SELECT a."messagekey", a."emailid", a."incoming" FROM (SELECT @k AS messagekey, @e AS emailid, @i AS incoming) AS a WHERE true
+                ON CONFLICT ("messagekey") DO NOTHING;
+                """);
+        FluentActions.Invoking(() => D.InsertIfAbsent("t", [], ["a"], "SELECT 1 AS a")).Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
     public void Upsert_is_an_INSERT_ON_CONFLICT()
     {
         D.Upsert("\"data\".\"activitypointer\"", ["activityid"], ["activitytypecode", "subject"], "SELECT a.\"activityid\" FROM x a")

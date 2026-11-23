@@ -34,8 +34,13 @@ public sealed class MailboxCommandsTests
                 : $$"""
                   {"value":[{"mailboxid":"{{MailboxId}}","name":"Ada","emailaddress":"ada@example.com","_emailserverprofile_value":"{{ProfileId}}",
                     "outgoingemaildeliverymethod":2,"enabledforoutgoingemail":true,"outgoingemailstatus":0,"emailrouteraccessapproval":2,
+                    "incomingemaildeliverymethod":2,"enabledforincomingemail":true,"incomingemailstatus":1,
+                    "lastsuccessfulsynccompletedon":"2026-11-23T09:30:00Z","processemailreceivedafter":"2026-11-20T08:00:00Z",
+                    "_regardingobjectid_value":"{{UserId}}","_regardingobjectid_value@Microsoft.Dynamics.CRM.lookuplogicalname":"systemuser",
                     "ispasswordset":false,"statecode":0}]}
                   """);
+        if (request.Method == HttpMethod.Get && path.EndsWith("/usersettingscollection"))
+            return FakeHandler.Json(HttpStatusCode.OK, """{"value":[{"incomingemailfilteringmethod":1}]}""");
         if (request.Method == HttpMethod.Get && path.EndsWith("/systemusers"))
             return FakeHandler.Json(HttpStatusCode.OK, $$"""{"value":[{"systemuserid":"{{UserId}}"}]}""");
         if (request.Method == HttpMethod.Get && path.EndsWith("/queues"))
@@ -155,7 +160,8 @@ public sealed class MailboxCommandsTests
         row.GetProperty("approval").GetString().Should().Be("Pending Approval");
 
         (await cli.RunAsync("mailbox", "show", "ada@example.com")).Should().Be(0, cli.Err.ToString());
-        Uri.UnescapeDataString(cli.Handler.Requests.Last().RequestUri!.Query).Should().Contain("emailaddress eq 'ada@example.com'");
+        var lookup = cli.Handler.Requests.Last(r => r.RequestUri!.AbsolutePath.EndsWith("/mailboxes"));
+        Uri.UnescapeDataString(lookup.RequestUri!.Query).Should().Contain("emailaddress eq 'ada@example.com'");
         (await cli.RunAsync("mailbox", "show", "nobody@example.com")).Should().Be(4);
     }
 
@@ -185,6 +191,76 @@ public sealed class MailboxCommandsTests
         json.GetProperty("outgoingemaildeliverymethod").GetInt32().Should().Be(2);
         json.GetProperty("enabledforoutgoingemail").GetBoolean().Should().BeTrue();
         cli.Out.ToString().Should().Contain("Relay");
+    }
+
+    [Fact]
+    public async Task Link_Incoming_WritesIncomingColumns()
+    {
+        using var cli = await LoggedInAsync();
+
+        (await cli.RunAsync("mailbox", "link", "ada@example.com", "--profile", "Relay", "--incoming")).Should().Be(0, cli.Err.ToString());
+
+        var json = JsonDocument.Parse(Last(cli, HttpMethod.Patch).Body!).RootElement;
+        json.GetProperty("emailserverprofile@odata.bind").GetString().Should().Be($"/emailserverprofiles({ProfileId})");
+        json.GetProperty("incomingemaildeliverymethod").GetInt32().Should().Be(2);
+        json.GetProperty("enabledforincomingemail").GetBoolean().Should().BeTrue();
+        // Without --no-outgoing the outgoing side is set too, as before.
+        json.GetProperty("outgoingemaildeliverymethod").GetInt32().Should().Be(2);
+        json.GetProperty("enabledforoutgoingemail").GetBoolean().Should().BeTrue();
+
+        // --no-outgoing leaves the outgoing columns alone: only the profile and the incoming side are written.
+        using var incomingOnly = await LoggedInAsync();
+        (await incomingOnly.RunAsync("mailbox", "link", "ada@example.com", "--profile", "Relay", "--incoming", "--no-outgoing"))
+            .Should().Be(0, incomingOnly.Err.ToString());
+        var body = JsonDocument.Parse(Last(incomingOnly, HttpMethod.Patch).Body!).RootElement;
+        body.GetProperty("incomingemaildeliverymethod").GetInt32().Should().Be(2);
+        body.TryGetProperty("outgoingemaildeliverymethod", out _).Should().BeFalse();
+        body.TryGetProperty("enabledforoutgoingemail", out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Show_PrintsIncomingState()
+    {
+        using var cli = await LoggedInAsync();
+
+        (await cli.RunAsync("mailbox", "show", "ada@example.com", "-o", "json")).Should().Be(0, cli.Err.ToString());
+
+        var row = JsonDocument.Parse(cli.Out.ToString()).RootElement;
+        row.GetProperty("incoming").GetString().Should().Be("Server-Side Synchronization");
+        row.GetProperty("incomingenabled").GetBoolean().Should().BeTrue();
+        row.GetProperty("incomingemailstatus").GetString().Should().Be("Success");
+        row.GetProperty("lastsuccessfulsynccompletedon").GetString().Should().StartWith("2026-11-23");
+        row.GetProperty("processemailreceivedafter").GetString().Should().StartWith("2026-11-20");
+        // The filtering is the user's usersettings value (1 is responses to email), not a mailbox column.
+        row.GetProperty("filtering").GetString().Should().Be("Responses to email");
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Forbidden, 0, "unavailable (no access)")]
+    [InlineData(HttpStatusCode.NotFound, 4, null)]
+    [InlineData(HttpStatusCode.InternalServerError, 1, null)]
+    public async Task Show_FilteringRefused_OnlyA403IsMarkedUnavailable(HttpStatusCode status, int exit, string? marker)
+    {
+        using var cli = await LoggedInAsync(r =>
+            r.Method == HttpMethod.Get && r.RequestUri!.AbsolutePath.EndsWith("/usersettingscollection")
+                ? FakeHandler.Json(status, """{"error":{"message":"no"}}""")
+                : Server(r));
+
+        (await cli.RunAsync("mailbox", "show", "ada@example.com", "-o", "json")).Should().Be(exit);
+
+        if (marker is not null) JsonDocument.Parse(cli.Out.ToString()).RootElement.GetProperty("filtering").GetString().Should().Be(marker);
+    }
+
+    [Fact]
+    public async Task List_HasTheIncomingMethodAndStatus()
+    {
+        using var cli = await LoggedInAsync();
+
+        (await cli.RunAsync("mailbox", "list", "-o", "json")).Should().Be(0, cli.Err.ToString());
+
+        var row = JsonDocument.Parse(cli.Out.ToString()).RootElement[0];
+        row.GetProperty("incoming").GetString().Should().Be("Server-Side Synchronization");
+        row.GetProperty("incomingemailstatus").GetString().Should().Be("Success");
     }
 
     [Fact]
@@ -243,17 +319,42 @@ public sealed class MailboxCommandsTests
     }
 
     [Fact]
+    public async Task TestWait_IncomingFailed_Exit5()
+    {
+        using var cli = await LoggedInAsync(r =>
+            r.Method == HttpMethod.Get && r.RequestUri!.AbsolutePath.EndsWith($"/mailboxes({MailboxId})")
+                ? FakeHandler.Json(HttpStatusCode.OK, """
+                    {"testemailconfigurationscheduled":false,"outgoingemailstatus":1,"incomingemailstatus":2,
+                     "testmailboxaccesscompletedon":"2026-11-23T10:00:00Z","lastsuccessfulsynccompletedon":null,
+                     "lastsyncerror":"The IMAP server refused the user name or password (AUTHENTICATIONFAILED)."}
+                    """)
+                : Server(r));
+        cli.Clock = new SteppingClock();
+
+        (await cli.RunAsync("mailbox", "test", MailboxId, "--wait", "-o", "json")).Should().Be(5, "a failed incoming test is exit 5 too");
+
+        var result = JsonDocument.Parse(cli.Out.ToString()).RootElement;
+        result.GetProperty("outgoingemailstatus").GetString().Should().Be("Success");
+        result.GetProperty("incomingemailstatus").GetString().Should().Be("Failure");
+        result.GetProperty("lastsyncerror").GetString().Should().Contain("refused");
+    }
+
+    [Fact]
     public async Task Test_Wait_Success_IsExit0()
     {
         using var cli = await LoggedInAsync(r =>
             r.Method == HttpMethod.Get && r.RequestUri!.AbsolutePath.EndsWith($"/mailboxes({MailboxId})")
-                ? FakeHandler.Json(HttpStatusCode.OK, """{"testemailconfigurationscheduled":false,"outgoingemailstatus":1,"testmailboxaccesscompletedon":"2026-11-23T10:00:00Z"}""")
+                ? FakeHandler.Json(HttpStatusCode.OK, """
+                    {"testemailconfigurationscheduled":false,"outgoingemailstatus":1,"incomingemailstatus":1,
+                     "testmailboxaccesscompletedon":"2026-11-23T10:00:00Z","lastsuccessfulsynccompletedon":"2026-11-23T10:00:00Z"}
+                    """)
                 : Server(r));
         cli.Clock = new SteppingClock();
 
         (await cli.RunAsync("mailbox", "test", MailboxId, "--wait")).Should().Be(0, cli.Err.ToString());
 
-        cli.Out.ToString().Should().Contain("Success");
+        // Both sides are printed.
+        cli.Out.ToString().Should().Contain("Success").And.Contain("incoming");
     }
 
     /// <summary>A clock whose timers fire at once, moving the time on by their delay.</summary>

@@ -10,14 +10,17 @@ import {
   MessageBar,
   MessageBarBody,
   Select,
+  Switch,
 } from '@fluentui/react-components';
 import { useState } from 'react';
 import { t } from '../../shell/i18n/t';
-import type { Mailbox, Profile } from './emailApi';
+import { receivesEmail, type Mailbox, type Profile } from './emailApi';
 
 /**
- * Links a mailbox to an email server profile (plan 4.1b, task 8): a choice of the active profiles, the mailbox's current one first
- * selected. Saving sends the profile, Server-Side Synchronization and outgoing email on; the server's refusal is shown in the dialog.
+ * Links a mailbox to an email server profile (plan 4.1b task 8, plan 4.1c task 10): a choice of the active profiles, the mailbox's
+ * current one first selected, and a Receive email switch that starts from what the mailbox does today. Saving sends the profile,
+ * Server-Side Synchronization and outgoing email on, and the incoming side as the switch says; the server's refusal is shown in the
+ * dialog.
  */
 export function LinkMailboxDialog({
   mailbox,
@@ -34,10 +37,13 @@ export function LinkMailboxDialog({
   busy: boolean;
   error?: string;
   onClose: () => void;
-  onSave: (profileId: string) => void;
+  /** `incoming` is undefined while the Receive email switch is untouched: the mailbox's incoming columns are then left alone. */
+  onSave: (profileId: string, incoming?: boolean) => void;
 }) {
   const choices = profiles.filter((p) => p.active || p.id === mailbox.profileId);
   const [profileId, setProfileId] = useState(mailbox.profileId ?? choices[0]?.id ?? '');
+  const [incoming, setIncoming] = useState<boolean>();
+  const receives = incoming ?? receivesEmail(mailbox);
   return (
     <Dialog open onOpenChange={(_, d) => !d.open && onClose()}>
       <DialogSurface>
@@ -62,12 +68,15 @@ export function LinkMailboxDialog({
                 </Select>
               </Field>
             )}
+            <Field hint={t('email.link.incomingHint')}>
+              <Switch label={t('email.link.incoming')} checked={receives} disabled={busy} onChange={(_, d) => setIncoming(d.checked)} />
+            </Field>
           </DialogContent>
           <DialogActions>
             <Button appearance="secondary" onClick={onClose}>
               {t('common.cancel')}
             </Button>
-            <Button appearance="primary" disabled={!profileId || busy} onClick={() => onSave(profileId)}>
+            <Button appearance="primary" disabled={!profileId || busy} onClick={() => onSave(profileId, incoming)}>
               {t('email.link.save')}
             </Button>
           </DialogActions>

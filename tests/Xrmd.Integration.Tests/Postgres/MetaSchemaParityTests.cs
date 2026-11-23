@@ -63,7 +63,7 @@ public sealed class MetaSchemaContainers : IAsyncLifetime
 
 /// <summary>
 /// Plan 2.7a, Task 4 (ruling P6): a fresh database migrated on PostgreSQL has the meta and auth schemas SQL Server has after
-/// migration 0019, and the PostgreSQL bootstrap gives the data tables their <c>versionnumber</c> (ruling P4).
+/// migration 0020, and the PostgreSQL bootstrap gives the data tables their <c>versionnumber</c> (ruling P4).
 /// </summary>
 [Trait("Category", "Postgres")]
 public sealed class MetaSchemaParityTests(MetaSchemaContainers fx) : IClassFixture<MetaSchemaContainers>
@@ -86,8 +86,8 @@ public sealed class MetaSchemaParityTests(MetaSchemaContainers fx) : IClassFixtu
         sqlColumns.Should().HaveCountGreaterThan(190);
         pgColumns.Should().BeEquivalentTo(sqlColumns);
 
-        (await VersionsAsync(postgres)).Should().Equal(Enumerable.Range(1, 19));
-        (await VersionsAsync(sqlServer)).Should().Equal(Enumerable.Range(1, 19));
+        (await VersionsAsync(postgres)).Should().Equal(Enumerable.Range(1, 20));
+        (await VersionsAsync(sqlServer)).Should().Equal(Enumerable.Range(1, 20));
     }
 
     [Fact]
@@ -96,13 +96,13 @@ public sealed class MetaSchemaParityTests(MetaSchemaContainers fx) : IClassFixtu
         var factory = await fx.NewPostgresDatabaseAsync();
         var migrator = new SchemaMigrator(factory, factory.Dialect);
 
-        (await migrator.GetStatusAsync()).Should().Be(new SchemaStatus(0, 2), "an empty database has the baseline and 0019 pending");
+        (await migrator.GetStatusAsync()).Should().Be(new SchemaStatus(0, 3), "an empty database has the baseline, 0019 and 0020 pending");
         await migrator.MigrateAsync();
         await migrator.MigrateAsync();
-        (await migrator.GetStatusAsync()).Should().Be(new SchemaStatus(19, 0));
+        (await migrator.GetStatusAsync()).Should().Be(new SchemaStatus(20, 0));
 
         await using var conn = await factory.OpenAsync();
-        (await ScalarAsync(conn, "SELECT COUNT(*) FROM meta.schema_version")).Should().Be(19);
+        (await ScalarAsync(conn, "SELECT COUNT(*) FROM meta.schema_version")).Should().Be(20);
         (await ScalarAsync(conn, "SELECT COUNT(*) FROM meta.version_stamp")).Should().Be(1);
         (await ScalarAsync(conn, "SELECT \"current\" FROM meta.version_stamp")).Should().Be(0);
         (await ScalarAsync(conn, "SELECT COUNT(*) FROM meta.filesecret WHERE octet_length(secret) = 32")).Should().Be(1);

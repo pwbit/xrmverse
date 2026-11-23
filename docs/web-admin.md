@@ -223,17 +223,23 @@ app or with `xrmd queue` (see [Email and queues](email-and-queues.md)).
 
 ## Email
 
-The **Email** page (`/manage/email`, System Administrators only) sets up outgoing email (see
-[Email and queues](email-and-queues.md#outgoing-email)). It has three parts:
+The **Email** page (`/manage/email`, System Administrators only) sets up outgoing and incoming email (see
+[Email and queues](email-and-queues.md#outgoing-email) and [Incoming email](email-and-queues.md#incoming-email)). It has
+three parts:
 
 - **Email server profiles**: name, type (SMTP or Exchange Online through Microsoft Graph), server or tenant, where the
   credentials are, whether the secret is set, and state. **New profile** and **Edit profile** open a dialog with the fields
   of the type. The secret is an empty password box with the hint "Set" or "Not set": it is sent only when you type one,
-  and it is never shown.
+  and it is never shown. The dialog sets the outgoing side; the incoming columns of an IMAP profile are written with the
+  Web API (see [Setting up receiving](email-and-queues.md#setting-up-receiving)).
 - **Mailboxes** of the users and queues: name, email address, approval, profile, the last outgoing test (or "Scheduled"),
-  when it ran, and the last error. Select a mailbox for **Approve** (approves its user's or queue's address), **Link to
-  profile** (a dialog to choose an active profile; saving sets the profile, Server-Side Synchronization and outgoing email on)
-  or **Test** (schedules a test; reload the page to see the result).
+  the last incoming test (or "Not receiving" when the mailbox does not receive), when the test ran, the last successful
+  synchronization (**Last sync**), and the last error. Select a mailbox for **Approve** (approves its user's or queue's
+  address), **Link to profile** or **Test** (schedules a test of both sides; reload the page to see the result).
+  **Link to profile** opens a dialog to choose an active profile; saving sets the profile, Server-Side Synchronization and
+  outgoing email on. Its **Receive email** switch shows whether the mailbox receives: turned on, the save also sets
+  Server-Side Synchronization for incoming email and `enabledforincomingemail`; turned off, it sets the incoming delivery
+  method to None and `enabledforincomingemail` to false. A switch left untouched changes no incoming column.
 - **Sender policy**: the switch **Send only from queues** sets the xrmverse setting `xrmverse_EmailSendFrom` to `queueOnly`
   (see [Sender policy](email-and-queues.md#sender-policy-xrmverse_emailsendfrom)).
 

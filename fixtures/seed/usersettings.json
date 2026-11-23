@@ -146,6 +146,105 @@
           }
         ]
       }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "incomingemailfilteringmethod",
+      "SchemaName": "IncomingEmailFilteringMethod",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Incoming Email Filtering",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Incoming Email Filtering",
+          "LanguageCode": 1033
+        }
+      },
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "All",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "All",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Responses",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Responses",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 2,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "From contacts and accounts",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "From contacts and accounts",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 3,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "From email-enabled records",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "From email-enabled records",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 4,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "None",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "None",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      },
+      "DefaultFormValue": 2
     }
   ],
   "ManyToOneRelationships": [

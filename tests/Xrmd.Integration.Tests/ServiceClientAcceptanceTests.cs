@@ -2258,4 +2258,304 @@ public sealed class ServiceClientAcceptanceTests(ServiceClientFixture fx, ITestO
                 }
         }
     }
+
+    // ---- Plan 4.1c, task 11: incoming email through the real ServiceClient (GreenMail SMTP and IMAP, the host's sync job) ----
+
+    /// <summary>
+    /// A queue whose mailbox sends through GreenMail's SMTP (user <c>sender</c>) and reads the inbox of <paramref name="inbox"/> over IMAP,
+    /// the queue's address being the inbox's. The mailbox is approved, both delivery methods are Server-Side Synchronization, both sides
+    /// enabled, and the test is scheduled (a successful incoming test schedules the sync job). Created records go to <paramref name="created"/>.
+    /// </summary>
+    private static (Guid Queue, Guid Mailbox) ReceivingQueue(ServiceClient admin, List<(string Table, Guid Id)> created, string tag, GreenMail greenMail,
+        MailUser inbox, string name)
+    {
+        Guid Make(Entity e) { var id = admin.Create(e); created.Add((e.LogicalName, id)); return id; }
+        var profile = Make(new Entity("emailserverprofile")
+        {
+            ["name"] = $"{tag} {name} SMTP and IMAP", ["servertype"] = new OptionSetValue(4),
+            ["outgoingserverlocation"] = greenMail.Hostname, ["outgoingportnumber"] = greenMail.SmtpPort, ["outgoingusessl"] = false,
+            ["outgoingauthenticationprotocol"] = new OptionSetValue(3), ["outgoingcredentialretrieval"] = new OptionSetValue(1),
+            ["outgoingusername"] = GreenMail.SenderUser, ["outgoingpassword"] = GreenMail.SenderPassword,
+            ["incomingserverlocation"] = greenMail.Hostname, ["incomingportnumber"] = greenMail.ImapPort, ["incomingusessl"] = false,
+            ["incomingcredentialretrieval"] = new OptionSetValue(1), ["incomingusername"] = inbox.Login, ["incomingpassword"] = inbox.Password,
+            // The outgoing side keeps its own credentials (sender), the incoming side reads the queue's inbox.
+            ["usesamesettingsforoutgoingconnections"] = false,
+        });
+        var queue = Make(new Entity("queue")
+        {
+            ["name"] = $"{tag} {name}", ["emailaddress"] = inbox.Address,
+            ["queueviewtype"] = new OptionSetValue(0), ["queuetypecode"] = new OptionSetValue(1),
+        });
+        admin.Update(new Entity("queue", queue) { ["emailrouteraccessapproval"] = new OptionSetValue(1) });
+        var mailbox = admin.Retrieve("queue", queue, new ColumnSet("defaultmailbox")).GetAttributeValue<EntityReference>("defaultmailbox").Id;
+        admin.Update(new Entity("mailbox", mailbox)
+        {
+            ["emailserverprofile"] = new EntityReference("emailserverprofile", profile),
+            ["outgoingemaildeliverymethod"] = new OptionSetValue(2), ["enabledforoutgoingemail"] = true,
+            ["incomingemaildeliverymethod"] = new OptionSetValue(2), ["enabledforincomingemail"] = true,
+        });
+        admin.Update(new Entity("mailbox", mailbox) { ["testemailconfigurationscheduled"] = true });
+        return (queue, mailbox);
+    }
+
+    /// <summary>Waits for the mailbox test to succeed on both sides and for the first sync pass (which sets <c>processemailreceivedafter</c>).</summary>
+    private static async Task<DateTime> FirstPassAsync(ServiceClient admin, Guid mailbox)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(90);
+        while (true)
+        {
+            var row = admin.Retrieve("mailbox", mailbox, new ColumnSet("testemailconfigurationscheduled", "incomingemailstatus", "outgoingemailstatus",
+                "lastsyncerror", "lastsuccessfulsynccompletedon", "processemailreceivedafter"));
+            var error = row.GetAttributeValue<string>("lastsyncerror");
+            if (row.GetAttributeValue<bool?>("testemailconfigurationscheduled") == false)
+            {
+                row.GetAttributeValue<OptionSetValue>("outgoingemailstatus")?.Value.Should().NotBe(2, error);
+                row.GetAttributeValue<OptionSetValue>("incomingemailstatus")?.Value.Should().NotBe(2, error);
+            }
+            if (row.GetAttributeValue<DateTime?>("lastsuccessfulsynccompletedon") is { } done)
+            {
+                row.GetAttributeValue<OptionSetValue>("incomingemailstatus").Value.Should().Be(1, error);
+                row.GetAttributeValue<DateTime?>("processemailreceivedafter").Should().NotBeNull("the first pass sets it");
+                return done;
+            }
+            DateTime.UtcNow.Should().BeBefore(deadline, "the mailbox test and the first sync pass should complete ({0})", error);
+            await Task.Delay(250);
+        }
+    }
+
+    /// <summary>Waits for a sync pass of <paramref name="mailbox"/> that completes after <paramref name="after"/>.</summary>
+    private static async Task<DateTime> PassAfterAsync(ServiceClient admin, Guid mailbox, DateTime after)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(60);
+        while (true)
+        {
+            var row = admin.Retrieve("mailbox", mailbox, new ColumnSet("lastsuccessfulsynccompletedon", "lastsyncerror"));
+            if (row.GetAttributeValue<DateTime?>("lastsuccessfulsynccompletedon") is { } done && done > after) return done;
+            DateTime.UtcNow.Should().BeBefore(deadline, "a sync pass should complete ({0})", row.GetAttributeValue<string>("lastsyncerror"));
+            await Task.Delay(250);
+        }
+    }
+
+    /// <summary>The received emails whose <c>messageid</c> is <paramref name="messageId"/> (with its angle brackets).</summary>
+    private static List<Entity> ReceivedEmails(ServiceClient admin, string messageId)
+    {
+        var query = new QueryExpression("email")
+        {
+            ColumnSet = new ColumnSet("subject", "statecode", "statuscode", "directioncode", "regardingobjectid", "parentactivityid",
+                "correlationmethod", "messageid", "inreplyto"),
+        };
+        query.Criteria.AddCondition("messageid", ConditionOperator.Equal, messageId);
+        query.Criteria.AddCondition("directioncode", ConditionOperator.Equal, false);
+        return [.. admin.RetrieveMultiple(query).Entities];
+    }
+
+    /// <summary>Waits up to a minute for the received email whose <c>messageid</c> is <paramref name="messageId"/>.</summary>
+    private static async Task<Entity> ReceivedAsync(ServiceClient admin, string messageId)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(60);
+        while (true)
+        {
+            if (ReceivedEmails(admin, messageId) is [var email, ..]) return email;
+            DateTime.UtcNow.Should().BeBefore(deadline, "the sync job should import {0}", messageId);
+            await Task.Delay(250);
+        }
+    }
+
+    /// <summary>The active queue items of <paramref name="email"/>, with their queue.</summary>
+    private static List<Entity> QueueItemsOf(ServiceClient admin, Guid email)
+    {
+        var query = new QueryExpression("queueitem") { ColumnSet = new ColumnSet("queueid", "objectid", "title", "statecode") };
+        query.Criteria.AddCondition("objectid", ConditionOperator.Equal, email);
+        return [.. admin.RetrieveMultiple(query).Entities];
+    }
+
+    /// <summary>A message from <paramref name="from"/> to <paramref name="to"/> with a new Message-ID and an HTML body.</summary>
+    private static MimeKit.MimeMessage IncomingMessage(string tag, string from, string to, string subject)
+    {
+        var m = new MimeKit.MimeMessage { Subject = subject, Date = DateTimeOffset.UtcNow };
+        m.From.Add(MimeKit.MailboxAddress.Parse(from));
+        m.To.Add(MimeKit.MailboxAddress.Parse(to));
+        m.MessageId = $"{Guid.NewGuid():N}.{tag}@example.com";
+        m.Body = new MimeKit.TextPart("html") { Text = "<p>" + subject + "</p>" };
+        return m;
+    }
+
+    /// <summary>
+    /// Puts <paramref name="message"/> in <paramref name="inbox"/> (IMAP APPEND) with an internal date a few seconds ahead, so it is never
+    /// before the mailbox's <c>processemailreceivedafter</c> (IMAP dates have whole seconds).
+    /// </summary>
+    private static Task DeliverAsync(GreenMail greenMail, MailUser inbox, MimeKit.MimeMessage message) =>
+        greenMail.AppendAsync(inbox, message, DateTimeOffset.UtcNow.AddSeconds(5));
+
+    private void Cleanup(ServiceClient admin, List<(string Table, Guid Id)> created)
+    {
+        foreach (var (table, id) in Enumerable.Reverse(created))
+            try
+            {
+                admin.Delete(table, id);
+            }
+            catch (FaultException<OrganizationServiceFault> ex)
+            {
+                output.WriteLine($"Cleanup: {table} {id} was not deleted: {ex.Message}");
+            }
+    }
+
+    /// <summary>
+    /// Plan 4.1c, task 11: an email about an account is sent from a queue's mailbox (SendEmail over GreenMail's SMTP, as in 4.1b); the
+    /// contact's reply, with <c>In-Reply-To</c> the sent email's <c>Message-ID</c>, reaches the queue's inbox and the host's sync job imports
+    /// it: a Received email regarding the same account, <c>parentactivityid</c> the sent email, <c>correlationmethod</c> 3 (In-Reply-To).
+    /// </summary>
+    [Fact]
+    public async Task ServiceClient_Reply_LinksToSameAccount()
+    {
+        await using var greenMail = await GreenMail.StartAsync();
+        using var admin = Connect();
+        admin.IsReady.Should().BeTrue(admin.LastError);
+        await fx.App.Services.GetRequiredService<SdkMessageCatalog>().EnsureAsync(default);
+        var tag = "r" + Guid.NewGuid().ToString("N")[..8];
+        var created = new List<(string Table, Guid Id)>();
+        Guid Make(Entity e) { var id = admin.Create(e); created.Add((e.LogicalName, id)); return id; }
+        try
+        {
+            var inbox = await greenMail.NewUserAsync();
+            var (queue, mailbox) = ReceivingQueue(admin, created, tag, greenMail, inbox, "Support");
+            await FirstPassAsync(admin, mailbox);
+
+            var account = Make(new Entity("account") { ["name"] = $"{tag} Fabrikam Example" });
+            var contact = Make(new Entity("contact") { ["firstname"] = "Grace", ["lastname"] = tag, ["emailaddress1"] = GreenMail.RecipientAddress });
+            var subject = $"{tag} Your order";
+            var sentId = Make(new Entity("email")
+            {
+                ["subject"] = subject, ["description"] = "<p>Your order has shipped.</p>",
+                ["regardingobjectid"] = new EntityReference("account", account),
+                ["from"] = new EntityCollection([new Entity("activityparty") { ["partyid"] = new EntityReference("queue", queue) }]),
+                ["to"] = new EntityCollection([new Entity("activityparty") { ["partyid"] = new EntityReference("contact", contact) }]),
+            });
+            admin.Execute(new SendEmailRequest { EmailId = sentId, IssueSend = true, TrackingToken = "" });
+
+            var deadline = DateTime.UtcNow.AddSeconds(60);
+            Entity sent;
+            while (true)
+            {
+                sent = admin.Retrieve("email", sentId, new ColumnSet("statuscode", "messageid"));
+                if (sent.GetAttributeValue<OptionSetValue>("statuscode").Value is 3 or 8) break;
+                DateTime.UtcNow.Should().BeBefore(deadline, "the send job should complete");
+                await Task.Delay(100);
+            }
+            sent.GetAttributeValue<OptionSetValue>("statuscode").Value.Should().Be(3, "the email is Sent");
+            var sentMessageId = sent.GetAttributeValue<string>("messageid");
+            (await greenMail.RecipientInboxAsync()).Should().Contain(m => m.Subject == subject);
+
+            // The contact answers: the reply names the sent email in In-Reply-To and reaches the queue's inbox.
+            var reply = IncomingMessage(tag, GreenMail.RecipientAddress, inbox.Address, "RE: " + subject);
+            reply.InReplyTo = sentMessageId.Trim('<', '>');
+            await DeliverAsync(greenMail, inbox, reply);
+
+            var received = await ReceivedAsync(admin, $"<{reply.MessageId}>");
+            created.Add(("email", received.Id));
+            received.GetAttributeValue<OptionSetValue>("statuscode").Value.Should().Be(4, "the email is Received");
+            received.GetAttributeValue<OptionSetValue>("statecode").Value.Should().Be(1);
+            received.GetAttributeValue<EntityReference>("regardingobjectid").Should().NotBeNull("the reply joins the thread's record");
+            received.GetAttributeValue<EntityReference>("regardingobjectid").LogicalName.Should().Be("account");
+            received.GetAttributeValue<EntityReference>("regardingobjectid").Id.Should().Be(account);
+            received.GetAttributeValue<EntityReference>("parentactivityid").Should().NotBeNull();
+            received.GetAttributeValue<EntityReference>("parentactivityid").Id.Should().Be(sentId);
+            received.GetAttributeValue<OptionSetValue>("correlationmethod").Value.Should().Be(3, "correlated by In-Reply-To");
+            received.GetAttributeValue<string>("inreplyto").Should().Be(sentMessageId);
+
+            var full = admin.Retrieve("email", received.Id, new ColumnSet("from"));
+            full.GetAttributeValue<EntityCollection>("from").Entities.Should().ContainSingle()
+                .Which.GetAttributeValue<string>("addressused").Should().Be(GreenMail.RecipientAddress);
+        }
+        finally
+        {
+            Cleanup(admin, created);
+        }
+    }
+
+    /// <summary>
+    /// Plan 4.1c, task 11: a new message (no thread headers, no token) to a queue's address is imported by the host's sync job as a
+    /// Received email without a regarding record, and a delivery adds it to the queue: one active queue item titled with the subject.
+    /// </summary>
+    [Fact]
+    public async Task ServiceClient_NewMessageToQueueMailbox_InQueue_WithoutRegarding()
+    {
+        await using var greenMail = await GreenMail.StartAsync();
+        using var admin = Connect();
+        admin.IsReady.Should().BeTrue(admin.LastError);
+        await fx.App.Services.GetRequiredService<SdkMessageCatalog>().EnsureAsync(default);
+        var tag = "q" + Guid.NewGuid().ToString("N")[..8];
+        var created = new List<(string Table, Guid Id)>();
+        try
+        {
+            var inbox = await greenMail.NewUserAsync();
+            var (queue, mailbox) = ReceivingQueue(admin, created, tag, greenMail, inbox, "Help desk");
+            await FirstPassAsync(admin, mailbox);
+
+            var subject = $"{tag} The printer is down";
+            var message = IncomingMessage(tag, $"someone.{tag}@example.com", inbox.Address, subject);
+            await DeliverAsync(greenMail, inbox, message);
+
+            var received = await ReceivedAsync(admin, $"<{message.MessageId}>");
+            created.Add(("email", received.Id));
+            received.GetAttributeValue<string>("subject").Should().Be(subject);
+            received.GetAttributeValue<OptionSetValue>("statuscode").Value.Should().Be(4, "the email is Received");
+            received.GetAttributeValue<EntityReference>("regardingobjectid").Should().BeNull("a new message is about nothing yet");
+            received.GetAttributeValue<EntityReference>("parentactivityid").Should().BeNull();
+            received.GetAttributeValue<OptionSetValue>("correlationmethod").Value.Should().Be(0, "nothing correlated");
+
+            var items = QueueItemsOf(admin, received.Id);
+            var item = items.Should().ContainSingle("a delivery adds the email to its queue").Subject;
+            item.GetAttributeValue<EntityReference>("queueid").Id.Should().Be(queue);
+            item.GetAttributeValue<OptionSetValue>("statecode").Value.Should().Be(0, "the item is active");
+            item.GetAttributeValue<string>("title").Should().Be(subject);
+        }
+        finally
+        {
+            Cleanup(admin, created);
+        }
+    }
+
+    /// <summary>
+    /// Plan 4.1c, task 11: a message imported by one pass is not imported again by the next ones, even when the inbox holds a second copy
+    /// of it (same <c>Message-ID</c>, a new IMAP UID): one email and one queue item.
+    /// </summary>
+    [Fact]
+    public async Task ServiceClient_TwoPasses_NoDuplicate()
+    {
+        await using var greenMail = await GreenMail.StartAsync();
+        using var admin = Connect();
+        admin.IsReady.Should().BeTrue(admin.LastError);
+        await fx.App.Services.GetRequiredService<SdkMessageCatalog>().EnsureAsync(default);
+        var tag = "d" + Guid.NewGuid().ToString("N")[..8];
+        var created = new List<(string Table, Guid Id)>();
+        try
+        {
+            var inbox = await greenMail.NewUserAsync();
+            var (_, mailbox) = ReceivingQueue(admin, created, tag, greenMail, inbox, "Orders");
+            await FirstPassAsync(admin, mailbox);
+
+            var message = IncomingMessage(tag, $"buyer.{tag}@example.com", inbox.Address, $"{tag} Order 1001");
+            var messageId = $"<{message.MessageId}>";
+            await DeliverAsync(greenMail, inbox, message);
+            var received = await ReceivedAsync(admin, messageId);
+            created.Add(("email", received.Id));
+
+            // The same message again (a second copy in the inbox), then two more passes: the first that ends after the copy arrived
+            // may have listed the inbox before it, the second has listed it for sure.
+            await DeliverAsync(greenMail, inbox, message);
+            var second = await PassAfterAsync(admin, mailbox, DateTime.UtcNow);
+            await PassAfterAsync(admin, mailbox, second);
+
+            ReceivedEmails(admin, messageId).Should().ContainSingle("a message is imported once").Which.Id.Should().Be(received.Id);
+            QueueItemsOf(admin, received.Id).Should().ContainSingle("and added to its queue once");
+            var row = admin.Retrieve("mailbox", mailbox, new ColumnSet("incomingemailstatus", "lastsyncerrorcount"));
+            row.GetAttributeValue<OptionSetValue>("incomingemailstatus").Value.Should().Be(1);
+            row.GetAttributeValue<int?>("lastsyncerrorcount").GetValueOrDefault().Should().Be(0);
+        }
+        finally
+        {
+            Cleanup(admin, created);
+        }
+    }
 }

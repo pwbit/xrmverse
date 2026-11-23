@@ -11,10 +11,12 @@ using MimeKit;
 namespace Xrmd.Integration.Tests;
 
 /// <summary>
-/// GreenMail (Apache 2.0, a test container only, exact tag): SMTP on 3025 with authentication, IMAP on 3143 to read what arrived.
-/// Users <c>sender</c> / <c>secret</c> (sender@example.com) and <c>rcpt</c> / <c>pw</c> (rcpt@example.com). GreenMail has no TLS:
-/// the host needs <c>Mail:AllowInsecureSmtp</c> true (the provider takes <c>allowInsecure: true</c>), and it accepts any SMTP
-/// password (a refused password needs <see cref="FakeSmtpServer"/>).
+/// GreenMail (Apache 2.0, a test container only, exact tag): SMTP on 3025 with authentication, IMAP on 3143, and its REST API on 8080
+/// (to add users). Users <c>sender</c> / <c>secret</c> (sender@example.com) and <c>rcpt</c> / <c>pw</c> (rcpt@example.com); a test
+/// that reads or fills a mailbox adds its own user with <see cref="NewUserAsync"/>, so a container shared by a test class
+/// (<see cref="GreenMailFixture"/>) gives each test an empty inbox. GreenMail has no TLS: the host needs <c>Mail:AllowInsecureSmtp</c>
+/// and <c>Mail:AllowInsecureImap</c> true (the providers take <c>allowInsecure: true</c>). IMAP refuses a wrong password; the SMTP
+/// failure cases (a refused password, 4xx and 5xx replies) use <see cref="FakeSmtpServer"/>.
 /// </summary>
 internal sealed class GreenMail : IAsyncDisposable
 {
@@ -31,26 +33,97 @@ internal sealed class GreenMail : IAsyncDisposable
 
     public int SmtpPort => _container.GetMappedPublicPort(3025);
 
+    public int ImapPort => _container.GetMappedPublicPort(3143);
+
+    private int ApiPort => _container.GetMappedPublicPort(8080);
+
     public static async Task<GreenMail> StartAsync()
     {
         var container = new ContainerBuilder(Image)
             .WithPortBinding(3025, true)
             .WithPortBinding(3143, true)
+            .WithPortBinding(8080, true)
             .WithEnvironment("GREENMAIL_OPTS",
-                "-Dgreenmail.setup.test.smtp -Dgreenmail.setup.test.imap -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.auth.disabled=false "
+                // No greenmail.auth.disabled: its mere presence (even "=false") turns authentication off, and IMAP must refuse a wrong password.
+                "-Dgreenmail.setup.test.smtp -Dgreenmail.setup.test.imap -Dgreenmail.hostname=0.0.0.0 "
                 + "-Dgreenmail.users=sender:secret@example.com,rcpt:pw@example.com")
-            .WithWaitStrategy(Wait.ForUnixContainer().UntilMessageIsLogged("Starting GreenMail API server"))
+            // The API logs its start before it listens: wait until it answers (users are added through it).
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilMessageIsLogged("Starting GreenMail API server")
+                .UntilHttpRequestIsSucceeded(r => r.ForPort(8080).ForPath("/api/service/readiness")))
             .Build();
         await container.StartAsync();
         return new GreenMail(container);
     }
 
-    /// <summary>The messages in the inbox of rcpt@example.com, after waiting up to <paramref name="timeout"/> for <paramref name="atLeast"/> of them.</summary>
-    public async Task<IReadOnlyList<MimeMessage>> RecipientInboxAsync(int atLeast = 1, TimeSpan? timeout = null)
+    /// <summary>A new user with an empty inbox (login, password and address <c>{login}@example.com</c>), added through the REST API.</summary>
+    public async Task<MailUser> NewUserAsync()
     {
-        using var imap = new ImapClient();
-        await imap.ConnectAsync(_container.Hostname, _container.GetMappedPublicPort(3143), SecureSocketOptions.None);
-        await imap.AuthenticateAsync("rcpt", "pw");
+        var login = "u" + Guid.NewGuid().ToString("N")[..12];
+        var user = new MailUser(login, "pw-" + Guid.NewGuid().ToString("N")[..8], login + "@example.com");
+        // The container is local: never through an HTTP proxy of the environment.
+        using var http = new HttpClient(new SocketsHttpHandler { UseProxy = false });
+        using var response = await http.PostAsync($"http://{Hostname}:{ApiPort}/api/user", new StringContent(
+            $$"""{"email":"{{user.Address}}","login":"{{user.Login}}","password":"{{user.Password}}"}""", Encoding.UTF8, "application/json"));
+        response.EnsureSuccessStatusCode();
+        return user;
+    }
+
+    /// <summary>An IMAP session of <paramref name="user"/> (plaintext; GreenMail has no TLS).</summary>
+    public async Task<ImapClient> ImapAsync(MailUser user)
+    {
+        var imap = new ImapClient();
+        await imap.ConnectAsync(Hostname, ImapPort, SecureSocketOptions.None);
+        await imap.AuthenticateAsync(user.Login, user.Password);
+        return imap;
+    }
+
+    /// <summary>Puts <paramref name="message"/> in the inbox of <paramref name="user"/> with the internal date <paramref name="receivedOn"/> (IMAP APPEND).</summary>
+    public async Task AppendAsync(MailUser user, MimeMessage message, DateTimeOffset receivedOn)
+    {
+        using var imap = await ImapAsync(user);
+        await imap.Inbox.AppendAsync(new AppendRequest(message, MessageFlags.None, receivedOn));
+        await imap.DisconnectAsync(true);
+    }
+
+    /// <summary>A small message from <c>sender@example.com</c> to <paramref name="to"/> with the Message-ID <c>{id}@example.com</c>.</summary>
+    public static MimeMessage Message(string id, string to, string? subject = null)
+    {
+        var m = new MimeMessage();
+        m.From.Add(new MailboxAddress("Sender", "sender@example.com"));
+        m.To.Add(MailboxAddress.Parse(to));
+        m.Subject = subject ?? id;
+        m.MessageId = id + "@example.com";
+        m.Body = new TextPart("plain") { Text = "Body of " + id };
+        return m;
+    }
+
+    /// <summary>The flags of every message in the inbox of <paramref name="user"/>, read by a separate session.</summary>
+    public async Task<IReadOnlyList<MessageFlags>> InboxFlagsAsync(MailUser user)
+    {
+        using var imap = await ImapAsync(user);
+        await imap.Inbox.OpenAsync(FolderAccess.ReadOnly);
+        var flags = imap.Inbox.Count == 0 ? [] : (await imap.Inbox.FetchAsync(0, -1, MessageSummaryItems.Flags)).Select(m => m.Flags ?? MessageFlags.None).ToList();
+        await imap.DisconnectAsync(true);
+        return flags;
+    }
+
+    /// <summary>Deletes and expunges every message of the inbox of <paramref name="user"/>, from a separate session.</summary>
+    public async Task ExpungeAllAsync(MailUser user)
+    {
+        using var imap = await ImapAsync(user);
+        await imap.Inbox.OpenAsync(FolderAccess.ReadWrite);
+        if (imap.Inbox.Count > 0)
+        {
+            await imap.Inbox.AddFlagsAsync(Enumerable.Range(0, imap.Inbox.Count).ToList(), MessageFlags.Deleted, silent: true);
+            await imap.Inbox.ExpungeAsync();
+        }
+        await imap.DisconnectAsync(true);
+    }
+
+    /// <summary>The messages in the inbox of <paramref name="user"/>, after waiting up to <paramref name="timeout"/> for <paramref name="atLeast"/> of them.</summary>
+    public async Task<IReadOnlyList<MimeMessage>> InboxAsync(MailUser user, int atLeast = 1, TimeSpan? timeout = null)
+    {
+        using var imap = await ImapAsync(user);
         var inbox = imap.Inbox;
         await inbox.OpenAsync(FolderAccess.ReadOnly);
         var deadline = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(5));
@@ -65,11 +138,40 @@ internal sealed class GreenMail : IAsyncDisposable
         return messages;
     }
 
+    /// <summary>The messages in the inbox of rcpt@example.com (the user the acceptance tests send to).</summary>
+    public Task<IReadOnlyList<MimeMessage>> RecipientInboxAsync(int atLeast = 1, TimeSpan? timeout = null) =>
+        InboxAsync(new MailUser("rcpt", "pw", RecipientAddress), atLeast, timeout);
+
     public ValueTask DisposeAsync() => _container.DisposeAsync();
 }
 
+/// <summary>A GreenMail user: IMAP login, password and address.</summary>
+internal sealed record MailUser(string Login, string Password, string Address);
+
 /// <summary>
-/// A minimal SMTP server for what GreenMail cannot do: GreenMail accepts every SMTP password, so it cannot refuse one. It listens on
+/// One <see cref="GreenMail"/> for a whole test class (<c>IClassFixture&lt;GreenMailFixture&gt;</c>): the container starts once, and each
+/// test adds its own user (<see cref="GreenMail.NewUserAsync"/>) instead of starting its own container.
+/// </summary>
+public sealed class GreenMailFixture : IAsyncLifetime
+{
+    private GreenMail? _server;
+
+    internal GreenMail Server => _server ?? throw new InvalidOperationException("GreenMail has not started.");
+
+    public async Task InitializeAsync() => _server = await GreenMail.StartAsync();
+
+    public async Task DisposeAsync()
+    {
+        if (_server is not null)
+        {
+            await _server.DisposeAsync();
+        }
+    }
+}
+
+/// <summary>
+/// A minimal SMTP server for the SMTP failure cases (a refused password, chosen MAIL FROM and RCPT TO replies), which GreenMail cannot
+/// script. It listens on
 /// 127.0.0.1, offers AUTH PLAIN and answers 535 unless <c>authOk</c>, answers MAIL FROM with <c>mailReply</c> and RCPT TO with
 /// <c>rcptReply</c>. It offers no STARTTLS (the provider needs <c>allowInsecure</c>).
 /// </summary>

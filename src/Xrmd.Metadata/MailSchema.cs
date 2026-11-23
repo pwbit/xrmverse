@@ -98,6 +98,27 @@ public static class MailSchema
     public const int CorrelationNone = 0, CorrelationSkipped = 1, CorrelationXHeader = 2, CorrelationInReplyTo = 3,
         CorrelationTrackingToken = 4, CorrelationConversationIndex = 5, CorrelationSmartMatching = 6, CorrelationCustom = 7;
 
+    /// <summary>
+    /// The <c>incomingemailfilteringmethod</c> values (plan 4.1c), on <c>usersettings</c> and <c>queue</c>: all messages, responses to
+    /// email, from contacts and accounts, from email-enabled records, none.
+    /// </summary>
+    public const int FilterAll = 0, FilterResponses = 1, FilterContactsAccounts = 2, FilterEmailEnabled = 3, FilterNone = 4;
+
+    /// <summary>The column of the incoming email filtering, on <c>usersettings</c> and <c>queue</c>.</summary>
+    public const string FilteringMethodColumn = "incomingemailfilteringmethod";
+
+    /// <summary>The default filtering of a user (<see cref="FilterContactsAccounts"/>) and of a queue (<see cref="FilterAll"/>).</summary>
+    public const int UserFilterDefault = FilterContactsAccounts, QueueFilterDefault = FilterAll;
+
+    /// <summary><c>organization.emailcorrelationenabled</c> (plan 4.1c): whether an incoming email is correlated with an earlier one (default true).</summary>
+    public const string CorrelationEnabledColumn = "emailcorrelationenabled";
+
+    /// <summary>
+    /// The shared variable that names the mailbox (its id in <c>D</c> format) of an incoming email's delivery (plan 4.1c): an xrmverse
+    /// extension, set only by the server, refused when a plug-in adds or changes it.
+    /// </summary>
+    public const string MailboxDeliveryVariable = "xrmverse_MailboxDeliveryId";
+
     /// <summary>The <c>email.statuscode</c> values: Draft and Failed (state 0), Sent (state 1) and Pending Send (state 1).</summary>
     public const int EmailDraft = 1, EmailFailed = 8, EmailSent = 3, EmailPendingSend = 6;
 

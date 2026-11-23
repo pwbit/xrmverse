@@ -107,6 +107,12 @@ public sealed class AsyncOperationQueue
     /// <summary>The <c>name</c> and <c>messagename</c> of a mailbox test job.</summary>
     public const string MailboxTestMessage = "TestMailbox";
 
+    /// <summary>
+    /// <c>asyncoperation.operationtype</c> "Mailbox Sync": the synchronization of one mailbox's incoming email (plan 4.1c). Dataverse has
+    /// no such type; the value is xrmverse's own, next to <see cref="MailboxTest"/>.
+    /// </summary>
+    public const int MailboxSync = 99013;
+
     /// <summary>Object type code of <c>systemuser</c> (the type column of the polymorphic <c>ownerid</c>).</summary>
     private const int SystemUserTypeCode = 8;
 

@@ -7,6 +7,7 @@ using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Audit;
 using Xrmd.Core;
+using Xrmd.Core.Mail;
 using Xrmd.Metadata;
 using Xrmd.Security;
 using Xrmd.Solution;
@@ -199,6 +200,10 @@ public static class OrganizationDatabase
         // After the administrator is inserted, so that an administrator added at a later start has its mailbox in the same start.
         await MailboxSettingsUpgrade.EnsureAsync(services.GetRequiredService<IMetadataStore>(), services.GetRequiredService<IDbConnectionFactory>(), ct,
             services.GetService<Microsoft.Extensions.Logging.ILoggerFactory>()?.CreateLogger(nameof(MailboxSettingsUpgrade)));
+        // Plan 4.1c: the outgoing message keys of the emails sent before the plan, once.
+        await IncomingMailSettingsUpgrade.EnsureAsync(services.GetRequiredService<IMetadataStore>(), services.GetRequiredService<IDbConnectionFactory>(),
+            MailMessageKeys.RegisterOutgoingAsync, ct,
+            services.GetService<Microsoft.Extensions.Logging.ILoggerFactory>()?.CreateLogger(nameof(IncomingMailSettingsUpgrade)));
 
         var factory = services.GetRequiredService<IDbConnectionFactory>();
         await using var conn = await factory.OpenAsync(ct);

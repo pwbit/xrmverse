@@ -17,6 +17,7 @@ public static class MailboxCommands
 {
     private const string MailboxSelect =
         "mailboxid,name,emailaddress,_emailserverprofile_value,outgoingemaildeliverymethod,enabledforoutgoingemail,outgoingemailstatus," +
+        "incomingemaildeliverymethod,enabledforincomingemail,incomingemailstatus,lastsuccessfulsynccompletedon," +
         "emailrouteraccessapproval,testmailboxaccesscompletedon,statecode";
     private const string ProfileSelect =
         "emailserverprofileid,name,servertype,outgoingserverlocation,outgoingportnumber,outgoingusessl,outgoingusername,outgoingcredentialretrieval," +
@@ -46,11 +47,57 @@ public static class MailboxCommands
 
     private static string Delivery(int? value) => value switch { 2 => "Server-Side Synchronization", 0 or null => "None", { } n => n.ToString(CultureInfo.InvariantCulture) };
 
+    /// <summary>
+    /// The <c>incomingemailfilteringmethod</c> values (plan 4.1c): which messages the mailbox's synchronization keeps. The column is the
+    /// owner's, not the mailbox's: a user's <c>usersettings</c> or the queue's own.
+    /// </summary>
+    private static string Filtering(int? value) => value switch
+    {
+        0 => "All messages",
+        1 => "Responses to email",
+        2 => "From contacts and accounts",
+        3 => "From email-enabled records",
+        4 => "No messages",
+        { } n => n.ToString(CultureInfo.InvariantCulture),
+        null => "",
+    };
+
+    private const string LookupLogicalName = "@Microsoft.Dynamics.CRM.lookuplogicalname";
+    private const string FilteringColumn = "incomingemailfilteringmethod";
+
+    /// <summary>
+    /// The filtering of the mailbox's incoming email: the queue's own <c>incomingemailfilteringmethod</c> (default all messages), or, for
+    /// a user's mailbox, the user's <c>usersettings</c> value (default from contacts and accounts). Null when the mailbox belongs to
+    /// neither; "unavailable (no access)" when the server answers 403 (any other failure fails the command).
+    /// </summary>
+    private static async Task<string?> FilteringAsync(XrmdClient client, JsonElement mailbox, CancellationToken ct)
+    {
+        if (Str(mailbox, "_regardingobjectid_value") is not { } owner || !Guid.TryParse(owner, out var ownerId)) return null;
+        var (path, fallback) = Str(mailbox, "_regardingobjectid_value" + LookupLogicalName) switch
+        {
+            "queue" => ($"queues?$select={FilteringColumn}&$filter=queueid eq {ownerId}", 0),
+            "systemuser" => ($"usersettingscollection?$select={FilteringColumn}&$filter=systemuserid eq {ownerId}", 2),
+            _ => (null, 0),
+        };
+        if (path is null) return null;
+        try
+        {
+            var rows = await client.GetAllPagesAsync(path, ct);
+            return rows.Count == 0 ? Filtering(fallback) : Filtering(Int(rows[0], FilteringColumn) ?? fallback);
+        }
+        catch (CliException e) when (e.HttpStatus is 403)
+        {
+            return "unavailable (no access)";
+        }
+    }
+
     /// <summary>A mailbox by id or by email address; exit 4 when there is none, 5 when the address is not unique.</summary>
     private static async Task<JsonElement> MailboxAsync(XrmdClient client, string mailbox, CancellationToken ct)
     {
         var filter = Guid.TryParse(mailbox, out var id) ? $"mailboxid eq {id}" : $"emailaddress eq {UserRoleLookup.Literal(mailbox)}";
-        var rows = await client.GetAllPagesAsync($"mailboxes?$select={MailboxSelect},lastsyncerror,username,ispasswordset&$filter={filter}", ct);
+        var rows = await client.GetAllPagesAsync(
+            $"mailboxes?$select={MailboxSelect},processemailreceivedafter,lastsyncerror,username,ispasswordset," +
+            $"_regardingobjectid_value&$filter={filter}", ct);
         if (rows.Count == 0) throw new CliException(ExitCodes.NotFound, $"Mailbox '{mailbox}' not found.");
         if (rows.Count > 1) throw new CliException(ExitCodes.Rejected, $"{rows.Count} mailboxes have the address '{mailbox}'. Use the mailbox id.");
         return rows[0];
@@ -67,13 +114,16 @@ public static class MailboxCommands
         outgoing = Delivery(Int(m, "outgoingemaildeliverymethod")),
         enabled = Bool(m, "enabledforoutgoingemail"),
         outgoingemailstatus = Status(Int(m, "outgoingemailstatus")),
+        incoming = Delivery(Int(m, "incomingemaildeliverymethod")),
+        incomingemailstatus = Status(Int(m, "incomingemailstatus")),
         testmailboxaccesscompletedon = Str(m, "testmailboxaccesscompletedon"),
         state = Int(m, "statecode") is 1 ? "Inactive" : "Active",
     };
 
     private static Command List(CliContext ctx)
     {
-        var command = new Command("list", "List the mailboxes: address, approval, outgoing delivery and the last outgoing test.");
+        var command = new Command("list",
+            "List the mailboxes: address, approval, the outgoing and incoming delivery with their last status, and the last outgoing test.");
         command.SetAction(async (_, ct) =>
         {
             var rows = await ctx.CreateClient().GetAllPagesAsync($"mailboxes?$select={MailboxSelect}&$orderby=name", ct);
@@ -86,10 +136,14 @@ public static class MailboxCommands
     private static Command Show(CliContext ctx)
     {
         var mailbox = new Argument<string>("mailbox") { Description = "Id or email address of the mailbox." };
-        var command = new Command("show", "Show a mailbox, its profile, its last error and whether its password is set (never the password).") { mailbox };
+        var command = new Command("show",
+            "Show a mailbox: its profile, both sides of its delivery with their last status, its last sync and filtering, its last error " +
+            "and whether its password is set (never the password).") { mailbox };
         command.SetAction(async (parse, ct) =>
         {
-            var m = await MailboxAsync(ctx.CreateClient(), parse.GetValue(mailbox)!, ct);
+            var client = ctx.CreateClient();
+            var m = await MailboxAsync(client, parse.GetValue(mailbox)!, ct);
+            var filtering = await FilteringAsync(client, m, ct);
             ctx.Write(new
             {
                 mailboxid = Str(m, "mailboxid"),
@@ -100,6 +154,12 @@ public static class MailboxCommands
                 outgoing = Delivery(Int(m, "outgoingemaildeliverymethod")),
                 enabled = Bool(m, "enabledforoutgoingemail"),
                 outgoingemailstatus = Status(Int(m, "outgoingemailstatus")),
+                incoming = Delivery(Int(m, "incomingemaildeliverymethod")),
+                incomingenabled = Bool(m, "enabledforincomingemail"),
+                incomingemailstatus = Status(Int(m, "incomingemailstatus")),
+                lastsuccessfulsynccompletedon = Str(m, "lastsuccessfulsynccompletedon"),
+                processemailreceivedafter = Str(m, "processemailreceivedafter"),
+                filtering,
                 testmailboxaccesscompletedon = Str(m, "testmailboxaccesscompletedon"),
                 lastsyncerror = Str(m, "lastsyncerror"),
                 username = Str(m, "username"),
@@ -139,31 +199,56 @@ public static class MailboxCommands
     }
 
     /// <summary>
-    /// <c>mailbox link &lt;mailbox&gt; --profile &lt;profile&gt;</c> (plan 4.1b, task 8): the mailbox sends through the profile. One PATCH
-    /// sets <c>emailserverprofile</c>, <c>outgoingemaildeliverymethod</c> 2 (Server-Side Synchronization) and
-    /// <c>enabledforoutgoingemail</c> true; the server's rules apply (the profile is a System Administrator's column).
+    /// <c>mailbox link &lt;mailbox&gt; --profile &lt;profile&gt; [--incoming] [--no-outgoing]</c> (plan 4.1b task 8, plan 4.1c task 10): the
+    /// mailbox sends and, with <c>--incoming</c>, receives through the profile. One PATCH sets <c>emailserverprofile</c>, then
+    /// <c>outgoingemaildeliverymethod</c> 2 (Server-Side Synchronization) and <c>enabledforoutgoingemail</c> true unless
+    /// <c>--no-outgoing</c>, and <c>incomingemaildeliverymethod</c> 2 with <c>enabledforincomingemail</c> true with <c>--incoming</c>; the
+    /// server's rules apply (the profile is a System Administrator's column).
     /// </summary>
     private static Command Link(CliContext ctx)
     {
         var mailbox = new Argument<string>("mailbox") { Description = "Id or email address of the mailbox." };
         var profile = new Option<string>("--profile") { Description = "Id or name of the email server profile.", Required = true };
+        var incoming = new Option<bool>("--incoming")
+        {
+            Description = "Also receive through the profile: Server-Side Synchronization for incoming email, and incoming email on.",
+        };
+        var noOutgoing = new Option<bool>("--no-outgoing") { Description = "Leave the outgoing columns of the mailbox as they are; without --incoming this only links the profile." };
         var command = new Command("link",
             "Link a mailbox to an email server profile (System Administrator): sets the profile, Server-Side Synchronization for outgoing email, " +
-            "and enables outgoing email. Test the mailbox afterwards.") { mailbox, profile };
+            "and enables outgoing email; --incoming does the same for incoming email. Test the mailbox afterwards.") { mailbox, profile, incoming, noOutgoing };
         command.SetAction(async (parse, ct) =>
         {
+            var receives = parse.GetValue(incoming);
+            var sends = !parse.GetValue(noOutgoing);
             var client = ctx.CreateClient();
             var id = IdOf(await MailboxAsync(client, parse.GetValue(mailbox)!, ct));
             var row = await ProfileAsync(client, parse.GetValue(profile)!, ct);
             var profileId = Str(row, "emailserverprofileid")!;
-            await client.SendJsonAsync(new HttpMethod("PATCH"), $"mailboxes({id})", new Dictionary<string, object?>
+            var body = new Dictionary<string, object?> { ["emailserverprofile@odata.bind"] = $"/emailserverprofiles({profileId})" };
+            if (sends)
             {
-                ["emailserverprofile@odata.bind"] = $"/emailserverprofiles({profileId})",
-                ["outgoingemaildeliverymethod"] = 2,
-                ["enabledforoutgoingemail"] = true,
-            }, cancellationToken: ct);
-            ctx.WriteResult(new { mailboxid = id, emailserverprofileid = profileId, outgoing = Delivery(2), enabled = true },
-                $"Mailbox {id} sends through profile '{Str(row, "name")}'. Run 'xrmd mailbox test {id} --wait' to check it.");
+                body["outgoingemaildeliverymethod"] = 2;
+                body["enabledforoutgoingemail"] = true;
+            }
+            if (receives)
+            {
+                body["incomingemaildeliverymethod"] = 2;
+                body["enabledforincomingemail"] = true;
+            }
+            await client.SendJsonAsync(new HttpMethod("PATCH"), $"mailboxes({id})", body, cancellationToken: ct);
+            var what = sends && receives ? "sends and receives" : receives ? "receives" : sends ? "sends" : "uses";
+            ctx.WriteResult(
+                new
+                {
+                    mailboxid = id,
+                    emailserverprofileid = profileId,
+                    outgoing = sends ? Delivery(2) : null,
+                    enabled = sends ? true : (bool?)null,
+                    incoming = receives ? Delivery(2) : null,
+                    incomingenabled = receives ? true : (bool?)null,
+                },
+                $"Mailbox {id} {what} through profile '{Str(row, "name")}'. Run 'xrmd mailbox test {id} --wait' to check it.");
             return ExitCodes.Ok;
         });
         return command;
@@ -175,7 +260,8 @@ public static class MailboxCommands
         var wait = new Option<bool>("--wait") { Description = "Wait for the test and print its result (exit 5 when it failed)." };
         var timeout = new Option<int>("--timeout") { Description = "With --wait: minutes to wait (default 5).", DefaultValueFactory = _ => 5 };
         var command = new Command("test",
-            "Test the outgoing configuration of a mailbox (its owner or a System Administrator): sets testemailconfigurationscheduled.") { mailbox, wait, timeout };
+            "Test the configuration of a mailbox, both sides where it is configured (its owner or a System Administrator): sets " +
+            "testemailconfigurationscheduled.") { mailbox, wait, timeout };
         command.SetAction(async (parse, ct) =>
         {
             var minutes = parse.GetValue(timeout);
@@ -195,21 +281,28 @@ public static class MailboxCommands
             while (true)
             {
                 var m = await client.GetJsonAsync(
-                    $"mailboxes({id})?$select=testemailconfigurationscheduled,outgoingemailstatus,testmailboxaccesscompletedon,lastsyncerror", ct);
+                    $"mailboxes({id})?$select=testemailconfigurationscheduled,outgoingemailstatus,incomingemailstatus," +
+                    "testmailboxaccesscompletedon,lastsuccessfulsynccompletedon,lastsyncerror", ct);
                 if (!Bool(m, "testemailconfigurationscheduled"))
                 {
                     var status = Int(m, "outgoingemailstatus");
+                    var incoming = Int(m, "incomingemailstatus");
+                    // The incoming side is tested only where the mailbox receives; either side failing is exit 5, with the one error both write.
+                    var failed = status == 2 || incoming == 2;
                     var result = new
                     {
                         mailboxid = id,
                         outgoingemailstatus = Status(status),
+                        incomingemailstatus = Status(incoming),
                         testmailboxaccesscompletedon = Str(m, "testmailboxaccesscompletedon"),
-                        lastsyncerror = status == 2 ? Str(m, "lastsyncerror") : null,
+                        lastsuccessfulsynccompletedon = Str(m, "lastsuccessfulsynccompletedon"),
+                        lastsyncerror = failed ? Str(m, "lastsyncerror") : null,
                     };
-                    ctx.WriteResult(result, status == 2
-                        ? $"The test of mailbox {id} failed: {Str(m, "lastsyncerror")}"
-                        : $"The test of mailbox {id}: {Status(status)}.");
-                    return status == 2 ? ExitCodes.Rejected : ExitCodes.Ok;
+                    var sides = $"outgoing {Status(status)}, incoming {Status(incoming)}";
+                    ctx.WriteResult(result, failed
+                        ? $"The test of mailbox {id} failed ({sides}): {Str(m, "lastsyncerror")}"
+                        : $"The test of mailbox {id}: {sides}.");
+                    return failed ? ExitCodes.Rejected : ExitCodes.Ok;
                 }
                 if (ctx.Env.Clock.GetUtcNow() >= deadline)
                     throw new CliException(ExitCodes.Unreachable,

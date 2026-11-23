@@ -279,6 +279,52 @@ namespace Xrmd.TestPlugins
         }
     }
 
+    /// <summary>
+    /// Plan 4.1c, task 7: reads or writes one shared variable. <c>"record|{entity}|{key}"</c> creates a record of the entity named
+    /// <c>Message|Stage|Depth|value</c> (<c>&lt;none&gt;</c> when the variable is absent); <c>"set|{key}|{value}"</c> sets it;
+    /// <c>"remove|{key}"</c> removes it; <c>"setparent|{key}|{value}"</c> sets it in the <c>ParentContext</c>;
+    /// <c>"setandcreate|{key}|{value}|{entity}"</c> sets it, then creates a record of the entity (<c>pb_name</c> "forged").
+    /// </summary>
+    public class SharedVariablePlugin : IPlugin
+    {
+        private readonly string[] _parts;
+
+        public SharedVariablePlugin(string unsecure, string secure) { _parts = unsecure.Split('|'); }
+
+        public void Execute(IServiceProvider serviceProvider)
+        {
+            var context = (IPluginExecutionContext)serviceProvider.GetService(typeof(IPluginExecutionContext));
+            switch (_parts[0])
+            {
+                case "record":
+                    var factory = (IOrganizationServiceFactory)serviceProvider.GetService(typeof(IOrganizationServiceFactory));
+                    var service = factory.CreateOrganizationService(context.UserId);
+                    var value = context.SharedVariables.Contains(_parts[2]) ? Convert.ToString(context.SharedVariables[_parts[2]], CultureInfo.InvariantCulture) : "<none>";
+                    var e = new Entity(_parts[1]);
+                    e["pb_name"] = string.Format(CultureInfo.InvariantCulture, "{0}|{1}|{2}|{3}", context.MessageName, context.Stage, context.Depth, value);
+                    service.Create(e);
+                    break;
+                case "set":
+                    context.SharedVariables[_parts[1]] = _parts[2];
+                    break;
+                case "remove":
+                    context.SharedVariables.Remove(_parts[1]);
+                    break;
+                case "setandcreate":
+                    context.SharedVariables[_parts[1]] = _parts[2];
+                    var creator = ((IOrganizationServiceFactory)serviceProvider.GetService(typeof(IOrganizationServiceFactory)))
+                        .CreateOrganizationService(context.UserId);
+                    creator.Create(new Entity(_parts[3]) { ["pb_name"] = "forged" });
+                    break;
+                case "setparent":
+                    context.ParentContext.SharedVariables[_parts[1]] = _parts[2];
+                    break;
+                default:
+                    throw new InvalidPluginExecutionException("Unknown mode " + _parts[0]);
+            }
+        }
+    }
+
     /// <summary>Post-operation Update that updates the same record again (infinite recursion).</summary>
     public class UpdateSelfPlugin : IPlugin
     {

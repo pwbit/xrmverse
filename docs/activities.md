@@ -467,10 +467,13 @@ custom API or custom action can take their names: `Book`, `Reschedule`, `AddRecu
 `DeliverIncomingEmail`, `CheckIncomingEmail`, `CheckPromoteEmail`, `BackgroundSendEmail`, `SendEmailFromTemplate`,
 `SendTemplate`, `InstantiateTemplate`, `Rollup`, `Restore`, `AppendRelatedParty`,
 `InitializeAnnotationBlocksUpload` and `InitializeAnnotationBlocksDownload`. The queue messages run (see [Email and queues](email-and-queues.md)).
+`DeliverIncomingEmail` and `CheckIncomingEmail` stay refused although email is received: incoming email arrives only through
+the synchronization of a mailbox, never through a message a caller sends (see
+[Incoming email](email-and-queues.md#incoming-email)).
 An `sdkmessage` row with one of these names does not make it run. These names are also reserved as entity set names, so a new table, or a table in a solution import, whose entity set is named `Rollup`, `Book` and so on is a
 400.
 
-`InitializeAttachmentBlocksUpload` and `InitializeAttachmentBlocksDownload` are refused too: an email attachment's body (`activitymimeattachment.body`, base64) is written with Create or Update and read with Retrieve, like a note's `documentbody`, and lives in the file store. The table follows its email: read needs read on the email, create, update and delete need write on it, and the email must be open to add or change attachments (deleting one is not refused on a sent email: checklist 5); `email.attachmentcount` follows the rows and `organization.blockedattachments` and `maxuploadfilesize` are checked.
+`InitializeAttachmentBlocksUpload` and `InitializeAttachmentBlocksDownload` are refused too: an email attachment's body (`activitymimeattachment.body`, base64) is written with Create or Update and read with Retrieve, like a note's `documentbody`, and lives in the file store. The table follows its email: read needs read on the email, create, update and delete need write on it, and the email must be open to add or change attachments (deleting one is not refused on a sent email: checklist 5); `email.attachmentcount` follows the rows and `organization.blockedattachments` and `maxuploadfilesize` are checked. A Received email is closed too: its attachments are created by the import that creates it, and a later Create of an attachment on it is a 400. An incoming attachment that is blocked or too large is not stored; a note on the email names it (see [The received email](email-and-queues.md#the-received-email)).
 
 The tables `letter`, `fax`, `recurringappointmentmaster`, `socialactivity`,
 `template`, `serviceappointment` and `campaignactivity` are not seeded: they give the usual "entity not found" 400.

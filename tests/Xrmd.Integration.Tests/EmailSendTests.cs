@@ -375,6 +375,23 @@ public sealed class EmailSendTests(XrmdFixture fx) : IAsyncLifetime
     // ---- the job ----
 
     [Fact]
+    public async Task SendJob_RegistersOutgoingKey()
+    {
+        // Plan 4.1c, task 1: the message id the job stores is the email's key, outgoing, so that a copy coming back is not imported.
+        var (sender, _, email) = await ReadyUserEmailAsync();
+        await sender.Service.ExecuteAsync(Send(email, issueSend: true));
+
+        var fake = new FakeProvider();
+        await RunAsync(email, fake);
+
+        var sent = fake.Calls.Should().ContainSingle().Subject;
+        var rows = await TestSql.RowsAsync(fx.ConnectionString, "SELECT messagekey, incoming FROM meta.mail_message WHERE emailid = @id", ("@id", email));
+        var row = rows.Should().ContainSingle().Subject;
+        ((byte[])row[0]!).Should().Equal(MailMessageKeys.KeyOf(sent.MessageId));
+        Convert.ToBoolean(row[1]).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task Job_Success_SetsSent_Senton_MessageId_AndMailboxSuccess()
     {
         var (sender, mailbox, email) = await ReadyUserEmailAsync();
@@ -592,6 +609,168 @@ public sealed class EmailSendTests(XrmdFixture fx) : IAsyncLifetime
         (await rerun.Should().ThrowAsync<Exception>()).Which.Message.Should().Contain("not sent again");
         again.Calls.Should().BeEmpty();
         (await StateAsync(email)).Should().Be((1, 6), "it stays Pending Send (Known limits)");
+    }
+
+    // ---- queue items after a failed send (#333) ----
+
+    /// <summary>An email of a ready sender that an administrator put in a new queue; returns it with its item and the queue.</summary>
+    private async Task<(Sender Sender, Guid Mailbox, Guid Email, Guid Item, Guid Queue)> QueuedEmailAsync(string queueName = "Outbox")
+    {
+        var (sender, mailbox, email) = await ReadyUserEmailAsync();
+        var queue = await QueueAsync(queueName);
+        var item = ((AddToQueueResponse)await Admin.ExecuteAsync(new AddToQueueRequest
+        {
+            Target = new EntityReference("email", email), DestinationQueueId = queue,
+        })).QueueItemId;
+        return (sender, mailbox, email, item, queue);
+    }
+
+    /// <summary>The item's state, status, queue and worker, read directly.</summary>
+    private async Task<(int State, int Status, Guid? Queue, Guid? Worker)> ItemAsync(Guid item)
+    {
+        var row = (await TestSql.RowsAsync(fx.ConnectionString,
+            "SELECT statecode, statuscode, queueid, workerid FROM data.queueitem WHERE queueitemid = @id", ("@id", item))).Single();
+        return (Convert.ToInt32(row[0]), Convert.ToInt32(row[1]), row[2] as Guid?, row[3] as Guid?);
+    }
+
+    private static FakeProvider Permanent() => new()
+    {
+        After = _ => throw new MailSendException("SMTP server answered 550: 5.1.1 no such user", transient: false) { Scope = MailFailureScope.Message },
+    };
+
+    [Fact]
+    public async Task Failed_ReactivatesTheQueueItemsSendEmailDeactivated()
+    {
+        var (sender, _, email, item, queue) = await QueuedEmailAsync();
+        await Admin.ExecuteAsync(new PickFromQueueRequest { QueueItemId = item, WorkerId = sender.Id });
+
+        await sender.Service.ExecuteAsync(Send(email, issueSend: true));
+
+        (await ItemAsync(item)).Should().Be((1, 2, queue, sender.Id), "SendEmail deactivates the email's item");
+        var data = JsonNode.Parse((await JobsAsync(email)).Single().Data!)!.AsObject();
+        data["queueItems"]!.AsArray().Select(n => n!.GetValue<Guid>()).Should().Equal(item);
+
+        var run = await RunAsync(email, Permanent());
+
+        (await StateAsync(email)).Should().Be((0, 8));
+        run.CompletionMessage.Should().Contain("no such user");
+        (await ItemAsync(item)).Should().Be((0, 1, queue, sender.Id), "the failed email is back in its queue, with its worker");
+        (await TestSql.ScalarAsync(fx.ConnectionString, "SELECT modifiedby FROM data.queueitem WHERE queueitemid = @id", ("@id", item)))
+            .Should().Be(sender.Id, "the sender reactivates the item, as it deactivated it");
+    }
+
+    [Fact]
+    public async Task Failed_BeforeSending_AlsoReactivatesItems()
+    {
+        var (sender, mailbox, email, item, queue) = await QueuedEmailAsync();
+        await sender.Service.ExecuteAsync(Send(email, issueSend: true));
+        // The mailbox's test no longer counts: the job fails the email before calling the provider.
+        await TestSql.ExecAsync(fx.ConnectionString, "UPDATE data.mailbox SET outgoingemailstatus = 0 WHERE mailboxid = @id", ("@id", mailbox));
+
+        var fake = new FakeProvider();
+        await RunAsync(email, fake);
+
+        fake.Calls.Should().BeEmpty();
+        (await StateAsync(email)).Should().Be((0, 8));
+        (await ItemAsync(item)).Should().Be((0, 1, queue, (Guid?)null));
+    }
+
+    [Fact]
+    public async Task Failed_ItemNotReactivated_WhenRecordHasAnotherActiveItem_OrQueueInactive()
+    {
+        // Another active item of the email (created while it was Pending Send): one active item per record (ruling R15).
+        var (sender, _, email, item, queue) = await QueuedEmailAsync("First");
+        await sender.Service.ExecuteAsync(Send(email, issueSend: true));
+        var other = await QueueAsync("Second");
+        var otherItem = await Admin.CreateAsync(new Entity("queueitem")
+        {
+            ["queueid"] = new EntityReference("queue", other), ["objectid"] = new EntityReference("email", email),
+        });
+
+        await RunAsync(email, Permanent());
+
+        (await StateAsync(email)).Should().Be((0, 8));
+        (await ItemAsync(item)).Should().Be((1, 2, queue, (Guid?)null), "the email already has an active item");
+        (await ItemAsync(otherItem)).State.Should().Be(0);
+
+        // The item's queue deactivated in the meantime: the item stays inactive.
+        var (sender2, _, email2, item2, queue2) = await QueuedEmailAsync("Closed");
+        await sender2.Service.ExecuteAsync(Send(email2, issueSend: true));
+        await Admin.UpdateAsync(new Entity("queue", queue2) { ["statecode"] = new OptionSetValue(1), ["statuscode"] = new OptionSetValue(2) });
+
+        await RunAsync(email2, Permanent());
+
+        (await StateAsync(email2)).Should().Be((0, 8));
+        (await ItemAsync(item2)).Should().Be((1, 2, queue2, (Guid?)null), "its queue is inactive");
+    }
+
+    [Fact]
+    public async Task Failed_AfterTransientRetry_StillReactivatesItems()
+    {
+        var (sender, _, email, item, queue) = await QueuedEmailAsync();
+        await sender.Service.ExecuteAsync(Send(email, issueSend: true));
+        var fake = new FakeProvider
+        {
+            After = n => throw (n == 1
+                ? new MailSendException("Server busy.", transient: true)
+                : new MailSendException("SMTP server answered 550: 5.1.1 no such user", transient: false) { Scope = MailFailureScope.Message }),
+        };
+
+        var first = await RunAsync(email, fake);
+
+        first.Suspension.Should().NotBeNull("the transient failure is retried");
+        var data = JsonNode.Parse(first.Suspension!.Value.Data!)!.AsObject();
+        data["queueItems"]!.AsArray().Select(n => n!.GetValue<Guid>()).Should().Equal(item);
+        (await ItemAsync(item)).State.Should().Be(1, "the email waits for its retry, still Pending Send");
+
+        await RunAsync(email, fake, first.Suspension.Value.Data);
+
+        fake.Calls.Should().HaveCount(2);
+        (await StateAsync(email)).Should().Be((0, 8));
+        (await ItemAsync(item)).Should().Be((0, 1, queue, (Guid?)null));
+    }
+
+    [Fact]
+    public async Task Sent_LeavesItemsInactive()
+    {
+        var (sender, _, email, item, queue) = await QueuedEmailAsync();
+        await sender.Service.ExecuteAsync(Send(email, issueSend: true));
+
+        await RunAsync(email, new FakeProvider());
+
+        (await StateAsync(email)).Should().Be((1, 3));
+        (await ItemAsync(item)).Should().Be((1, 2, queue, (Guid?)null));
+    }
+
+    [Fact]
+    public async Task QueueItemDeactivationAndReactivation_FireNoQueueItemStep()
+    {
+        // Contract for the contact center: the server's own moves of queue items are core writes; no queueitem step sees them.
+        await fx.App.Services.GetRequiredService<SdkMessageCatalog>().EnsureAsync(default);
+        await PluginTestHelper.ClearAsync(fx);
+        try
+        {
+            var (sender, _, email, item, queue) = await QueuedEmailAsync();
+            var assembly = await PluginTestHelper.EnsureAssemblyAsync(Admin, PluginTestHelper.TestPluginBytes);
+            var thrower = await PluginTestHelper.RegisterTypeAsync(Admin, assembly, "Xrmd.TestPlugins.ThrowPlugin");
+            await PluginTestHelper.RegisterStepAsync(Admin, thrower, "Update", "queueitem", 20, config: "invalid:queue item step fired");
+            // The step is live: an Update of the item through the pipeline runs it.
+            (await FaultAsync(() => Admin.UpdateAsync(new Entity("queueitem", item) { ["title"] = "Touched" })))
+                .Message.Should().Contain("queue item step fired");
+
+            await sender.Service.ExecuteAsync(Send(email, issueSend: true));
+            (await ItemAsync(item)).State.Should().Be(1, "SendEmail deactivated the item without the step");
+
+            var run = await RunAsync(email, Permanent());
+
+            run.CompletionMessage.Should().NotContain("queue item step fired");
+            (await StateAsync(email)).Should().Be((0, 8));
+            (await ItemAsync(item)).Should().Be((0, 1, queue, (Guid?)null), "the Failed path reactivated the item without the step");
+        }
+        finally
+        {
+            await PluginTestHelper.ClearAsync(fx);
+        }
     }
 
     // ---- tracking tokens ----

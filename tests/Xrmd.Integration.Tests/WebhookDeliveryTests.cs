@@ -7,11 +7,13 @@ using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.Xrm.Sdk;
+using Xrmd.Abstractions;
 using Xrmd.Core;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
 using Xrmd.Pipeline;
 using Xrmd.Pipeline.Async;
+using Xrmd.Pipeline.Webhooks;
 using static Xrmd.Integration.Tests.SecurityTestHelper;
 using static Xrmd.Integration.Tests.TestHelpers;
 
@@ -55,10 +57,10 @@ public sealed class WebhookDeliveryTests(XrmdFixture fx) : IAsyncLifetime
 
     // ---- receiver ----
 
-    private sealed record Received(string Path, string Query, IReadOnlyDictionary<string, string> Headers, JsonElement Body);
+    internal sealed record Received(string Path, string Query, IReadOnlyDictionary<string, string> Headers, JsonElement Body);
 
     /// <summary>An <see cref="HttpListener"/> on 127.0.0.1 and a free port; answers <see cref="Status"/> to every POST.</summary>
-    private sealed class Receiver : IDisposable
+    internal sealed class Receiver : IDisposable
     {
         private readonly HttpListener _listener = new();
         private readonly Task _loop;
@@ -155,6 +157,25 @@ public sealed class WebhookDeliveryTests(XrmdFixture fx) : IAsyncLifetime
         return Admin.CreateAsync(step);
     }
 
+    /// <summary>
+    /// A webhook step of <paramref name="endpoint"/> on <paramref name="message"/>, filtered on <paramref name="entity"/> when given (plan 4.1c:
+    /// AddToQueue has no table filter).
+    /// </summary>
+    internal static Task<Guid> CreateWebhookStepAsync(OrganizationService admin, Guid endpoint, string message, string? entity, int stage, int mode = Sync)
+    {
+        var step = new Entity("sdkmessageprocessingstep")
+        {
+            ["name"] = $"hook {message} {entity} {stage} {mode}",
+            ["sdkmessageid"] = new EntityReference("sdkmessage", SdkMessageCatalog.MessageId(message)),
+            ["eventhandler"] = new EntityReference(ServiceEndpointSchema.Table, endpoint),
+            ["stage"] = new OptionSetValue(stage),
+            ["mode"] = new OptionSetValue(mode),
+            ["rank"] = 1,
+        };
+        if (entity is not null) step["sdkmessagefilterid"] = new EntityReference("sdkmessagefilter", SdkMessageCatalog.FilterId(message, entity));
+        return admin.CreateAsync(step);
+    }
+
     private AsyncOperationWorker NewWorker(int maxRetries = 3) =>
         new(fx.App.Services, fx.App.Services.GetRequiredService<AsyncOperationQueue>(),
             Options.Create(new PipelineOptions
@@ -223,6 +244,43 @@ public sealed class WebhookDeliveryTests(XrmdFixture fx) : IAsyncLifetime
         request.Body.GetProperty("Stage").GetInt32().Should().Be(40);
         request.Body.GetProperty("OwningExtension").GetProperty("Id").GetGuid().Should().Be(step);
         (await ScalarAsync("SELECT COUNT(*) FROM data.plugintracelog")).Should().Be(0, "Dataverse writes no trace for a webhook step");
+    }
+
+    /// <summary>
+    /// Plan 4.1c, task 8 (the contact center contract): the synchronous stage 20 webhook of a mailbox delivery's AddToQueue gets the
+    /// <c>SharedVariables</c> array with <see cref="MailSchema.MailboxDeliveryVariable"/>, the mailbox id; so does the email Create's, whose
+    /// body is trimmed when the email is too large for it.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Delivery_SharedVariable_InBody(bool trimmed)
+    {
+        await TestEntities.EnsurePipeAsync(fx.App.Services.GetRequiredService<IMetadataStore>());
+        var kit = new IncomingKit(fx, Guid.NewGuid().ToString("N")[..8]);
+        var (_, mailbox, _) = await kit.QueueMailboxAsync();
+        var receiver = NewReceiver();
+        var endpoint = await CreateEndpointAsync(receiver);
+        await CreateWebhookStepAsync(Admin, endpoint, "AddToQueue", null, 20);
+        await CreateWebhookStepAsync(Admin, endpoint, "Create", "email", 20);
+        var html = trimmed ? "<p>" + new string('x', WebhookPayload.SizeLimit) + "</p>" : "<p>Hi</p>";
+
+        (await kit.ImportAsync(mailbox, kit.Message(kit.Address("Desk"), html: html))).Should().Be(Xrmd.Core.Mail.ImportOutcome.Created);
+
+        var requests = receiver.Requests.ToList();
+        requests.Select(r => r.Headers["x-ms-dynamics-request-name"]).Should().BeEquivalentTo(["Create", "AddToQueue"]);
+        foreach (var request in requests)
+        {
+            var shared = request.Body.GetProperty("SharedVariables");
+            shared.ValueKind.Should().Be(JsonValueKind.Array);
+            shared.EnumerateArray().Should().ContainSingle(p => p.GetProperty("key").GetString() == MailSchema.MailboxDeliveryVariable)
+                .Which.GetProperty("value").GetString().Should().Be(mailbox.ToString("D"));
+            request.Body.GetProperty("Stage").GetInt32().Should().Be(20);
+        }
+        var create = requests.Single(r => r.Headers["x-ms-dynamics-request-name"] == "Create");
+        create.Headers.ContainsKey("x-ms-dynamics-msg-size-exceeded").Should().Be(trimmed);
+        requests.Single(r => r.Headers["x-ms-dynamics-request-name"] == "AddToQueue").Headers.ContainsKey("x-ms-dynamics-msg-size-exceeded")
+            .Should().BeFalse();
     }
 
     [Fact]

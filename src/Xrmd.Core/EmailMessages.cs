@@ -66,7 +66,9 @@ public sealed class EmailMessages
     /// is given. With <c>IssueSend</c> true (plan 4.1b) also: every recipient resolved to a record unless the organization's
     /// <c>allowunresolvedpartiesonemailsend</c> is on (ruling P1, as Dataverse); under the sender policy <c>queueOnly</c>
     /// (<see cref="EmailSendPolicy"/>) a queue as the sender; with tracking tokens on (<see cref="TrackingTokens"/>), a new token when
-    /// none is given, appended to the subject; and one <see cref="EmailSendJob"/> queued in the same transaction, owned by the caller.
+    /// none is given, appended to the subject (a token already in the subject is kept only when it is the email's own stored
+    /// <c>trackingtoken</c>); and one <see cref="EmailSendJob"/> queued in the same transaction, owned by the caller, whose data names
+    /// the queue items the Update deactivates (a Failed send reactivates them, #333).
     /// The response's <c>Subject</c> is the email's subject.
     /// </summary>
     /// <exception cref="XrmdFaultException">400 for a missing parameter, an email that is not open, one without recipients, one whose
@@ -84,7 +86,7 @@ public sealed class EmailMessages
         var token = request.Parameters.TryGetValue("TrackingToken", out var t) ? t as string : null;
         var email = _store.GetEntity(Email) ?? throw new InvalidOperationException("The email table is not seeded.");
 
-        var (state, status, subject) = await LockAsync(s, id, ct);
+        var (state, status, subject, storedToken) = await LockAsync(s, id, ct);
         if (state != Open)
             throw XrmdFaultException.InvalidArgument(
                 $"The email {id} cannot be sent: it is not open (statecode {state}, statuscode {status}). Only a draft or failed email is sent.");
@@ -108,24 +110,45 @@ public sealed class EmailMessages
             serverParties["from"] = new EntityCollection(
                 [new Entity(ActivitySchema.Party) { [ActivitySchema.PartyId] = new EntityReference("systemuser", caller.UserId) }]);
 
+        IReadOnlyList<Guid> queueItems = [];
         if (issueSend)
         {
             await DemandResolvedRecipientsAsync(s, id, parties, ct);
             if (await EmailSendPolicy.QueueOnlyAsync(s, ct) && sender?.LogicalName != QueueSchema.Queue)
                 throw XrmdFaultException.InvalidArgument(EmailSendPolicy.QueueOnlyRefusal(id, sender));
             serverAttributes["deliveryattempts"] = 0;
-            // Tracking tokens on: a token when none is given, and the token at the end of the subject (from memory: checklist 7). A
-            // subject that already carries a token in the current format (an email sent again after a failure) keeps it: no second
-            // token is taken or appended (final review M2; whether Dataverse reuses it is from memory: checklist 7).
-            var tracked = string.IsNullOrEmpty(token)
-                ? await TrackingTokens.FindInSubjectAsync(s, subject, ct) ?? await TrackingTokens.NextAsync(s, ct)
-                : await TrackingTokens.EnabledAsync(s, ct) ? token : null;
+            // Tracking tokens on: a token when none is given, and the token at the end of the subject (from memory: checklist 7). An
+            // email sent again after a failure whose subject still carries its own stored token keeps it: no second token is taken or
+            // appended (final review M2). Any other token in the subject (another email's, quoted by a reply) is never reused: the
+            // email gets a new one (#333; whether Dataverse reuses a token is from memory: checklist 7).
+            string? tracked;
+            var appended = true;
+            if (string.IsNullOrEmpty(token))
+            {
+                tracked = null;
+                if (await TrackingTokens.FormatAsync(s, ct) is { } format)
+                {
+                    if (!string.IsNullOrEmpty(storedToken)
+                        && TrackingTokens.FindAllInSubject(subject, format.Prefix, format.Digits).Contains(storedToken, StringComparer.Ordinal))
+                    {
+                        tracked = storedToken;
+                        appended = false;
+                    }
+                    else tracked = await TrackingTokens.NextAsync(s, ct);
+                }
+            }
+            else
+            {
+                tracked = await TrackingTokens.EnabledAsync(s, ct) ? token : null;
+                appended = subject is null || !subject.Contains(token, StringComparison.Ordinal);
+            }
             if (tracked is not null)
             {
                 token = tracked;
-                if (subject is null || !subject.Contains(tracked, StringComparison.Ordinal))
-                    serverAttributes["subject"] = subject = WithToken(email, id, subject, tracked);
+                if (appended) serverAttributes["subject"] = subject = WithToken(email, id, subject, tracked);
             }
+            // #333: the items the Update below deactivates go in the send job's data, so that a Failed send puts them back.
+            queueItems = await QueueMessages.ActiveItemIdsAsync(s, id, ct);
         }
         if (!string.IsNullOrEmpty(token)) update["trackingtoken"] = token;
 
@@ -135,7 +158,7 @@ public sealed class EmailMessages
         {
             var queue = _core.JobQueue;
             await queue.EnqueueSystemJobAsync(s, caller, AsyncOperationQueue.EmailSend, AsyncOperationQueue.EmailSendMessage,
-                AsyncOperationQueue.EmailSendMessage, Email, id, EmailSendJob.DataOf(id), ct);
+                AsyncOperationQueue.EmailSendMessage, Email, id, EmailSendJob.DataOf(id, queueItems: queueItems), ct);
             s.OnCommitted(queue.Signal);
             _logger.LogDebug("Email {EmailId} is Pending Send: its send job is queued.", id);
         }
@@ -233,15 +256,16 @@ public sealed class EmailMessages
         return result;
     }
 
-    /// <summary>The email's state, status and subject, read under an update lock held until commit.</summary>
+    /// <summary>The email's state, status, subject and stored tracking token, read under an update lock held until commit.</summary>
     /// <exception cref="XrmdFaultException">404 when the email does not exist.</exception>
-    private static async Task<(int? State, int? Status, string? Subject)> LockAsync(DataSession s, Guid id, CancellationToken ct)
+    private static async Task<(int? State, int? Status, string? Subject, string? TrackingToken)> LockAsync(DataSession s, Guid id, CancellationToken ct)
     {
         await using var cmd = s.Command(
-            $"SELECT statecode, statuscode, subject FROM {s.DataTable(Email)}{s.Dialect.LockHint(RowLock.UpdateRow)} WHERE activityid = @id{s.Dialect.LockClause(RowLock.UpdateRow)}");
+            $"SELECT statecode, statuscode, subject, trackingtoken FROM {s.DataTable(Email)}{s.Dialect.LockHint(RowLock.UpdateRow)} WHERE activityid = @id{s.Dialect.LockClause(RowLock.UpdateRow)}");
         cmd.AddParameter("@id", DbType.Guid, id);
         await using var rd = await cmd.ExecuteReaderAsync(ct);
         if (!await rd.ReadAsync(ct)) throw XrmdFaultException.ObjectDoesNotExist(Email, id);
-        return (rd.IsDBNull(0) ? null : rd.GetInt32(0), rd.IsDBNull(1) ? null : rd.GetInt32(1), rd.IsDBNull(2) ? null : rd.GetString(2));
+        return (rd.IsDBNull(0) ? null : rd.GetInt32(0), rd.IsDBNull(1) ? null : rd.GetInt32(1), rd.IsDBNull(2) ? null : rd.GetString(2),
+            rd.IsDBNull(3) ? null : rd.GetString(3));
     }
 }

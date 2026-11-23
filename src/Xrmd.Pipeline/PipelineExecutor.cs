@@ -44,6 +44,23 @@ public sealed record InvocationContext(Caller Caller, Guid InitiatingUserId, int
     /// new invocations.
     /// </summary>
     public bool IsCoreCascade { get; init; }
+
+    /// <summary>
+    /// Plan 4.1c: shared variables only the server sets (the <see cref="MailSchema.MailboxDeliveryVariable"/> of a mailbox delivery),
+    /// copied into the <c>SharedVariables</c> of this execution and of the nested requests the core issues for it (such as the
+    /// <c>queueitem</c> Create of AddToQueue), never into a request a plug-in or a workflow makes. Built by server code only: no SDK,
+    /// SOAP or Web API parameter and no plug-in reaches it.
+    /// </summary>
+    public IReadOnlyDictionary<string, object>? ServerSharedVariables { get; init; }
+
+    /// <summary>
+    /// Plan 4.1c: columns the core writes on a Create after the validation of its Target (such as <c>email.senton</c>, which is not
+    /// valid for Create); plug-ins see them in the post image, never in the Target. Only server code supplies them (no front end and no
+    /// plug-in can), and they skip <c>ValidateWrite</c> (valid-for-Create, read-only and type checks): the server is trusted with the
+    /// values; only a name that is not a column of the table fails. Only for a Create (any other message fails with
+    /// <see cref="InvalidOperationException"/>), and not inherited by the nested requests of the execution.
+    /// </summary>
+    public IReadOnlyDictionary<string, object?>? ServerSetValues { get; init; }
 }
 
 /// <summary>
@@ -168,6 +185,9 @@ public sealed class PipelineExecutor(IPipelineCore core, StepRegistry registry, 
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(invocation);
+        // Plan 4.1c: server values are written by a Create only (a server bug otherwise, never a caller's fault).
+        if (invocation.ServerSetValues is not null && !string.Equals(request.RequestName, "Create", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Server values are written on a Create only, not on '{request.RequestName}'.");
         // Migration spec §7.5: the writes of a migration call the core directly; no step, workflow or webhook may run inside one.
         if (MigrationScope.IsActive) throw new InvalidOperationException("The pipeline cannot run inside a migration scope.");
         if (invocation.Depth > MaxDepth)
@@ -269,6 +289,10 @@ public sealed class PipelineExecutor(IPipelineCore core, StepRegistry registry, 
     private async Task<OrganizationResponse> RunAsync(OrganizationRequest request, InvocationContext invocation, DataSession session,
         bool customAction, CustomApiDefinition? api, ActionDefinition? action, CancellationToken ct)
     {
+        // Plan 4.1c: a plug-in or workflow that changed a reserved shared variable makes no request with it changed (its own step fails
+        // after it returns; a request it makes before that, outside a transaction at stage 10, would otherwise be written).
+        if (invocation.Parent is { } parent)
+            ReservedSharedVariables.DemandKept(parent, $"The plug-in or workflow that issued this '{request.RequestName}' request");
         // Before anything of the message runs (stage 10 included), with the parameters as the caller sent them.
         if (!customAction) await guard.AuthorizeAsync(request, invocation.Caller, session, ct);
         if (api is not null)
@@ -366,14 +390,14 @@ public sealed class PipelineExecutor(IPipelineCore core, StepRegistry registry, 
             using (PipelineTelemetry.Stage("mainoperation", message, entityName))
             {
                 if (api is not null) await RunMainOperationAsync(api, context, request, invocation, session, execution, ct);
-                if (action is not null) await _workflows.RunActionAsync(this, action, context, invocation, session, ct);
+                if (action is not null) await _workflows.RunActionAsync(this, action, context, WithoutServerValues(invocation), session, ct);
                 response = customAction
                     ? new OrganizationResponse { ResponseName = message } // a custom action has no core operation
                     : string.Equals(message, ExecuteWorkflowMessage, StringComparison.OrdinalIgnoreCase)
                     ? new ExecuteWorkflowResponse
                     {
                         ResponseName = ExecuteWorkflowMessage,
-                        Results = { ["Id"] = await _workflows.ExecuteWorkflowAsync(this, request, context, invocation, session, ct) },
+                        Results = { ["Id"] = await _workflows.ExecuteWorkflowAsync(this, request, context, WithoutServerValues(invocation), session, ct) },
                     }
                     : bulkTable is not null
                     ? await BulkStage.ExecuteAsync(request, bulkTable, inner => RunInnerAsync(inner, InnerKind.Bulk, invocation, context, session, ct), ct)
@@ -385,13 +409,15 @@ public sealed class PipelineExecutor(IPipelineCore core, StepRegistry registry, 
                         inner => RunInnerAsync(StandardUpsert.CarryParameters(request, inner), InnerKind.Upsert, invocation, context, session, ct),
                         StandardUpsert.IsCreateOnly(request), ct)
                     // A request the core issues (the record Update of CommitFileBlocksUpload) runs as a plug-in-issued request
-                    // would: one level deeper, with this message's context as its ParentContext.
+                    // would: one level deeper, with this message's context as its ParentContext. Plan 4.1c: it keeps the server shared
+                    // variables (the queueitem Create of a delivery's AddToQueue carries the delivery's), not the server values.
                     : await core.ExecuteCoreAsync(request, invocation.Caller, session,
                         (nested, c) => ExecuteAsync(nested,
                             invocation with
                             {
                                 Session = session, Parent = context, Depth = invocation.Depth + 1, IsCoreCascade = CascadeHint.IsMarked(nested),
-                            }, c), ct);
+                                ServerSetValues = null,
+                            }, c), invocation.ServerSetValues, ct);
                 // Plan 2.14 (final review I2): the activation of an assigned definition follows its owner, in the same transaction;
                 // so does it after an Update of ownerid, which plan 2.21 (A16) accepts on an Activated definition.
                 if (!customAction && entityName == WorkflowSchema.Table && entityId != Guid.Empty
@@ -438,8 +464,8 @@ public sealed class PipelineExecutor(IPipelineCore core, StepRegistry registry, 
 
                 // Plan 2.14 (W9): the background workflows the write triggers, queued in its transaction.
                 if (trigger is not null)
-                    await _workflows.QueueBackgroundAsync(trigger.Message, entityName, trigger.Columns, trigger.Owner, context, invocation,
-                        session, ct);
+                    await _workflows.QueueBackgroundAsync(trigger.Message, entityName, trigger.Columns, trigger.Owner, context,
+                        WithoutServerValues(invocation), session, ct);
 
                 foreach (var entry in postAsync)
                 {
@@ -626,7 +652,7 @@ public sealed class PipelineExecutor(IPipelineCore core, StepRegistry registry, 
         XrmdPluginExecutionContext outerContext, DataSession session, CancellationToken ct)
     {
         InnerExecution.Mark(inner, kind);
-        return ExecuteAsync(inner, outer with { Session = session, Parent = outerContext.Clone(MainOperation) }, ct);
+        return ExecuteAsync(inner, outer with { Session = session, Parent = outerContext.Clone(MainOperation), ServerSetValues = null }, ct);
     }
 
     /// <summary>
@@ -760,7 +786,7 @@ public sealed class PipelineExecutor(IPipelineCore core, StepRegistry registry, 
     {
         _organization ??= await core.OrganizationAsync(session, ct);
         var now = DateTime.UtcNow;
-        return new XrmdPluginExecutionContext
+        var context = new XrmdPluginExecutionContext
         {
             MessageName = request.RequestName,
             InputParameters = request.Parameters,
@@ -781,7 +807,22 @@ public sealed class PipelineExecutor(IPipelineCore core, StepRegistry registry, 
             OperationCreatedOn = now,
             Mode = Synchronous,
         };
+        // Plan 4.1c: the server's shared variables (a mailbox delivery's), at every stage of this execution.
+        if (invocation.ServerSharedVariables is { } shared)
+            foreach (var (key, value) in shared) context.SharedVariables[key] = value;
+        // What a plug-in or workflow must leave as it is: this snapshot (a parent's was taken when the parent was built).
+        ReservedSharedVariables.Snapshot(context);
+        return context;
     }
+
+    /// <summary>
+    /// <paramref name="invocation"/> as a workflow gets it (plan 4.1c): without the server shared variables and server values, which
+    /// the requests of a workflow, like those of a plug-in, never carry. Its context still shows the variables.
+    /// </summary>
+    private static InvocationContext WithoutServerValues(InvocationContext invocation) =>
+        invocation.ServerSharedVariables is null && invocation.ServerSetValues is null
+            ? invocation
+            : invocation with { ServerSharedVariables = null, ServerSetValues = null };
 
     /// <summary>
     /// The main operation of a custom API (plan 15, C7): its plug-in type, when it has one, run once as a synthetic step of
@@ -1023,7 +1064,8 @@ public sealed class PipelineExecutor(IPipelineCore core, StepRegistry registry, 
             workflowContext.Mode = Synchronous;
             workflowContext.IsInTransaction = session.Transaction is not null;
             workflowContext.OwningExtension = new EntityReference(WorkflowSchema.Table, item.Workflow!.ActivationId) { Name = item.Workflow.Name };
-            await _workflows.RunRealtimeAsync(this, item.Workflow, workflowContext, invocation, session, ct);
+            await _workflows.RunRealtimeAsync(this, item.Workflow, workflowContext, WithoutServerValues(invocation), session, ct);
+            ReservedSharedVariables.DemandKept(workflowContext, $"The real-time workflow '{item.Workflow.Name}'");
         }
     }
 
@@ -1096,6 +1138,13 @@ public sealed class PipelineExecutor(IPipelineCore core, StepRegistry registry, 
         context.OwningExtension = StepReference(entry.Step);
         if (stage != PreValidation) AddImages(context, entry, images, post: stage == PostOperation);
         await ExecuteStepAsync(entry.Step, context, invocation.Caller, session, execution, ct);
+        // A webhook step has no access to the context; a plug-in's changes are checked against the server's values.
+        if (entry.Step.Endpoint is null)
+        {
+            var who = $"The plug-in step '{entry.Step.Name}'";
+            ReservedSharedVariables.DemandKept(context, who);
+            if (!ReferenceEquals(context.SharedVariables, baseContext.SharedVariables)) ReservedSharedVariables.DemandKept(baseContext, who);
+        }
     }
 
     /// <summary>

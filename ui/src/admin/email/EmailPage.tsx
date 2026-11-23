@@ -30,6 +30,7 @@ import {
   loadMailboxes,
   loadProfiles,
   loadSenderPolicy,
+  receivesEmail,
   saveSenderPolicy,
   secretSet,
   testMailbox,
@@ -47,10 +48,11 @@ const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : '')
 const label = (key: string) => t(key as keyof typeof en);
 
 /**
- * Email (plan 4.1b, System Administrator only): the email server profiles (secrets write-only: "set" or "not set"), the mailboxes
- * of the users and queues with their approval and last outgoing test, and the sender policy (`xrmverse_EmailSendFrom`, an xrmverse
- * extension) as a switch. The command bar acts on the selected profile (Edit) or mailbox (Approve, Link to profile, Test); the server judges every
- * write and its refusal is shown as it is. A test runs as a system job: the page shows "Scheduled" until a reload finds its result.
+ * Email (plan 4.1b and 4.1c, System Administrator only): the email server profiles (secrets write-only: "set" or "not set"), the
+ * mailboxes of the users and queues with their approval, both sides of their last test and their last incoming synchronization, and the
+ * sender policy (`xrmverse_EmailSendFrom`, an xrmverse extension) as a switch. The command bar acts on the selected profile (Edit) or
+ * mailbox (Approve, Link to profile, Test); the server judges every write and its refusal is shown as it is. A test runs as a system
+ * job: the page shows "Scheduled" until a reload finds its result.
  */
 export function EmailPage() {
   const { api } = useAuth();
@@ -116,13 +118,12 @@ export function EmailPage() {
     setError(undefined);
   }
 
-  function saveLink(profileId: string) {
+  function saveLink(profileId: string, incoming?: boolean) {
     const target = linking;
     if (!api || !target) return;
     const profileLabel = profiles?.find((p) => p.id === profileId)?.name ?? profileId;
-    void write(() => linkMailbox(api, target.id, profileId), t('email.mailboxes.linked', { name: mailboxName(target), profile: profileLabel })).then(
-      (ok) => ok && closeDialog(),
-    );
+    const done = t(incoming === true ? 'email.mailboxes.linkedBoth' : 'email.mailboxes.linked', { name: mailboxName(target), profile: profileLabel });
+    void write(() => linkMailbox(api, target.id, profileId, incoming), done).then((ok) => ok && closeDialog());
   }
 
   function saveProfile(values: ProfileValues) {
@@ -261,6 +262,8 @@ export function EmailPage() {
                   <TableHeaderCell>{t('email.col.approval')}</TableHeaderCell>
                   <TableHeaderCell>{t('email.col.profile')}</TableHeaderCell>
                   <TableHeaderCell>{t('email.col.status')}</TableHeaderCell>
+                  <TableHeaderCell>{t('email.col.incoming')}</TableHeaderCell>
+                  <TableHeaderCell>{t('email.col.lastSync')}</TableHeaderCell>
                   <TableHeaderCell>{t('email.col.testedOn')}</TableHeaderCell>
                   <TableHeaderCell>{t('email.col.lastError')}</TableHeaderCell>
                 </TableRow>
@@ -282,6 +285,16 @@ export function EmailPage() {
                         </Badge>
                       )}
                     </TableCell>
+                    <TableCell>
+                      {!receivesEmail(m) ? (
+                        t('email.incoming.off')
+                      ) : (
+                        <Badge appearance="tint" color={m.incomingStatus === 1 ? 'success' : m.incomingStatus === 2 ? 'danger' : 'informative'}>
+                          {label(`email.status.${m.incomingStatus}`)}
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>{when(m.lastSyncOn)}</TableCell>
                     <TableCell>{when(m.testedOn)}</TableCell>
                     <TableCell>{m.status === 2 ? m.lastError ?? '' : ''}</TableCell>
                   </TableRow>

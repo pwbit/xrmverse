@@ -46,6 +46,14 @@ public static class XrmdHost
     public const string RollupRetryDelayNegative =
         "Rollups:TransientRetryDelay must be zero or more (a time span such as 00:05:00): it is how long a rollup calculation job waits before it runs again after a transient database failure.";
 
+    /// <summary>The refusal of a <c>Mail:IncomingSyncInterval</c> under 10 seconds at startup (plan 4.1c).</summary>
+    public const string IncomingSyncIntervalTooShort =
+        "Mail:IncomingSyncInterval must be at least 00:00:10 (a time span such as 00:01:00): it is the time between two synchronizations of a mailbox's incoming email.";
+
+    /// <summary>The refusal of a <c>Mail:IncomingBatchSize</c> outside 1 to 500 at startup (plan 4.1c).</summary>
+    public const string IncomingBatchSizeOutOfRange =
+        "Mail:IncomingBatchSize must be from 1 to 500: it is the most incoming messages one synchronization of a mailbox lists.";
+
     public static WebApplicationBuilder AddXrmd(this WebApplicationBuilder builder)
     {
         var services = builder.Services;
@@ -55,6 +63,7 @@ public static class XrmdHost
         services.AddSingleton<InstanceLockWatchdog>();
 
         // Outgoing email (plan 4.1b): the Graph calls use a named HttpClient with a timeout; Mail:GraphBaseUrl overrides the Graph endpoint; Mail:AllowInsecureSmtp (default false) allows plaintext SMTP when a server has no STARTTLS.
+        // Incoming email (plan 4.1c): Mail:AllowInsecureImap (default false) allows plaintext IMAP when a server has no STARTTLS (test servers only).
         services.AddHttpClient(Xrmd.Core.Mail.MailProviders.GraphClientName, c => c.Timeout = TimeSpan.FromSeconds(60));
         services.AddSingleton(sp =>
         {
@@ -62,8 +71,16 @@ public static class XrmdHost
             return new Xrmd.Core.Mail.MailProviders(
                 () => factory.CreateClient(Xrmd.Core.Mail.MailProviders.GraphClientName),
                 sp.GetRequiredService<IConfiguration>()["Mail:GraphBaseUrl"],
-                sp.GetRequiredService<IConfiguration>().GetValue<bool>("Mail:AllowInsecureSmtp"));
+                sp.GetRequiredService<IConfiguration>().GetValue<bool>("Mail:AllowInsecureSmtp"),
+                sp.GetRequiredService<IConfiguration>().GetValue<bool>("Mail:AllowInsecureImap"));
         });
+        // Incoming email (plan 4.1c, task 9): Mail:IncomingSyncInterval (default 00:01:00, at least 00:00:10) and Mail:IncomingBatchSize (default 50, 1-500).
+        services.AddOptions<Xrmd.Core.Mail.MailboxSyncOptions>()
+            .Bind(builder.Configuration.GetSection("Mail"))
+            .Validate(o => o.IncomingSyncInterval >= Xrmd.Core.Mail.MailboxSyncOptions.MinimumInterval, IncomingSyncIntervalTooShort)
+            .Validate(o => o.IncomingBatchSize is >= 1 and <= Xrmd.Core.Mail.MailboxSyncOptions.MaximumBatchSize, IncomingBatchSizeOutOfRange)
+            .ValidateOnStart();
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<Xrmd.Core.Mail.MailboxSyncOptions>>().Value);
         services.AddHostedService(sp => sp.GetRequiredService<InstanceLockWatchdog>());
 
         // Plan 2.7a, ruling P3: the engine of the organizations (Storage:Provider, refused at startup when unknown) and its SQL dialect.
@@ -269,6 +286,13 @@ public static class XrmdHost
         services.AddScoped<IAsyncOperationHandler, Xrmd.Core.Mail.EmailSendJob>();
         // ... and the mailbox tests writing testemailconfigurationscheduled true queues (operationtype 99012).
         services.AddScoped<IAsyncOperationHandler, Xrmd.Core.Mail.MailboxTestJob>();
+        // Incoming email (plan 4.1c): the import of one message (scoped like the pipeline it runs), the sync jobs of the mailboxes
+        // (operationtype 99013), and their scheduling at host start (idle without an organization database).
+        services.AddScoped<Xrmd.Core.Mail.IncomingEmailImporter>();
+        services.AddScoped<IAsyncOperationHandler, Xrmd.Core.Mail.MailboxSyncJob>();
+        services.AddHostedService(sp => new MailboxSyncStartup(sp.GetRequiredService<IDbConnectionFactory>, sp.GetRequiredService<AsyncOperationQueue>(),
+            !string.IsNullOrWhiteSpace(sp.GetRequiredService<IConfiguration>().GetConnectionString("Org")),
+            sp.GetRequiredService<ILogger<MailboxSyncStartup>>(), sp.GetRequiredService<TimeProvider>(), sp.GetService<IMigrationLock>()));
         services.AddScoped<OrganizationService>();
         services.AddScoped<IOrganizationService>(sp => sp.GetRequiredService<OrganizationService>());
         services.AddSingleton<ODataEdmModelBuilder>();

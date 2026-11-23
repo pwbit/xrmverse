@@ -3,12 +3,15 @@ using MimeKit;
 namespace Xrmd.Core.Mail;
 
 /// <summary>
-/// What a provider needs from an <c>emailserverprofile</c> row (plain data, built by the send job from the row). Nothing here is a secret.
+/// What a provider needs from an <c>emailserverprofile</c> row (plain data, built from the row). Nothing here is a secret. The host, port, SSL
+/// and protocol fields are those of the direction being served: a send provider gets the outgoing ones (<c>MailConnections.ResolveAsync</c>),
+/// an incoming provider (<see cref="IIncomingMailProvider"/>) gets the incoming ones (<c>MailConnections.ResolveIncomingAsync</c>:
+/// <c>incomingserverlocation</c>, <c>incomingportnumber</c>, <c>incomingusessl</c>, <c>incomingauthenticationprotocol</c>).
 /// </summary>
-/// <param name="ServerLocation">Outgoing server host name (<c>outgoingserverlocation</c>); SMTP only.</param>
-/// <param name="Port">Outgoing port (<c>outgoingportnumber</c>); null uses 465 with SSL and 587 without.</param>
-/// <param name="UseSsl"><c>outgoingusessl</c>: true is TLS from the first byte, false requires STARTTLS (plaintext only with the server setting <c>Mail:AllowInsecureSmtp</c>).</param>
-/// <param name="Protocol">Outgoing authentication protocol value (3 Basic, 4 OAuth), informational.</param>
+/// <param name="ServerLocation">Server host name: <c>outgoingserverlocation</c> (SMTP), or <c>incomingserverlocation</c> (IMAP); unused by Graph.</param>
+/// <param name="Port">Port: <c>outgoingportnumber</c> (null uses 465 with SSL and 587 without), or <c>incomingportnumber</c> (null uses 993 with SSL and 143 without).</param>
+/// <param name="UseSsl"><c>outgoingusessl</c> or <c>incomingusessl</c>: true is TLS from the first byte, false requires STARTTLS (plaintext only with the server setting <c>Mail:AllowInsecureSmtp</c> or <c>Mail:AllowInsecureImap</c>).</param>
+/// <param name="Protocol">Authentication protocol value of that direction (3 Basic, 4 OAuth), informational.</param>
 /// <param name="TenantId">Microsoft Entra tenant id (<c>exchangeonlinetenantid</c>); Graph only.</param>
 /// <param name="ClientId">Application (client) id (<c>oauthclientid</c>); Graph only.</param>
 /// <param name="ServerAuthority"><c>serverauthority</c>: 0 Public, 1 US Government, 2 China, 3 Automatic; Graph only.</param>

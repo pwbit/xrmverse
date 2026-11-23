@@ -116,6 +116,12 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
     /// </summary>
     public const string BlockedAttachmentsDefaultStep = "organization-blockedattachments-default";
 
+    /// <summary>
+    /// The <c>meta.upgrade_step</c> name of the one-time default of <c>usersettings.incomingemailfilteringmethod</c> (plan 4.1c, task 1
+    /// fix round 1; never renamed).
+    /// </summary>
+    public const string IncomingEmailFilteringDefaultStep = "usersettings-incomingemailfilteringmethod-default";
+
     private const string ResourcePrefix = "Xrmd.Metadata.Seed.";
 
     // Referenced entities first, though lookup targets are not validated.
@@ -284,6 +290,11 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
         await UpgradeOnceAsync(conn, tx, ColorSchemeDefaultStep, now,
             $"UPDATE data.{CurrencySchema.UserSettings} SET {AppModuleSchema.UserColorScheme} = {dialect.IsNull(AppModuleSchema.UserColorScheme, "@scheme")}", ct,
             ("@scheme", AppModuleSchema.DefaultColorScheme));
+        // The incoming email filtering of a user (plan 4.1c): From contacts and accounts for a settings row made before the column, once
+        // (meta.upgrade_step), so a value an administrator clears afterwards is not set again at every startup.
+        await UpgradeOnceAsync(conn, tx, IncomingEmailFilteringDefaultStep, now,
+            $"UPDATE data.{CurrencySchema.UserSettings} SET {MailSchema.FilteringMethodColumn} = @filter WHERE {MailSchema.FilteringMethodColumn} IS NULL", ct,
+            ("@filter", MailSchema.UserFilterDefault));
         await EnsureTimeZonesAsync(conn, tx, now, ct);
 
         // The form defaults (plan 3.5 UI-1b, Learn): not the default form, active, for a form made before the two columns.
@@ -325,6 +336,9 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
         // Auto-save of the model-driven forms (#117): on, as in Dataverse, for an organization made before the column.
         await ExecuteAsync(conn, tx,
             $"UPDATE data.organization SET {AppModuleSchema.AutoSaveEnabled} = {dialect.BooleanLiteral(true)} WHERE {AppModuleSchema.AutoSaveEnabled} IS NULL", ct);
+        // Email correlation (plan 4.1c): on, as in Dataverse, for a new organization and one made before the column.
+        await ExecuteAsync(conn, tx,
+            $"UPDATE data.organization SET {MailSchema.CorrelationEnabledColumn} = {dialect.BooleanLiteral(true)} WHERE {MailSchema.CorrelationEnabledColumn} IS NULL", ct);
         // The blocked attachment extensions (plan 4.1b, final review I2): Dataverse's default list for an organization made before the
         // column, once (meta.upgrade_step), and only where the value is empty: a list an administrator set is kept.
         await UpgradeOnceAsync(conn, tx, BlockedAttachmentsDefaultStep, now,
@@ -471,9 +485,9 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
         await ExecuteAsync(conn, tx, $"""
             INSERT INTO data.{CurrencySchema.UserSettings} (systemuserid, ownerid, owneridtype, owninguser, owningbusinessunit,
                 createdon, createdby, modifiedon, modifiedby, statecode, statuscode, {AppModuleSchema.PagingLimit}, {AppModuleSchema.UserColorScheme},
-                {string.Join(", ", TimeZoneSchema.UserSettingsDefaults.Select(d => d.Column))})
+                {MailSchema.FilteringMethodColumn}, {string.Join(", ", TimeZoneSchema.UserSettingsDefaults.Select(d => d.Column))})
             SELECT u.systemuserid, u.systemuserid, 8, u.systemuserid, u.businessunitid, @now, @by, @now, @by, 0, 1, {AppModuleSchema.DefaultPagingLimit},
-                {AppModuleSchema.DefaultColorScheme},
+                {AppModuleSchema.DefaultColorScheme}, {MailSchema.UserFilterDefault},
                 {string.Join(", ", TimeZoneSchema.UserSettingsDefaults.Select((_, i) => $"@d{i}"))}
             FROM data.systemuser u
             WHERE NOT EXISTS (SELECT 1 FROM data.{CurrencySchema.UserSettings} s{dialect.LockHint(RowLock.UpdateRange)} WHERE s.systemuserid = u.systemuserid)

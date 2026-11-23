@@ -25,6 +25,20 @@ public interface IPipelineCore
         CancellationToken ct) => ExecuteCoreAsync(request, caller, session, ct);
 
     /// <summary>
+    /// <see cref="ExecuteCoreAsync(OrganizationRequest, Caller, DataSession, NestedRequest, CancellationToken)"/> with the columns the
+    /// server writes on a Create (plan 4.1c, <see cref="InvocationContext.ServerSetValues"/>): set after the Target is validated, so a
+    /// column not valid for Create may be among them; the Target never holds them. Null for every other call.
+    /// </summary>
+    /// <exception cref="InvalidOperationException"><paramref name="serverSetValues"/> is set on a message other than Create, or names a
+    /// column the table does not have.</exception>
+    /// <exception cref="NotSupportedException">This core writes no server values (the default implementation).</exception>
+    Task<OrganizationResponse> ExecuteCoreAsync(OrganizationRequest request, Caller caller, DataSession session, NestedRequest nested,
+        IReadOnlyDictionary<string, object?>? serverSetValues, CancellationToken ct) =>
+        serverSetValues is null
+            ? ExecuteCoreAsync(request, caller, session, nested, ct)
+            : throw new NotSupportedException("This core does not write server values.");
+
+    /// <summary>
     /// True for the messages <see cref="ExecuteCoreAsync"/> implements; any other message runs only as a custom action
     /// (a custom <c>sdkmessage</c>), without a core operation.
     /// </summary>

@@ -46,7 +46,16 @@ public sealed class SendEmailTests(XrmdFixture fx) : IAsyncLifetime
         await PluginTestHelper.ClearAsync(fx);
         // Plan 4.1b: the send jobs these tests queue are not run.
         await TestSql.ExecAsync(fx.ConnectionString, $"DELETE FROM data.asyncoperation WHERE operationtype = {Xrmd.Pipeline.Async.AsyncOperationQueue.EmailSend}");
+        await TrackingOffAsync();
     }
+
+    /// <summary>Tracking tokens on in the shared organization: <c>CRM:</c>, four digits, the next number 7.</summary>
+    private Task TrackingOnAsync() => TestSql.ExecAsync(fx.ConnectionString,
+        "UPDATE data.organization SET trackingprefix = 'CRM:', trackingtokeniddigits = 4, nexttrackingnumber = 7");
+
+    /// <summary>Tracking tokens back off (the default).</summary>
+    private Task TrackingOffAsync() => TestSql.ExecAsync(fx.ConnectionString,
+        "UPDATE data.organization SET trackingprefix = NULL, trackingtokeniddigits = NULL, nexttrackingnumber = NULL");
 
     // ---- helpers ----
 
@@ -156,6 +165,48 @@ public sealed class SendEmailTests(XrmdFixture fx) : IAsyncLifetime
 
         (await Admin.RetrieveAsync("email", id, new ColumnSet("trackingtoken"))).GetAttributeValue<string>("trackingtoken")
             .Should().Be("XV:0001:" + _run);
+    }
+
+    [Fact]
+    public async Task TrackingOn_SubjectCarriesOtherEmailsToken_GetsNewToken()
+    {
+        // #333: a reply whose subject quotes another email's token gets its own token; the other email's token is not reused.
+        await TrackingOnAsync();
+        var first = await DraftAsync();
+        var quoted = ((SendEmailResponse)await Admin.ExecuteAsync(Send(first, issueSend: true))).Subject;
+        quoted.Should().Be($"Welcome {_run} CRM:0007");
+        var reply = await DraftAsync();
+        await Admin.UpdateAsync(new Entity("email", reply) { ["subject"] = "Re: " + quoted });
+
+        var response = (SendEmailResponse)await Admin.ExecuteAsync(Send(reply, issueSend: true));
+
+        response.Subject.Should().Be($"Re: Welcome {_run} CRM:0007 CRM:0008");
+        (await ScalarAsync("SELECT subject FROM data.email WHERE activityid = @id", ("@id", reply))).Should().Be(response.Subject);
+        (await ScalarAsync("SELECT trackingtoken FROM data.email WHERE activityid = @id", ("@id", reply))).Should().Be("CRM:0008");
+        (await ScalarAsync("SELECT trackingtoken FROM data.email WHERE activityid = @id", ("@id", first))).Should().Be("CRM:0007");
+        Convert.ToInt32(await ScalarAsync("SELECT nexttrackingnumber FROM data.organization")).Should().Be(9);
+    }
+
+    [Fact]
+    public async Task TrackingOn_FailedEmailSentAgain_KeepsItsOwnToken()
+    {
+        // Final review M2, narrowed by #333: the subject's token is reused only when it is the email's own stored trackingtoken.
+        await TrackingOnAsync();
+        var id = await DraftAsync();
+        ((SendEmailResponse)await Admin.ExecuteAsync(Send(id, issueSend: true))).Subject.Should().Be($"Welcome {_run} CRM:0007");
+        await ScalarAsync("UPDATE data.email SET statecode = 0, statuscode = 8 WHERE activityid = @id", ("@id", id));
+
+        var again = (SendEmailResponse)await Admin.ExecuteAsync(Send(id, issueSend: true));
+
+        again.Subject.Should().Be($"Welcome {_run} CRM:0007");
+        (await ScalarAsync("SELECT trackingtoken FROM data.email WHERE activityid = @id", ("@id", id))).Should().Be("CRM:0007");
+        Convert.ToInt32(await ScalarAsync("SELECT nexttrackingnumber FROM data.organization")).Should().Be(8, "no new number is taken");
+
+        // Its stored token no longer in the subject (the subject was rewritten): a new token is taken and appended.
+        await ScalarAsync("UPDATE data.email SET statecode = 0, statuscode = 8, subject = @subject WHERE activityid = @id",
+            ("@id", id), ("@subject", "Rewritten " + _run));
+        ((SendEmailResponse)await Admin.ExecuteAsync(Send(id, issueSend: true))).Subject.Should().Be($"Rewritten {_run} CRM:0008");
+        (await ScalarAsync("SELECT trackingtoken FROM data.email WHERE activityid = @id", ("@id", id))).Should().Be("CRM:0008");
     }
 
     [Fact]

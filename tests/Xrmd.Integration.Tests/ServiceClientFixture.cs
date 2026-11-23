@@ -51,6 +51,9 @@ public sealed class ServiceClientFixture : IAsyncLifetime
         builder.Configuration["Seed:AdminName"] = "Test Admin";
         // Plan 4.1b: GreenMail and the fake SMTP server offer no STARTTLS (a test setting; production requires TLS).
         builder.Configuration["Mail:AllowInsecureSmtp"] = "true";
+        // Plan 4.1c: GreenMail's IMAP has no STARTTLS either, and the mailboxes sync every 10 seconds (the shortest interval accepted).
+        builder.Configuration["Mail:AllowInsecureImap"] = "true";
+        builder.Configuration["Mail:IncomingSyncInterval"] = "00:00:10";
         builder.Logging.AddProvider(_requestLog);
         builder.Logging.AddFilter<RequestLogCollector>(null, LogLevel.None);
         builder.Logging.AddFilter<RequestLogCollector>(typeof(RequestLoggingMiddleware).FullName, LogLevel.Debug);

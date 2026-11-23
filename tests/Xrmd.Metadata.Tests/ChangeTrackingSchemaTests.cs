@@ -94,6 +94,10 @@ public class ChangeTrackingSchemaTests
         [("WebhookSecrets.cs", "{SecretTable}")] = null,
         // meta.mail_secret (plan 4.1b): a meta table, not a data table.
         [("MailSecrets.cs", "{SecretTable}")] = null,
+        // meta.mail_message (plan 4.1c): the message keys, a meta table, not a data table.
+        [("MailMessageKeys.cs", "{Table}")] = null,
+        // meta.mailbox_sync (plan 4.1c): the incoming sync state of a mailbox, a meta table, not a data table.
+        [("MailboxSyncState.cs", "{Table}")] = null,
     };
 
     private const string Intersect = "(intersect)";

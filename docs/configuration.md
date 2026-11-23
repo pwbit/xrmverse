@@ -139,7 +139,9 @@ ignored.
 ## Other settings
 
 Feature pages document their own keys: [Webhooks](webhooks.md#configuration) (`Pipeline:*`), [Email and queues](email-and-queues.md#configuration)
-(`Mail:*`), [Observability](observability.md)
+(`Mail:*`: `Mail:AllowInsecureSmtp`, `Mail:AllowInsecureImap`, `Mail:GraphBaseUrl`, and for incoming email
+`Mail:IncomingSyncInterval`, default `00:01:00`, at least `00:00:10`, and `Mail:IncomingBatchSize`, default 50, from 1 to
+500; the server refuses to start with a value out of range), [Observability](observability.md)
 (`Observability:*`), [Files and images](files-and-images.md), [SQL endpoint](sql-endpoint.md) and
 [Rollup columns](rollup-columns.md#jobs).
 

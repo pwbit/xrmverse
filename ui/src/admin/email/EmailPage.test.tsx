@@ -44,6 +44,8 @@ function mockServer() {
           {
             mailboxid: ADA_MAILBOX, name: 'Ada', emailaddress: 'ada@example.com', _emailserverprofile_value: RELAY, emailrouteraccessapproval: 2,
             outgoingemaildeliverymethod: 2, enabledforoutgoingemail: true, outgoingemailstatus: 2,
+            incomingemaildeliverymethod: 2, enabledforincomingemail: true, incomingemailstatus: 1,
+            lastsuccessfulsynccompletedon: '2026-11-23T09:30:00Z',
             lastsyncerror: 'The SMTP server refused the user name or password.', statecode: 0,
           },
         ],
@@ -198,10 +200,101 @@ describe('EmailPage', () => {
     await waitFor(() =>
       expect(patches).toContainEqual({
         path: `mailboxes(${ADA_MAILBOX})`,
-        body: { 'emailserverprofile@odata.bind': `/emailserverprofiles(${GRAPH})`, outgoingemaildeliverymethod: 2, enabledforoutgoingemail: true },
+        body: {
+          'emailserverprofile@odata.bind': `/emailserverprofiles(${GRAPH})`,
+          outgoingemaildeliverymethod: 2,
+          enabledforoutgoingemail: true,
+        },
       }),
     );
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('leaves the incoming columns alone when the Receive email switch is untouched', async () => {
+    const user = userEvent.setup();
+    server.use(
+      onPath('get', 'mailboxes', () =>
+        HttpResponse.json({
+          value: [
+            {
+              mailboxid: ADA_MAILBOX, name: 'Ada', emailaddress: 'ada@example.com', _emailserverprofile_value: RELAY,
+              emailrouteraccessapproval: 1, outgoingemaildeliverymethod: 2, enabledforoutgoingemail: true, outgoingemailstatus: 1,
+              incomingemaildeliverymethod: 2, enabledforincomingemail: false, incomingemailstatus: 0, statecode: 0,
+            },
+          ],
+        }),
+      ),
+    );
+    await open();
+    await selectRow(user, 'ada@example.com');
+    await user.click(await screen.findByRole('button', { name: en['email.mailboxes.link'] }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('switch', { name: en['email.link.incoming'] })).not.toBeChecked();
+    await user.click(within(dialog).getByRole('button', { name: en['email.link.save'] }));
+
+    await waitFor(() => expect(patches).toHaveLength(1));
+    expect(patches[0].body).not.toHaveProperty('incomingemaildeliverymethod');
+    expect(patches[0].body).not.toHaveProperty('enabledforincomingemail');
+  });
+
+  it('shows the incoming status and the last sync of a mailbox', async () => {
+    await open();
+    const mailboxes = screen.getByRole('table', { name: en['email.mailboxes.title'] });
+    expect(within(mailboxes).getByRole('columnheader', { name: en['email.col.incoming'] })).toBeInTheDocument();
+    expect(within(mailboxes).getByRole('columnheader', { name: en['email.col.lastSync'] })).toBeInTheDocument();
+    const ada = within(mailboxes).getByRole('row', { name: /ada@example.com/ });
+    // The outgoing test failed and the incoming one succeeded: both are shown.
+    expect(within(ada).getByText(en['email.status.2'])).toBeInTheDocument();
+    expect(within(ada).getByText(en['email.status.1'])).toBeInTheDocument();
+    expect(within(ada).getByText(new Date('2026-11-23T09:30:00Z').toLocaleString())).toBeInTheDocument();
+  });
+
+  it('the Link dialog has a Receive email switch that writes the incoming columns', async () => {
+    const user = userEvent.setup();
+    await open();
+    await selectRow(user, 'ada@example.com');
+
+    await user.click(await screen.findByRole('button', { name: en['email.mailboxes.link'] }));
+    const dialog = await screen.findByRole('dialog');
+    const receive = within(dialog).getByRole('switch', { name: en['email.link.incoming'] });
+    expect(receive).toBeChecked(); // the mailbox receives today
+    await user.click(receive);
+    await user.click(within(dialog).getByRole('button', { name: en['email.link.save'] }));
+
+    await waitFor(() =>
+      expect(patches).toContainEqual({
+        path: `mailboxes(${ADA_MAILBOX})`,
+        body: {
+          'emailserverprofile@odata.bind': `/emailserverprofiles(${RELAY})`,
+          outgoingemaildeliverymethod: 2,
+          enabledforoutgoingemail: true,
+          incomingemaildeliverymethod: 0,
+          enabledforincomingemail: false,
+        },
+      }),
+    );
+
+    // Left on, the incoming side is Server-Side Synchronization and incoming email is turned on.
+    await user.click(await screen.findByRole('button', { name: en['email.mailboxes.link'] }));
+    const again = await screen.findByRole('dialog');
+    const receiveAgain = within(again).getByRole('switch', { name: en['email.link.incoming'] });
+    expect(receiveAgain).toBeChecked();
+    await user.click(receiveAgain);
+    await user.click(receiveAgain); // touched, and on again
+    await user.click(within(again).getByRole('button', { name: en['email.link.save'] }));
+
+    await waitFor(() =>
+      expect(patches).toContainEqual({
+        path: `mailboxes(${ADA_MAILBOX})`,
+        body: {
+          'emailserverprofile@odata.bind': `/emailserverprofiles(${RELAY})`,
+          outgoingemaildeliverymethod: 2,
+          enabledforoutgoingemail: true,
+          incomingemaildeliverymethod: 2,
+          enabledforincomingemail: true,
+        },
+      }),
+    );
   });
 
   it('shows the sender policy as a switch that writes the environment setting', async () => {

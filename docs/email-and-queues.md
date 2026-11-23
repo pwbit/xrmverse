@@ -16,7 +16,11 @@ codes for queues. Whether each detail matches a real Dataverse is not verified (
 mailbox, over SMTP or Microsoft Graph, with its attachments. A System Administrator sets up the profile, approves the
 mailbox's address and tests the mailbox first (see [Outgoing email](#outgoing-email)).
 
-This page covers queues (item 4.1a) and outgoing email (item 4.1b). Receiving email (item 4.1c) is not part of it yet.
+**Incoming email** (roadmap item 4.1c) reads the inbox of a mailbox over IMAP or Microsoft Graph, in the background, and
+turns each new message into a Received email: linked to its senders and recipients, to the email it answers and its
+record, and, for a queue's mailbox, put in the queue (see [Incoming email](#incoming-email)).
+
+This page covers queues (item 4.1a), outgoing email (item 4.1b) and incoming email (item 4.1c).
 
 ![The queue item grid with the Pick, Release, Route and Remove from queue commands](images/queue-item-grid.png)
 
@@ -39,7 +43,14 @@ This page covers queues (item 4.1a) and outgoing email (item 4.1b). Receiving em
 | Sender policy | `xrmverse_EmailSendFrom`: `userOrQueue` (default) or `queueOnly` | **Extra** (xrmverse extension) |
 | Attachments | `activitymimeattachment` with its body in the file store, size limit and blocked extensions of the organization | Same idea; no chunked transfer |
 | Tracking tokens | Off by default; on when the organization has a `trackingprefix` | **Differs**: a new Dataverse environment has them on (from memory) |
-| Receiving email | Not available | **Narrower** (planned in 4.1c) |
+| Receiving email | Server-Side Synchronization over IMAP (Basic authentication) or Microsoft Graph, read-only, every `Mail:IncomingSyncInterval` | Same idea; no POP3, Exchange Web Services or Forward Mailbox; the interval is a server setting (see [Synchronization](#synchronization)) |
+| Filtering | The five `incomingemailfilteringmethod` values of the user or queue | Same idea; senders are matched without smart matching |
+| Duplicates | One email per `Message-ID` in the organization, the first mailbox wins; mail without `Message-ID` keyed by its content | Same idea; a message already tracked never gets an item in a second queue (see [Duplicates](#duplicates)) |
+| Parties | `account`, `contact`, `systemuser` and `queue`, active records only; the sender linked only when exactly one record matches | **Narrower**: custom email-enabled tables are not matched |
+| Correlation | `In-Reply-To` and `References`, tracking token, conversation index | Same order; no smart matching (method 6) |
+| Who delivers | The mailbox's owner, or the administrator of the team that owns it, never SYSTEM | Same idea (from memory) |
+| Delivery marker | Shared variable `xrmverse_MailboxDeliveryId` in the delivery's plug-in contexts | **Extra** (xrmverse extension) |
+| Attachments not imported | A blocked or oversized incoming attachment is not stored; a note on the email names it | **Extra**: the note is xrmverse's own |
 
 ### Tasks at a glance
 
@@ -56,6 +67,10 @@ This page covers queues (item 4.1a) and outgoing email (item 4.1b). Receiving em
 | Get a mailbox ready to send | `xrmd mailbox approve`, `link`, `test`, or the Email page | [Mailboxes](#mailboxes) |
 | Send an email | `SendEmail` with `IssueSend` true, or **Send** on the email form | [Sending](#sending) |
 | Allow sending from queues only | `xrmverse_EmailSendFrom` = `queueOnly` | [Sender policy](#sender-policy-xrmverse_emailsendfrom) |
+| Receive email in a mailbox | The profile's incoming columns, `xrmd mailbox link --incoming`, `test` | [Setting up receiving](#setting-up-receiving) |
+| Choose which messages are kept | `incomingemailfilteringmethod` of the user or queue | [Filtering](#filtering) |
+| Link replies to the email they answer | Headers, tracking tokens, conversation index | [Correlation](#correlation) |
+| Let only deliveries create work in a queue | The shared variable `xrmverse_MailboxDeliveryId` | [Building a delivery guard](#building-a-delivery-guard) |
 
 ### Default forms and views
 
@@ -312,6 +327,9 @@ in the same transaction. **Send** on an email form does the same (see
   - **Permanent error**, or a mailbox that cannot send (address not approved, no profile, not tested): the email is Failed
     (state 0, status 8) and the reason is the send job's message (`asyncoperation.message`). A failure of the server or of
     the credentials also sets the mailbox to Failure with the reason; a refused recipient fails only that email.
+  - **Queue items.** `SendEmail` deactivates the email's active queue items. When the send ends Failed, the items it
+    deactivated are active again in their queues, with their worker, unless the email has another active item meanwhile or
+    the queue is inactive. A Sent email's items stay inactive.
 - A Failed email is open again: correct it and send it again.
 - `IssueSend` false still marks the email as Sent without sending anything (see
   [Activities and notes](activities.md#sendemail)).
@@ -372,7 +390,7 @@ To turn them on, set `trackingprefix` (for example `CRM:`), `trackingtokeniddigi
 - `GetTrackingTokenEmail` (SDK, or `POST /api/data/v9.2/GetTrackingTokenEmail`) returns the next token; with tracking off it is
   a 400 that names `trackingprefix`.
 
-Incoming email (item 4.1c) will use the token to link replies.
+Incoming email uses the token to link replies (see [Correlation](#correlation)).
 
 ### Configuration
 
@@ -380,9 +398,244 @@ Incoming email (item 4.1c) will use the token to link replies.
 |---|---|---|
 | `Mail:AllowInsecureSmtp` | `false` | Allow an SMTP session without TLS when the server offers no STARTTLS. For test and development servers only: user names and passwords then travel in clear text |
 | `Mail:GraphBaseUrl` | `https://graph.microsoft.com/v1.0` | The Microsoft Graph endpoint the Graph profiles call |
+| `Mail:AllowInsecureImap` | `false` | Allow an IMAP session without TLS when the server offers no STARTTLS. For test and development servers only, as `Mail:AllowInsecureSmtp` |
+| `Mail:IncomingSyncInterval` | `00:01:00` | The time between two synchronization passes of a mailbox; at least `00:00:10` |
+| `Mail:IncomingBatchSize` | `50` | The most messages one pass lists, from 1 to 500 |
+
+The server refuses to start when `Mail:IncomingSyncInterval` is under 10 seconds or `Mail:IncomingBatchSize` is outside 1
+to 500, with a message that names the key.
 
 They are ASP.NET configuration keys: as environment variables, write them as `Mail__AllowInsecureSmtp`. See
 [Configuration](configuration.md).
+
+## Incoming email
+
+A mailbox that **can receive** is read by a background job, and each new message of its inbox becomes a Received `email`.
+A mailbox can receive when the address of its user or queue is approved, the mailbox is active and linked to a profile,
+its incoming delivery method is Server-Side Synchronization (`incomingemaildeliverymethod` 2) with
+`enabledforincomingemail` on, and its last incoming test succeeded (`incomingemailstatus` 1 Success).
+
+The server reads the mailbox and never changes it: no message is deleted, moved or flagged (IMAP opens the inbox
+read-only and fetches without setting `\Seen`), so the people who use the mailbox in a mail client keep working as before.
+
+### Setting up receiving
+
+1. **The incoming side of the profile.**
+   - **IMAP** (an SMTP profile, `servertype` 4): set `incomingserverlocation`, `incomingportnumber`, `incomingusessl` and the
+     credentials. `incomingusessl` true (the default when empty) opens TLS from the first byte (port 993 by default); false
+     requires STARTTLS (port 143 by default), and a server that offers none is refused before any credential is sent, unless
+     `Mail:AllowInsecureImap` is true. `incomingauthenticationprotocol` is 3 Basic (0 Auto Detect is stored as 3).
+     `incomingcredentialretrieval` 1 takes `incomingusername` and `incomingpassword` from the profile; 0 (or empty) takes each
+     mailbox's own `username` and `password`. Any other protocol or credential source is a 400 that names the value.
+   - **Graph** (`servertype` 0): nothing more. The incoming protocol and credential source take the outgoing ones (4 OAuth,
+     7 OAuth with Microsoft Entra ID), and the profile reads the inbox with the same app-only token. Reading needs
+     `Mail.Read`, which the `Mail.ReadWrite` permission of [the Graph set-up](#email-server-profiles) already covers; the
+     application access policy limits the mailboxes it can read as it limits the ones it can send from.
+
+   `xrmd mailbox profile create` and the web admin's profile dialog set the outgoing side only: write the incoming columns
+   on the profile with the Web API or the SDK.
+
+   ```http
+   PATCH /api/data/v9.2/emailserverprofiles(<profileid>)
+   {
+     "incomingserverlocation": "imap.example.com",
+     "incomingportnumber": 993,
+     "incomingusessl": true,
+     "incomingauthenticationprotocol": 3,
+     "incomingcredentialretrieval": 1,
+     "incomingusername": "support@example.com",
+     "incomingpassword": "<password>",
+     "usesamesettingsforoutgoingconnections": false
+   }
+   ```
+
+   `usesamesettingsforoutgoingconnections` true makes the send use the incoming credentials (credential source, user name
+   and `incomingpassword`) instead of the outgoing ones. It applies only when the profile has an incoming server
+   (`incomingserverlocation`): a profile without one keeps sending with its outgoing credentials, whatever the value.
+2. **Link the mailbox for receiving.** `xrmd mailbox link <mailbox> --profile <profile> --incoming` also writes
+   `incomingemaildeliverymethod` 2 and `enabledforincomingemail` true (add `--no-outgoing` to leave the outgoing columns as
+   they are). On the web admin's Email page, turn on **Receive email** in the **Link to profile** dialog. Only a System
+   Administrator may change a mailbox's profile.
+3. **Approve and test.** Approve the address as for sending, then test the mailbox (`xrmd mailbox test <mailbox> --wait`).
+   When the mailbox receives, the test checks the incoming side too: the delivery user (see
+   [Who delivers](#who-delivers-the-delivery-user)) and the connection, opening the inbox read-only. The outcome goes to
+   `incomingemailstatus`, and the reason of a failure to `lastsyncerror`, the column both sides write. A successful
+   incoming test starts the synchronization.
+
+Changing the mailbox's profile, user name, password, incoming delivery method or `enabledforincomingemail` sets
+`incomingemailstatus` back to Not Run: test the mailbox again. So does a new email address of the mailbox's user or queue,
+and another incoming delivery method set on the user or queue. Each of these forgets the stored position: the next
+synchronization starts again from `processemailreceivedafter`, and the [duplicate rule](#duplicates) keeps the messages
+already imported from coming in twice. A pass still running when the settings change stores nothing more and ends, even
+when a new test succeeds before it finishes.
+
+### Synchronization
+
+Each mailbox that can receive has one synchronization job (`asyncoperation.operationtype` 99013, named `SyncMailbox`,
+regarding the mailbox and owned by the delivery user). It runs one **pass**, then waits for the next one,
+`Mail:IncomingSyncInterval` later (one minute by default):
+
+- The first pass sets `processemailreceivedafter` to its own time. Messages that reached the inbox earlier are never
+  imported; the column is the server's (a write is a 400).
+- A pass lists up to `Mail:IncomingBatchSize` messages (50 by default) after the stored position: the last IMAP UID read
+  (a new UIDVALIDITY of the folder starts again from `processemailreceivedafter`), or the Graph delta link. A delta link
+  Graph no longer accepts (`410 Gone`, or the error codes `syncStateNotFound`, `syncStateInvalid` and `resyncRequired`,
+  given when the delta token expired) is dropped, and the listing starts again from `processemailreceivedafter` in the same
+  pass; the [duplicate rule](#duplicates) keeps the messages already imported from coming in twice. When the server has
+  more, the next pass starts at once.
+- Each message is imported in a transaction of its own, through the pipeline (see [The received email](#the-received-email)),
+  and the position after it is stored, so an interrupted pass goes on after the last message it imported.
+- A pass that ends well sets `lastsuccessfulsynccompletedon` and `lastsyncerrorcount` 0. It leaves the text of
+  `lastsyncerror` as it was, so the last error stays visible.
+- The server checks every 5 minutes, and at startup, that each mailbox that can receive has its job, and queues the
+  missing ones.
+
+**Failures.**
+
+| What failed | What happens |
+|---|---|
+| One message: its import refused by its pipeline (a plug-in, a validation) or by its own data; the server refuses to give it (an IMAP `NO` or `BAD` on its fetch, a Graph `4xx` other than `401` and `403` on its content); it is not readable MIME; any other error of its reading or import that is not the database, the network or a timeout | The pass stops before the message and tries it again at the next interval. After the third failure in a row the message is skipped, the pass goes on after it, and `lastsyncerror` names its `Message-ID` (or its server id) and the reason |
+| A missing privilege of the delivery user (403) | Recorded in `lastsyncerror`, not counted against the message; the pass is tried again at the next interval. When the same message is refused this way three passes in a row, `incomingemailstatus` is set to 2 Failure with the reason, and the job ends until a new successful test (the message is never skipped for it) |
+| The mailbox: authentication, TLS, its set-up, the delivery user (a team without an administrator, a disabled user) | `incomingemailstatus` 2 Failure with `lastsyncerror`, `lastsyncerrorcount` and `lastsyncerroroccurredon`; the job ends, and only a new successful test starts it again |
+| Anything else: the network, the database, a timeout, a Graph `429` or `5xx` | Recorded in `lastsyncerror`; the status is kept, nothing counts against a message, and the next pass runs at the next interval |
+
+A skipped message is remembered until the stored position moves past it, so it is not tried again. For a message without
+`Message-ID` the count of failures restarts after an IMAP UIDVALIDITY reset, because its server id changes.
+
+A mailbox that can no longer receive (disabled, unlinked, not tested) ends its job at its next pass, and the job's message
+says why.
+
+### Filtering
+
+The mailbox owner's **incoming email filtering** decides which messages are kept. For a user's mailbox it is the user's
+`usersettings.incomingemailfilteringmethod` (default 2); for a queue's mailbox, the queue's `incomingemailfilteringmethod`
+(default 0).
+
+| Value | Keeps |
+|---|---|
+| 0 | Every message |
+| 1 | Only messages that [correlate](#correlation) with an email of the organization |
+| 2 | Messages whose sender matches at least one active contact or account |
+| 3 | Messages whose sender matches at least one record of the [party tables](#parties) |
+| 4 | Nothing |
+
+An ambiguous sender (several matches) is admitted by 2 and 3. A message the filter does not keep is passed over and not
+imported later, even if the filter changes.
+
+### Duplicates
+
+Every message has a **key**, kept for the whole organization: its `Message-ID` (case kept, angle brackets and spaces
+removed). A message without one is keyed by its content: the `Date`, `From`, `To` and `Subject` headers and the length of
+its body. A `Message-ID` longer than 998 characters counts as none. Sent email registers its key too.
+
+The first mailbox that imports a message owns its `email`. When a message whose key is already known arrives, nothing is
+written, whichever mailbox reads it:
+
+- A message the organization sent itself, to one of its own user or queue mailboxes, stays one email (the sent one) and
+  gets no queue item.
+- A message sent to several mailboxes of the organization (a user and a queue, or two queues) becomes one email, in the
+  mailbox that reads it first. A message first imported by a user's mailbox and later seen by a queue's mailbox therefore
+  reaches no queue, and a message already in one queue gets no item in a second one.
+
+### Parties
+
+Each address of `From`, `To`, `Cc` and `Bcc` is looked up, ignoring case, in four tables: active `account` and `contact`
+(`emailaddress1`, `emailaddress2` and `emailaddress3`), enabled `systemuser` (`internalemailaddress`) and active `queue`
+(`emailaddress`).
+
+- **A recipient** gets one party per matching record, or one party with only `addressused` when nothing matches.
+- **The sender** is linked only when exactly one record matches; the email's `emailsender` is then that record. With no
+  match, or several, the party has only `addressused`; several matches also set `isduplicatesenderunresolved` true.
+- A matching record that the delivery user cannot read is not linked: its party keeps the address only.
+- `sender` holds the sender's address and `torecipients` the `To` addresses separated by `;`.
+
+### Correlation
+
+A new message is linked to an earlier email of the organization, its **parent**, in this order; the first hit wins and its
+method goes to `correlationmethod`:
+
+1. **Headers** (method 3), when `organization.emailcorrelationenabled` is on (the default): the `In-Reply-To` header, then
+   the `References` header from the last id to the first, each looked up among the keys of the organization's email, sent
+   or received.
+2. **Tracking token** (method 4), when tracking tokens are on (see [Tracking tokens](#tracking-tokens)): the tokens of the
+   subject, the last first, each equal to the `trackingtoken` of an email (the newest first). A text that looks like a token
+   but is stored on no email is no hit.
+3. **Conversation index** (method 5), when `emailcorrelationenabled` is on: the message's conversation index (from Graph,
+   or the MIME `Thread-Index` header over IMAP) without its last 5-byte block equals the `conversationindex` of an email.
+
+A hit sets `parentactivityid` to the parent and copies the parent's `regardingobjectid` (none when the parent has none). No
+hit is method 0, with no parent and no regarding record. The regarding record is left out when the delivery user lacks
+Append To on it, and the parent when the delivery user lacks Append To on the parent email. When both are left out, the
+email is linked to nothing and `correlationmethod` is 0. A parent whose regarding table
+cannot be resolved makes the import of the message fail (it counts as a [failure of the message](#synchronization)).
+
+Email sent by xrmverse over SMTP stores no conversation index, and neither does email sent through Graph: replies to it
+correlate through `In-Reply-To` and `References`, or through the tracking token.
+
+### The received email
+
+| Column | Value |
+|---|---|
+| `directioncode` | false (incoming) |
+| `statecode`, `statuscode` | 1 Completed, 4 Received |
+| `subject`, `description` | The subject; the HTML body, or the text body as HTML (encoded, line breaks as `<br>`) |
+| `from`, `to`, `cc`, `bcc`, `emailsender`, `isduplicatesenderunresolved`, `sender`, `torecipients` | See [Parties](#parties) |
+| `messageid` | The `Message-ID` that made the [key](#duplicates), with its angle brackets: the message's header, else the id the server reports (Graph's `internetMessageId`). Empty when the message was keyed by its content, or when the id with its brackets is longer than the column (320 characters): an id is never stored cut |
+| `inreplyto`, `conversationindex` | From the message's headers (the id with its angle brackets) |
+| `senton` | The `Date` header, else the time the server received the message |
+| `regardingobjectid`, `parentactivityid`, `correlationmethod` | See [Correlation](#correlation) |
+| `ownerid` | The mailbox's owner: its user, or the queue's owning user or team |
+
+A value longer than its column (`subject`, `sender`, `torecipients`, `inreplyto`, `conversationindex`, for example) is cut
+to the column's length.
+
+Each part of the message that is not the text of its body becomes an `activitymimeattachment` of the email: the parts marked
+as attachments, the inline parts an HTML body references by content id (images, which become plain attachments, see
+[Known limits](#known-limits)) and the parts without a `Content-Disposition` header. One without a file name is named `attachment1`,
+`attachment2` and so on, with the extension of its MIME type. An attachment whose extension is in
+`organization.blockedattachments`, or that is larger than `maxuploadfilesize`, is not stored: a note (`annotation`) on the
+email, "Attachments not imported", names each such file and the reason.
+
+The email, its attachments and the note are created in one transaction. When the import fails, nothing of it stays.
+
+### Queue delivery
+
+A message read by a queue's mailbox is added to that queue with `AddToQueue` (Target the email, `DestinationQueueId` the
+queue) in the same transaction. The `queueitem` Create nested in it runs through the pipeline, so the Create steps of
+`queueitem` fire; the item's `title` is the subject. A delivery never picks, releases, routes or removes an item, and never
+updates one.
+
+### Who delivers: the delivery user
+
+Every request of a delivery runs as the **delivery user**: the user who owns the mailbox, or, for a mailbox owned by a team
+(a team-owned queue), the team's administrator (`team.administratorid`). It runs with that user's privileges and is never
+SYSTEM: `createdby` of the email and of the queue item, and `UserId` and `InitiatingUserId` in plug-ins, webhooks and
+workflows, are the delivery user. A team without an administrator, or a delivery user who is disabled, makes the mailbox's
+test and synchronization fail with the reason.
+
+### Building a delivery guard
+
+A contact center that lets only deliveries create work in a queue can tell a delivery apart with the shared variable
+`xrmverse_MailboxDeliveryId`, an **xrmverse extension** (Dataverse has no such variable: a guard ported to Dataverse needs
+another rule there).
+
+- **The `AddToQueue` of a delivery** has `Depth` 1, no `ParentContext`, `UserId` and `InitiatingUserId` the delivery user,
+  `InputParameters` `Target` (the email, incoming and Received) and `DestinationQueueId` (the mailbox's queue), and
+  `SharedVariables["xrmverse_MailboxDeliveryId"]` the mailbox id as a string (`D` format,
+  `00000000-0000-0000-0000-000000000000`). The email Create and the attachment Creates of the delivery carry it too.
+- **The nested `queueitem` Create** (`Depth` 2, `ParentContext` the `AddToQueue`) carries the same variable in its own
+  `SharedVariables`.
+- **Read it from your own context**: a guard reads `context.SharedVariables`, not `context.ParentContext.SharedVariables`.
+- **Allow the delivery** when the variable is present, names a `mailbox` whose `regardingobjectid` is the destination
+  queue, and `UserId` is that mailbox's delivery user.
+- **It cannot be forged.** No request parameter of the SDK, SOAP or the Web API maps to it (a `tag` does not), and a plug-in
+  or workflow step that adds, changes or removes it fails the message with a 400. Requests a plug-in makes do not carry it.
+- **Asynchronous steps** of a delivery see the variable in their context; the requests they make do not carry it.
+- **Webhooks** get it in the body's `SharedVariables` (also in a trimmed body).
+- **Queue items moved by the server** never carry it and fire no step: `SendEmail` deactivating an email's items, and a
+  failed send reactivating them, write the items without the pipeline.
+
+See [Plug-ins](plugins.md#incoming-email-deliveries) for the pipeline side.
 
 ## Tasks
 
@@ -412,6 +665,22 @@ xrmd mailbox test support@example.com --wait
 With the SDK, create the email with `from` = the queue and `to` = a contact, add an `activitymimeattachment`, then run
 `SendEmailRequest { EmailId = id, IssueSend = true }`. The email is Pending Send until the job ends with Sent or Failed.
 
+### Receive email in a queue
+
+Give the profile its incoming side first (the `PATCH` in [Setting up receiving](#setting-up-receiving)), then:
+
+```bash
+xrmd queue create "Support" --email support@example.com
+xrmd mailbox link support@example.com --profile "Relay" --incoming
+xrmd mailbox approve support@example.com
+xrmd mailbox test support@example.com --wait      # outgoing Success, incoming Success
+xrmd mailbox show support@example.com             # incomingemailstatus, lastsuccessfulsynccompletedon, filtering
+```
+
+Each new message sent to support@example.com becomes a Received email with an active item in the Support queue. A reply
+to an email sent from the queue gets that email as `parentactivityid` and its regarding record. With the SDK, find the
+received email by its `messageid` (with angle brackets) and `directioncode` false, and its item by `objectid`.
+
 ### Use the command line
 
 | Command | Does |
@@ -426,11 +695,11 @@ are the server's (see [CLI](cli.md#exit-codes)).
 
 | Command | Does |
 |---|---|
-| `xrmd mailbox list` | Lists the mailboxes: address, approval, profile, outgoing delivery and the last test |
-| `xrmd mailbox show <id\|address>` | One mailbox, its profile, its last error and whether its password is set |
+| `xrmd mailbox list` | Lists the mailboxes: address, approval, profile, outgoing and incoming delivery with their last test |
+| `xrmd mailbox show <id\|address>` | One mailbox, its profile, its last error, whether its password is set, its incoming status, last sync, `processemailreceivedafter` and filtering |
 | `xrmd mailbox approve <id\|address>` | Approves the address of the mailbox's user or queue (System Administrator) |
-| `xrmd mailbox link <id\|address> --profile <id\|name>` | Links the mailbox to a profile, with Server-Side Synchronization and outgoing email on (System Administrator) |
-| `xrmd mailbox test <id\|address> [--wait] [--timeout N]` | Starts a test; with `--wait` prints the result, exit 5 when it failed and 6 when it did not run in time |
+| `xrmd mailbox link <id\|address> --profile <id\|name> [--incoming] [--no-outgoing]` | Links the mailbox to a profile, with Server-Side Synchronization and outgoing email on; `--incoming` turns receiving on the same way, `--no-outgoing` leaves the outgoing columns alone (System Administrator) |
+| `xrmd mailbox test <id\|address> [--wait] [--timeout N]` | Starts a test; with `--wait` prints the result of both sides, exit 5 when either failed and 6 when it did not run in time |
 | `xrmd mailbox profile create\|update\|list` | Email server profiles (`--type smtp\|graph`); the secret only with `--secret-stdin` or a prompt |
 
 ## Surfaces
@@ -440,8 +709,9 @@ are the server's (see [CLI](cli.md#exit-codes)).
 - **CLI.** `xrmd queue` (see [CLI](cli.md)).
 - **Web API, SDK, SOAP.** The messages above.
 - **Web admin.** Queues are tables like others; there is no queue-specific page. A table's page has a one-way switch to
-  enable queues for the table (`IsValidForQueue`). The **Email** page (System Administrators) lists profiles and mailboxes,
-  approves and tests mailboxes and sets the sender policy (see [Web admin](web-admin.md#email)).
+  enable queues for the table (`IsValidForQueue`). The **Email** page (System Administrators) lists profiles and mailboxes
+  with their outgoing and incoming tests and last sync, links mailboxes for sending and receiving, approves and tests them
+  and sets the sender policy (see [Web admin](web-admin.md#email)).
 - **Model-driven apps.** The email form: party lists, **Send**, the send status and attachments (see
   [Model-driven apps](model-driven-apps.md#email-form)).
 - **CLI.** `xrmd mailbox` for profiles and mailboxes.
@@ -476,7 +746,6 @@ None of these is silent: each is refused with an explicit error or stated here.
 - **Queue form without members.** The default queue form lists the queue's items but not its members (there is no seeded
   view of users to list them); manage members with `xrmd queue member` or `AddPrincipalToQueue` (see
   [Members and privacy](#members-and-privacy)).
-- **No incoming email.** Receiving email, and linking replies through tracking tokens, are roadmap item 4.1c.
 - **Secrets stored unencrypted.** Profile and mailbox passwords and the client secret are kept unencrypted in the
   organization database (never returned by a read), as the webhook authentication value is (#86).
 - **Tracking tokens off by default.** A new organization has no `trackingprefix`; a new Dataverse environment has tracking
@@ -491,8 +760,6 @@ None of these is silent: each is refused with an explicit error or stated here.
   job is still handing it to the server can deliver it twice.
 - **Stop during a send.** A graceful stop of the server while a send job prepares the message, before it is handed to the
   server, also leaves the email Pending Send although nothing was sent. Reopen the email, then send it again.
-- **Queue items after a failed send.** Sending an email deactivates its active queue items; when the send fails and the email
-  is open again (Failed), those items stay inactive.
 - **Tracking token base.** `organization.trackingtokenidbase` is refused unless empty or 0: tokens are the prefix and the
   counter only.
 - **Temporary recipient errors.** A temporary error about one recipient (for example SMTP `452`) that is still there after
@@ -503,9 +770,42 @@ None of these is silent: each is refused with an explicit error or stated here.
   by value (`regardingobjectid eq <email id>`), it has no navigation property.
 - **Not modelled.** Sending as another user, delegate access to a mailbox, email templates (`SendEmailFromTemplate` and the
   template messages are refused), Outlook and Forward Mailbox delivery, IMAP/SMTP with OAuth, Exchange on-premises, and
-  inline (content id) attachments.
+  inline (content id) attachments in sent email.
 - **Migration.** Mailboxes, profiles and email attachments are not part of a migration from Dataverse.
-- **SMTP without TLS** works only with `Mail:AllowInsecureSmtp` true, a setting for test and development servers.
+- **SMTP without TLS** works only with `Mail:AllowInsecureSmtp` true, a setting for test and development servers; IMAP
+  without TLS only with `Mail:AllowInsecureImap` true.
+- **Incoming: no smart matching.** Correlation uses headers, tracking tokens and the conversation index only;
+  `correlationmethod` 6 (smart matching) is never set, and the smart matching settings of the organization are not
+  seeded.
+- **Incoming: four party tables.** Addresses are matched against `account`, `contact`, `systemuser` and `queue` only;
+  custom email-enabled tables are not.
+- **Incoming: inline images.** An image embedded in the HTML body (an inline part referenced by content id) is imported as a
+  plain attachment of the email. The body keeps its `cid:` reference, which is not rewritten, so the image is not shown in
+  place.
+- **Incoming: HTML in the email form.** The email form shows the HTML body of a received email as source text (#335).
+- **Incoming: one process per database.** The synchronization assumes one `xrmd` process per organization database, as the
+  job worker does.
+- **Incoming: conversation index of sent email.** Email sent by xrmverse (over SMTP or Graph) stores no conversation index,
+  so the conversation index links only replies to received email; replies to sent email correlate through their headers
+  or the tracking token.
+- **Incoming: a tracked message in a second queue.** A message already imported gets no item in another queue; there is no
+  setting to add one.
+- **Incoming: mail without `Message-ID`.** Two messages without `Message-ID` that have the same `Date`, `From`, `To`,
+  `Subject` and body length count as one: the second is not imported.
+- **Incoming: a user's mailbox first.** A message imported by a user's mailbox and later read by a queue's mailbox (both
+  were recipients) reaches no queue: the email stays with the user.
+- **Incoming: no back-fill.** Messages that reached the inbox before the first synchronization pass
+  (`processemailreceivedafter`) are not imported.
+- **Incoming: profile's incoming side.** The CLI and the web admin set the outgoing side of a profile only; the incoming
+  columns are written with the Web API or the SDK (see [Setting up receiving](#setting-up-receiving)).
+- **Incoming: PreValidation in the transaction.** The steps of a delivery's messages at stage 10 (PreValidation) run inside
+  the import's transaction, with the rest of the message: one message, one transaction (see
+  [Plug-ins](plugins.md#incoming-email-deliveries)).
+- **Incoming: parties and regarding records the delivery user cannot see.** A matching record that the delivery user cannot
+  read is not linked as a party (the address stays), and a regarding record or parent email it cannot append to is left
+  out. From memory, Dataverse may link more.
+- **Not modelled for incoming email.** `DeliverIncomingEmail` and `CheckIncomingEmail` (refused), POP3, Exchange Web
+  Services, Forward Mailbox, folder-level tracking, and changing the mailbox on the server (no delete, move or flag).
 
 ### Not yet verified against Dataverse
 
@@ -546,6 +846,23 @@ environment:
 - The name of the type column of `queueitem.objectid` in the Web API (`objectidtypecode` here).
 - That writing `testemailconfigurationscheduled` starts a mailbox test, who may do it, and whether a mailbox whose address is
   not approved can be tested (here the test fails with the reason, without contacting the server).
+- Who creates an incoming email and its queue item (`createdby`, the plug-in `UserId` and `InitiatingUserId`), for a user's
+  mailbox, a user-owned queue and a team-owned queue (here the owner, or the team's administrator).
+- Whether a message already tracked gets a queue item in a second queue's mailbox (no second item here).
+- A message sent from the organization to its own user or queue mailbox: one activity or two, and a queue item or not
+  (one activity and no item here).
+- `correlationmethod` for a hit on `References` only (3 here) and for no hit (0 here).
+- The conversation index rule (here the parent is the index without its last 5-byte block).
+- Filter 1 without smart matching, and filters 2 and 3 with an ambiguous sender (admitted here, the sender unresolved).
+- That `emailcorrelationenabled` covers the headers and the conversation index but not tracking tokens.
+- `senton` of an incoming email (the `Date` header here).
+- When `processemailreceivedafter` is set and what it skips.
+- The mailbox's state after an authentication failure, and whether a new test is needed (Failure and a new test here).
+- `isduplicatesenderunresolved` for an ambiguous sender.
+- What Dataverse records for a blocked or oversized incoming attachment (a note here).
+- Inactive records and disabled users in address resolution (not matched here).
+- The queue items of an email whose send failed (reactivated here).
+- The title of a queue item created for an incoming email (the subject here).
 
 ## See also
 

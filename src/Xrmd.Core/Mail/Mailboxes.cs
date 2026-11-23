@@ -32,6 +32,32 @@ public sealed record MailboxState(Guid Id, string? Address, Guid? ProfileId, boo
 }
 
 /// <summary>
+/// What incoming email needs to know about a mailbox (plan 4.1c): its address, profile, approval, switches, last incoming test, the sync
+/// start, and who owns it.
+/// </summary>
+/// <param name="Id">The mailbox.</param>
+/// <param name="Address">The address of the mailbox's user or queue.</param>
+/// <param name="ProfileId">The email server profile the mailbox uses.</param>
+/// <param name="OwnerId">The mailbox's owner: a user, or a team (the owner of a team's queue).</param>
+/// <param name="OwnerTable"><c>systemuser</c> or <c>team</c>.</param>
+/// <param name="QueueId">The queue the mailbox belongs to; null for a user's mailbox.</param>
+/// <param name="Approved">The address's <c>emailrouteraccessapproval</c> is Approved.</param>
+/// <param name="Enabled"><c>enabledforincomingemail</c>.</param>
+/// <param name="DeliveryMethod"><c>incomingemaildeliverymethod</c>.</param>
+/// <param name="IncomingStatus"><c>incomingemailstatus</c>.</param>
+/// <param name="ReceivedAfter"><c>processemailreceivedafter</c>: messages received before are not delivered.</param>
+/// <param name="Filter">The incoming email filtering method: the queue's, or the user's <c>usersettings</c>; unset is the default
+/// (<see cref="MailSchema.QueueFilterDefault"/>, <see cref="MailSchema.UserFilterDefault"/>).</param>
+/// <param name="Active">The mailbox's <c>statecode</c> is Active.</param>
+public sealed record MailboxReceiver(Guid Id, string? Address, Guid? ProfileId, Guid OwnerId, string OwnerTable, Guid? QueueId, bool Approved,
+    bool Enabled, int DeliveryMethod, int IncomingStatus, DateTime? ReceivedAfter, int Filter, bool Active = true)
+{
+    /// <summary>Approved, a profile set, incoming method Server-Side Synchronization, enabled, active, and the last incoming test a Success.</summary>
+    public bool CanReceive => Approved && ProfileId is not null && DeliveryMethod == MailSchema.DeliveryServerSide && Enabled && Active
+                              && IncomingStatus == MailSchema.StatusSuccess;
+}
+
+/// <summary>
 /// The mailbox of a user or a queue (plan 4.1b): created with its owner (disabled: delivery methods None, not enabled, statuses Not Run),
 /// kept in step with the owner's name and address, deleted with a queue, and read to find out whether a sender can send.
 /// </summary>
@@ -82,6 +108,104 @@ public static class Mailboxes
             rd.IsDBNull(6) ? MailSchema.StatusNotRun : Convert.ToInt32(rd.GetValue(6)),
             rd.IsDBNull(7) || Convert.ToInt32(rd.GetValue(7)) == 0);
     }
+
+    /// <summary>The mailbox <paramref name="mailboxId"/> as incoming email sees it, or null when there is none.</summary>
+    public static async Task<MailboxReceiver?> ResolveReceiverAsync(DataSession s, Guid mailboxId, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+        // The mailbox's user or queue (the ids never collide) gives the address, approval and filtering.
+        await using var cmd = s.Command($"""
+            SELECT m.mailboxid, COALESCE(u.internalemailaddress, q.emailaddress, m.emailaddress), m.emailserverprofile,
+                COALESCE(u.{MailSchema.ApprovalColumn}, q.{MailSchema.ApprovalColumn}), m.enabledforincomingemail, m.incomingemaildeliverymethod,
+                m.incomingemailstatus, m.statecode, m.processemailreceivedafter, m.owningteam, m.owninguser, m.ownerid, q.queueid,
+                q.{MailSchema.FilteringMethodColumn}, us.{MailSchema.FilteringMethodColumn}
+            FROM {s.DataTable(MailSchema.Mailbox)} m
+            LEFT JOIN {s.DataTable("systemuser")} u ON u.systemuserid = m.regardingobjectid
+            LEFT JOIN {s.DataTable(QueueSchema.Queue)} q ON q.queueid = m.regardingobjectid
+            LEFT JOIN {s.DataTable("usersettings")} us ON us.systemuserid = u.systemuserid
+            WHERE m.mailboxid = @id
+            """);
+        cmd.AddParameter("@id", DbType.Guid, mailboxId);
+        await using var rd = await cmd.ExecuteReaderAsync(ct);
+        if (!await rd.ReadAsync(ct)) return null;
+        var team = rd.IsDBNull(9) ? (Guid?)null : rd.GetGuid(9);
+        var owner = team ?? (rd.IsDBNull(10) ? rd.IsDBNull(11) ? Guid.Empty : rd.GetGuid(11) : rd.GetGuid(10));
+        var queue = rd.IsDBNull(12) ? (Guid?)null : rd.GetGuid(12);
+        var filter = queue is not null
+            ? rd.IsDBNull(13) ? MailSchema.QueueFilterDefault : Convert.ToInt32(rd.GetValue(13))
+            : rd.IsDBNull(14) ? MailSchema.UserFilterDefault : Convert.ToInt32(rd.GetValue(14));
+        return new MailboxReceiver(rd.GetGuid(0), rd.IsDBNull(1) ? null : rd.GetString(1), rd.IsDBNull(2) ? null : rd.GetGuid(2), owner,
+            team is null ? "systemuser" : "team", queue, !rd.IsDBNull(3) && Convert.ToInt32(rd.GetValue(3)) == MailSchema.ApprovalApproved,
+            !rd.IsDBNull(4) && Convert.ToBoolean(rd.GetValue(4)),
+            rd.IsDBNull(5) ? MailSchema.DeliveryNone : Convert.ToInt32(rd.GetValue(5)),
+            rd.IsDBNull(6) ? MailSchema.StatusNotRun : Convert.ToInt32(rd.GetValue(6)),
+            rd.IsDBNull(8) ? null : DateTime.SpecifyKind(rd.GetDateTime(8), DateTimeKind.Utc), filter,
+            rd.IsDBNull(7) || Convert.ToInt32(rd.GetValue(7)) == 0);
+    }
+
+    /// <summary>
+    /// Who delivers the incoming email of <paramref name="m"/> (plan 4.1c, the contact center contract): the mailbox's owning user, or, for a
+    /// mailbox owned by a team, that team's <c>administratorid</c>; with the user's business unit.
+    /// </summary>
+    /// <exception cref="MailSetupException">The team has no administrator, or the user does not exist or is disabled.</exception>
+    public static async Task<Caller> DeliveryUserAsync(DataSession s, MailboxReceiver m, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+        ArgumentNullException.ThrowIfNull(m);
+        var user = m.OwnerId;
+        if (m.OwnerTable == "team")
+        {
+            await using var team = s.Command($"SELECT administratorid FROM {s.DataTable("team")} WHERE teamid = @id");
+            team.AddParameter("@id", DbType.Guid, m.OwnerId);
+            user = await team.ExecuteScalarAsync(ct) as Guid? ?? throw new MailSetupException(
+                $"The team {m.OwnerId} that owns the mailbox has no administrator, so its incoming email cannot be delivered; set the administrator of the team.");
+        }
+        await using var cmd = s.Command($"SELECT businessunitid, isdisabled FROM {s.DataTable("systemuser")} WHERE systemuserid = @id");
+        cmd.AddParameter("@id", DbType.Guid, user);
+        await using var rd = await cmd.ExecuteReaderAsync(ct);
+        if (!await rd.ReadAsync(ct)) throw new MailSetupException($"The user {user} that delivers the incoming email of the mailbox does not exist.");
+        if (!rd.IsDBNull(1) && Convert.ToBoolean(rd.GetValue(1)))
+            throw new MailSetupException($"The user {user} that delivers the incoming email of the mailbox is disabled.");
+        if (rd.IsDBNull(0)) throw new MailSetupException($"The user {user} that delivers the incoming email of the mailbox has no business unit.");
+        return new Caller(user, rd.GetGuid(0));
+    }
+
+    /// <summary>
+    /// Before an Update of a <c>mailbox</c> writes <paramref name="row"/>: a changed profile, user name, password (<paramref name="secrets"/>),
+    /// incoming delivery method or <c>enabledforincomingemail</c> sends <c>incomingemailstatus</c> back to Not Run, as the mailbox must be
+    /// tested again (unless the same write sets the status).
+    /// </summary>
+    public static async Task ApplyIncomingChangeAsync(DataSession s, Entity row, Guid id, IReadOnlyDictionary<string, string?> secrets, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+        ArgumentNullException.ThrowIfNull(row);
+        ArgumentNullException.ThrowIfNull(secrets);
+        if (row.Contains("incomingemailstatus")) return;
+        var changed = secrets.ContainsKey("password");
+        if (!changed && IncomingSettingColumns.Any(row.Contains))
+        {
+            await using var cmd = s.Command($"SELECT emailserverprofile, username, incomingemaildeliverymethod, enabledforincomingemail FROM {s.DataTable(MailSchema.Mailbox)} WHERE mailboxid = @id");
+            cmd.AddParameter("@id", DbType.Guid, id);
+            await using var rd = await cmd.ExecuteReaderAsync(ct);
+            if (await rd.ReadAsync(ct))
+            {
+                object?[] stored =
+                [
+                    rd.IsDBNull(0) ? null : rd.GetGuid(0), rd.IsDBNull(1) ? null : rd.GetString(1) is { Length: > 0 } n ? n : null,
+                    rd.IsDBNull(2) ? MailSchema.DeliveryNone : Convert.ToInt32(rd.GetValue(2)), !rd.IsDBNull(3) && Convert.ToBoolean(rd.GetValue(3)),
+                ];
+                for (var i = 0; i < IncomingSettingColumns.Length && !changed; i++)
+                    if (row.Contains(IncomingSettingColumns[i]))
+                    {
+                        var sent = Normal(row[IncomingSettingColumns[i]]);
+                        changed = !Equals(i is 2 ? sent ?? MailSchema.DeliveryNone : i is 3 ? sent ?? false : sent, stored[i]);
+                    }
+            }
+        }
+        if (changed) row["incomingemailstatus"] = new OptionSetValue(MailSchema.StatusNotRun);
+    }
+
+    private static readonly string[] IncomingSettingColumns = ["emailserverprofile", "username", "incomingemaildeliverymethod", "enabledforincomingemail"];
 
     /// <summary>
     /// Refuses an incoming or outgoing delivery method of Outlook (1) or Forward Mailbox (3) on <c>mailbox</c>, <c>queue</c> and
@@ -201,7 +325,8 @@ public static class Mailboxes
     /// <summary>
     /// After an Update of a <c>systemuser</c> or <c>queue</c> wrote <paramref name="row"/>: the mailbox follows the owner's name,
     /// address and incoming and outgoing delivery methods, and shows its approval; a new address also sends the mailbox's last tests
-    /// back to Not Run.
+    /// back to Not Run. Whenever the incoming status goes back to Not Run (a new address, another incoming delivery method), the mailbox's
+    /// sync state is reset (<see cref="MailboxSyncState.ResetAsync"/>).
     /// </summary>
     /// <param name="deliveryChanged">The delivery columns whose value differs from the owner's stored one
     /// (<see cref="ChangedDeliveryColumnsAsync"/>, read before the UPDATE); only these are copied to the mailbox.</param>
@@ -234,7 +359,9 @@ public static class Mailboxes
             sets.Add($"{column} = @{column}");
             parameters.Add(($"@{column}", DbType.Int32, DeliveryValue(row[column]), null));
         }
+        var incomingReset = addressChanged || deliveryChanged?.Contains("incomingemaildeliverymethod") == true;
         if (addressChanged) sets.Add("incomingemailstatus = 0, outgoingemailstatus = 0");
+        else if (incomingReset) sets.Add("incomingemailstatus = 0");
         // A queue's mailbox follows the queue's owner (an Assign, or an Update of ownerid): the old owner loses the credentials.
         if (table == QueueSchema.Queue && row.Contains("ownerid") && row["ownerid"] is EntityReference owner)
         {
@@ -257,6 +384,17 @@ public static class Mailboxes
             if (size is { } n) cmd.AddParameter(name2, type, value, n);
             else cmd.AddParameter(name2, type, value);
         await cmd.ExecuteNonQueryAsync(ct);
+        if (!incomingReset) return;
+        // Final review I3: back to Not Run, the sync state goes too (the UPDATE above holds the mailboxes' row locks), so a mailbox tested
+        // again does not resume from a cursor of the old address or method.
+        var mailboxes = new List<Guid>();
+        await using (var select = s.Command($"SELECT mailboxid FROM {s.DataTable(MailSchema.Mailbox)} WHERE regardingobjectid = @id"))
+        {
+            select.AddParameter("@id", DbType.Guid, id);
+            await using var rd = await select.ExecuteReaderAsync(ct);
+            while (await rd.ReadAsync(ct)) mailboxes.Add(rd.GetGuid(0));
+        }
+        foreach (var mailbox in mailboxes) await MailboxSyncState.ResetAsync(s, mailbox, ct);
     }
 
     /// <summary>

@@ -692,6 +692,24 @@
         }
       },
       "DefaultValue": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "emailcorrelationenabled",
+      "SchemaName": "EmailCorrelationEnabled",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Email Correlation",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Email Correlation",
+          "LanguageCode": 1033
+        }
+      },
+      "DefaultValue": true
     }
   ],
   "ManyToOneRelationships": [

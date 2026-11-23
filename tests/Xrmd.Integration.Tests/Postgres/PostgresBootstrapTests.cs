@@ -80,8 +80,8 @@ public sealed class PostgresBootstrapTests(PostgresServer fx) : IClassFixture<Po
 
         maxRunning.Should().Be(1, "the startup work is serialized by the advisory lock");
         migrated.Should().Be(1, "the second process finds the database migrated");
-        (await ScalarAsync<long>(name, "SELECT COUNT(*) FROM meta.schema_version")).Should().Be(19);
-        (await ScalarAsync<long>(name, "SELECT COUNT(DISTINCT version) FROM meta.schema_version")).Should().Be(19);
+        (await ScalarAsync<long>(name, "SELECT COUNT(*) FROM meta.schema_version")).Should().Be(20);
+        (await ScalarAsync<long>(name, "SELECT COUNT(DISTINCT version) FROM meta.schema_version")).Should().Be(20);
         (await ScalarAsync<string>(PostgresDatabases.MaintenanceDatabase, $"SELECT datlocprovider::text || '/' || daticulocale FROM pg_database WHERE datname = '{name}'"))
             .Should().Be("i/und", "the bootstrapper creates a missing database as ruling P5 says");
     }

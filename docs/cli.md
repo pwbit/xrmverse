@@ -67,7 +67,7 @@ template used for the macOS archives. Nothing is published to nuget.org.
 | `envvar` | `list`, `get <schemaname>`, `set <schemaname> <value>`, `unset <schemaname>`: environment variable values over the Web API; see [Environment variables](environment-variables.md) |
 | `workflow` | `apply <file.yaml> [--solution] [--activate] [--dry-run]`, `export <nameOrId> [--format yaml\|xaml] [--file]`, `list [--kind] [--entity]`, `activate\|deactivate <nameOrId>`: workflows, business rules and actions as YAML over the authoring API; see [Workflow authoring as code](workflow-authoring.md) |
 | `queue` | `list [--public]`, `create <name> [--private] [--email <address>]`, `member add <queue> <user\|team>`, `items <queue>`: queues over the Web API; see [Email and queues](email-and-queues.md) |
-| `mailbox` | `list`, `show`, `approve`, `link --profile`, `test [--wait]`, `profile create\|update\|list`: mailboxes and email server profiles over the Web API (see [Mailboxes and email server profiles](#mailboxes-and-email-server-profiles)) |
+| `mailbox` | `list`, `show`, `approve`, `link --profile [--incoming] [--no-outgoing]`, `test [--wait]`, `profile create\|update\|list`: mailboxes and email server profiles over the Web API (see [Mailboxes and email server profiles](#mailboxes-and-email-server-profiles)) |
 | `dev` | `seed <table>`: sample rows |
 | `apply <schema.yaml>` | applies a schema file (tables, columns, choices, relationships) |
 | `mcp` | stdio MCP bridge to the server's `/mcp` endpoint (see [MCP](mcp.md)) |
@@ -441,7 +441,8 @@ xrmd queue items "Support"
 
 ## Mailboxes and email server profiles
 
-`xrmd mailbox` sets up outgoing email (see [Email and queues](email-and-queues.md#outgoing-email)). It runs over the Web API
+`xrmd mailbox` sets up outgoing and incoming email (see [Email and queues](email-and-queues.md#outgoing-email) and
+[Incoming email](email-and-queues.md#incoming-email)). It runs over the Web API
 as the signed-in user, so the server's privilege checks apply: profiles and approvals are for System Administrators, and a
 mailbox's test for its owner or a System Administrator.
 
@@ -457,6 +458,7 @@ xrmd mailbox profile update "Relay" --secret-prompt     # a new password
 xrmd queue create "Support" --email support@example.com   # the queue's mailbox sends from this address
 xrmd mailbox list
 xrmd mailbox link support@example.com --profile "Relay"   # the mailbox sends through the profile
+xrmd mailbox link support@example.com --profile "Relay" --incoming   # ... and receives through it
 xrmd mailbox approve support@example.com              # approves the address of the mailbox's user or queue
 xrmd mailbox test support@example.com --wait          # prints the result
 xrmd mailbox show support@example.com
@@ -470,11 +472,22 @@ xrmd mailbox show support@example.com
   without it the CLI asks on the terminal, without echo, and exits 2 when standard input is not a terminal. `profile update`
   changes the secret only with `--secret-stdin` or `--secret-prompt`. An option such as `--password` is refused (exit 2)
   without showing what was given. `show` and `profile list` print "set" or "not set", never a secret.
-- `test --wait` polls the mailbox until the test has run (`--timeout`, in minutes, default 5): exit 0 on Success, 5 on Failure
-  with the reason, 6 when the test did not run in time (is the server's job worker running?).
+- `test --wait` polls the mailbox until the test has run (`--timeout`, in minutes, default 5) and prints both sides
+  (`outgoing Success, incoming Not Run`): exit 0 when neither failed, 5 when either side failed, with the reason
+  (`lastsyncerror`), 6 when the test did not run in time (is the server's job worker running?). The incoming side is tested
+  only when the mailbox receives.
 - `link` sets the mailbox's profile, Server-Side Synchronization for outgoing email and `enabledforoutgoingemail` in one write
   (see [Mailboxes](email-and-queues.md#mailboxes)); only a System Administrator may change a mailbox's profile (exit 3
-  otherwise). Test the mailbox afterwards.
+  otherwise). `--incoming` also sets Server-Side Synchronization for incoming email and `enabledforincomingemail`;
+  `--no-outgoing` leaves the outgoing columns as they are, so `--no-outgoing` without `--incoming` only links the profile.
+  There is no `--no-incoming`: turn receiving off with the **Receive email** switch of the web admin's Email page, or by
+  writing the mailbox's columns. Test the mailbox afterwards.
+- `list` shows the outgoing and the incoming delivery with the status of their last test. `show` adds the incoming status,
+  `lastsuccessfulsynccompletedon`, `processemailreceivedafter` and the filtering of the mailbox's user or queue
+  (`incomingemailfilteringmethod`); when the signed-in user may not read that setting (403), it prints
+  `filtering: unavailable (no access)`.
+- `profile create` and `profile update` set the outgoing side of a profile only. Write the incoming columns of an IMAP
+  profile with the Web API (see [Setting up receiving](email-and-queues.md#setting-up-receiving)).
 - `xrmd queue create --email` sets the queue's address. There is no command to change the address of an existing queue or
   user: set it on the record (in a model-driven app, in the web admin's **Tables**, or with the Web API).
 

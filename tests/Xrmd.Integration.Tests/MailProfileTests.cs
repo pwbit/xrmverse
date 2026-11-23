@@ -9,6 +9,7 @@ using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
+using Xrmd.Abstractions.Storage;
 using Xrmd.Core;
 using Xrmd.Security;
 using static Xrmd.Integration.Tests.SecurityTestHelper;
@@ -398,5 +399,111 @@ public sealed class MailProfileTests(XrmdFixture fx) : IAsyncLifetime
 
         (await FaultAsync(() => ServiceFor(fx, oid).CreateAsync(Smtp()))).HttpStatus.Should().Be(403);
         (await TestSql.CountAsync(fx.ConnectionString, "SELECT COUNT(*) FROM meta.mail_secret")).Should().Be(0);
+    }
+
+    // ---- plan 4.1c, task 3: the incoming side ----
+
+    [Fact]
+    public async Task Profile_IncomingNtlm_Is400()
+    {
+        var ntlm = Smtp();
+        ntlm["incomingauthenticationprotocol"] = new OptionSetValue(2);
+        (await BadRequestAsync(() => Admin.CreateAsync(ntlm))).Should()
+            .Contain("incoming authentication protocol 2 (NTLM) is not supported for SMTP");
+
+        var graph = Graph();
+        graph["incomingauthenticationprotocol"] = new OptionSetValue(3);
+        (await BadRequestAsync(() => Admin.CreateAsync(graph))).Should().Contain("incoming authentication protocol 3 (Basic) is not supported for Microsoft Graph");
+
+        // An Update is checked as the row will be.
+        var id = await Admin.CreateAsync(Smtp());
+        (await BadRequestAsync(() => Admin.UpdateAsync(new Entity("emailserverprofile", id) { ["incomingauthenticationprotocol"] = new OptionSetValue(2) })))
+            .Should().Contain("NTLM");
+    }
+
+    [Theory]
+    [InlineData(2, "2 (server to server)")]
+    [InlineData(7, "7 (OAuth with Microsoft Entra ID)")]
+    public async Task Profile_IncomingRetrievalServerToServer_Is400(int retrieval, string named)
+    {
+        var profile = Smtp();
+        profile["incomingcredentialretrieval"] = new OptionSetValue(retrieval);
+        (await BadRequestAsync(() => Admin.CreateAsync(profile))).Should()
+            .Contain($"incoming credential retrieval {named} is not supported for SMTP");
+
+        var graph = Graph();
+        graph["incomingcredentialretrieval"] = new OptionSetValue(retrieval == 7 ? 1 : retrieval);
+        (await BadRequestAsync(() => Admin.CreateAsync(graph))).Should().Contain("incoming credential retrieval");
+    }
+
+    [Fact]
+    public async Task Profile_Graph_IncomingAbsent_TakesOutgoing()
+    {
+        var id = await Admin.CreateAsync(Graph());
+        var stored = await Admin.RetrieveAsync("emailserverprofile", id, new ColumnSet("incomingauthenticationprotocol", "incomingcredentialretrieval"));
+        stored.GetAttributeValue<OptionSetValue>("incomingauthenticationprotocol").Value.Should().Be(4);
+        stored.GetAttributeValue<OptionSetValue>("incomingcredentialretrieval").Value.Should().Be(7);
+    }
+
+    [Fact]
+    public async Task Profile_Imap_IncomingAutoDetect_StoredAsBasic()
+    {
+        var profile = Smtp();
+        profile["incomingauthenticationprotocol"] = new OptionSetValue(0);
+        profile["incomingcredentialretrieval"] = new OptionSetValue(1);
+        var id = await Admin.CreateAsync(profile);
+        (await Admin.RetrieveAsync("emailserverprofile", id, new ColumnSet("incomingauthenticationprotocol")))
+            .GetAttributeValue<OptionSetValue>("incomingauthenticationprotocol").Value.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task SameSettingsForOutgoing_SendUsesIncomingCredentials()
+    {
+        // Outgoing credentials by the mailbox, incoming credentials in the profile: with the same settings the send takes the incoming ones.
+        static Entity Build(string name)
+        {
+            var profile = Smtp(name);
+            profile["outgoingcredentialretrieval"] = new OptionSetValue(0);
+            profile.Attributes.Remove("outgoingusername");
+            profile["outgoingpassword"] = "outgoing-only";
+            profile["incomingserverlocation"] = "imap.example.com";
+            profile["incomingportnumber"] = 993;
+            profile["incomingusessl"] = true;
+            profile["incomingcredentialretrieval"] = new OptionSetValue(1);
+            profile["incomingusername"] = "inbox@example.com";
+            profile["incomingpassword"] = "incoming-secret";
+            profile["usesamesettingsforoutgoingconnections"] = true;
+            return profile;
+        }
+        var id = await Admin.CreateAsync(Build("same"));
+
+        var separate = await Admin.CreateAsync(Build("separate"));
+        await Admin.UpdateAsync(new Entity("emailserverprofile", separate)
+        {
+            ["usesamesettingsforoutgoingconnections"] = false, ["outgoingcredentialretrieval"] = new OptionSetValue(1),
+            ["outgoingusername"] = "outbox@example.com", ["outgoingpassword"] = "outgoing-only",
+        });
+
+        using var scope = fx.App.Services.CreateScope();
+        var core = scope.ServiceProvider.GetRequiredService<CoreOperations>();
+        await using var conn = await TestProvider.OpenAsync(fx.ConnectionString);
+        var s = new DataSession(conn, null);
+        var mailbox = Guid.NewGuid();
+
+        var same = await Xrmd.Core.Mail.MailConnections.ResolveAsync(s, core, mailbox, id, "test", default);
+        same.Credentials.UserName.Should().Be("inbox@example.com");
+        same.Credentials.Password.Should().Be("incoming-secret");
+        same.Profile.ServerLocation.Should().Be("smtp.example.com", "only the credentials follow the incoming side");
+
+        var own = await Xrmd.Core.Mail.MailConnections.ResolveAsync(s, core, mailbox, separate, "test", default);
+        own.Credentials.UserName.Should().Be("outbox@example.com");
+        own.Credentials.Password.Should().Be("outgoing-only");
+
+        var incoming = await Xrmd.Core.Mail.MailConnections.ResolveIncomingAsync(s, core, mailbox, id, "test", default);
+        incoming.Profile.ServerLocation.Should().Be("imap.example.com");
+        incoming.Profile.Port.Should().Be(993);
+        incoming.Profile.UseSsl.Should().BeTrue();
+        incoming.Credentials.UserName.Should().Be("inbox@example.com");
+        incoming.Credentials.Password.Should().Be("incoming-secret");
     }
 }

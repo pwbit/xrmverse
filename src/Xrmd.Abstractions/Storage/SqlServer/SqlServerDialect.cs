@@ -276,6 +276,19 @@ public sealed class SqlServerDialect : ISqlDialect
                $"    VALUES ({string.Join(", ", insert.Select(c => "a." + Quote(c)))});";
     }
 
+    public string InsertIfAbsent(string table, IReadOnlyList<string> keyColumns, IReadOnlyList<string> columns, string source)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(table);
+        ArgumentNullException.ThrowIfNull(keyColumns);
+        ArgumentNullException.ThrowIfNull(columns);
+        ArgumentException.ThrowIfNullOrEmpty(source);
+        if (keyColumns.Count == 0) throw new ArgumentException("At least one key column is required.", nameof(keyColumns));
+        var insert = keyColumns.Concat(columns).ToList();
+        return $"INSERT INTO {table} ({string.Join(", ", insert.Select(Quote))})\n" +
+               $"SELECT {string.Join(", ", insert.Select(c => "a." + Quote(c)))} FROM ({source}) AS a\n" +
+               $"WHERE NOT EXISTS (SELECT 1 FROM {table} p WITH (UPDLOCK, HOLDLOCK) WHERE {string.Join(" AND ", keyColumns.Select(k => $"p.{Quote(k)} = a.{Quote(k)}"))});";
+    }
+
     public string BinaryEquals(string left, string right) =>
         $"({left} COLLATE Latin1_General_BIN2 = {right} AND DATALENGTH({left}) = DATALENGTH({right}))";
 

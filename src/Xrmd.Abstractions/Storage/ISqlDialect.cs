@@ -311,6 +311,16 @@ public interface ISqlDialect
     string Upsert(string table, IReadOnlyList<string> keyColumns, IReadOnlyList<string> columns, string source);
 
     /// <summary>
+    /// The statement that inserts the rows of <paramref name="source"/> (a <c>SELECT</c> whose columns are named like the table's) into
+    /// <paramref name="table"/> (quoted) unless a row with the same <paramref name="keyColumns"/> exists, and never updates one (plan
+    /// 4.1c, task 1). A duplicate key is never an error, so it leaves the caller's transaction usable: SQL Server checks the key under
+    /// <c>WITH (UPDLOCK, HOLDLOCK)</c> and then inserts, PostgreSQL runs <c>INSERT … ON CONFLICT DO NOTHING</c>. A row a concurrent
+    /// transaction inserted and has not committed makes the statement wait for its outcome. The affected row count tells whether the
+    /// row was inserted. Column names are quoted here.
+    /// </summary>
+    string InsertIfAbsent(string table, IReadOnlyList<string> keyColumns, IReadOnlyList<string> columns, string source);
+
+    /// <summary>
     /// <paramref name="left"/> equals <paramref name="right"/> exactly: case, accents and trailing spaces count (SQL Server: a
     /// <c>Latin1_General_BIN2</c> comparison and equal byte lengths).
     /// </summary>

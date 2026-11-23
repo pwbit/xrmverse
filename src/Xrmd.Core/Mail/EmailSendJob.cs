@@ -18,7 +18,8 @@ namespace Xrmd.Core.Mail;
 /// <summary>
 /// Sends one email (<c>asyncoperation.operationtype</c> <see cref="AsyncOperationQueue.EmailSend"/>, plan 4.1b), queued by SendEmail with
 /// <c>IssueSend</c> true; the job runs as its owner, the user who called SendEmail. Data: <c>{"emailId": "&lt;guid&gt;"}</c>, plus the
-/// attempts made so far (<c>"attempts"</c>) once it waits for a retry.
+/// queue items SendEmail deactivated (<c>"queueItems"</c>, #333) and the attempts made so far (<c>"attempts"</c>) once it waits for a
+/// retry; every retry keeps the items.
 /// </summary>
 /// <remarks>
 /// <para>A run first locks the email and ends without sending when it is no longer Pending Send (reopened, deleted, already sent) or
@@ -27,7 +28,8 @@ namespace Xrmd.Core.Mail;
 /// mailbox (<see cref="Mailboxes.ResolveSenderAsync"/>: approved, on a profile, Server-Side Synchronization, enabled, active and tested),
 /// its profile (<see cref="ProfileRules"/>) and the credentials (<see cref="MailSecrets"/>), and the recipients' addresses. Any of these
 /// that fails ends the email Failed (state 0, status 8) with the reason as the job's message, and nothing is sent.</para>
-/// <para>Then it stores the <c>Message-ID</c> on the email (<c>messageid</c>, kept from an earlier attempt) and counts the attempt
+/// <para>Then it stores the <c>Message-ID</c> on the email (<c>messageid</c>, kept from an earlier attempt) and registers its key (outgoing,
+/// <see cref="MailMessageKeys"/>; plan 4.1c), counts the attempt
 /// (<c>deliveryattempts</c>) and commits, before the provider is called: an attempt that started is never made again by a run that
 /// does not know its outcome. A run that finds more attempts on the email than its data counts (a run interrupted after it started
 /// sending, which the worker puts back to Ready after a crash) fails without sending, and the email stays Pending Send (Known limits);
@@ -41,6 +43,9 @@ namespace Xrmd.Core.Mail;
 /// the error is recorded on the mailbox with its outgoing status Failure, while a refusal of this message only
 /// (<see cref="MailFailureScope.Message"/>: a recipient, its size) leaves the mailbox as it is. Secrets never reach a log, a message or
 /// the job's data.</para>
+/// <para>An email that ends Failed, for any of these reasons, gets back the queue items SendEmail deactivated, in the transaction that
+/// fails it (<see cref="QueueMessages.ReactivateItemsAsync"/>: core writes as the job's owner, no queue item step fires; #333). A sent email leaves them
+/// inactive.</para>
 /// </remarks>
 public sealed class EmailSendJob(IDbConnectionFactory factory, CoreOperations core, MailProviders providers, FileColumnService files,
     SecurityGuard guard, ILogger<EmailSendJob>? logger = null) : IAsyncOperationHandler
@@ -60,11 +65,15 @@ public sealed class EmailSendJob(IDbConnectionFactory factory, CoreOperations co
     /// <summary>An interrupted send may have reached the server: it is not started again (the email stays Pending Send).</summary>
     public bool RestartsWhenInterrupted => false;
 
-    /// <summary>The job's data for the email <paramref name="emailId"/> after <paramref name="attempts"/> attempts.</summary>
-    public static string DataOf(Guid emailId, int attempts = 0)
+    /// <summary>
+    /// The job's data for the email <paramref name="emailId"/> after <paramref name="attempts"/> attempts, with the queue items
+    /// SendEmail deactivated (<paramref name="queueItems"/>; none when null or empty).
+    /// </summary>
+    public static string DataOf(Guid emailId, int attempts = 0, IReadOnlyList<Guid>? queueItems = null)
     {
         var data = new JsonObject { ["emailId"] = emailId };
         if (attempts > 0) data["attempts"] = attempts;
+        if (queueItems is { Count: > 0 }) data["queueItems"] = new JsonArray([.. queueItems.Select(i => (JsonNode)JsonValue.Create(i))]);
         return data.ToJsonString();
     }
 
@@ -74,9 +83,9 @@ public sealed class EmailSendJob(IDbConnectionFactory factory, CoreOperations co
     public async Task RunAsync(AsyncOperationRun run, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(run);
-        var (emailId, attempts) = Parse(run.Data);
+        var (emailId, attempts, queueItems) = Parse(run.Data);
 
-        var prepared = await InTransactionAsync(s => PrepareAsync(s, run, emailId, attempts, ct), ct);
+        var prepared = await InTransactionAsync(s => PrepareAsync(s, run, emailId, attempts, queueItems, ct), ct);
         if (prepared is not Ready ready)
         {
             run.CompletionMessage = ((Ended)prepared).Message;
@@ -96,7 +105,7 @@ public sealed class EmailSendJob(IDbConnectionFactory factory, CoreOperations co
             catch (Exception ex) when (ex is MailSendException or XrmdFaultException)
             {
                 // The message cannot be built (a line break in an address or a name, a missing attachment): the mailbox is not at fault.
-                run.CompletionMessage = await FailAsync(run, emailId, null, ex.Message, ct);
+                run.CompletionMessage = await FailAsync(run, emailId, queueItems, null, ex.Message, ct);
                 return;
             }
 
@@ -112,14 +121,15 @@ public sealed class EmailSendJob(IDbConnectionFactory factory, CoreOperations co
                     await InTransactionAsync(s => RecordErrorAsync(s, ready.MailboxId, ex.Message, failed: false, ct), ct);
                     _logger.LogWarning("Email {EmailId}: attempt {Attempt} failed ({Reason}); it is tried again in {Delay}.",
                         emailId, attempt, ex.Message, RetryDelays[attempt - 1]);
-                    run.Suspend(run.Now + RetryDelays[attempt - 1], DataOf(emailId, attempt));
+                    run.Suspend(run.Now + RetryDelays[attempt - 1], DataOf(emailId, attempt, queueItems));
                     return;
                 }
                 var reason = ex.Transient ? $"{ex.Message} (after {attempt} attempts)" : ex.Message;
                 // A failure of the mailbox, or retries run out, sets its outgoing status Failure; a refusal of this message only (a
                 // recipient, its size) fails the email and leaves the mailbox as it is.
                 var mailboxAtFault = ex.Transient || ex.Scope == MailFailureScope.Mailbox;
-                run.CompletionMessage = await FailAsync(run, emailId, mailboxAtFault ? ready.MailboxId : null, reason, ct, mailboxError: ex.Message);
+                run.CompletionMessage = await FailAsync(run, emailId, queueItems, mailboxAtFault ? ready.MailboxId : null, reason, ct,
+                    mailboxError: ex.Message);
                 return;
             }
         }
@@ -155,7 +165,8 @@ public sealed class EmailSendJob(IDbConnectionFactory factory, CoreOperations co
     /// (sender, mailbox, profile, credentials or recipients), or counts the attempt and stores the message id.
     /// </summary>
     /// <exception cref="InvalidOperationException">The email has more attempts than the run counts: an interrupted send.</exception>
-    private async Task<Outcome> PrepareAsync(DataSession s, AsyncOperationRun run, Guid emailId, int attempts, CancellationToken ct)
+    private async Task<Outcome> PrepareAsync(DataSession s, AsyncOperationRun run, Guid emailId, int attempts, IReadOnlyList<Guid> queueItems,
+        CancellationToken ct)
     {
         string? subject, body, messageId;
         int delivered;
@@ -193,11 +204,15 @@ public sealed class EmailSendJob(IDbConnectionFactory factory, CoreOperations co
                 cmd.AddParameter("@id", DbType.Guid, emailId);
                 await cmd.ExecuteNonQueryAsync(ct);
             }
+            // Plan 4.1c: the message id is the email's key, outgoing, so that a copy coming back is not imported (kept from an earlier attempt).
+            if (MailMessageKeys.Normalize(ready.Mail.MessageId) is { } normalized
+                && await MailMessageKeys.TryRegisterAsync(s, MailMessageKeys.KeyOf(normalized), emailId, incoming: false, ct) is { } owner && owner != emailId)
+                _logger.LogDebug("Email {EmailId}: its message id is already the key of email {OwnerId}; the key is kept there.", emailId, owner);
             return ready;
         }
         catch (MailSetupException ex)
         {
-            await core.EmailMessages.CompleteSendAsync(s, run.Owner, emailId, sent: false, ct);
+            await FailEmailAsync(s, run, emailId, queueItems, ct);
             _logger.LogWarning("Email {EmailId} was not sent: {Reason}", emailId, ex.Message);
             return new Ended(Failed(emailId, ex.Message));
         }
@@ -327,17 +342,31 @@ public sealed class EmailSendJob(IDbConnectionFactory factory, CoreOperations co
     /// it on the mailbox with the outgoing status Failure.
     /// </summary>
     /// <returns>The job's message.</returns>
-    private async Task<string> FailAsync(AsyncOperationRun run, Guid emailId, Guid? mailboxId, string reason, CancellationToken ct,
-        string? mailboxError = null)
+    private async Task<string> FailAsync(AsyncOperationRun run, Guid emailId, IReadOnlyList<Guid> queueItems, Guid? mailboxId, string reason,
+        CancellationToken ct, string? mailboxError = null)
     {
         await InTransactionAsync(async s =>
         {
-            if (await IsPendingSendAsync(s, emailId, ct)) await core.EmailMessages.CompleteSendAsync(s, run.Owner, emailId, sent: false, ct);
+            if (await IsPendingSendAsync(s, emailId, ct)) await FailEmailAsync(s, run, emailId, queueItems, ct);
             if (mailboxId is { } mailbox) await RecordErrorAsync(s, mailbox, mailboxError ?? reason, failed: true, ct);
             return true;
         }, ct);
         _logger.LogWarning("Email {EmailId} was not sent: {Reason}", emailId, reason);
         return Failed(emailId, reason);
+    }
+
+    /// <summary>
+    /// The email, locked and still Pending Send, ends Failed, and the queue items SendEmail deactivated are made active again in the
+    /// same transaction (#333).
+    /// </summary>
+    private async Task FailEmailAsync(DataSession s, AsyncOperationRun run, Guid emailId, IReadOnlyList<Guid> queueItems, CancellationToken ct)
+    {
+        await core.EmailMessages.CompleteSendAsync(s, run.Owner, emailId, sent: false, ct);
+        if (queueItems.Count == 0) return;
+        var reactivated = await core.QueueMessages.ReactivateItemsAsync(s, run.Owner, queueItems, ct);
+        if (reactivated < queueItems.Count)
+            _logger.LogDebug("Email {EmailId} failed: {Reactivated} of its {Count} queue items were made active again; the others were left inactive.",
+                emailId, reactivated, queueItems.Count);
     }
 
     private static string Failed(Guid emailId, string reason) => $"The email {emailId} was not sent: {reason}";
@@ -365,12 +394,13 @@ public sealed class EmailSendJob(IDbConnectionFactory factory, CoreOperations co
     }
 
     /// <exception cref="XrmdFaultException">400 when the data names no email.</exception>
-    private static (Guid EmailId, int Attempts) Parse(string? data)
+    private static (Guid EmailId, int Attempts, IReadOnlyList<Guid> QueueItems) Parse(string? data)
     {
         try
         {
             if (data is not null && JsonNode.Parse(data) is JsonObject o && o["emailId"]?.GetValue<Guid>() is { } id && id != Guid.Empty)
-                return (id, o["attempts"]?.GetValue<int>() ?? 0);
+                return (id, o["attempts"]?.GetValue<int>() ?? 0,
+                    o["queueItems"] is JsonArray items ? [.. items.Select(i => i?.GetValue<Guid>()).OfType<Guid>()] : []);
         }
         catch (Exception ex) when (ex is JsonException or FormatException or InvalidOperationException)
         {
