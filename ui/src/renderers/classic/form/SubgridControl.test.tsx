@@ -397,11 +397,11 @@ describe('Subgrid New and Add existing (#118)', () => {
     Entity1NavigationPropertyName: 'xv_project_tags',
     Entity2NavigationPropertyName: 'xv_tag_projects',
   };
-  function renderCommands(cell: Cell, privileges = ALL, records?: AppsMock['records']) {
+  function renderCommands(cell: Cell, privileges = ALL, records?: AppsMock['records'], tables = TABLES) {
     const base = contextOf([name], RECORD);
     const ctx = { ...base, entity: { ...base.entity, schemaName: 'xv_Project' } };
     return renderForm(formWith(cell), ctx, {
-      apps: { ...TASKS, savedQueries: [TASK_VIEW, TAG_VIEW], tables: TABLES, privileges, schemaNames: SCHEMAS, records: records ?? rows },
+      apps: { ...TASKS, savedQueries: [TASK_VIEW, TAG_VIEW], tables, privileges, schemaNames: SCHEMAS, records: records ?? rows },
       setup: () =>
         server.use(
           http.get('*/api/data/v9.2/RelationshipDefinitions', () =>
@@ -414,7 +414,8 @@ describe('Subgrid New and Add existing (#118)', () => {
 
   it('new_opens_the_related_create_form_with_the_lookup_set', async () => {
     renderCommands(subgridCell());
-    await userEvent.click(await screen.findByRole('button', { name: 'New Task' }));
+    await userEvent.click(await commandsMenu());
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'New Task' }));
     await waitFor(() => {
       const location = screen.getByTestId('location').textContent!;
       const params = new URLSearchParams(location.slice(location.indexOf('?')));
@@ -456,7 +457,8 @@ describe('Subgrid New and Add existing (#118)', () => {
         return new HttpResponse(null, { status: 204 });
       }),
     );
-    await userEvent.click(await screen.findByRole('button', { name: 'Add Existing Task' }));
+    await userEvent.click(await commandsMenu());
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Add Existing Task' }));
     const dialog = await screen.findByRole('dialog');
     await userEvent.click(await within(dialog).findByRole('option', { name: 'Loose task' }));
     await userEvent.click(within(dialog).getByRole('option', { name: 'Other task' }));
@@ -483,7 +485,8 @@ describe('Subgrid New and Add existing (#118)', () => {
         return HttpResponse.json({ error: { code: '0x80040237', message: 'Cannot insert duplicate key.' } }, { status: 412 });
       }),
     );
-    await userEvent.click(await screen.findByRole('button', { name: 'Add Existing Tag' }));
+    await userEvent.click(await commandsMenu());
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Add Existing Tag' }));
     const dialog = await screen.findByRole('dialog');
     await userEvent.click(await within(dialog).findByRole('option', { name: 'Urgent' }));
     await userEvent.click(within(dialog).getByRole('button', { name: 'Add' }));
@@ -495,11 +498,44 @@ describe('Subgrid New and Add existing (#118)', () => {
 
   it('commands_follow_the_privileges', async () => {
     const { unmount } = renderCommands(subgridCell(), ['prvCreatexv_Task', 'prvAppendxv_Task']);
-    expect(await screen.findByRole('button', { name: 'New Task' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Add Existing Task' })).toBeNull();
+    await userEvent.click(await commandsMenu());
+    expect(await screen.findByRole('menuitem', { name: 'New Task' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Add Existing Task' })).toBeNull();
     unmount();
     renderCommands(subgridCell(), ['prvAppendxv_Task', 'prvAppendToxv_Project']);
-    expect(await screen.findByRole('button', { name: 'Add Existing Task' })).toBeInTheDocument();
+    await userEvent.click(await commandsMenu());
+    expect(await screen.findByRole('menuitem', { name: 'Add Existing Task' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'New Task' })).toBeNull();
+  });
+
+  it('New on an activity child follows the shared activity privilege (#196)', async () => {
+    const asActivity = { ...TABLES, xv_task: { ...TABLES!.xv_task!, isActivity: true } };
+    const { unmount } = renderCommands(subgridCell(), ['prvCreateActivity'], undefined, asActivity);
+    await userEvent.click(await commandsMenu());
+    expect(await screen.findByRole('menuitem', { name: 'New Task' })).toBeInTheDocument();
+    unmount();
+    renderCommands(subgridCell(), ['prvAppendActivity', 'prvAppendToxv_Project'], undefined, asActivity);
+    await userEvent.click(await commandsMenu());
+    expect(await screen.findByRole('menuitem', { name: 'Add Existing Task' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'New Task' })).toBeNull();
+  });
+
+  it('subgrid_commands_open_from_one_menu_with_icons', async () => {
+    renderCommands(subgridCell());
+    const trigger = await commandsMenu();
     expect(screen.queryByRole('button', { name: 'New Task' })).toBeNull();
+    expect(screen.queryByRole('menuitem')).toBeNull();
+    await userEvent.click(trigger);
+    const items = await screen.findAllByRole('menuitem');
+    expect(items.map((i) => i.textContent)).toEqual(['New Task', 'Add Existing Task']);
+    for (const item of items) expect(item.querySelector('.fui-MenuItem__icon')?.childElementCount).toBeGreaterThan(0);
+  });
+
+  it('no_commands_menu_without_privileges', async () => {
+    renderCommands(subgridCell(), []);
+    await screen.findByTestId('subgrid');
+    expect(screen.queryByRole('button', { name: /commands$/ })).toBeNull();
   });
 });
+
+const commandsMenu = () => screen.findByRole('button', { name: /commands$/ });

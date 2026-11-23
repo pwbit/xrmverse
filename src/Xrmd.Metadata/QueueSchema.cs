@@ -117,19 +117,25 @@ public static class QueueSchema
             [("name", 260), ("queueviewtype", 160), ("ownerid", 200)], "name", false),
     ];
 
-    /// <summary>A seeded system view: the columns with their widths, an optional equality filter and the sort.</summary>
+    /// <summary>A seeded system view: the columns with their widths, an optional equality filter (or an `in` filter with FilterValues) and the sort.</summary>
     public sealed record SystemView(Guid Id, string Name, string Table, bool IsDefault, string? FilterColumn, int? FilterValue,
-        (string Column, int Width)[] Columns, string SortColumn, bool SortDescending)
+        (string Column, int Width)[] Columns, string SortColumn, bool SortDescending, int[]? FilterValues = null)
     {
+        /// <summary>The primary key: <c>activityid</c> for the four standard activity tables, <c>{table}id</c> for any other.</summary>
+        public string IdColumn => Table is ActivitySchema.Email or ActivitySchema.Task or ActivitySchema.PhoneCall or ActivitySchema.Appointment
+            ? "activityid" : $"{Table}id";
+
         public string FetchXml =>
             $"<fetch version=\"1.0\" mapping=\"logical\"><entity name=\"{Table}\">" +
-            string.Concat(Columns.Select(c => $"<attribute name=\"{c.Column}\" />")) + $"<attribute name=\"{Table}id\" />" +
+            string.Concat(Columns.Select(c => $"<attribute name=\"{c.Column}\" />")) + $"<attribute name=\"{IdColumn}\" />" +
             $"<order attribute=\"{SortColumn}\" descending=\"{(SortDescending ? "true" : "false")}\" />" +
-            (FilterColumn is null ? "" : $"<filter type=\"and\"><condition attribute=\"{FilterColumn}\" operator=\"eq\" value=\"{FilterValue}\" /></filter>") +
+            (FilterColumn is null ? "" : FilterValues is { Length: > 0 }
+                ? $"<filter type=\"and\"><condition attribute=\"{FilterColumn}\" operator=\"in\">" + string.Concat(FilterValues.Select(v => $"<value>{v}</value>")) + "</condition></filter>"
+                : $"<filter type=\"and\"><condition attribute=\"{FilterColumn}\" operator=\"eq\" value=\"{FilterValue}\" /></filter>") +
             "</entity></fetch>";
 
         public string LayoutXml(int objectTypeCode) =>
-            $"<grid name=\"resultset\" object=\"{objectTypeCode}\" jump=\"{Columns[0].Column}\" select=\"1\" icon=\"1\" preview=\"1\"><row name=\"result\" id=\"{Table}id\">" +
+            $"<grid name=\"resultset\" object=\"{objectTypeCode}\" jump=\"{Columns[0].Column}\" select=\"1\" icon=\"1\" preview=\"1\"><row name=\"result\" id=\"{IdColumn}\">" +
             string.Concat(Columns.Select(c => $"<cell name=\"{c.Column}\" width=\"{c.Width}\" />")) + "</row></grid>";
     }
 }

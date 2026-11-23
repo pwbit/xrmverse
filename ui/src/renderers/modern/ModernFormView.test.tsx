@@ -160,10 +160,13 @@ describe('ModernFormView', () => {
     it('colours the section, and a field with its own colour over it; the other field shows the section through', async () => {
       const { main, name: nameCell, note: noteCell } = await renderColoured(ModernFormView, overlay);
       expect(main.style.backgroundColor).toBe('var(--colorPaletteYellowBackground2)');
-      expect(noteCell.style.backgroundColor).toBe('rgb(161, 178, 195)');
-      expect(noteCell).toHaveAttribute('data-background', 'true');
+      // The colour fills the control box (through the custom property), never the cell itself.
+      expect(noteCell.style.backgroundColor).toBe('');
+      expect(noteCell.style.getPropertyValue('--xrmverse-field-fill')).toBe('#a1b2c3');
+      expect(noteCell).toHaveAttribute('data-field-fill', 'true');
       expect(nameCell.style.backgroundColor).toBe('');
-      expect(nameCell).not.toHaveAttribute('data-background');
+      expect(nameCell.style.getPropertyValue('--xrmverse-field-fill')).toBe('');
+      expect(nameCell).not.toHaveAttribute('data-field-fill');
     });
 
     it('never colours with the classic renderer', async () => {

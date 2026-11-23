@@ -89,6 +89,8 @@ export interface TableInfo {
   primaryId: string;
   /** The table's SchemaName (its privilege names are `prv{Verb}{SchemaName}`); undefined when the server gives none. */
   schemaName?: string;
+  /** `IsActivity`: an activity table is secured by the shared `prv{Verb}Activity` privileges; undefined when the server gives none. */
+  isActivity?: boolean;
   /** `PrimaryNameAttribute`: what a lookup search of the table searches and shows; undefined when the server gives none. */
   primaryName?: string;
   /** The table's display name in the user language (else 1033, else the user label); undefined when it has none. */
@@ -129,9 +131,10 @@ export async function loadTable(client: XrmApi, entity: string, lcid: number): P
       PrimaryIdAttribute: string;
       SchemaName?: string | null;
       PrimaryNameAttribute?: string | null;
+      IsActivity?: boolean | null;
       IsValidForQueue?: { Value?: boolean } | null;
       DisplayName?: AttributeRow['DisplayName'];
-    }>(`${key}?$select=LogicalName,EntitySetName,PrimaryIdAttribute,SchemaName,PrimaryNameAttribute,DisplayName,IsValidForQueue`),
+    }>(`${key}?$select=LogicalName,EntitySetName,PrimaryIdAttribute,SchemaName,PrimaryNameAttribute,DisplayName,IsValidForQueue,IsActivity`),
     client.get<{ value: AttributeRow[] }>(`${key}/Attributes?$select=LogicalName,DisplayName,AttributeType`),
   ]);
   const labels: Record<string, string> = {};
@@ -146,6 +149,7 @@ export async function loadTable(client: XrmApi, entity: string, lcid: number): P
     entitySetName: definition.EntitySetName,
     primaryId: definition.PrimaryIdAttribute,
     schemaName: definition.SchemaName || undefined,
+    ...(definition.IsActivity ? { isActivity: true } : {}),
     ...(definition.PrimaryNameAttribute ? { primaryName: definition.PrimaryNameAttribute } : {}),
     ...(displayLabel(definition.DisplayName, lcid) ? { displayName: displayLabel(definition.DisplayName, lcid) } : {}),
     ...(definition.IsValidForQueue ? { isValidForQueue: definition.IsValidForQueue.Value === true } : {}),

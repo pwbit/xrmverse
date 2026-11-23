@@ -54,6 +54,33 @@ describe('EntityListPage New', () => {
   });
 });
 
+describe('EntityListPage New on an activity table (#196)', () => {
+  const EMAIL_SITEMAP = `<SiteMap><Area Id="a">${titled('Sales')}<Group Id="c">${titled('Activities')}<SubArea Id="emails" Entity="email">${titled('Emails')}</SubArea></Group></Area></SiteMap>`;
+  const email = rawEntity(
+    'email',
+    'emails',
+    [rawAttr('activityid', 'Uniqueidentifier', { IsPrimaryId: true }), rawAttr('subject', 'String', { IsPrimaryName: true, display: 'Subject' })],
+    { SchemaName: 'Email', PrimaryNameAttribute: 'subject', PrimaryIdAttribute: 'activityid', display: 'Email', IsActivity: true },
+  );
+  function openEmails(privileges: string[]) {
+    mockApps({ apps: [SALES], userRoles: [ROLE_SALES], privileges, siteMapXml: EMAIL_SITEMAP, schemaNames: { email: 'Email' } });
+    installMetadata([email]);
+    render(<App initialEntries={[`/main.aspx?appid=${APP_ID}&pagetype=entitylist&etn=email`]} />);
+  }
+
+  it('New is shown with prvCreateActivity only', async () => {
+    openEmails(['prvReadActivity', 'prvCreateActivity']);
+    expect(await screen.findByRole('button', { name: 'New' })).toBeInTheDocument();
+  });
+
+  it('New is hidden without prvCreateActivity', async () => {
+    openEmails(['prvReadActivity']);
+    expect(await screen.findByRole('heading', { level: 1, name: 'Emails' })).toBeInTheDocument();
+    expect(await screen.findByText('This table has no view that you may open.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'New' })).toBeNull();
+  });
+});
+
 describe('EntityListPage paging', () => {
   it('paging buttons keep their names and show icons, not « ‹ ›', async () => {
     openAccounts({

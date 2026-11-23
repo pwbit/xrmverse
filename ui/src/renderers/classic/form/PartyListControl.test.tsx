@@ -104,6 +104,16 @@ const input = () => screen.findByRole('combobox', { name: 'To' });
 const chips = () => within(screen.getByRole('list', { name: 'To' })).queryAllByRole('listitem').map((li) => li.textContent);
 
 describe('PartyListControl', () => {
+  it('marks its box as a field box, editable or read-only, so a field colour reaches it', async () => {
+    mockSearch();
+    const { container, unmount } = renderControl();
+    await input();
+    expect(container.querySelectorAll('[data-field-box]')).toHaveLength(1);
+    unmount();
+    const readOnly = renderControl({ disabled: true });
+    await waitFor(() => expect(readOnly.container.querySelectorAll('[data-field-box]')).toHaveLength(1));
+  });
+
   it('searches the primary name and the email column of each target, 5 per table, grouped', async () => {
     const searches = mockSearch();
     const onValue = vi.fn();

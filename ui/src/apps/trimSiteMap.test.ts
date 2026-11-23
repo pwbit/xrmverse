@@ -27,7 +27,13 @@ const model: SiteMapModel = {
     },
   ],
 };
-const SCHEMA = { account: 'Account', contact: 'Contact', role: 'Role' };
+const SCHEMA = {
+  account: { schemaName: 'Account', isActivity: false },
+  contact: { schemaName: 'Contact', isActivity: false },
+  role: { schemaName: 'Role', isActivity: false },
+  email: { schemaName: 'Email', isActivity: true },
+  xv_visit: { schemaName: 'xv_Visit', isActivity: true },
+};
 const ids = (m: SiteMapModel) =>
   m.areas.map((a) => [a.id, a.groups.map((g) => [g.id, g.subAreas.map((s) => s.id)])]);
 
@@ -69,5 +75,24 @@ describe('trimSiteMap', () => {
     expect(ids(trimmed)).toEqual([['a', [['g', ['dash', 'acc2', 'free']]]]]);
     const withoutRole = trimSiteMap(m, new Set(['prvReadAccount', 'prvReadContact', 'prvWriteContact']), SCHEMA);
     expect(ids(withoutRole)).toEqual([['a', [['g', ['acc', 'acc2', 'free']]]]]);
+  });
+
+  const one = (entity: string): SiteMapModel => ({ areas: [{ id: 'a', titles: {}, groups: [{ id: 'g', titles: {}, subAreas: [sub('x', { entity })] }] }] });
+
+  it('an email subarea is visible with prvReadActivity only', () => {
+    expect(ids(trimSiteMap(one('email'), new Set(['prvReadActivity']), SCHEMA))).toEqual([['a', [['g', ['x']]]]]);
+  });
+
+  it('a custom activity table subarea is visible with prvReadActivity', () => {
+    expect(ids(trimSiteMap(one('xv_visit'), new Set(['prvReadActivity']), SCHEMA))).toEqual([['a', [['g', ['x']]]]]);
+  });
+
+  it('an email subarea is hidden without prvReadActivity', () => {
+    expect(trimSiteMap(one('email'), new Set(['prvReadAccount']), SCHEMA).areas).toEqual([]);
+  });
+
+  it('a Privilege child on an activity table is met by the shared activity privilege', () => {
+    const m: SiteMapModel = { areas: [{ id: 'a', titles: {}, groups: [{ id: 'g', titles: {}, subAreas: [sub('d', { privileges: [{ entity: 'email', privilege: 'Read' }] })] }] }] };
+    expect(trimSiteMap(m, new Set(['prvReadActivity']), SCHEMA).areas).toHaveLength(1);
   });
 });

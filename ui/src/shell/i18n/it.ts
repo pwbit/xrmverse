@@ -148,6 +148,7 @@ export const it: Partial<Record<keyof typeof en, string>> = {
   'record.related.notThisTable': 'la relazione {name} non collega i record di questa tabella',
   'record.related.unsupported': '{label} non è disponibile qui: sono mostrate solo le tabelle correlate, non i collegamenti ad altre pagine.',
   'record.subgrid.commands': 'Comandi {table}',
+  'record.subgrid.commandsMenu': 'Comandi',
   'record.subgrid.new': 'Nuovo {table}',
   'record.subgrid.addExisting': 'Aggiungi {table} esistente',
   'record.subgrid.addExistingTitle': 'Aggiungi {table} esistente',

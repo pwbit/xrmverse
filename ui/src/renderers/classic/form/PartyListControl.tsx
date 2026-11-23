@@ -417,7 +417,7 @@ export function PartyListControl({ attr, value, onChange, disabled, error, sende
   if (disabled) {
     return (
       <Field label={label} required={attr.required} validationMessage={error}>
-        <div className={mergeClasses(styles.box, styles.readOnly)}>{value.length > 0 ? chipList : <Text>{t('field.empty')}</Text>}</div>
+        <div className={mergeClasses(styles.box, styles.readOnly)} data-field-box="">{value.length > 0 ? chipList : <Text>{t('field.empty')}</Text>}</div>
       </Field>
     );
   }
@@ -504,7 +504,7 @@ export function PartyListControl({ attr, value, onChange, disabled, error, sende
           if (!(e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget))) setPopup((p) => (p?.kind === 'ambiguous' ? p : undefined));
         }}
       >
-        <div className={styles.box}>
+        <div className={styles.box} data-field-box="">
           {chipList}
           {!sender && (
             <input

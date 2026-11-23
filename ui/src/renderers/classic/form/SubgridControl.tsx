@@ -1,4 +1,4 @@
-import { Button, makeStyles, MessageBar, MessageBarBody, Spinner, Text, tokens, Toolbar, ToolbarButton } from '@fluentui/react-components';
+import { Button, makeStyles, Menu, MenuButton, MenuItem, MenuList, MenuPopover, MenuTrigger, MessageBar, MessageBarBody, Spinner, Text, tokens } from '@fluentui/react-components';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useRecordOpener } from '../../../apps/record/recordOpener';
@@ -298,7 +298,7 @@ function SubgridGrid({
     if (!api || !commands) return;
     let cancelled = false;
     cachedRead(env, 'privileges', () => heldPrivileges(api)).then(
-      (held) => !cancelled && setAllowed(subgridCommandsAllowed(held, table.schemaName, env.ctx.entity.schemaName)),
+      (held) => !cancelled && setAllowed(subgridCommandsAllowed(held, table, env.ctx.entity)),
       () => undefined,
     );
     return () => {
@@ -433,19 +433,28 @@ function SubgridGrid({
           <div className={styles.commands}>
             <ViewModeSwitcher modes={resolved.modes} mode={mode} onChange={setPicked} />
             {commands && (allowed.canNew || allowed.canAddExisting) && (
-              // The same command bar as the form's, on the title's line, at the end.
-              <Toolbar size="small" className={surface.commandBar} aria-label={t('record.subgrid.commands', { table: tableLabel })}>
-                {allowed.canNew && (
-                  <ToolbarButton icon={<NewIcon />} onClick={openNew}>
-                    {t('record.subgrid.new', { table: tableLabel })}
-                  </ToolbarButton>
-                )}
-                {allowed.canAddExisting && table.primaryName && (
-                  <ToolbarButton icon={<AddExistingIcon />} onClick={() => setAdding(true)}>
-                    {t('record.subgrid.addExisting', { table: tableLabel })}
-                  </ToolbarButton>
-                )}
-              </Toolbar>
+              // One drop-down of the commands, on the title's line, at the end.
+              <Menu>
+                <MenuTrigger disableButtonEnhancement>
+                  <MenuButton size="small" className={surface.commandBar} aria-label={t('record.subgrid.commands', { table: tableLabel })}>
+                    {t('record.subgrid.commandsMenu')}
+                  </MenuButton>
+                </MenuTrigger>
+                <MenuPopover>
+                  <MenuList>
+                    {allowed.canNew && (
+                      <MenuItem icon={<NewIcon />} onClick={openNew}>
+                        {t('record.subgrid.new', { table: tableLabel })}
+                      </MenuItem>
+                    )}
+                    {allowed.canAddExisting && table.primaryName && (
+                      <MenuItem icon={<AddExistingIcon />} onClick={() => setAdding(true)}>
+                        {t('record.subgrid.addExisting', { table: tableLabel })}
+                      </MenuItem>
+                    )}
+                  </MenuList>
+                </MenuPopover>
+              </Menu>
             )}
           </div>
         )}

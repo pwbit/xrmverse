@@ -252,6 +252,9 @@ export function FormView({ form, state, ctx, lcid, onSelectForm, forms, notice, 
   };
   const custom = renderTabBody?.({ tabs, current, env, selectTab, tabList });
   const ownBody = custom !== undefined && !ownTabList;
+  // An aside goes to the top of the last column of a multi-column classic tab; else it stays beside the whole body.
+  const asideInColumn = aside !== undefined && custom === undefined && !showRelated && (current?.tab.columns.length ?? 0) >= 2;
+  const besideAside = aside !== undefined && !asideInColumn;
 
   const primaryName = ctx.entity.primaryNameAttribute;
   const named = primaryName ? (state.record ?? ctx.record)?.[primaryName] : undefined;
@@ -297,7 +300,8 @@ export function FormView({ form, state, ctx, lcid, onSelectForm, forms, notice, 
   ) : custom !== undefined ? (
     custom
   ) : (
-    (tabs.length > 0 || navigation.length > 0) && tabList()
+    (tabs.length > 0 || navigation.length > 0) &&
+      tabList((tab) => <FormTab tab={tab} env={env} lead={asideInColumn && tab.columns.length >= 2 ? { column: tab.columns.length - 1, node: aside } : undefined} />)
   );
   const headerCells = form.header.filter((c) => isShown(env, c));
 
@@ -338,8 +342,8 @@ export function FormView({ form, state, ctx, lcid, onSelectForm, forms, notice, 
       </div>
       {banner}
       <FormNotifications items={notifications} />
-      <div className={mergeClasses(styles.body, aside !== undefined && styles.withAside)} data-form-body="">
-        {aside !== undefined ? (
+      <div className={mergeClasses(styles.body, besideAside && styles.withAside)} data-form-body="">
+        {besideAside ? (
           <>
             <div className={styles.main}>
               {body}

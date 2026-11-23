@@ -294,7 +294,8 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
         await EnsureSystemSolutionsAsync(conn, tx, o, rootId.Value, adminId ?? newAdminId, now, ct);
         await EnsureSystemAdministratorProfileAsync(conn, tx, rootId.Value, adminId ?? newAdminId, now, ct);
         await EnsureSettingDefinitionsAsync(conn, tx, rootId.Value, adminId ?? newAdminId, now, ct);
-        await EnsureQueueViewsAsync(conn, tx, rootId.Value, adminId ?? newAdminId, now, ct);
+        await EnsureSystemViewsAsync(conn, tx, rootId.Value, adminId ?? newAdminId, now, ct);
+        await EnsureSystemFormsAsync(conn, tx, rootId.Value, adminId ?? newAdminId, now, ct);
 
         // Organizations of an older database get the default only where the new column is still empty.
         await ExecuteAsync(conn, tx, "UPDATE data.organization SET plugintracelogsetting = 1 WHERE plugintracelogsetting IS NULL", ct);
@@ -568,21 +569,60 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
             $"SELECT {key} FROM data.{table}{dialect.LockHint(RowLock.UpdateRange)} WHERE {key} = @id{dialect.LockClause(RowLock.UpdateRange)}", ct, ("@id", id)) is null;
     }
 
-    /// <summary>The system views of the queue tables (<see cref="QueueSchema.SystemViews"/>), each inserted only when its id is missing.</summary>
-    private async Task EnsureQueueViewsAsync(DbConnection conn, DbTransaction tx, Guid rootId, Guid creator, DateTime now, CancellationToken ct)
+    /// <summary>
+    /// True when no row of <paramref name="table"/> for <paramref name="entity"/> (in <paramref name="typeColumn"/>, narrowed by
+    /// <paramref name="kindFilter"/>) is the default yet, after taking a key lock on that default slot and an update lock on the
+    /// rows read, so two seeds cannot both claim it. The caller inserts in the same transaction.
+    /// </summary>
+    private static async Task<bool> DefaultSlotFreeAsync(
+        DbConnection conn, DbTransaction tx, string table, string key, string typeColumn, string kindFilter, string entity, CancellationToken ct)
     {
         var dialect = SqlDialects.For(conn);
-        foreach (var view in QueueSchema.SystemViews)
+        await KeyLockAsync(conn, tx, table, "default:" + entity, ct);
+        return await FindIdAsync(conn, tx,
+            $"SELECT {key} FROM data.{table}{dialect.LockHint(RowLock.UpdateRange)} WHERE {typeColumn} = @entity AND {kindFilter} " +
+            $"AND isdefault = {dialect.BooleanLiteral(true)}{dialect.LockClause(RowLock.UpdateRange)}", ct, ("@entity", entity)) is null;
+    }
+
+    /// <summary>
+    /// The system views of the queue tables (<see cref="QueueSchema.SystemViews"/>) and of email and queue
+    /// (<see cref="PlatformLayouts.Views"/>), each inserted only when its id is missing.
+    /// </summary>
+    private async Task EnsureSystemViewsAsync(DbConnection conn, DbTransaction tx, Guid rootId, Guid creator, DateTime now, CancellationToken ct)
+    {
+        var dialect = SqlDialects.For(conn);
+        foreach (var view in QueueSchema.SystemViews.Concat(PlatformLayouts.Views))
         {
             if (!await MissingAsync(conn, tx, "savedquery", "savedqueryid", view.Id, ct)) continue;
             var code = store.GetEntity(view.Table)?.ObjectTypeCode ?? 0;
+            // One default public view per table: a view seeded where the table already has one is not the default.
+            var isDefault = view.IsDefault && await DefaultSlotFreeAsync(conn, tx, "savedquery", "savedqueryid", "returnedtypecode", "querytype = 0", view.Table, ct);
             await ExecuteAsync(conn, tx, $"""
                 INSERT INTO data.savedquery (savedqueryid, name, returnedtypecode, fetchxml, layoutxml, querytype, isdefault, ismanaged,
                     owningbusinessunit, createdon, createdby, modifiedon, modifiedby, statecode, statuscode)
-                VALUES (@id, @name, @table, @fetch, @layout, 0, {dialect.BooleanLiteral(view.IsDefault)}, {dialect.BooleanLiteral(false)},
+                VALUES (@id, @name, @table, @fetch, @layout, 0, {dialect.BooleanLiteral(isDefault)}, {dialect.BooleanLiteral(false)},
                     @bu, @now, @by, @now, @by, 0, 1);
                 """, ct, ("@id", view.Id), ("@name", view.Name), ("@table", view.Table), ("@fetch", view.FetchXml),
                 ("@layout", view.LayoutXml(code)), ("@bu", rootId), ("@now", now), ("@by", creator));
+        }
+    }
+
+    /// <summary>The default main forms of email, queue and queue item (<see cref="PlatformLayouts.Forms"/>), each inserted only when its id is missing.</summary>
+    private static async Task EnsureSystemFormsAsync(DbConnection conn, DbTransaction tx, Guid rootId, Guid creator, DateTime now, CancellationToken ct)
+    {
+        var dialect = SqlDialects.For(conn);
+        foreach (var form in PlatformLayouts.Forms)
+        {
+            if (!await MissingAsync(conn, tx, "systemform", "systemformid", form.Id, ct)) continue;
+            // One default main form per table: a form seeded where the table already has one is not the default.
+            var isDefault = await DefaultSlotFreeAsync(conn, tx, "systemform", "systemformid", "objecttypecode", "type = 2", form.Table, ct);
+            await ExecuteAsync(conn, tx, $"""
+                INSERT INTO data.systemform (systemformid, name, objecttypecode, formxml, type, isdefault, formactivationstate, ismanaged,
+                    owningbusinessunit, createdon, createdby, modifiedon, modifiedby, statecode, statuscode)
+                VALUES (@id, @name, @table, @xml, 2, {dialect.BooleanLiteral(isDefault)}, 1, {dialect.BooleanLiteral(false)},
+                    @bu, @now, @by, @now, @by, 0, 1);
+                """, ct, ("@id", form.Id), ("@name", form.Name), ("@table", form.Table), ("@xml", form.FormXml),
+                ("@bu", rootId), ("@now", now), ("@by", creator));
         }
     }
 

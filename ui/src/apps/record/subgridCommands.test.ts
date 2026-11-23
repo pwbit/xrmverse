@@ -8,9 +8,16 @@ const manyToMany = { schemaName: 'xv_project_tag', entity1: 'xv_project', entity
 describe('subgridCommands', () => {
   it('privileges_by_name', () => {
     const held = new Set(['prvCreatexv_Task', 'prvAppendxv_Task', 'prvAppendToxv_Project']);
-    expect(subgridCommandsAllowed(held, 'xv_Task', 'xv_Project')).toEqual({ canNew: true, canAddExisting: true });
-    expect(subgridCommandsAllowed(new Set(['prvAppendxv_Task']), 'xv_Task', 'xv_Project')).toEqual({ canNew: false, canAddExisting: false });
-    expect(subgridCommandsAllowed(held, undefined, 'xv_Project')).toEqual({ canNew: false, canAddExisting: false });
+    expect(subgridCommandsAllowed(held, { schemaName: 'xv_Task' }, { schemaName: 'xv_Project' })).toEqual({ canNew: true, canAddExisting: true });
+    expect(subgridCommandsAllowed(new Set(['prvAppendxv_Task']), { schemaName: 'xv_Task' }, { schemaName: 'xv_Project' })).toEqual({ canNew: false, canAddExisting: false });
+    expect(subgridCommandsAllowed(held, {}, { schemaName: 'xv_Project' })).toEqual({ canNew: false, canAddExisting: false });
+  });
+
+  it('an activity child or parent is met by the shared activity privileges (#196)', () => {
+    const held = new Set(['prvCreateActivity', 'prvAppendActivity', 'prvAppendToActivity']);
+    expect(subgridCommandsAllowed(held, { schemaName: 'Email', isActivity: true }, { schemaName: 'Account', isActivity: false })).toEqual({ canNew: true, canAddExisting: false });
+    expect(subgridCommandsAllowed(held, { schemaName: 'Email', isActivity: true }, { schemaName: 'Email', isActivity: true })).toEqual({ canNew: true, canAddExisting: true });
+    expect(subgridCommandsAllowed(new Set(['prvReadActivity']), { schemaName: 'Email', isActivity: true }, { schemaName: 'Account' })).toEqual({ canNew: false, canAddExisting: false });
   });
 
   it('new_sets_the_lookup_or_associates_from_the_new_rows_side', () => {

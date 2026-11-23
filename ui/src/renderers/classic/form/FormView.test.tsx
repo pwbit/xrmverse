@@ -89,6 +89,30 @@ describe('FormView layout', () => {
     expect(top).toHaveAttribute('data-label-position', 'top');
   });
 
+  it('a cell without its label takes the full width in a left-label section (no label track)', async () => {
+    const form = formOf([
+      tab('main', [
+        {
+          width: '100%',
+          sections: [
+            section([[field('xv_name')], [field('xv_note', { showLabel: false })]], { name: 'a' }),
+            section([[field('xv_code')]], { name: 'b', labelPosition: 'top' }),
+          ],
+        },
+      ]),
+    ]);
+    renderForm(form, contextOf([name, code, attr('xv_note', { displayName: 'Note' })], RECORD));
+    const cellOf = (label: string) => screen.getByLabelText(label).closest('[data-testid="form-cell"]')!;
+    await screen.findByLabelText('xv_name label');
+    const classes = (el: Element) => new Set(el.className.split(/\s+/).filter(Boolean));
+    const left = classes(cellOf('xv_name label'));
+    const top = classes(cellOf('xv_code label'));
+    const leftOnly = [...left].filter((c) => !top.has(c));
+    expect(leftOnly.length).toBeGreaterThan(0);
+    const hidden = classes(cellOf('xv_note label'));
+    expect(leftOnly.filter((c) => hidden.has(c))).toEqual([]);
+  });
+
   it('hidden_tab_section_cell_not_rendered', async () => {
     const hiddenSection = section([[field('xv_note')]], { name: 'h', visible: false });
     const form = formOf([
@@ -500,5 +524,53 @@ describe('FormView party lists and email (plan 4.1b, task 9)', () => {
     });
     expect(await screen.findByText('the banner')).toBeInTheDocument();
     expect(screen.getByRole('complementary', { name: 'side' })).toBeInTheDocument();
+  });
+});
+
+describe('FormView email layout (aside, memo height)', () => {
+  const body = attr('xv_body', { kind: 'memo', displayName: 'Body' });
+  const aside = { formView: { aside: <div data-testid="aside" /> } };
+
+  it('an aside goes at the top of the last column of a two-column tab', async () => {
+    const form = formOf([
+      tab('general', [
+        { width: '66%', sections: [section([[field('xv_name')]], { name: 'message' })] },
+        { width: '34%', sections: [section([[field('xv_code')]], { name: 'details' })] },
+      ]),
+    ]);
+    const { container } = renderForm(form, contextOf([name, code], RECORD), aside);
+    await screen.findByLabelText('xv_name label');
+    const columns = container.querySelectorAll('[data-form-column]');
+    expect(columns).toHaveLength(2);
+    const last = columns[1] as HTMLElement;
+    const node = within(last).getByTestId('aside');
+    expect(within(columns[0] as HTMLElement).queryByTestId('aside')).toBeNull();
+    expect(last.firstElementChild!.contains(node)).toBe(true);
+    // Wrapped with a section's vertical margins, so it lines up with the first section of the other column.
+    expect(last.firstElementChild).toHaveAttribute('data-form-lead');
+    expect(node.compareDocumentPosition(within(last).getByLabelText('xv_code label')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // No separate aside grid: the body holds the tab only (plus the footer strip).
+    expect(container.querySelectorAll('[data-testid="aside"]')).toHaveLength(1);
+    expect((container.querySelector('[data-form-body]') as HTMLElement).className).not.toMatch(/withAside/);
+  });
+
+  it('an aside stays beside the body of a one-column tab', async () => {
+    const { container } = renderForm(simpleForm([field('xv_name')]), contextOf([name], RECORD), aside);
+    await screen.findByLabelText('xv_name label');
+    expect(within(container.querySelector('[data-form-column]') as HTMLElement).queryByTestId('aside')).toBeNull();
+    const asideNode = screen.getByTestId('aside');
+    const grid = container.querySelector('[data-form-body]') as HTMLElement;
+    expect(grid.children).toHaveLength(2);
+    expect(grid.children[1]!.contains(asideNode)).toBe(true);
+  });
+
+  it('a memo cell with rowspan 12 shows a 24-row text area', async () => {
+    renderForm(simpleForm([field('xv_body', { rowSpan: 12 })]), contextOf([body], { ...RECORD, xv_body: 'hi' }));
+    expect(await screen.findByLabelText('xv_body label')).toHaveAttribute('rows', '24');
+  });
+
+  it('a memo cell without rowspan keeps the default text area', async () => {
+    renderForm(simpleForm([field('xv_body')]), contextOf([body], { ...RECORD, xv_body: 'hi' }));
+    expect(await screen.findByLabelText('xv_body label')).not.toHaveAttribute('rows');
   });
 });

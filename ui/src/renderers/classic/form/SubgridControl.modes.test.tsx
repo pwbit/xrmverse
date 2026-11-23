@@ -226,7 +226,8 @@ describe('SubgridControl view modes', () => {
     );
     await screen.findByRole('list', { name: 'Active' });
     expect(fetches.filter((f) => f.getAttribute('count') === '250')).toHaveLength(1);
-    await userEvent.click(await screen.findByRole('button', { name: /Add Existing/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /commands$/ }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: /Add Existing/ }));
     const dialog = await screen.findByRole('dialog');
     await userEvent.click(await within(dialog).findByRole('option', { name: 'Grace Hopper' }));
     await userEvent.click(within(dialog).getByRole('button', { name: 'Add' }));

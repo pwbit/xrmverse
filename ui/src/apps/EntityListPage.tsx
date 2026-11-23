@@ -168,22 +168,23 @@ export function EntityListPage({ appId, etn, viewId, title }: EntityListPageProp
 
   // The user holds `prvCreate{SchemaName}` on the table (`RetrieveUserPrivileges`); the SchemaName comes with the table's setup.
   const schemaName = setup.status === 'ready' ? setup.tables[etn]?.schemaName : undefined;
+  const isActivity = setup.status === 'ready' ? setup.tables[etn]?.isActivity : undefined;
   const [rights, setRights] = useState({ create: false, delete: false });
   const showNew = rights.create;
   useEffect(() => {
     if (!api) return;
     let cancelled = false;
     setRights({ create: false, delete: false });
-    if (!schemaName) return;
+    if (!schemaName && !isActivity) return;
     // Without the answer New and Delete stay hidden, as they do without the privilege.
-    tableRights(api, userId, { schemaName }).then(
+    tableRights(api, userId, { schemaName, isActivity }).then(
       (held) => !cancelled && setRights(held),
       () => undefined,
     );
     return () => {
       cancelled = true;
     };
-  }, [api, userId, schemaName]);
+  }, [api, userId, schemaName, isActivity]);
 
   // The table's states and ownership (the view's record commands, ruling W8): without them the bar shows New only.
   const [meta, setMeta] = useState<{ etn: string; entity?: EntityMeta }>({ etn });

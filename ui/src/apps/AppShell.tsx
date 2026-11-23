@@ -64,12 +64,12 @@ async function userPrivileges(api: XrmApi, userId: string): Promise<Set<string>>
   return new Set(result.RolePrivileges.map((p) => p.PrivilegeName));
 }
 
-/** Logical name (lower case) to SchemaName, for `prvRead{SchemaName}`. */
-async function entitySchemaNames(api: XrmApi): Promise<Record<string, string>> {
-  const result = await api.get<{ value: { LogicalName: string; SchemaName: string }[] }>(
-    'EntityDefinitions?$select=LogicalName,SchemaName',
+/** Logical name (lower case) to SchemaName and IsActivity, for `prv{Verb}{SchemaName}` (`prv{Verb}Activity` for an activity). */
+async function entityTables(api: XrmApi): Promise<Record<string, { schemaName: string; isActivity: boolean }>> {
+  const result = await api.get<{ value: { LogicalName: string; SchemaName: string; IsActivity?: boolean | null }[] }>(
+    'EntityDefinitions?$select=LogicalName,SchemaName,IsActivity',
   );
-  return Object.fromEntries(result.value.map((e) => [e.LogicalName.toLowerCase(), e.SchemaName]));
+  return Object.fromEntries(result.value.map((e) => [e.LogicalName.toLowerCase(), { schemaName: e.SchemaName, isActivity: e.IsActivity === true }]));
 }
 
 /** The app (when the user may open it) and its trimmed sitemap; `undefined` for a missing or forbidden app. */
@@ -77,13 +77,13 @@ async function loadApp(api: XrmApi, appId: string, userId: string): Promise<Load
   const app = (await knownApps(api)).find((a) => a.id.toLowerCase() === appId.toLowerCase());
   if (!app) return undefined;
   if (!app.siteMapId) return { app, siteMap: { areas: [] } };
-  const [row, privileges, schemaNames] = await Promise.all([
+  const [row, privileges, tables] = await Promise.all([
     api.get<{ sitemapxml?: string | null }>(`sitemaps(${app.siteMapId})?$select=sitemapxml`),
     userPrivileges(api, userId),
-    entitySchemaNames(api),
+    entityTables(api),
   ]);
   const siteMap = row.sitemapxml ? parseSiteMap(row.sitemapxml) : { areas: [] };
-  return { app, siteMap: trimSiteMap(siteMap, privileges, schemaNames) };
+  return { app, siteMap: trimSiteMap(siteMap, privileges, tables) };
 }
 
 const useStyles = makeStyles({

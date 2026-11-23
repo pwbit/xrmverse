@@ -113,6 +113,8 @@ export function FieldControl({ cell, control, env, forceReadOnly = false }: { ce
       context={ctx.fieldContext}
       preSearch={env.overlay?.preSearch(cell)}
       entityTypes={own.entityTypes}
+      // A memo cell spanning rows is taller: two lines per row.
+      rows={column.kind === 'memo' && cell.rowSpan > 1 ? cell.rowSpan * 2 : undefined}
     />
   );
   const standard = column.secured ? <SecuredField>{editor}</SecuredField> : editor;

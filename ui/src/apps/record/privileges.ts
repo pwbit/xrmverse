@@ -9,6 +9,9 @@ export async function heldPrivileges(api: XrmApi): Promise<Set<string>> {
 
 export type PrivilegeVerb = 'Create' | 'Read' | 'Write' | 'Delete' | 'Append' | 'AppendTo' | 'Assign' | 'Share';
 
+/** Every privilege verb, in the casing of the privilege names. */
+export const PRIVILEGE_VERBS: readonly PrivilegeVerb[] = ['Create', 'Read', 'Write', 'Delete', 'Append', 'AppendTo', 'Assign', 'Share'];
+
 /**
  * The user holds `prv{verb}` on `table`: `prv{verb}{SchemaName}`, or for an activity table the shared `prv{verb}Activity`
  * (the server names the privileges of the pointer and of every activity table with the stem `Activity`, as Dataverse does

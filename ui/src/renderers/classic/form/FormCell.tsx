@@ -1,5 +1,5 @@
 import { makeStyles, MessageBar, MessageBarBody, Text, tokens } from '@fluentui/react-components';
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import type { Cell, Control } from '../../../model/form';
 import { labelFor } from '../../../parsers/formXml';
 import { t } from '../../../shell/i18n/t';
@@ -46,11 +46,12 @@ const useStyles = makeStyles({
     },
   },
   controlLabel: { display: 'block', marginBlockEnd: tokens.spacingVerticalXXS },
-  // A coloured cell: the colour reaches a little past the cell, so its content stays aligned with its neighbours.
-  coloured: {
-    padding: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalS}`,
-    margin: `calc(-1 * ${tokens.spacingVerticalXS}) calc(-1 * ${tokens.spacingHorizontalS})`,
-    borderRadius: tokens.borderRadiusMedium,
+  // A coloured field: the colour fills the control's box (the gray input), never the cell, so the label and the cell stay as they are.
+  // The selectors rely on Fluent's static root class names (see `left` above); a custom box adds `data-field-box`.
+  fieldFill: {
+    '& .fui-Input, & .fui-Textarea, & .fui-Combobox, & .fui-Dropdown, & .fui-SpinButton, & .fui-Select__select, & [data-field-box]': {
+      backgroundColor: 'var(--xrmverse-field-fill)',
+    },
   },
 });
 
@@ -65,7 +66,7 @@ export interface FormCellProps {
   readOnly?: boolean;
   /** Draws the control and its label in place of the form's controls. */
   renderControl?: RenderControl;
-  /** The cell's own background (a CSS colour, the modern form's overlay); absent, the section's shows through. */
+  /** The colour of the field's control box (a CSS colour, the modern form's overlay); absent, the control keeps its own fill; the cell itself is never painted. */
   background?: string;
 }
 
@@ -82,7 +83,8 @@ export function FormCell({ cell, env, labelPosition, readOnly = false, renderCon
   }, [focus]);
   if (!isShown(env, cell)) return null;
   const control = cell.control;
-  const classes = [styles.cell, styles[labelPosition], !cell.showLabel && styles.labelHidden, background && styles.coloured].filter(Boolean).join(' ');
+  // A cell that hides its label gives the control the whole width: no label track beside it, nothing above or below it.
+  const classes = [styles.cell, cell.showLabel ? styles[labelPosition] : styles.labelHidden, background && styles.fieldFill].filter(Boolean).join(' ');
   const label = own?.label ?? labelFor(cell.labels, env.lcid);
   return (
     <div
@@ -91,8 +93,8 @@ export function FormCell({ cell, env, labelPosition, readOnly = false, renderCon
       data-testid="form-cell"
       data-label-position={labelPosition}
       data-label-hidden={cell.showLabel ? undefined : 'true'}
-      data-background={background ? 'true' : undefined}
-      style={{ gridColumn: `span ${cell.colSpan}`, ...(background ? { backgroundColor: background } : {}) }}
+      data-field-fill={background ? 'true' : undefined}
+      style={{ gridColumn: `span ${cell.colSpan}`, ...(background ? ({ '--xrmverse-field-fill': background } as CSSProperties) : {}) }}
     >
       {!control ? null : renderControl ? (
         renderControl(cell, control, cell.showLabel ? label : undefined)

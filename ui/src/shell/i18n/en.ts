@@ -190,6 +190,7 @@ export const en = {
   'record.related.notThisTable': "the relationship {name} does not relate this table's records",
   'record.related.unsupported': '{label} is not available here: only related tables are shown, not links to other pages.',
   'record.subgrid.commands': '{table} commands',
+  'record.subgrid.commandsMenu': 'Commands',
   'record.subgrid.new': 'New {table}',
   'record.subgrid.addExisting': 'Add Existing {table}',
   'record.subgrid.addExistingTitle': 'Add existing {table}',

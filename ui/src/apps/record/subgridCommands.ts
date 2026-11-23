@@ -1,6 +1,7 @@
 import type { XrmApi } from '../../shell/api/client';
 import { XrmError } from '../../shell/api/errors';
 import type { RelationshipMeta } from './subgridQuery';
+import { holds } from './privileges';
 
 /** The parent record of a subgrid: what its New and Add existing commands relate the rows to. */
 export interface SubgridParent {
@@ -20,16 +21,19 @@ export interface SubgridChild {
 /** Learn, "Associate and disassociate table rows": an association that already exists answers "Cannot insert duplicate key". */
 const DUPLICATE_RECORD = '0x80040237';
 
+type PrivilegeTable = { schemaName?: string; isActivity?: boolean };
+
 /**
  * The privileges the subgrid commands need (#118, ruling R5): New, `prvCreate` on the related table; Add existing, `prvAppend`
- * on the related table and `prvAppendTo` on the parent. Each is checked by name (`RetrieveUserPrivileges`); the server checks
- * the depth when the row is written.
+ * on the related table and `prvAppendTo` on the parent. Each is checked by name (`RetrieveUserPrivileges`), an activity table
+ * by the shared `prv{Verb}Activity` (see `holds`, #196); the server checks the depth when the row is written.
  */
-export function subgridCommandsAllowed(held: Set<string>, childSchema: string | undefined, parentSchema: string | undefined) {
-  if (!childSchema || !parentSchema) return { canNew: false, canAddExisting: false };
+export function subgridCommandsAllowed(held: ReadonlySet<string>, child: PrivilegeTable, parent: PrivilegeTable) {
+  const known = (t: PrivilegeTable) => !!t.schemaName || t.isActivity === true;
+  if (!known(child) || !known(parent)) return { canNew: false, canAddExisting: false };
   return {
-    canNew: held.has(`prvCreate${childSchema}`),
-    canAddExisting: held.has(`prvAppend${childSchema}`) && held.has(`prvAppendTo${parentSchema}`),
+    canNew: holds(held, 'Create', child),
+    canAddExisting: holds(held, 'Append', child) && holds(held, 'AppendTo', parent),
   };
 }
 

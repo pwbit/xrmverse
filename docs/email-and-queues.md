@@ -57,6 +57,21 @@ This page covers queues (item 4.1a) and outgoing email (item 4.1b). Receiving em
 | Send an email | `SendEmail` with `IssueSend` true, or **Send** on the email form | [Sending](#sending) |
 | Allow sending from queues only | `xrmverse_EmailSendFrom` = `queueOnly` | [Sender policy](#sender-policy-xrmverse_emailsendfrom) |
 
+### Default forms and views
+
+Every organization has a main form for `email`, `queue`, `queueitem`, `task`, `phonecall` and `appointment`, so a
+model-driven app can create and open these records without a solution that brings forms. The email form shows From, To,
+Cc, Bcc, Subject and Regarding, then the body, with Attachments and Details (owner, priority, due date) on the right; the
+queue form shows the queue's settings and its active items in a subgrid; the queue item form shows the item, its queue,
+who works it and since when. The task, phone call and appointment forms keep the activity's own fields on the left and
+Details on the right. The views are **Open Emails** (the default), **All Emails**, **Sent Emails**, **Received Emails**,
+**All Queues**, and **Open** (the default) and **All** for tasks, phone calls and appointments. Each form and view is
+inserted only when its id is missing, so one you changed is never overwritten. A new organization gets them when it is
+created; an existing one gets the missing ones at the server's next start, and the forms and views it already has are
+left as they are. A seeded form or view is the default only when the table has no default main form (or default public
+view) yet, so an organization's own default stays the default. An app that names its own form for one of
+these tables opens that form instead.
+
 ## Queues
 
 A queue is owned by a user or a team and has a name (up to 200 characters), a visibility (`queueviewtype`: 0 Public, 1
@@ -458,6 +473,9 @@ None of these is silent: each is refused with an explicit error or stated here.
 - **Migration.** Queues, queue items and memberships are not part of a migration from Dataverse yet (see
   [Migrating from Dataverse](migration.md)).
 - **Not modelled.** Routing rules, and the Unified Routing and Omnichannel tables.
+- **Queue form without members.** The default queue form lists the queue's items but not its members (there is no seeded
+  view of users to list them); manage members with `xrmd queue member` or `AddPrincipalToQueue` (see
+  [Members and privacy](#members-and-privacy)).
 - **No incoming email.** Receiving email, and linking replies through tracking tokens, are roadmap item 4.1c.
 - **Secrets stored unencrypted.** Profile and mailbox passwords and the client secret are kept unencrypted in the
   organization database (never returned by a read), as the webhook authentication value is (#86).

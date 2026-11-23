@@ -34,6 +34,8 @@ export interface FieldProps {
   preSearch?: (target: string) => string[];
   /** Lookups only, optional: the tables the lookup offers, when a form script narrowed them. */
   entityTypes?: string[];
+  /** Memo only, optional: the visible lines of the text area (a form cell's rowspan). */
+  rows?: number;
 }
 
 /** The options an attribute offers: its own, else those of its global choice. */

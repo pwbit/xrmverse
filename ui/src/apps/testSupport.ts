@@ -92,6 +92,8 @@ export interface MockTable {
   primaryName?: string;
   /** The table's display name (1033). */
   displayName?: string;
+  /** `IsActivity`. */
+  isActivity?: boolean;
 }
 
 /** The ids of the seeded setting definitions (#129, the observed well-known ids). */
@@ -265,6 +267,7 @@ export function mockApps({
             EntitySetName: meta.entitySetName,
             PrimaryIdAttribute: meta.primaryId,
             PrimaryNameAttribute: meta.primaryName ?? null,
+            IsActivity: meta.isActivity ?? false,
             DisplayName: meta.displayName ? { LocalizedLabels: [{ Label: meta.displayName, LanguageCode: 1033 }] } : null,
           });
         return list(

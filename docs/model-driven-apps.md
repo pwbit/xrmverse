@@ -116,7 +116,9 @@ app is protected by the user's roles, as in Dataverse.
 
 The site map comes from the app's `sitemap` row (`sitemapxml`); the user's privileges come from `RetrieveUserPrivileges`.
 
-- A subarea with an `Entity` is shown when the user holds `prvRead{SchemaName}` of that table at any depth.
+- A subarea with an `Entity` is shown when the user holds `prvRead{SchemaName}` of that table at any depth. For an
+  activity table (`email`, `task`, `phonecall`, `appointment` and the other tables with `IsActivity`), the shared
+  `prvReadActivity` is enough, as in Dataverse.
 - Every `<Privilege Entity="…" Privilege="Read,Write"/>` child of a subarea must hold too (`prvRead…` and `prvWrite…`).
 - A subarea of a table the organization does not have is hidden.
 - A group, or an area, left empty is hidden.
@@ -447,8 +449,8 @@ another.
 
 - The columns are columns of the subgrid's **target table** (here `contact`), checked as for a view: a column that does
   not fit gives a console warning and its mode is not offered.
-- The **Grid**, **Board**, **Calendar** and **Cards** tabs sit at the end of the subgrid's title line, before **New** and
-  **Add Existing**. The subgrid opens in the entry's `default` mode; the mode is not in the URL and is not remembered: the
+- The **Grid**, **Board**, **Calendar** and **Cards** tabs sit at the end of the subgrid's title line, before the
+  **Commands** drop-down (**New** and **Add Existing**). The subgrid opens in the entry's `default` mode; the mode is not in the URL and is not remembered: the
   **Refresh** command and reopening the form go back to the default mode.
 - Every mode lists the same records: the subgrid's view, its relationship to the form's record and the user's privileges.
   The grid and the cards keep the subgrid's paging (`RecordsPerPage`); the board and the calendar read at most 250 records
@@ -537,9 +539,10 @@ commands are the same. Without the key the timeline is unchanged.
 #### Background colours (`background`)
 
 Highlights sections and fields with a background colour. `sections` colours a section by its `name`: the whole
-section card, so its fields show the same colour. `fields` colours the cell of a field (its label and its control) by the
-column's logical name, in every section of the form; a field's own colour wins over its section's. The input boxes keep
-their normal background, so values stay easy to read. A colour is one of the names `yellow`, `orange`, `red`, `pink`,
+section card, so its fields show the same colour. `fields` colours a field by the column's logical name, in every section
+of the form: the colour fills the field's control box (the input, the drop-down, the lookup or party list box), while its
+label stays on the section's background. Multiple-choice (check box group), file and image fields have no such box and are
+not coloured. A colour is one of the names `yellow`, `orange`, `red`, `pink`,
 `purple`, `blue`, `teal`, `green` and `gray`, which follow the light or dark theme (a soft tint in light, a deep shade
 in dark), or a free colour as `#rrggbb`, which is the same in both themes (pick one that reads well in both). An unknown
 colour, or a name of a section or column the form does not have, is ignored (the first with a console warning). The
@@ -555,7 +558,8 @@ The classic look never reads `forms`: every form shows its normal tabs.
 
 - **Not scheduled:** the wizard on an existing record, step-change events for scripts, grid placement of the header, the
   footer or single fields, timeline options per control, background colours of tabs, the header, the footer and
-  non-field cells (subgrids, quick views, web resources), and changing a colour from a script. The layouts are edited in the web admin's form designer
+  non-field cells (subgrids, quick views, web resources), a field colour on multiple-choice, file and image fields (they
+  have no control box to fill), and changing a colour from a script. The layouts are edited in the web admin's form designer
   (see [Forms](web-admin.md#forms)).
 
 
@@ -663,9 +667,10 @@ Forms are edited in the web admin's form designer; see [Forms](web-admin.md#form
   columns (a cell spans `colspan` of them) and its label position. `columns` is either a count of equal columns (`"2"`)
   or one digit per column giving its relative width (`"111"` is three equal columns, `"12"` two columns of one third and
   two thirds), as dashboards and many main forms write it. Invisible sections and cells are not drawn, and
-  a cell with no control keeps its space. `rowspan` is not drawn.
+  a cell with no control keeps its space. A multi-line text field's `rowspan` sets its height (two lines of text per
+  row), and a web resource's sets its height in rows; other controls ignore it.
 - A cell's label is its label in the user's language, else 1033, else the column's display label; `showlabel="false"`
-  hides it.
+  hides it, and the control then takes the cell's full width (the label's space is not kept).
 - A section's `celllabelposition` places its field labels: `Left` (the default) beside the field, `Top` above it. The
   form designer sets it per section.
 - Editable fields are drawn with a soft gray fill and no border (Fluent's `filled-darker` appearance, which follows the
@@ -726,9 +731,10 @@ column, is drawn with the standard control).
 - A form subgrid with `ChartGridMode` `Chart` and a `VisualizationId` shows the notice "This subgrid's chart is not shown on
   a form in this version; its records are listed instead." above its grid (see the
   [known limits](#known-limits-of-dashboards-and-charts-ui-1f)).
-- A subgrid (and a Related tab item) has **New {table}** and **Add Existing {table}** in a command bar at the end of the
-  title's line, styled as the form's command bar (#118):
-  - **New** needs `prvCreate` on the related table. It opens the related table's create form. For a one-to-many, the
+- A subgrid (and a Related tab item) has a **Commands** drop-down at the end of the title's line, styled as the form's
+  command bar, whose menu holds **New {table}** and **Add Existing {table}**, each with its icon (#118):
+  - **New** needs `prvCreate` on the related table (for an activity table, the shared `prvCreateActivity` is enough; the
+    list's **New** follows the same rule). It opens the related table's create form. For a one-to-many, the
     relationship's lookup is set to this record through `extraqs` (`{lookup}`, `{lookup}name`, `{lookup}type`). For a
     many-to-many, the new row is associated with this record after its first save. After that save, the form comes back to
     this record and the subgrid shows the new row. For a one-to-many, the create form also asks
@@ -738,7 +744,8 @@ column, is drawn with the standard control).
     is read from its table. If the call fails, the form says "Mapped fields from the parent could not be filled: {reason}"
     and stays usable. If the relationship's lookup is not on the related form, the parameter is reported as ignored, as any
     form parameter.
-  - **Add Existing** needs `prvAppend` on the related table and `prvAppendTo` on this table. It opens a search of the
+  - **Add Existing** needs `prvAppend` on the related table and `prvAppendTo` on this table (`prvAppendActivity` and
+    `prvAppendToActivity` for an activity table). It opens a search of the
     related table, where the user picks one or more rows:
     - for a one-to-many, the search lists rows of no record or of another record, and each chosen row's lookup is
       PATCHed (`{nav}@odata.bind`);
@@ -778,8 +785,8 @@ Dataverse opens a lookup's record on the full page.
 ### Email form
 
 Roadmap item 4.1b adds what an email form needs to write and send an email (see
-[Email and queues](email-and-queues.md#outgoing-email)). The system activity tables still have no seeded form, so the app's
-solution brings the email form.
+[Email and queues](email-and-queues.md#outgoing-email)). The server seeds a default email form (see
+[Default forms and views](email-and-queues.md#default-forms-and-views)); an app's solution can bring its own instead.
 
 - **Party lists.** Every party list column (`from`, `to`, `cc`, `bcc`, `requiredattendees` and the others) is an editable
   list of chips, on classic and modern forms. Typing searches the column's tables by name or email address; an address that
@@ -794,9 +801,11 @@ solution brings the email form.
   refusal of the server shows as a form notification.
 - **Send status.** A banner shows Pending Send (and follows the send until it ends, then reloads the form), Sent (with
   `senton`, the sender and the `Message-ID`) or Failed (with the reason of the email's newest send job).
-- **Attachments.** A section beside the form lists the attachments with their size, with **Preview**, **Download** and
+- **Attachments.** A section lists the attachments with their size, with **Preview**, **Download** and
   **Delete**, and adds files by browsing or by dropping them. A file over `maxuploadfilesize` or with a blocked extension is
-  refused before it is sent. The section is hidden on a new email and read-only once the email is sent.
+  refused before it is sent. The section is hidden on a new email and read-only once the email is sent. On a tab with
+  two or more columns (the seeded email form) it sits at the top of the last column, above that column's sections;
+  otherwise it sits beside the whole form.
 - **Preview** opens in a side surface with the name, the size, "n of m", previous and next, and **Download**. It shows PDF
   files, images and plain text only. HTML, SVG and XML files, and any other type, are never rendered: they show "No preview"
   with **Download**. A file named `.pdf` that does not start like a PDF shows "No preview" too.
@@ -1751,7 +1760,7 @@ None of these is silent: each is refused with an explicit error or stated here.
 - **Header edited inline**, not in a flyout.
 - **The control follows the column's metadata**, so a classid asking for another presentation of a plain column is
   ignored.
-- **`rowspan` is not drawn.**
+- **`rowspan` sets only the height of multi-line text fields and web resources**; other cells ignore it.
 - **Create-time field security is not detectable**: a column the user may not create is not marked read-only on the
   create form. A secured column the server leaves out of the read shows as "no access".
 - **Field PCF controls run since UI-1d** (see [Known limits of PCF controls](#known-limits-of-pcf-controls-ui-1d)).
@@ -2000,11 +2009,11 @@ None of these is silent: each is refused with an explicit error or stated here.
 - **Email reply, reply all and forward** are not offered; an email is written and sent on its form (see
   [Email form](#email-form)).
 - **Notes use a plain multi-line editor**; the rich text editor and its configuration URL are not supported.
-- **The system activity tables have no form.** xrmverse seeds no main form for `task`, `phonecall`, `appointment`,
-  `email` and the other system activity tables, and an app's solution rarely brings one. So + offers them, but the new
-  activity opens "No form of this table is available in this app." until a main form of the table exists (from a
-  solution, or a `systemform` row created through the Web API). OpenProject365 brings none. Custom activity tables use
-  their own forms.
+- **Seeded forms for some activity tables only.** xrmverse seeds a default main form for `email`, `task`, `phonecall`
+  and `appointment` (see [Default forms and views](email-and-queues.md#default-forms-and-views)). The other system
+  activity tables (fax, letter, recurring appointment and the rest) have none, so + offers them but the new activity
+  opens "No form of this table is available in this app." until a main form of the table exists (from a solution, or a
+  `systemform` row created through the Web API). Custom activity tables use their own forms.
 - **No quick create form**: "create an activity" opens the activity's main form (as for any New, see
   [Known limits of forms](#known-limits-of-forms-ui-1b)).
 - **The timeline's settings in FormXml are not read.** Learn documents them in the form designer but not how FormXml
