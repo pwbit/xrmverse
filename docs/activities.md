@@ -248,6 +248,10 @@ POST /api/data/v9.2/emails
 GET /api/data/v9.2/emails(<id>)?$select=subject&$expand=email_activity_parties($select=participationtypemask,addressused,_partyid_value)
 ```
 
+Binding names on an email: the regarding binds per target table with the activity's name as a suffix
+(`regardingobjectid_account_email@odata.bind`, `regardingobjectid_xrmv_case_email@odata.bind` for a custom table), and the
+parent activity binds without one (`parentactivityid@odata.bind`, not `parentactivityid_email`).
+
 Each item takes `participationtypemask` (required), one `partyid_{table}@odata.bind` and `addressused`; any other property
 is a 400. Inside the `$expand`, only `$select` is accepted. `$select` of a party list column (`$select=to`) is a 400. Any
 other collection-valued navigation in a POST or PATCH body (a generic deep insert) is a 400.

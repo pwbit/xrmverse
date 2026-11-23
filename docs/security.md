@@ -518,8 +518,8 @@ on every table that has a hierarchical relationship (`account` through `account_
 - The Web API query functions (`Microsoft.Dynamics.CRM.Under` and the others) are not supported in `$filter`, like every
   query function; FetchXML (`?fetchXml=`) and `QueryExpression` work (H9).
 - `rowaggregate="CountChildren"` is refused with 400 (H8).
-- The hierarchy visualization and `hierarchyrule` are UI work of phase 3, and `RetrievePrincipalAccess` is not implemented
-  (see Deferred), so there is nothing that reports access gained through the hierarchy.
+- The hierarchy visualization and `hierarchyrule` are not modelled. `RetrievePrincipalAccess` is available (see
+  [Model-driven apps](model-driven-apps.md)): it reports the rights the security check grants on a record.
 - **Field-level security does not follow the hierarchy.** A secured column is read and written according to the caller's
   own field security profiles and field shares (and, under impersonation, the AND of both users), never the reach, the
   profiles or the shares of the reports. The field-share rules check Read on the record, and that check includes the
@@ -570,9 +570,9 @@ on every table that has a hierarchical relationship (`account` through `account_
 - Plan 6: `xrmd org create` and the `xrmd user/role` commands.
 - Phase 2: hierarchy security, field-level security and access team templates are done: see
   [Hierarchy security](#hierarchy-security), [Field-level security](field-security.md) and [Access teams](#access-teams).
-- Out of the MVP: `RetrievePrincipalAccess`, `RetrieveUserPrivileges`, `RetrieveRolePrivilegesRole`,
-  `RetrieveSharedPrincipalsAndAccess`, `AddMembersTeam`/`RemoveMembersTeam`, `SetBusinessSystemUser`,
-  default team per BU, cascade of share/assign to child records.
+- Out of the MVP: `RetrieveRolePrivilegesRole`, `AddMembersTeam`/`RemoveMembersTeam`, `SetBusinessSystemUser`,
+  default team per BU, cascade of share/assign to child records. `RetrievePrincipalAccess`, `RetrieveUserPrivileges` and
+  `RetrieveSharedPrincipalsAndAccess` came with the model-driven apps (UI-1b).
 
 ## See also
 

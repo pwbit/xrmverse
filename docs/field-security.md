@@ -19,7 +19,8 @@ This page says what xrmverse does and where it stops. Whether each detail matche
 | Securing a column | `IsSecured`, profiles with permissions, field sharing | Same |
 | Who bypasses it | System Administrators | Same |
 | Masking | Not supported: `canreadunmasked` other than 0 and `UnMaskedData` true are refused | **Narrower** |
-| `RetrieveUserPrivileges`, `RetrievePrincipalAccess`, `RetrieveAttributePrivileges` | Not implemented | **Narrower** |
+| `RetrieveUserPrivileges`, `RetrievePrincipalAccess` | Available; they report table privileges and record rights, not column permissions | **Narrower** |
+| `RetrieveAttributePrivileges` | Not implemented | **Narrower** |
 | Hierarchy security | Does not widen column access | See [Known limits](#known-limits) |
 | Verification | Type codes, securable columns and some codes not verified | **Unverified** where stated |
 
@@ -231,8 +232,8 @@ Each of these is either refused with an error or stated here; none is a silent d
 - **`Upsert`** applies the checks above: on a standard table through the Create or Update it turns into; on an elastic
   table the create check when it inserts, and the update check (including the columns it clears) when it replaces the row.
   See [Bulk operations](bulk-operations.md) and [Elastic tables](elastic-tables.md).
-- **Not implemented**: the `applicationuserprofile` relationship; `RetrieveUserPrivileges`, `RetrievePrincipalAccess`
-  and `RetrieveAttributePrivileges` (planned with the web UI work). The [SQL endpoint](sql-endpoint.md#columns) applies field
+- **Not implemented**: the `applicationuserprofile` relationship; `RetrieveAttributePrivileges`.
+  `RetrieveUserPrivileges` and `RetrievePrincipalAccess` exist but say nothing about secured columns. The [SQL endpoint](sql-endpoint.md#columns) applies field
   security: a secured column the user cannot read is `NULL`, and filtering on it is refused.
 - **Calculated and rollup columns** that read secured columns: see the Security sections of
   [Calculated columns](calculated-columns.md#security) and [Rollup columns](rollup-columns.md#security). **Formula columns**

@@ -138,6 +138,8 @@ external SQL Server and the single-instance guard. Notes about the generated fil
     address); `org add <name> --tds-port <port>` gives one organization its own. Other authentication modes, an
     organization without a host, ports 80 and 443 behind the generated proxy, and a port another organization uses are
     refused (exit 2).
+  - An organization name is 1 to 32 lowercase letters or digits, starting with a letter (`^[a-z][a-z0-9]{0,31}$`): no
+    hyphens or underscores, and not the name of a SQL Server system database. Another name is refused with exit 2.
   - With `--no-proxy`, `--tds-cert` and `--tds-key` are required (a PEM certificate covering every host and its
     unencrypted key, copied to `<dir>/certs/tds.crt` and `tds.key`); without `--no-proxy` or `--tds-port` they are refused. Behind your own proxy, `server up` and `server upgrade` exit 5 when `certs/tds.crt` or `certs/tds.key` is missing.
   - A long-running `tds-certs` service in the compose file copies each organization's certificate into `<dir>/tds/<org>/`

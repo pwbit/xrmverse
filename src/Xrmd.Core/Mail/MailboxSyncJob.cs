@@ -233,7 +233,7 @@ public sealed class MailboxSyncJob(IDbConnectionFactory factory, CoreOperations 
                 try
                 {
                     // A message received before processemailreceivedafter is not delivered (the listing filters by date already).
-                    if (item.ReceivedOn >= receiver.ReceivedAfter.Value)
+                    if (ReceivedInWindow(item.ReceivedOn, receiver.ReceivedAfter.Value))
                     {
                         message = await session.FetchAsync(item, ct);
                         if (message is not null)
@@ -492,6 +492,19 @@ public sealed class MailboxSyncJob(IDbConnectionFactory factory, CoreOperations 
         try { return a.GetExportedTypes().Any(t => typeof(DbConnection).IsAssignableFrom(t)); }
         catch (Exception) { return false; }
     });
+
+    /// <summary>
+    /// Whether a message received at <paramref name="receivedOn"/> is delivered for a mailbox that processes email received at
+    /// or after <paramref name="after"/>. Both are compared to the whole second: IMAP internal dates and Graph filters carry
+    /// whole seconds, while <c>processemailreceivedafter</c> is set to the time the first pass ran, so a message that arrived
+    /// in that same second is delivered.
+    /// </summary>
+    internal static bool ReceivedInWindow(DateTime receivedOn, DateTime after) =>
+        AsUtc(receivedOn) >= new DateTime(AsUtc(after).Ticks / TimeSpan.TicksPerSecond * TimeSpan.TicksPerSecond, DateTimeKind.Utc);
+
+    /// <summary>A stored or listed time (UTC, possibly with an unspecified kind) as UTC.</summary>
+    private static DateTime AsUtc(DateTime value) =>
+        value.Kind == DateTimeKind.Local ? value.ToUniversalTime() : DateTime.SpecifyKind(value, DateTimeKind.Utc);
 
     /// <summary>Any failure but the host stopping the job (which runs again from its data).</summary>
     private static bool IsTransient(Exception ex, CancellationToken ct) => !(ex is OperationCanceledException && ct.IsCancellationRequested);
