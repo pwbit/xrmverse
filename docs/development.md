@@ -97,6 +97,13 @@ The ServiceClient acceptance tests (`[Trait("Category", "Acceptance")]`) start K
 permission to open port 80 (root, or `CAP_NET_BIND_SERVICE` / `net.ipv4.ip_unprivileged_port_start=80` on
 Linux) and the port must be free. Where that is not possible, exclude them with the filter above.
 
+## SDK-free probe
+
+`tests/Xrmd.Integration.Tests/SdkFree/SdkFreeProbeTests.cs` starts a host in `Sdk:Mode` `none` and runs a fixed tour. Its results
+are compared with `tests/fixtures/sdk-free-baseline.json` (the steps that still need the SDK) and
+`tests/fixtures/sdk-free-assemblies.json`. A step that fails and is not in the baseline is a regression; a step in the baseline
+that now passes must be removed from it, so the lists only shrink. See [SDK-free servers](microsoft-sdk.md#sdk-free-servers).
+
 ## Tests on PostgreSQL
 
 The integration tests run on SQL Server by default. `XRMD_TEST_PROVIDER` chooses the engine of the run:

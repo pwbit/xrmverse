@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Http.Metadata;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Xrmd.Abstractions;
+using Xrmd.Abstractions.Sdk;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core;
 using Xrmd.Core.Errors;
@@ -57,6 +58,16 @@ public static class MigrationPackageEndpoints
         return admin;
     }
 
+    /// <summary>
+    /// Refuses (400 <c>FeatureNotAvailable</c>) a migration from Dataverse on an SDK-free server (plan S.2a): a package's records are
+    /// read with the Microsoft SDK. Called before anything is written: at the creation of a package and at the start of a run.
+    /// </summary>
+    internal static void DemandNotSdkFree(IServiceProvider services)
+    {
+        if (services.GetService<SdkModeInfo>()?.IsSdkFree == true)
+            throw new XrmdFaultException(ErrorCodes.FeatureNotAvailable, SdkFreeMessages.Migration, StatusCodes.Status400BadRequest);
+    }
+
     internal static XrmdFaultException BadRequest(string message) => XrmdFaultException.InvalidArgument(message);
 
     internal static XrmdFaultException Conflict(string message) => new(ErrorCodes.InvalidArgument, message, StatusCodes.Status409Conflict);
@@ -86,6 +97,7 @@ public static class MigrationPackageEndpoints
 
     private static async Task<IResult> CreateAsync(HttpContext context)
     {
+        DemandNotSdkFree(context.RequestServices);
         var caller = await context.RequestServices.GetRequiredService<CallerResolver>().ResolveAsync(context.RequestAborted);
         var id = await context.RequestServices.GetRequiredService<MigrationRunStore>().CreatePackageAsync(caller.UserId, context.RequestAborted);
         return Results.Json(new JsonObject { ["packageId"] = id.ToString() }, statusCode: StatusCodes.Status201Created);

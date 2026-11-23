@@ -82,6 +82,7 @@ public static partial class ComposeRenderer
         {
             Installation.ValidateOrgName(org.Name); // the name is pasted into YAML verbatim
             var sections = new HashSet<string> { sql };
+            if (!installation.IsSdkFree) sections.Add("SDK"); // the SDK folder is mounted only on a standard server
             if (installation.IsPostgres) sections.Add("PG"); // Storage:Provider
             // The .bak directory on the external SQL Server's host; PostgreSQL's backups are pg_dump's, in /var/lib/xrmd/backups (Q8).
             if (installation.ExternalSql && !installation.IsPostgres) sections.Add("EXTSQL");

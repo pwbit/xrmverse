@@ -4,6 +4,7 @@ using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using Microsoft.Xrm.Sdk;
 using Xrmd.Abstractions;
+using Xrmd.Abstractions.Sdk;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
@@ -33,8 +34,10 @@ namespace Xrmd.Pipeline.Registration;
 /// (<see cref="DemandNotEventHandlerAssociate"/>).</item>
 /// </list>
 /// An Update is checked on the record as it will be (<paramref name="existing"/> overlaid with the target).
+/// On an SDK-free server (plan S.2a) a Create or Update of a <c>pluginassembly</c> and a Create of a <c>plugintype</c> are refused
+/// (400 <c>FeatureNotAvailable</c>) before any other check: such a server cannot load a plug-in built on the Microsoft SDK.
 /// </summary>
-public sealed class RegistrationValidator(IMetadataStore store, CustomApiRegistry customApis, PluginAssemblyLoader loader)
+public sealed class RegistrationValidator(IMetadataStore store, CustomApiRegistry customApis, PluginAssemblyLoader loader, SdkModeInfo? sdkMode = null)
 {
     private const int PreImage = 0;
     private const int PostImage = 1;
@@ -57,7 +60,10 @@ public sealed class RegistrationValidator(IMetadataStore store, CustomApiRegistr
         ArgumentNullException.ThrowIfNull(entity);
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(s);
-        switch (entity.ToLowerInvariant())
+        var name = entity.ToLowerInvariant();
+        if (sdkMode?.IsSdkFree == true && (name == "pluginassembly" || name == "plugintype" && existing is null))
+            throw new XrmdFaultException(ErrorCodes.FeatureNotAvailable, SdkFreeMessages.PluginAssembly, 400);
+        switch (name)
         {
             case "pluginassembly":
                 ValidateAssembly(target, existing is null);

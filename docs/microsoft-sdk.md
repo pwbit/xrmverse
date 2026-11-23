@@ -108,10 +108,72 @@ when there is none.
 | Check | Reports |
 |---|---|
 | `xrmd sdk status` | Version, path, acceptance record; `workflowSdk` (the package and version, or `missing (run 'xrmd sdk install')`), `workflowVersion`, `workflowSha512` |
-| `GET /admin/health` | `sdkVersion`, and `workflowSdkVersion` (null without the workflow SDK) |
+| `GET /admin/health` | `sdkMode`, `sdkVersion` (null in mode `none`), and `workflowSdkVersion` (null without the workflow SDK) |
 | `xrmd server doctor` (`GET /admin/doctor`) | `sdk` check: an error, naming `xrmd sdk install`, when the loaded SDK is not the pinned one. `sdk-workflow` check: a warning, naming the file, the folder and `xrmd sdk install`, when the workflow SDK is missing or is not the pinned one |
+
+## SDK-free servers
+
+**Experimental.** An SDK-free server never loads the Microsoft SDK, so you install none. This release has the mode, the
+refusals and the tool that tracks what is left, but an SDK-free server does **not start yet**: the host exits with code 3
+and says which component still needs the SDK (see [Known limits](#known-limits)).
+
+### Introduction
+
+An SDK-free server is meant for apps that are born on xrmverse: they use the Web API, webhooks, service endpoints and
+workflows, and they do not bring Microsoft SDK plug-ins or a SOAP client. The mode is the setting `Sdk:Mode` (environment
+variable `XRMD_SDK_MODE`): `standard` (the default) or `none`. Any other value is refused at startup with exit code 3 and the
+message `Sdk:Mode '<value>' is not valid: use 'standard' or 'none'.`
+
+### Compared with Dataverse
+
+Dataverse always has the SDK. An SDK-free xrmverse server is a smaller server, not a Dataverse replacement: it does not
+exchange data with Dataverse (see the table below).
+
+### Tasks
+
+Create an SDK-free installation (experimental):
+
+```bash
+xrmd server init --dir ./xrmd --org acme --sdk-free
+```
+
+`--sdk-free` writes `XRMD_SDK_MODE=none` to `.env` and `Sdk__Mode` to the compose file, which has no `./sdk` mount. It excludes
+`--accept-microsoft-license`. `server up`, `server upgrade` and `server org add` do not look for the SDK folder, and
+`server status` shows `SDK: not used (SDK-free server)` (`sdkMode` in JSON). See [CLI](cli.md#set-up-a-server).
+
+What an SDK-free server refuses, always with the error code `0x80090900` (FeatureNotAvailable) and a text that points to this
+section:
+
+| Feature | Answer |
+|---|---|
+| SOAP endpoint (`/XRMServices/2011/Organization.svc`) | HTTP 501 with a SOAP fault |
+| Creating or updating a `pluginassembly`, creating a `plugintype` (Web API, CLI) | HTTP 400 |
+| `POST /admin/migrate/packages` and `/admin/migrate/runs`, and the MCP tool that starts a migration | HTTP 400: no migration from Dataverse (the MCP tool answers with a tool error carrying the same message, not an HTTP status) |
+| Importing a solution that carries plug-in assemblies | Refused, through the same check as the two rows above |
+
+The check on solutions is on content, not origin: a solution exported by a standard xrmverse server can be imported into an
+SDK-free one, as long as it has no plug-in assemblies. "Only apps born on xrmverse" is the support statement; it is not
+enforced. Exporting a solution works as on any server, and importing that file into Dataverse is unsupported.
+
+Reporting: `GET /admin/health` has `sdkMode`, and `sdkVersion` is null; `xrmd server doctor` shows the `sdk` and
+`sdk-workflow` checks as ok with "Not used (SDK-free server)."; the About page says so.
+
+### Known limits
+
+- The server does not start yet. With `Sdk:Mode` `none` the host refuses every load of a Microsoft SDK assembly, prints
+  `sdk-free: refused <assembly> requested by <component>` and `This build cannot run as an SDK-free server yet: …`, and exits
+  with code 3. Modules still use the SDK internally; later releases remove it step by step.
+- The probe, the integration test `SdkFreeProbeTests`, runs a fixed tour and compares it with the checked-in baselines
+  `tests/fixtures/sdk-free-baseline.json` (the steps that still need the SDK) and `tests/fixtures/sdk-free-assemblies.json`.
+  The lists only shrink: see [Development](development.md#sdk-free-probe).
+- Custom workflow activities and SDK plug-ins are not available; use webhooks, service endpoints and workflows.
+- `server init --force` keeps the mode of an existing server and refuses to switch a standard server to SDK-free.
+
+### See also
+
+- [Known issues](known-issues.md), [CLI](cli.md), [Admin API](admin-api.md#health-and-logs)
 
 ## See also
 
 - [Getting started (Docker)](getting-started.md), [Installing xrmverse](install.md)
-- [Plug-ins](plugins.md), [Classic workflows](workflows.md)
+- [Plug-ins](plugins.md), [Classic workflows](workflows.md), [SDK-free servers](#sdk-free-servers)

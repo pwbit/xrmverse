@@ -93,7 +93,7 @@ xrmd server status --dir ./xrmd                 # http://localhost:5001/
 (one per `--org`, in the same order), `--sql-connection`, `--sql-edition` (default `Express`, see
 [SQL Server editions](sql-server-editions.md)), `--accept-sql-server-eula` (you accept the bundled SQL Server's license
 terms, written as `ACCEPT_EULA=Y`; without it init asks at a terminal, see
-[License terms](sql-server-editions.md#license-terms-accept_eula)), `--accept-microsoft-license` (installs the SDK into `<dir>/sdk` now); `--force` overwrites, keeping the `SA_PASSWORD` and dev signing
+[License terms](sql-server-editions.md#license-terms-accept_eula)), `--accept-microsoft-license` (installs the SDK into `<dir>/sdk` now), `--sdk-free` (experimental: an SDK-free server, which never installs the SDK; it excludes `--accept-microsoft-license`, see [SDK-free servers](microsoft-sdk.md#sdk-free-servers)); `--force` overwrites, keeping the `SA_PASSWORD` and dev signing
 key of an existing `.env`) generates the SQL Server password and,
 in dev mode, the signing key, and creates one dev profile per organization. `server org add|remove` change the set of
 organizations; see [Multiple organizations](multiple-organizations.md) for the `.env` keys, ports, profiles, the
@@ -121,6 +121,7 @@ external SQL Server and the single-instance guard. Notes about the generated fil
 - Each organization's audience is `http://localhost:<port>/` unless `ORG_<ORG>_AUDIENCE` is set. With Entra the
   audience **must** equal the API's Application ID URI (the audience of the tokens): set `ORG_<ORG>_AUDIENCE` when
   that is not the organization's URL, and `AUTH_TENANT_ID` to the tenant GUID (see [Development token](getting-started.md#development-token-auth_modedevelopment)).
+- With `--sdk-free` the `.env` has `XRMD_SDK_MODE=none`, the compose file sets `Sdk__Mode` and has no `./sdk` mount, and `server up`, `server upgrade` and `server org add` skip the SDK check. `--force` keeps the mode of an existing server and refuses to switch a standard server to SDK-free. `server status` shows `SDK: not used (SDK-free server)` (`sdkMode` in JSON). The server does not start yet in this release.
 - The ports are bound to `127.0.0.1`; set `XRMD_BIND=0.0.0.0` in `.env` to expose them.
 - `--domain`, `--public-host`, `--tls`, `--acme-email`, `--tls-cert`, `--tls-key`, `--no-proxy`, `--trusted-proxy`,
   `--expose-ports` and `--edge-subnet` give the organizations public host names on 443 behind a generated Caddy proxy

@@ -1,5 +1,6 @@
 using System.Data.Common;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -58,8 +59,18 @@ public sealed class DoctorReport(HealthReport health, IServiceProvider services,
         checks.Add(pipeline.Value.AsyncWorkerEnabled
             ? new("asyncWorker", Ok, "The asynchronous job worker is enabled.")
             : new("asyncWorker", Warning, "Pipeline:AsyncWorkerEnabled is false: asynchronous steps are queued but never run."));
-        checks.Add(SdkCheck());
-        checks.Add(WorkflowSdkCheck());
+        if (status.SdkMode == SdkModes.ToSetting(SdkMode.None))
+        {
+            // Plan S.2a: no SDK is loaded, so there is nothing to check, and nothing here may touch an SDK type.
+            checks.Add(new("sdk", Ok, SdkFreeMessages.NotUsed));
+            checks.Add(new("sdk-workflow", Ok, SdkFreeMessages.NotUsed));
+        }
+        else
+        {
+            checks.Add(SdkCheck());
+            checks.Add(WorkflowSdkCheck());
+        }
+
         checks.Add(await FileStoreCheckAsync(ct));
         if (reachable) checks.AddRange(await PluginAssembliesAsync(ct));
         return checks;
@@ -92,6 +103,7 @@ public sealed class DoctorReport(HealthReport health, IServiceProvider services,
     }
 
     /// <summary>The Microsoft SDK the host loaded: ok with its version and folder, error when it is not the pinned one.</summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private static DoctorCheck SdkCheck()
     {
 #pragma warning disable IL3000 // the host is never a single-file app
@@ -107,6 +119,7 @@ public sealed class DoctorReport(HealthReport health, IServiceProvider services,
     /// The optional workflow SDK (plan 2.14, W18): ok with its version and folder, a warning when the host runs without it
     /// (custom workflow activity steps are then unsupported steps) or with one that is not the pinned package.
     /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private static DoctorCheck WorkflowSdkCheck()
     {
         if (WorkflowSdk.Assembly is { } assembly)

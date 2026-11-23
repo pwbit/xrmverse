@@ -58,6 +58,11 @@ public static class XrmdHost
     {
         var services = builder.Services;
 
+        // Plan S.2a: the SDK mode, read from this host's configuration (not SdkBootstrap.Mode), so in-process test hosts with
+        // different settings stay independent. An invalid value is refused by SdkBootstrap.Ensure before this runs.
+        Xrmd.Abstractions.Sdk.SdkModes.TryParse(SdkBootstrap.ModeSetting(builder.Configuration), out var sdkMode);
+        services.AddSingleton(new Xrmd.Abstractions.Sdk.SdkModeInfo(sdkMode));
+
         // Keeps the instance lock taken by UseXrmdAsync. Registered before every other hosted service of xrmd: hosted services stop
         // in reverse order, so it releases the lock only after the others (the async worker among them) have stopped.
         services.AddSingleton<InstanceLockWatchdog>();
@@ -331,6 +336,13 @@ public static class XrmdHost
     }
 
     /// <summary>
+    /// Maps the SDK-bound SOAP organization service. Not inlined (plan S.2a): the endpoint's static state holds SDK data contract
+    /// serializers, so it is touched only when a standard server calls this method, never on an SDK-free one.
+    /// </summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static void MapSdkSoapEndpoint(WebApplication app) => app.MapOrganizationSoapEndpoint();
+
+    /// <summary>
     /// The startup recovery of the features after the populate: stranded duplicate rule publishes and orphan match code tables
     /// (every engine since plan 2.7b, Task 4), and the open migration run (every engine since plan 2.7b, Task 10).
     /// </summary>
@@ -453,8 +465,10 @@ public static class XrmdHost
         // The authoring API beside it (plan 2.21, A18): a valid token and no role, every operation a pipeline request as the caller.
         app.MapWorkflowAuthoringEndpoints();
 
-        // SOAP organization service (Execute) for clients that do not use the Web API, e.g. ServiceClient by default.
-        app.MapOrganizationSoapEndpoint();
+        // SOAP organization service (Execute) for clients that do not use the Web API, e.g. ServiceClient by default; an SDK-free
+        // server answers its route with a refusal fault (plan S.2a).
+        if (app.Services.GetRequiredService<Xrmd.Abstractions.Sdk.SdkModeInfo>().IsSdkFree) SdkFreeSoapEndpoint.Map(app);
+        else MapSdkSoapEndpoint(app);
 
         // The MCP server (streamable HTTP, stateless): the same token as the Web API, every tool as the token's user.
         app.MapXrmdMcp("/mcp");

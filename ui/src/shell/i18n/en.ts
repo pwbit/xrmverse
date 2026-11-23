@@ -451,6 +451,8 @@ export const en = {
   'about.notice': 'xrmverse is an independent project and is not affiliated with, endorsed by or sponsored by Microsoft. Microsoft, Dataverse, Dynamics 365 and Power Apps are trademarks of the Microsoft group of companies.',
   'about.thirdParty': 'Third-party software notices are in THIRD_PARTY_NOTICES.md, included with the server image and the xrmd CLI.',
   'about.license': 'Copyright 2026 Power Builders Italia S.r.l. Licensed under the Apache License, Version 2.0. The xrmverse names and logos are trademarks of Power Builders Italia S.r.l. and are not covered by the license.',
+  'about.sdk': 'SDK: {version}',
+  'about.sdkNone': 'SDK: not used (SDK-free server)',
   'about.licenseLink': 'Apache License, Version 2.0',
   'about.security': 'Security policy (SECURITY.md)',
   'environment.title': 'Environment',

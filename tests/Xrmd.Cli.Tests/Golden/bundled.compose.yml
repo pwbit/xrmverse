@@ -63,6 +63,7 @@ services:
       # Loopback only by default. To expose: set XRMD_BIND=0.0.0.0 in .env.
       - "${XRMD_BIND:-127.0.0.1}:${ORG_ACME_PORT:?set ORG_ACME_PORT in .env}:5000"
     environment:
+      Sdk__Mode: ${XRMD_SDK_MODE:-standard}
       ConnectionStrings__Org: "Server=sqlserver;Database=acme;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True"
       Auth__Mode: ${AUTH_MODE:-Development}
       # Each organization has its own audience: a token of one organization is rejected by the others.
@@ -118,6 +119,7 @@ services:
       # Loopback only by default. To expose: set XRMD_BIND=0.0.0.0 in .env.
       - "${XRMD_BIND:-127.0.0.1}:${ORG_ZENITH_PORT:?set ORG_ZENITH_PORT in .env}:5000"
     environment:
+      Sdk__Mode: ${XRMD_SDK_MODE:-standard}
       ConnectionStrings__Org: "Server=sqlserver;Database=zenith;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True"
       Auth__Mode: ${AUTH_MODE:-Development}
       # Each organization has its own audience: a token of one organization is rejected by the others.

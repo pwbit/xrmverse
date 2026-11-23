@@ -32,6 +32,7 @@ public static class MigrationRunService
     /// </summary>
     public static async Task<MigrationResult> StartAsync(IServiceProvider services, Caller caller, JsonObject body, CancellationToken ct)
     {
+        DemandNotSdkFree(services);
         var packageId = body["packageId"] is JsonValue p && p.TryGetValue<string>(out var pText)
             ? Guid.TryParse(pText, out var pid) ? pid : throw BadRequest("'packageId' is not a GUID.") : (Guid?)null;
         var serverPath = body["serverPath"] is JsonValue s && s.TryGetValue<string>(out var sText) && sText.Length > 0 ? sText : null;

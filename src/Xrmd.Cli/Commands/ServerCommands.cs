@@ -148,6 +148,11 @@ public static partial class ServerCommands
                           "Without it, init asks at a terminal (default no) and otherwise installs nothing: run `xrmd sdk install --dir <dir>` later.",
         };
 
+        var sdkFree = new Option<bool>("--sdk-free")
+        {
+            Description = "Experimental: an SDK-free server, for apps born on xrmverse only (no SOAP, no Microsoft SDK plug-ins, no exchange with Dataverse). See docs/microsoft-sdk.md.",
+        };
+
         var tdsPort = new Option<int?>("--tds-port")
         {
             Description = "Give the organizations a SQL (TDS) endpoint, read-only: the host port of the first organization (e.g. 5558); the " +
@@ -169,11 +174,14 @@ public static partial class ServerCommands
 
         var command = new Command("init", "Write docker-compose.yml and .env with generated secrets for one or more organizations.")
         {
-            dir, org, port, auth, tenant, admin, database, sqlConnection, sqlEdition, acceptSqlEula, image, force, accept,
+            dir, org, port, auth, tenant, admin, database, sqlConnection, sqlEdition, acceptSqlEula, image, force, accept, sdkFree,
             domain, publicHost, tls, acmeEmail, tlsCert, tlsKey, noProxy, trustedProxy, exposePorts, edgeSubnet, tdsPort, tdsCert, tdsKey,
         };
         command.SetAction(async (parse, ct) =>
         {
+            var sdkFreeFlag = parse.GetValue(sdkFree);
+            if (sdkFreeFlag && parse.GetValue(accept))
+                throw new CliException(ExitCodes.Usage, "--sdk-free and --accept-microsoft-license exclude each other: an SDK-free server never installs the Microsoft SDK.");
             var isEntra = parse.GetValue(auth) == "entra";
             var isLocal = parse.GetValue(auth) == "local";
             var tenantId = parse.GetValue(tenant);
@@ -257,6 +265,13 @@ public static partial class ServerCommands
             // volume is first set up, so a new password would lock the services out of the existing instance; and a kept
             // signing key keeps the existing dev tokens valid.
             var existing = forced ? Installation.ReadRawValues(envPath) : [];
+            // The SDK mode of an existing server never changes: --force keeps it, and --sdk-free over a standard one is refused.
+            var existingSdkFree = existing.TryGetValue(Installation.SdkModeKey, out var keptSdkMode) && Installation.IsSdkFreeValue(keptSdkMode);
+            if (sdkFreeFlag && forced && File.Exists(envPath) && !existingSdkFree)
+                throw new CliException(ExitCodes.Usage, "The SDK mode of an existing server cannot be changed: it was created as a standard server.");
+            var isSdkFree = sdkFreeFlag || existingSdkFree;
+            if (isSdkFree && parse.GetValue(accept))
+                throw new CliException(ExitCodes.Usage, "--accept-microsoft-license does not apply: the existing server is SDK-free and never installs the Microsoft SDK.");
             var kept = new List<string>();
             string Keep(string key, Func<string> generate)
             {
@@ -311,6 +326,7 @@ public static partial class ServerCommands
             var values = new Dictionary<string, string>
             {
                 ["XRMD_IMAGE"] = imageValue,
+                [Installation.SdkModeKey] = Xrmd.Abstractions.Sdk.SdkModes.ToSetting(isSdkFree ? Xrmd.Abstractions.Sdk.SdkMode.None : Xrmd.Abstractions.Sdk.SdkMode.Standard),
                 [Installation.StorageProviderKey] = isPostgres ? nameof(StorageProvider.PostgreSql) : "",
                 [Installation.PostgresPasswordKey] = isPostgres && sql.Length == 0 ? Keep(Installation.PostgresPasswordKey, () => RandomNumberGenerator.GetString(Lower + Upper + Digits, PostgresPasswordLength)) : "",
                 ["SA_PASSWORD"] = sql.Length > 0 || isPostgres ? "" : Keep("SA_PASSWORD", GeneratePassword),
@@ -465,7 +481,7 @@ public static partial class ServerCommands
                                adminPasswords = adminPasswords.Select(kv => new { org = kv.Key, password = kv.Value }).ToList() };
             ctx.WriteResult(result, string.Join(Environment.NewLine, lines));
             WarnIfDeveloperEdition(ctx, installation);
-            await OfferSdkAsync(ctx, installation, parse.GetValue(accept), ct);
+            if (!isSdkFree) await OfferSdkAsync(ctx, installation, parse.GetValue(accept), ct);
             return ExitCodes.Ok;
         });
         return command;
@@ -1241,6 +1257,9 @@ public static partial class ServerCommands
     {
         var fullDir = Path.GetFullPath(composeDir);
         if (!File.Exists(Path.Combine(fullDir, ComposeFileName)) || !File.Exists(Path.Combine(fullDir, EnvFileName))) return;
+        // An SDK-free server (XRMD_SDK_MODE=none) never loads the SDK; an absent key is standard.
+        if (installation is not null ? installation.IsSdkFree
+            : Installation.ReadRawValues(Path.Combine(fullDir, EnvFileName)).TryGetValue(Installation.SdkModeKey, out var rawMode) && Installation.IsSdkFreeValue(rawMode)) return;
         var sdkFolder = Path.Combine(fullDir, "sdk");
         var installed = SdkFolder.TryRead(sdkFolder) is not null;
         if (installation is not null && installed) return;
@@ -1492,6 +1511,7 @@ public static partial class ServerCommands
             ctx.Write(rows.Select(r =>
             {
                 var row = OrgRow(r.Target, json || hosts);
+                if (json) row["sdkMode"] = installation.IsSdkFree ? "none" : "standard";
                 if (installation.HasTds)
                 {
                     row["tdsPort"] = r.Target.Org.TdsPort;
@@ -1504,6 +1524,7 @@ public static partial class ServerCommands
                 return row;
             }).ToList());
 
+            if (!json && installation.IsSdkFree) await ctx.Env.Out.WriteLineAsync("SDK: not used (SDK-free server)");
             var failing = rows.Where(r => r.Health is not { } h || HealthStatus(h) != "Healthy").Select(r => r.Target.Org.Name).ToList();
             if (failing.Count == 0) return ExitCodes.Ok;
             await ctx.Env.Err.WriteLineAsync($"Not healthy: {string.Join(", ", failing)}.");

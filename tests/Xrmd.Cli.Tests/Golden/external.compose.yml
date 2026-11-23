@@ -18,6 +18,7 @@ services:
       # Loopback only by default. To expose: set XRMD_BIND=0.0.0.0 in .env.
       - "${XRMD_BIND:-127.0.0.1}:${ORG_ACME_PORT:?set ORG_ACME_PORT in .env}:5000"
     environment:
+      Sdk__Mode: ${XRMD_SDK_MODE:-standard}
       # The external SQL Server of SQL_CONNECTION (which sets no database); the database is the organization.
       ConnectionStrings__Org: "${SQL_CONNECTION:?set SQL_CONNECTION in .env};Database=acme"
       Admin__FilesBackupDirectory: /var/lib/xrmd/backups
@@ -72,6 +73,7 @@ services:
       # Loopback only by default. To expose: set XRMD_BIND=0.0.0.0 in .env.
       - "${XRMD_BIND:-127.0.0.1}:${ORG_ZENITH_PORT:?set ORG_ZENITH_PORT in .env}:5000"
     environment:
+      Sdk__Mode: ${XRMD_SDK_MODE:-standard}
       # The external SQL Server of SQL_CONNECTION (which sets no database); the database is the organization.
       ConnectionStrings__Org: "${SQL_CONNECTION:?set SQL_CONNECTION in .env};Database=zenith"
       Admin__FilesBackupDirectory: /var/lib/xrmd/backups
@@ -126,6 +128,7 @@ services:
       # Loopback only by default. To expose: set XRMD_BIND=0.0.0.0 in .env.
       - "${XRMD_BIND:-127.0.0.1}:${ORG_ORBIT_PORT:?set ORG_ORBIT_PORT in .env}:5000"
     environment:
+      Sdk__Mode: ${XRMD_SDK_MODE:-standard}
       # The external SQL Server of SQL_CONNECTION (which sets no database); the database is the organization.
       ConnectionStrings__Org: "${SQL_CONNECTION:?set SQL_CONNECTION in .env};Database=orbit"
       Admin__FilesBackupDirectory: /var/lib/xrmd/backups

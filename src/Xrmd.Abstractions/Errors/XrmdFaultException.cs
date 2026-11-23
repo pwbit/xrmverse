@@ -66,6 +66,9 @@ public static class ErrorCodes
     /// <summary>The caller lacks, at the required depth, a privilege of the role it grants (403).</summary>
     public const int RoleUpdateValidationFailure = unchecked((int)0x80048D3C);
 
+    /// <summary>The feature is not available on this server (e.g. the SOAP service of an SDK-free server).</summary>
+    public const int FeatureNotAvailable = unchecked((int)0x80090900);
+
     /// <summary>A privilege id that is not in the catalog (400).</summary>
     public const int InvalidPrivilege = unchecked((int)0x80090903);
 

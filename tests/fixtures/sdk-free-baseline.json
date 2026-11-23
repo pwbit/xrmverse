@@ -1,0 +1,25 @@
+{
+  "needsSdk": [
+    "host-start",
+    "healthz",
+    "admin-health",
+    "webapi-whoami",
+    "webapi-crud",
+    "webapi-metadata",
+    "query-odata",
+    "query-fetchxml",
+    "security-privilege",
+    "webhook",
+    "workflow",
+    "custom-api",
+    "solution-export-import",
+    "audit",
+    "files",
+    "tds",
+    "mcp",
+    "web-admin",
+    "apps",
+    "workflow-studio",
+    "cli"
+  ]
+}

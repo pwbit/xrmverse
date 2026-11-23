@@ -33,8 +33,44 @@ public static class SdkBootstrap
     /// <see cref="ExitCode"/>). An SDK that resolves from the application folder (tests, <c>dotnet run</c> with the test
     /// SDK) is accepted as is.
     /// </summary>
+    /// <remarks>
+    /// <c>Sdk:Mode</c> (else <c>XRMD_SDK_MODE</c>, plan S.2a) chooses the mode: an invalid value is refused; in mode
+    /// <see cref="SdkMode.None"/> nothing is loaded, the SDK folder is not looked at, and <see cref="SdkFreeResolver"/> refuses
+    /// every SDK assembly the host asks for.
+    /// </remarks>
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static string? Ensure(IConfiguration? configuration)
+    {
+        var setting = ModeSetting(configuration);
+        if (!SdkModes.TryParse(setting, out var mode)) return SdkModes.InvalidMessage(setting!);
+        Mode = mode;
+        if (mode == SdkMode.None)
+        {
+            EnsureSdkFree();
+            return null;
+        }
+
+        return EnsureStandard(configuration);
+    }
+
+    /// <summary>The mode <see cref="Ensure"/> found; read by <c>Program</c>.</summary>
+    public static SdkMode Mode { get; private set; }
+
+    /// <summary>The <c>Sdk:Mode</c> setting of <paramref name="configuration"/>, else the <c>XRMD_SDK_MODE</c> environment variable.</summary>
+    public static string? ModeSetting(IConfiguration? configuration) =>
+        configuration?[SdkModes.ConfigKey] ?? Environment.GetEnvironmentVariable(SdkModes.EnvironmentVariable);
+
+    /// <summary>Mode <see cref="SdkMode.None"/>: no SDK assembly is loaded, and the workflow SDK is absent.</summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void EnsureSdkFree()
+    {
+        SdkFreeResolver.Install();
+        WorkflowSdk.Set(null, null);
+    }
+
+    /// <summary>Mode <see cref="SdkMode.Standard"/>: the SDK of the SDK folder (the behaviour before plan S.2a).</summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static string? EnsureStandard(IConfiguration? configuration)
     {
         var folder = SdkFolder.Resolve(configuration?[PathKey]);
         SdkAssemblyResolver.Install(folder);

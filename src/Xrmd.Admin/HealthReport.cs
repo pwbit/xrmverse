@@ -1,6 +1,7 @@
 using System.Data;
 using System.Data.Common;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Xrmd.Abstractions;
@@ -64,13 +65,15 @@ public sealed class AsyncQueueStats(IServiceProvider services, TimeProvider time
 }
 
 /// <summary>The body of <c>GET /admin/health</c>.</summary>
-/// <param name="SdkVersion">The file version of the loaded <c>Microsoft.Xrm.Sdk</c> (installed with <c>xrmd sdk install</c>).</param>
+/// <param name="SdkMode">The <c>Sdk:Mode</c> of the host: <c>standard</c> or <c>none</c> (plan S.2a).</param>
+/// <param name="SdkVersion">The file version of the loaded <c>Microsoft.Xrm.Sdk</c> (installed with <c>xrmd sdk install</c>); null
+/// in mode <c>none</c>, where no SDK is loaded.</param>
 /// <param name="WorkflowSdkVersion">The file version of the loaded <c>Microsoft.Xrm.Sdk.Workflow</c> (plan 2.14, W18); null when the
 /// SDK folder has none (custom workflow activities cannot run).</param>
 /// <param name="TextKeyConflicts">The alternate keys of a 2.7a PostgreSQL organization whose rows collide under the text keys of
 /// plan 2.7b (ruling Q3, #299), so that the key still compares the stored text; empty otherwise.</param>
 public sealed record HealthStatus(string Status, string Version, string Organization, string Database, int SchemaVersion,
-    int PendingMigrations, AsyncQueueCounts AsyncQueue, string AuthMode, string SdkVersion, string? WorkflowSdkVersion,
+    int PendingMigrations, AsyncQueueCounts AsyncQueue, string AuthMode, string SdkMode, string? SdkVersion, string? WorkflowSdkVersion,
     IReadOnlyList<TextKeyConflict> TextKeyConflicts);
 
 /// <summary>
@@ -98,29 +101,49 @@ public sealed class HealthReport(IServiceProvider services, AsyncQueueStats queu
         typeof(HealthReport).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
         ?? typeof(HealthReport).Assembly.GetName().Version?.ToString() ?? "unknown";
 
-    /// <summary>The <c>Microsoft.Xrm.Sdk</c> the host runs with (from the SDK folder, or the application folder in tests).</summary>
-    public static Assembly SdkAssembly => typeof(Microsoft.Xrm.Sdk.Entity).Assembly;
+    /// <summary>
+    /// The <c>Microsoft.Xrm.Sdk</c> the host runs with (from the SDK folder, or the application folder in tests). Mode <c>standard</c>
+    /// only: in mode <c>none</c> nothing may read it.
+    /// </summary>
+    public static Assembly SdkAssembly => LoadedSdk.Assembly;
 
-    /// <summary>The file version of <see cref="SdkAssembly"/>.</summary>
-    public static string SdkVersion { get; } = SdkAssemblyResolver.VersionOf(SdkAssembly);
+    /// <summary>The file version of <see cref="SdkAssembly"/> (mode <c>standard</c> only).</summary>
+    public static string SdkVersion => LoadedSdk.Version;
+
+    /// <summary>
+    /// The SDK accesses, apart so that the type initializer, which names an SDK type, runs only when a standard-mode report asks
+    /// for them (never in mode <c>none</c>).
+    /// </summary>
+    private static class LoadedSdk
+    {
+        public static readonly Assembly Assembly = typeof(Microsoft.Xrm.Sdk.Entity).Assembly;
+        public static readonly string Version = SdkAssemblyResolver.VersionOf(Assembly);
+    }
+
+    /// <summary>The file version of the SDK, read behind a method of its own that only mode <c>standard</c> calls.</summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static string ReadSdkVersion() => SdkVersion;
 
     public async Task<HealthStatus> GetAsync(CancellationToken ct)
     {
         var authMode = configuration["Auth:Mode"] is { Length: > 0 } mode ? mode : "None";
         var database = DatabaseName();
+        var sdkFree = services.GetService<SdkModeInfo>()?.IsSdkFree == true;
+        var sdkMode = SdkModes.ToSetting(sdkFree ? SdkMode.None : SdkMode.Standard);
+        var sdkVersion = sdkFree ? null : ReadSdkVersion();
         try
         {
             var schema = await services.GetRequiredService<SchemaMigrator>().GetStatusAsync(ct);
             var counts = await queue.GetAsync(ct);
             var organization = await OrganizationNameAsync(ct);
             var conflicts = await TextKeyConflictsAsync(ct);
-            return new HealthStatus(Healthy, Version, organization, database, schema.CurrentVersion, schema.PendingMigrations, counts, authMode, SdkVersion,
+            return new HealthStatus(Healthy, Version, organization, database, schema.CurrentVersion, schema.PendingMigrations, counts, authMode, sdkMode, sdkVersion,
                 WorkflowSdk.Version, conflicts);
         }
         catch (Exception ex) when (ex is DbException or InvalidOperationException)
         {
             // The database is unreachable or not set up: the report says so instead of failing.
-            return new HealthStatus(Unhealthy, Version, "", database, 0, 0, new AsyncQueueCounts(0, 0), authMode, SdkVersion, WorkflowSdk.Version, []);
+            return new HealthStatus(Unhealthy, Version, "", database, 0, 0, new AsyncQueueCounts(0, 0), authMode, sdkMode, sdkVersion, WorkflowSdk.Version, []);
         }
     }
 

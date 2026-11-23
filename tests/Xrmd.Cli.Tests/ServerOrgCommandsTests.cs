@@ -47,6 +47,33 @@ public class ServerOrgCommandsTests : IDisposable
         Profiles(cli).Profiles.Should().ContainKey("orbit");
     }
 
+    [Fact]
+    public async Task Org_add_skips_the_sdk_check_on_an_sdk_free_server()
+    {
+        using var cli = new TestCli();
+        await InitWithoutSdkAsync(cli, "--org", "acme", "--sdk-free");
+        var runner = new FakeProcessRunner();
+        cli.Process = runner;
+
+        (await cli.RunAsync("server", "org", "add", "orbit", "--dir", _dir)).Should().Be(0, cli.Err.ToString());
+
+        runner.Calls.Should().NotBeEmpty();
+        File.ReadAllText(ComposePath).Should().NotContain("/var/lib/xrmd/sdk");
+    }
+
+    [Fact]
+    public async Task Org_add_on_an_env_without_sdk_mode_renders_the_standard_compose()
+    {
+        using var cli = new TestCli();
+        await InitAsync(cli, "--org", "acme");
+        File.WriteAllLines(EnvPath, File.ReadAllLines(EnvPath).Where(l => !l.StartsWith("XRMD_SDK_MODE=")));
+        cli.Process = new FakeProcessRunner();
+
+        (await cli.RunAsync("server", "org", "add", "orbit", "--dir", _dir)).Should().Be(0, cli.Err.ToString());
+
+        File.ReadAllText(ComposePath).Should().Contain("./sdk:/var/lib/xrmd/sdk:ro");
+    }
+
     private static CliConfig Profiles(TestCli cli) => new ProfileStore(cli.ConfigDir).Load();
 
     private List<string> ComposeTail(ProcessSpec call) => call.Arguments.Skip(5).ToList();

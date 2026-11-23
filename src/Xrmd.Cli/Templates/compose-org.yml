@@ -37,8 +37,10 @@
       # Blobs of file and image columns (Files__FileSystem__Root defaults to this path). Shared by every organization:
       # blob keys are prefixed by the database name.
       - files:/var/lib/xrmd/files
+#{{SDK_BEGIN}}
       # The Microsoft SDK installed by `xrmd sdk install --dir <this directory>` (XRMD_SDK_DIR in the image); read-only, never in the image.
       - ./sdk:/var/lib/xrmd/sdk:ro
+#{{SDK_END}}
 #{{IDP_BEGIN}}
       # This organization's own secrets folder (never another's): the one-shot initial administrator password written by
       # `xrmd server init --auth local`; the server deletes it after use.
@@ -77,6 +79,7 @@
       - edge      # the proxy, whose address alone is trusted
 #{{EDGE_END}}
     environment:
+      Sdk__Mode: ${XRMD_SDK_MODE:-standard}
 #{{SQL_BEGIN}}
       ConnectionStrings__Org: "Server=sqlserver;Database={{ORG}};User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True"
 #{{SQL_END}}

@@ -1,0 +1,20 @@
+{
+  "referenceSdk": [
+    "Xrmd.Abstractions",
+    "Xrmd.Admin",
+    "Xrmd.Audit",
+    "Xrmd.Core",
+    "Xrmd.Files",
+    "Xrmd.Host",
+    "Xrmd.Mcp",
+    "Xrmd.Metadata",
+    "Xrmd.Pipeline",
+    "Xrmd.Query",
+    "Xrmd.Schema",
+    "Xrmd.Security",
+    "Xrmd.Solution",
+    "Xrmd.Tds",
+    "Xrmd.WebApi",
+    "Xrmd.Workflows"
+  ]
+}

@@ -464,6 +464,133 @@ public class ServerCommandsTests : IDisposable
     }
 
     [Fact]
+    public async Task Init_sdk_free_writes_mode_none_and_no_sdk_mount()
+    {
+        using var cli = new TestCli();
+        await InitWithoutSdkAsync(cli, "--sdk-free");
+
+        ReadEnv(_dir)["XRMD_SDK_MODE"].Should().Be("none");
+        var compose = File.ReadAllText(Path.Combine(_dir, "docker-compose.yml"));
+        compose.Should().Contain("Sdk__Mode").And.NotContain("/var/lib/xrmd/sdk");
+        (cli.Out.ToString() + cli.Err).Should().NotContain("xrmd sdk install").And.NotContain("Microsoft SDK");
+        Directory.Exists(Path.Combine(_dir, "sdk")).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Init_default_writes_mode_standard_and_the_sdk_mount()
+    {
+        using var cli = new TestCli();
+        await InitWithoutSdkAsync(cli);
+
+        ReadEnv(_dir)["XRMD_SDK_MODE"].Should().Be("standard");
+        var compose = File.ReadAllText(Path.Combine(_dir, "docker-compose.yml"));
+        compose.Should().Contain("Sdk__Mode: ${XRMD_SDK_MODE:-standard}").And.Contain("./sdk:/var/lib/xrmd/sdk:ro");
+    }
+
+    [Fact]
+    public async Task Init_sdk_free_with_accept_microsoft_license_is_a_usage_error()
+    {
+        using var cli = new TestCli();
+
+        (await cli.RunAsync(["server", "init", "--dir", _dir, .. TestCli.Eula(["--sdk-free", "--accept-microsoft-license"])])).Should().Be(2);
+
+        File.Exists(Path.Combine(_dir, ".env")).Should().BeFalse();
+        File.Exists(Path.Combine(_dir, "docker-compose.yml")).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Up_skips_the_sdk_check_on_an_sdk_free_server()
+    {
+        using var cli = new TestCli();
+        await InitWithoutSdkAsync(cli, "--sdk-free");
+        var runner = new FakeProcessRunner();
+        cli.Process = runner;
+
+        (await cli.RunAsync("server", "up", "--dir", _dir)).Should().Be(0, cli.Err.ToString());
+
+        runner.Calls.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Init_force_keeps_the_sdk_free_mode()
+    {
+        using var cli = new TestCli();
+        await InitWithoutSdkAsync(cli, "--sdk-free");
+
+        await InitWithoutSdkAsync(cli, "--force");
+        ReadEnv(_dir)["XRMD_SDK_MODE"].Should().Be("none");
+        File.ReadAllText(Path.Combine(_dir, "docker-compose.yml")).Should().NotContain("/var/lib/xrmd/sdk");
+
+        // Re-running with the flag on an SDK-free server is allowed.
+        await InitWithoutSdkAsync(cli, "--force", "--sdk-free");
+        ReadEnv(_dir)["XRMD_SDK_MODE"].Should().Be("none");
+    }
+
+    [Fact]
+    public async Task Init_force_sdk_free_over_a_standard_server_is_a_usage_error()
+    {
+        using var cli = new TestCli();
+        await InitWithoutSdkAsync(cli);
+        var envBefore = File.ReadAllText(Path.Combine(_dir, ".env"));
+        var composeBefore = File.ReadAllText(Path.Combine(_dir, "docker-compose.yml"));
+
+        (await cli.RunAsync(["server", "init", "--dir", _dir, .. TestCli.Eula(["--force", "--sdk-free"])])).Should().Be(2);
+        cli.Err.ToString().Should().Contain("The SDK mode of an existing server cannot be changed: it was created as a standard server.");
+        File.ReadAllText(Path.Combine(_dir, ".env")).Should().Be(envBefore);
+        File.ReadAllText(Path.Combine(_dir, "docker-compose.yml")).Should().Be(composeBefore);
+
+        // A key-less (older) .env is standard too.
+        File.WriteAllLines(Path.Combine(_dir, ".env"), File.ReadAllLines(Path.Combine(_dir, ".env")).Where(l => !l.StartsWith("XRMD_SDK_MODE=")));
+        (await cli.RunAsync(["server", "init", "--dir", _dir, .. TestCli.Eula(["--force", "--sdk-free"])])).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Init_force_accept_microsoft_license_over_an_sdk_free_server_is_a_usage_error()
+    {
+        using var cli = new TestCli();
+        await InitWithoutSdkAsync(cli, "--sdk-free");
+        var envBefore = File.ReadAllText(Path.Combine(_dir, ".env"));
+        var composeBefore = File.ReadAllText(Path.Combine(_dir, "docker-compose.yml"));
+
+        (await cli.RunAsync(["server", "init", "--dir", _dir, .. TestCli.Eula(["--force", "--accept-microsoft-license"])])).Should().Be(2);
+
+        File.ReadAllText(Path.Combine(_dir, ".env")).Should().Be(envBefore);
+        File.ReadAllText(Path.Combine(_dir, "docker-compose.yml")).Should().Be(composeBefore);
+    }
+
+    [Fact]
+    public async Task Old_env_without_sdk_mode_is_standard()
+    {
+        using var cli = new TestCli();
+        await InitWithoutSdkAsync(cli);
+        var envPath = Path.Combine(_dir, ".env");
+        File.WriteAllLines(envPath, File.ReadAllLines(envPath).Where(l => !l.StartsWith("XRMD_SDK_MODE=")));
+        var runner = new FakeProcessRunner();
+        cli.Process = runner;
+
+        (await cli.RunAsync("server", "up", "--dir", _dir)).Should().Be(1);
+
+        runner.Calls.Should().BeEmpty();
+        cli.Err.ToString().Should().Contain(Xrmd.Abstractions.Sdk.SdkPackage.MissingMessage(Path.Combine(_dir, "sdk")))
+            .And.Contain($"xrmd sdk install --dir {_dir}");
+    }
+
+    [Fact]
+    public async Task Status_reports_sdk_free()
+    {
+        using var cli = new TestCli(_ => FakeHandler.Json(HttpStatusCode.OK, """{"status":"Healthy"}"""));
+        await InitWithoutSdkAsync(cli, "--sdk-free");
+
+        (await cli.RunAsync("server", "status", "--dir", _dir)).Should().Be(0, cli.Err.ToString());
+        cli.Out.ToString().Should().Contain("SDK: not used (SDK-free server)");
+
+        cli.Out.GetStringBuilder().Clear();
+        (await cli.RunAsync("server", "status", "--dir", _dir, "-o", "json")).Should().Be(0, cli.Err.ToString());
+        using var doc = System.Text.Json.JsonDocument.Parse(cli.Out.ToString());
+        doc.RootElement.EnumerateArray().Should().NotBeEmpty().And.OnlyContain(r => r.GetProperty("sdkMode").GetString() == "none");
+    }
+
+    [Fact]
     public async Task Org_add_mounts_the_sdk_folder()
     {
         using var cli = new TestCli();

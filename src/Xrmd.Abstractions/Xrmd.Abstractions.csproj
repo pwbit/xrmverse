@@ -23,4 +23,9 @@
     <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.15" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Test-only seam: SdkFreeResolver.OnResolving (plan S.2a). -->
+    <InternalsVisibleTo Include="Xrmd.Core.Tests" />
+  </ItemGroup>
+
 </Project>

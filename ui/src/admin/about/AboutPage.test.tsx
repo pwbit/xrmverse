@@ -48,4 +48,16 @@ describe('AboutPage', () => {
     const link = screen.getByRole('link', { name: /SECURITY\.md/ });
     expect(link).toHaveAttribute('href', expect.stringMatching(/\/SECURITY\.md$/));
   });
+
+  it('shows_the_sdk_version_from_the_health_report', async () => {
+    server.use(http.get('*/admin/health', () => HttpResponse.json({ status: 'Healthy', sdkMode: 'standard', sdkVersion: '9.2.49.17970' })));
+    render(<App initialEntries={['/manage/about']} />);
+    expect(await screen.findByText('SDK: 9.2.49.17970')).toBeInTheDocument();
+  });
+
+  it('says_the_sdk_is_not_used_when_the_server_is_sdk_free', async () => {
+    server.use(http.get('*/admin/health', () => HttpResponse.json({ status: 'Healthy', sdkMode: 'none', sdkVersion: null })));
+    render(<App initialEntries={['/manage/about']} />);
+    expect(await screen.findByText('SDK: not used (SDK-free server)')).toBeInTheDocument();
+  });
 });

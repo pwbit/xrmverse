@@ -147,7 +147,7 @@ Features that are missing or partial today. Each one fails explicitly where it i
 | Queue privilege `prvPickFromQueue` | The message privilege is not modelled. Pick, Release, Route, Remove and the Update or Delete of a queue item need the queue item privilege, the item's queue readable (public, owned, a member, or shared) and Read on its record instead; no Write on the queue itself. See [Email and queues](email-and-queues.md#security-of-the-messages). | Stays until verified against Dataverse |
 | No optimistic concurrency on queue items | Queue items have no ETag or `If-Match` check; the last writer wins on a plain Update. See [Email and queues](email-and-queues.md#known-limits). | Not scheduled |
 | SharePoint document integration | Not available. | Planned (item 6.1, phase 6) |
-| Microsoft SDK in every component | The Web API, web admin, MCP and CLI still need the Microsoft SDK that you install yourself. See [Installing the Microsoft SDK](microsoft-sdk.md). | Planned (item S.2) |
+| SDK-free servers (experimental) | An SDK-free server (`server init --sdk-free`) does not start yet: modules still use the Microsoft SDK internally. SOAP, Microsoft SDK plug-ins and migration from Dataverse are refused on such a server by design. See [SDK-free servers](microsoft-sdk.md#sdk-free-servers). | Planned (item S.2) |
 | In-process plug-ins without the Microsoft SDK | Plug-ins that run inside the transaction must be built against the Microsoft SDK; without it, only webhooks and workflows are available. | Planned (item S.4) |
 
 ### PostgreSQL organizations

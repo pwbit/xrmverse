@@ -32,7 +32,7 @@ use `GET /healthz` (as the Docker health check does; see [Observability](observa
 
 | Route | Purpose |
 |---|---|
-| `GET /admin/health` | `{status, ...}`; **503** when the status is `Unhealthy`, 200 otherwise |
+| `GET /admin/health` | `{status, ...}`, with `sdkMode` (`standard` or `none`) and `sdkVersion` (null on an [SDK-free server](microsoft-sdk.md#sdk-free-servers)); **503** when the status is `Unhealthy`, 200 otherwise |
 | `GET /admin/doctor` | Self-checks (configuration, authentication, migrations, the file store, plug-ins) |
 | `GET /admin/logs?level=&since=&take=` | Recent log entries from an in-memory ring buffer (`take` 1 to 1000) |
 

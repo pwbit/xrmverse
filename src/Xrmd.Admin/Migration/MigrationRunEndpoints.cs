@@ -37,6 +37,8 @@ public static class MigrationRunEndpoints
 
     private static async Task<IResult> StartAsync(HttpContext context)
     {
+        // An SDK-free server refuses the run before its body is read (plan S.2a); MigrationRunService.StartAsync checks it again for MCP.
+        DemandNotSdkFree(context.RequestServices);
         var body = await ReadBodyAsync(context);
         return Json(await MigrationRunService.StartAsync(context.RequestServices, await CallerAsync(context), body, context.RequestAborted));
     }

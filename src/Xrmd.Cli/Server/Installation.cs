@@ -75,6 +75,9 @@ public sealed partial class Installation
     public const string LocalAuthMode = "Local";
     public const string SqlEditionKey = "MSSQL_PID";
     public const string ImageKey = "XRMD_IMAGE";
+
+    /// <summary>The SDK mode of the server (<c>standard</c> or <c>none</c>, see <c>SdkModes</c>); absent is standard.</summary>
+    public const string SdkModeKey = Xrmd.Abstractions.Sdk.SdkModes.EnvironmentVariable;
     /// <summary>
     /// <c>ACCEPT_EULA</c> (issue #16, option 1): <c>Y</c> once the user has accepted the SQL Server license terms, with
     /// <c>--accept-sql-server-eula</c> or at the prompt; only the bundled SQL Server has it. xrmd never writes it otherwise.
@@ -160,6 +163,12 @@ public sealed partial class Installation
 
     /// <summary>True when <see cref="SdkPath"/> holds a valid <c>sdk.json</c>.</summary>
     public bool HasSdk => Xrmd.Abstractions.Sdk.SdkFolder.TryRead(SdkPath) is not null;
+
+    /// <summary>True when <c>.env</c> has <c>XRMD_SDK_MODE=none</c> (an SDK-free server); an absent key is standard.</summary>
+    public bool IsSdkFree => IsSdkFreeValue(TryGetValue(SdkModeKey));
+
+    internal static bool IsSdkFreeValue(string? value) =>
+        Xrmd.Abstractions.Sdk.SdkModes.TryParse(value?.Trim('\'', '"'), out var mode) && mode == Xrmd.Abstractions.Sdk.SdkMode.None;
 
     public IReadOnlyList<OrgEntry> Orgs => _orgs;
 
