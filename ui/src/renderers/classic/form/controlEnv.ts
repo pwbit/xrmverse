@@ -3,6 +3,7 @@ import type { RecordForm } from '../../../apps/record/useRecordForm';
 import type { TimelineOptions } from '../../../model/app';
 import type { UiOverlay } from '../../../client-api/uiOverlay';
 import type { ViewPresentation } from '../../../parsers/presentationJson';
+import type { SenderPolicy } from './PartyListControl';
 
 /** The overlay's timeline restyle (ruling C4). */
 export interface TimelineAppearance {
@@ -52,6 +53,8 @@ export interface ControlEnv {
   cache?: ReadCache;
   /** What the form's scripts changed; read before the FormXml. */
   overlay?: UiOverlay;
+  /** The sender policy an email's `from` offers (plan 4.1b, `xrmverse_EmailSendFrom`); absent, the caller and the queues. */
+  senderPolicy?: SenderPolicy;
 }
 
 /** A tab, section or cell is shown: as a script set it, else as the FormXml says. */

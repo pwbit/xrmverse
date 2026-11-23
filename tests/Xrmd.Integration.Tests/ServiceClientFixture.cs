@@ -49,6 +49,8 @@ public sealed class ServiceClientFixture : IAsyncLifetime
         builder.Configuration["Seed:OrgName"] = OrgName;
         builder.Configuration["Seed:AdminObjectId"] = AdminObjectId.ToString();
         builder.Configuration["Seed:AdminName"] = "Test Admin";
+        // Plan 4.1b: GreenMail and the fake SMTP server offer no STARTTLS (a test setting; production requires TLS).
+        builder.Configuration["Mail:AllowInsecureSmtp"] = "true";
         builder.Logging.AddProvider(_requestLog);
         builder.Logging.AddFilter<RequestLogCollector>(null, LogLevel.None);
         builder.Logging.AddFilter<RequestLogCollector>(typeof(RequestLoggingMiddleware).FullName, LogLevel.Debug);

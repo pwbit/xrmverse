@@ -1,6 +1,7 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { changedBody, createBody, FieldError, sameValue, valuesFromRecord, type FieldValue, type FormValues, type LookupValue } from '../../admin/tables/formValues';
 import { isFileKind, type AttributeMeta } from '../../admin/tables/metadata';
+import { PARTY_TYPE_OF, partyItems, partyValuesOf, type Party, type PartyRow } from '../../admin/tables/partyLists';
 import { entityPath } from '../../admin/tables/tableApi';
 import type { UiOverlay } from '../../client-api/uiOverlay';
 import type { Cell, FormModel } from '../../model/form';
@@ -126,12 +127,23 @@ export function useRecordForm(ctx: RecordContext, form: FormModel, options: Reco
       ctx.fieldContext.lookups.find((r) => r.referencingAttribute === attribute && r.referencedEntity === target)?.nav,
     [ctx.fieldContext.lookups],
   );
+  // Plan 4.1b, task 9: a party list is read from, and written through, the party navigation (`{activity}_activity_parties`).
+  const partyNavigation = ctx.fieldContext.partyNavigation;
   const load = useCallback(
-    (record: Record<string, unknown> | undefined): FormValues => (record ? valuesFromRecord(fields, record, navFor, zone) : {}),
-    [fields, navFor, zone],
+    (record: Record<string, unknown> | undefined): FormValues => {
+      if (!record) return {};
+      const values = valuesFromRecord(fields, record, navFor, zone);
+      const raw = partyNavigation ? record[partyNavigation] : undefined;
+      for (const a of fields) if (a.kind === 'partylist') values[a.logicalName] = partyValuesOf(a.logicalName, Array.isArray(raw) ? (raw as PartyRow[]) : []);
+      return values;
+    },
+    [fields, navFor, zone, partyNavigation],
   );
 
   const [record, setRecord] = useState(ctx.record);
+  // The record as last read, for the party rows of the lists the form does not show (sent back whole on update).
+  const recordRef = useRef(record);
+  recordRef.current = record;
   const [original, setOriginal] = useState<FormValues>(() => load(ctx.record));
   const [values, setValues] = useState<FormValues>(original);
   // The values as changed by calls not yet rendered: a script that sets a value reads it back at once, and a save started by
@@ -191,13 +203,15 @@ export function useRecordForm(ctx: RecordContext, form: FormModel, options: Reco
   /**
    * The server would not take a value for the column (no Write right, not valid for create or update, field security, a
    * file, a party list): it is never sent, whatever the form or a script does. A column that is only disabled on the form is
-   * still sent when a script changed it (as in Dataverse).
+   * still sent when a script changed it (as in Dataverse). A party list is written only through the party navigation, when
+   * the relationships name it and its participation type is known.
    */
   const refusedByServer = (attribute: string): boolean => {
     if (readOnly || attribute === 'statecode') return true;
     const a = ctx.entity.attributes.find((x) => x.logicalName === attribute);
     if (!a) return true;
-    if (a.kind === 'unsupported' || a.kind === 'partylist') return true;
+    if (a.kind === 'unsupported') return true;
+    if (a.kind === 'partylist' && (!partyNavigation || PARTY_TYPE_OF[a.logicalName] === undefined)) return true;
     // A file or image is uploaded on its own, on a record that exists.
     if (isFileKind(a.kind)) return creating;
     if (!(creating ? a.validForCreate : a.validForUpdate)) return true;
@@ -244,7 +258,7 @@ export function useRecordForm(ctx: RecordContext, form: FormModel, options: Reco
 
   const reload = async (): Promise<void> => {
     if (!api || !set || !id) return;
-    const fresh = await fetchRecord(api, ctx.entity, id, columns);
+    const fresh = await fetchRecord(api, ctx.entity, id, columns, partyNavigation);
     const loaded = load(fresh);
     latestRef.current = { values: loaded, original: loaded };
     setRecord(fresh);
@@ -294,6 +308,40 @@ export function useRecordForm(ctx: RecordContext, form: FormModel, options: Reco
     return next;
   }
 
+  /** Entity sets of the party tables, read once per form from their metadata (never guessed from the table name). */
+  const partySets = useRef(new Map<string, string>());
+
+  /**
+   * The party navigation's items for the party lists to send. On create: every non-empty list. On update, when any list changed:
+   * the whole party set (on PATCH the server replaces every party list type, plan 4.1b ruling P12): each list of the form as it
+   * now is, and each other party list of the table as the record holds it; an emptied list sends no item and is cleared.
+   */
+  async function partyBody(toSend: AttributeMeta[], original: FormValues, values: FormValues, always: ReadonlySet<string>): Promise<Record<string, unknown>> {
+    if (!api || !partyNavigation) return {};
+    const lists = toSend.filter((a) => a.kind === 'partylist');
+    const changedLists = lists.filter((a) => {
+      const now = (values[a.logicalName] as Party[] | null) ?? [];
+      if (creating) return now.length > 0;
+      return always.has(a.logicalName) || !sameValue(a, original[a.logicalName], values[a.logicalName]);
+    });
+    if (changedLists.length === 0) return {};
+    const rawRows = recordRef.current?.[partyNavigation];
+    const rows = Array.isArray(rawRows) ? (rawRows as PartyRow[]) : [];
+    const columns = creating
+      ? changedLists.map((a) => a.logicalName)
+      : ctx.entity.attributes.filter((a) => a.kind === 'partylist' && PARTY_TYPE_OF[a.logicalName] !== undefined).map((a) => a.logicalName);
+    const partiesOf = (column: string): Party[] =>
+      column in values ? ((values[column] as Party[] | null) ?? []) : partyValuesOf(column, rows);
+    const tables = new Set(columns.flatMap((c) => partiesOf(c).flatMap((p) => (p.id && p.logicalName ? [p.logicalName] : []))));
+    for (const table of tables) {
+      if (partySets.current.has(table)) continue;
+      const meta = await api.get<{ EntitySetName?: string | null }>(`${entityPath(table)}?$select=EntitySetName`);
+      if (meta.EntitySetName) partySets.current.set(table, meta.EntitySetName);
+    }
+    const items = columns.flatMap((c) => partyItems(c, partiesOf(c), (table) => partySets.current.get(table)));
+    return { [partyNavigation]: items };
+  }
+
   async function save(): Promise<{ id: string } | undefined> {
     if (!api || !set || readOnly || busyRef.current) return undefined;
     // Created already: the page is loading the new record; the form does not create it twice. A value a script set since the
@@ -322,6 +370,7 @@ export function useRecordForm(ctx: RecordContext, form: FormModel, options: Reco
       try {
         const withSet = await withSets(values, toSend);
         body = creating ? createBody(toSend, withSet, zone) : changedBody(toSend, original, withSet, always, zone);
+        Object.assign(body, await partyBody(toSend, original, values, always));
       } catch (e) {
         if (!(e instanceof FieldError)) {
           setNotification(e instanceof Error ? e.message : String(e));

@@ -88,7 +88,11 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
     /// BulkDetectDuplicates: <c>prvRead</c> on the table of <c>Query</c> (plan 2.15, ruling D15; the job reads the rows as the caller).
     /// RetrieveExchangeRate: Read on the currency <c>TransactionCurrencyId</c> (plan 2.10).
     /// CalculateRollupField: Write on the row <c>Target</c>, else 403 <c>0x8004E027</c> (plan 2.12b, ruling R10).
-    /// SendEmail: Write on the email <c>EmailId</c>, and update on the secured columns it writes (plan 2.11, A17).
+    /// SendEmail: Write on the email <c>EmailId</c>, and update on the secured columns it writes (plan 2.11, A17); an email whose
+    /// sender (<c>from</c>) is a queue also needs the queue readable (plan 4.1b, <see cref="DemandQueueReadableAsync(Caller, Guid, DataSession, CancellationToken)"/>).
+    /// GetTrackingTokenEmail: no rule of its own (plan 4.1b, task 7).
+    /// A mailbox's Update that sets <c>testemailconfigurationscheduled</c> true: the owner of the mailbox or a System Administrator only
+    /// (plan 4.1b, task 7, <see cref="DemandMailboxTestAllowed"/>).
     /// Queue items (plan 4.1a, ruling R23; a <c>queueitem</c> has no owner): working an item (PickFromQueue, ReleaseToQueue, RouteTo
     /// for the queue it leaves, RemoveFromQueue, the Update and Delete of a <c>queueitem</c>) needs the item privilege (Write, Delete
     /// for RemoveFromQueue and Delete), its current queue readable (<see cref="DemandQueueReadableAsync"/>: the read predicate of
@@ -172,6 +176,12 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
                     // Plan 4.1a (ruling R23): a queue item has no owner; its Delete is working it.
                     if (deletedEntity.LogicalName == QueueSchema.QueueItem)
                         await DemandWorkItemAsync(principals, KeyedId(deletedEntity, deleteTarget), AccessRights.DeleteAccess, session, ct);
+                    else if (deletedEntity.LogicalName == MailSchema.Attachment)
+                    {
+                        // The cascade of an email's Delete (marked by the core): the email's Delete was checked.
+                        if (!CascadeHint.IsMarked(request))
+                            await DemandAttachmentWriteAsync(principals, deletedEntity, KeyedId(deletedEntity, deleteTarget), null, session, ct);
+                    }
                     else
                         await DemandRecordAsync(principals, deletedEntity, KeyedId(deletedEntity, deleteTarget), AccessRights.DeleteAccess, session, ct);
                 }
@@ -297,7 +307,14 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
                 {
                     await DemandRecordAsync(principals, emailEntity, emailId, AccessRights.WriteAccess, session, ct);
                     await DemandFieldUpdateAsync(caller, emailEntity, emailId, SendEmailColumns(parameters), session, ct);
+                    // Plan 4.1b (spec section 7): sending from a queue needs the queue readable, as a query reads it (its privacy).
+                    if (await QueueSenderAsync(emailId, session, ct) is { } queueSender)
+                        await DemandQueueReadableAsync(principals, queueSender, session, ct);
                 }
+                break;
+            case "gettrackingtokenemail":
+                // Plan 4.1b, task 7: handing out the organization's next tracking token needs no privilege of its own (from memory:
+                // checklist 7); any organization member may, as any member may send email with a token.
                 break;
             case "addtoqueue":
                 // Plan 4.1a (ruling R23): placing. Read on the record, Create Queue Item and the destination queue readable (its
@@ -374,6 +391,31 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
         && (string.IsNullOrEmpty(targets.EntityName) ? targets.Entities.FirstOrDefault()?.LogicalName : targets.EntityName) is { } name
             ? store.GetEntity(name)
             : null;
+
+    /// <summary>The queue that is the sender (<c>from</c> party) of the email <paramref name="emailId"/>; null for any other sender or none.</summary>
+    private async Task<Guid?> QueueSenderAsync(Guid emailId, DataSession session, CancellationToken ct)
+    {
+        if (store.GetEntity(QueueSchema.Queue)?.ObjectTypeCode is not { } queueType) return null;
+        await using var cmd = session.Command(
+            $"SELECT partyid FROM {session.DataTable(ActivitySchema.Party)} WHERE activityid = @id AND participationtypemask = 1 AND partyidtype = @type");
+        cmd.AddParameter("@id", System.Data.DbType.Guid, emailId);
+        cmd.AddParameter("@type", System.Data.DbType.Int32, queueType);
+        return await cmd.ExecuteScalarAsync(ct) is Guid queue ? queue : null;
+    }
+
+    /// <summary>
+    /// Plan 4.1b: the queue <paramref name="queueId"/> readable by <paramref name="caller"/>, as a query reads it (the read predicate
+    /// of <see cref="ReadSecurity"/>, privacy included): what sending from a queue needs, checked by SendEmail and again by the send
+    /// job. No effect for <see cref="Caller.Internal"/> and the SYSTEM user.
+    /// </summary>
+    /// <exception cref="XrmdFaultException">403 PrivilegeDenied or AccessDenied; 404 for a missing queue.</exception>
+    public async Task DemandQueueReadableAsync(Caller caller, Guid queueId, DataSession session, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(caller);
+        ArgumentNullException.ThrowIfNull(session);
+        if (await IsUnrestrictedAsync(caller, ct)) return;
+        await DemandQueueReadableAsync(await PrincipalsAsync(caller, ct), queueId, session, ct);
+    }
 
     /// <summary>The columns of <c>email</c> a SendEmail writes besides the server-maintained ones (<c>senton</c>, the sender).</summary>
     private static List<string> SendEmailColumns(ParameterCollection parameters)
@@ -713,7 +755,14 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
         DataSession session, CancellationToken ct)
     {
         if (store.GetEntity(target.LogicalName ?? "") is not { } entity) return;
+        // Plan 4.1b: an email's attachment follows its email (Write on it), whatever the table's own privileges.
+        if (entity.LogicalName == MailSchema.Attachment)
+        {
+            await DemandAttachmentWriteAsync(principals, entity, Guid.Empty, target.GetAttributeValue<EntityReference>(ActivitySchema.ObjectId), session, ct);
+            return;
+        }
         var privilege = DemandPrivilege(principals, AccessRights.CreateAccess, entity);
+        await DemandMailAdministrationAsync(principals, entity, target, Guid.Empty, session, ct);
         var pk = SystemAttributes.PrimaryIdName(entity);
         var id = target.Id != Guid.Empty ? target.Id : target.GetAttributeValue<Guid?>(pk) ?? Guid.Empty;
 
@@ -766,6 +815,34 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
     }
 
     /// <summary>
+    /// Create, Update and Delete of an <c>activitymimeattachment</c> (plan 4.1b, ruling P4): Write on the email it belongs to (the
+    /// privilege, then the record's depth, shares and hierarchy), as the table has no owner and no privilege of its own. A new
+    /// attachment names its email in <paramref name="email"/>; a stored one is read by <paramref name="id"/>. An email that is
+    /// missing, or no email, is left to the core operation (404, 400).
+    /// </summary>
+    /// <exception cref="XrmdFaultException">403 PrivilegeDenied or AccessDenied; 404 for a missing attachment or email.</exception>
+    private async Task DemandAttachmentWriteAsync(IReadOnlyList<SecurityProfile> principals, EntityMetadata attachment, Guid id,
+        EntityReference? email, DataSession session, CancellationToken ct)
+    {
+        if (store.GetEntity(ActivitySchema.Email) is not { } emailEntity) return;
+        Guid emailId;
+        if (id != Guid.Empty)
+        {
+            var stored = await ReadRecordAsync(attachment, id, [ActivitySchema.ObjectId], session, ct);
+            // Fails closed: an attachment without an email (never made by the server) is writable by nobody but unrestricted callers.
+            if (stored.Lookups.GetValueOrDefault(ActivitySchema.ObjectId) is not { } owner)
+                throw XrmdFaultException.AccessDenied(principals[0].UserId, AccessRights.WriteAccess, attachment.LogicalName, id);
+            emailId = owner;
+        }
+        else
+        {
+            if (email is null || email.LogicalName != ActivitySchema.Email) return;
+            emailId = KeyedId(emailEntity, email);
+        }
+        await DemandRecordAsync(principals, emailEntity, emailId, AccessRights.WriteAccess, session, ct);
+    }
+
+    /// <summary>
     /// A direct Create of a <c>queueitem</c> (plan 4.1a, spec §6, ruling R23): its queue (<c>queueid</c>) readable
     /// (<see cref="DemandQueueReadableAsync"/>; Create Queue Item is demanded by the caller), and Read on the record it points to
     /// (<c>objectid</c>). A missing or unknown reference is left to the core operation (400).
@@ -793,8 +870,15 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
             return;
         }
 
+        if (entity.LogicalName == MailSchema.Attachment)
+        {
+            await DemandAttachmentWriteAsync(principals, entity, id, null, session, ct);
+            return;
+        }
+
         var lookups = WrittenLookups(entity, target, isCreate: false).ToList();
         DemandPrivilege(principals, AccessRights.WriteAccess, entity);
+        await DemandMailAdministrationAsync(principals, entity, target, id, session, ct);
         if (entity.LogicalName == SystemUser && target.Attributes.ContainsKey(EntraObjectId)
             && principals.FirstOrDefault(p => !p.IsSystemAdministrator) is { } notAdministrator)
             throw new XrmdFaultException(ErrorCodes.PrivilegeDenied,
@@ -802,6 +886,9 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
                 403);
         var record = await ReadRecordAsync(entity, id, lookups.Select(l => l.Attribute).ToList(), session, ct);
         await DemandRecordAsync(principals, entity, id, AccessRights.WriteAccess, record, session, ct);
+        if (entity.LogicalName == MailSchema.Mailbox && target.Attributes.ContainsKey(MailSchema.TestScheduled)
+            && await ChangesTestScheduledAsync(entity, id, target.GetAttributeValue<bool?>(MailSchema.TestScheduled) == true, session, ct))
+            DemandMailboxTestAllowed(principals, record.Owner);
 
         var changed = lookups.Where(l => record.Lookups.GetValueOrDefault(l.Attribute) != l.Value?.Id).ToList();
         if (changed.Count > 0)
@@ -817,6 +904,84 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
         {
             await DemandRecordAsync(principals, entity, id, AccessRights.AssignAccess, record, session, ct);
             await DemandOwnerCanReadAsync(entity, newOwner, session, ct);
+        }
+    }
+
+    /// <summary>
+    /// Plan 4.1b (controller ruling P2): the approval of a user's, queue's or mailbox's email address and a mailbox's server profile are
+    /// written by a System Administrator only. On an Update a column sent with its stored value is not a change (a client that
+    /// retrieves all columns and sends them back passes). <paramref name="id"/> is empty on a Create, where every named column counts.
+    /// </summary>
+    /// <exception cref="XrmdFaultException">403 PrivilegeDenied.</exception>
+    private async Task DemandMailAdministrationAsync(IReadOnlyList<SecurityProfile> principals, EntityMetadata entity, Entity target, Guid id,
+        DataSession session, CancellationToken ct)
+    {
+        var pk = SystemAttributes.PrimaryIdName(entity);
+        var sent = (entity.LogicalName == MailSchema.Mailbox
+                ? target.Attributes.Keys.Where(c => !MailSchema.MailboxUserColumns.Contains(c) && c != pk
+                                                    && entity.Attributes?.Any(a => a.LogicalName == c && a.AttributeOf is null && !MailSchema.IsSecret(a)) == true)
+                : MailSchema.AdministratorColumns(entity.LogicalName).Where(target.Attributes.ContainsKey)).ToList();
+        if (sent.Count == 0 || principals.FirstOrDefault(p => !p.IsSystemAdministrator) is not { } notAdministrator) return;
+        static object? Normal(string column, object? v) => v switch
+        {
+            OptionSetValue o => o.Value,
+            EntityReference r => r.Id,
+            string { Length: 0 } => null,
+            null when column == MailSchema.ApprovalColumn => 0,
+            var x => x,
+        };
+        if (id != Guid.Empty)
+        {
+            await using var cmd = session.Command($"SELECT {string.Join(", ", sent.Select(session.Quote))} FROM {session.DataTable(entity.LogicalName)} " +
+                                                  $"WHERE {session.Quote(pk)} = @id");
+            cmd.AddParameter("@id", DbType.Guid, id);
+            await using var rd = await cmd.ExecuteReaderAsync(ct);
+            if (await rd.ReadAsync(ct))
+            {
+                var keep = new List<string>();
+                for (var i = 0; i < sent.Count; i++)
+                {
+                    object? stored = rd.IsDBNull(i) ? null : rd.GetValue(i);
+                    var value = Normal(sent[i], target[sent[i]]);
+                    stored = Normal(sent[i], stored is Guid or string or null or DateTime or bool ? stored : stored is IConvertible ? Convert.ToInt32(stored) : stored);
+                    if (!Equals(stored, value)) keep.Add(sent[i]);
+                }
+                sent = keep;
+            }
+        }
+        if (sent.Count > 0)
+            throw new XrmdFaultException(ErrorCodes.PrivilegeDenied,
+                $"Principal user (Id={notAdministrator.UserId}, type=8) is not a System Administrator: only a System Administrator can change {string.Join(", ", sent)} of {entity.LogicalName}.",
+                403);
+    }
+
+    /// <summary>
+    /// Whether an Update writes <c>testemailconfigurationscheduled</c>: true schedules a test, false while a test waits withdraws it; the
+    /// stored value sent back (false while nothing waits) is not a write.
+    /// </summary>
+    private static async Task<bool> ChangesTestScheduledAsync(EntityMetadata entity, Guid id, bool value, DataSession session, CancellationToken ct)
+    {
+        if (value) return true;
+        await using var cmd = session.Command($"SELECT {session.Quote(MailSchema.TestScheduled)} FROM {session.DataTable(entity.LogicalName)} " +
+                                              $"WHERE {session.Quote(SystemAttributes.PrimaryIdName(entity))} = @id");
+        cmd.AddParameter("@id", DbType.Guid, id);
+        return await cmd.ExecuteScalarAsync(ct) is { } stored and not DBNull && Convert.ToBoolean(stored);
+    }
+
+    /// <summary>
+    /// Plan 4.1b, task 7 (ruling P2): the outgoing test of a mailbox (<c>testemailconfigurationscheduled</c>, set true or withdrawn) is
+    /// asked for or withdrawn by the owner of the mailbox (its owning user, or a member of its owning team) or a System Administrator; Write on the mailbox alone is
+    /// not enough. Every principal (the caller and the impersonated user) must qualify.
+    /// </summary>
+    /// <exception cref="XrmdFaultException">403 PrivilegeDenied.</exception>
+    private static void DemandMailboxTestAllowed(IReadOnlyList<SecurityProfile> principals, RecordOwnership owner)
+    {
+        foreach (var p in principals)
+        {
+            if (p.IsSystemAdministrator || owner.OwningUser == p.UserId || (owner.OwningTeam is { } team && p.TeamIds.Contains(team))) continue;
+            throw new XrmdFaultException(ErrorCodes.PrivilegeDenied,
+                $"Principal user (Id={p.UserId}, type=8) can test only its own mailbox: only the owner of a mailbox or a System Administrator " +
+                $"can change {MailSchema.TestScheduled}.", 403);
         }
     }
 

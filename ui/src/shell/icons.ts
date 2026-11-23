@@ -111,6 +111,16 @@ import {
   ArrowUndoRegular,
   ArrowRoutingFilled,
   ArrowRoutingRegular,
+  EyeFilled,
+  EyeRegular,
+  SendFilled,
+  SendRegular,
+  PeopleQueueFilled,
+  PeopleQueueRegular,
+  DocumentPdfFilled,
+  DocumentPdfRegular,
+  ImageFilled,
+  ImageRegular,
   DismissFilled as QueueDismissFilled,
   DismissRegular as QueueDismissRegular,
 } from '@fluentui/react-icons';
@@ -165,6 +175,14 @@ export const EditIcon = bundleIcon(EditFilled, EditRegular);
 export const BackIcon = bundleIcon(ArrowLeftFilled, ArrowLeftRegular);
 export const ShowAsIcon = bundleIcon(GridFilled, GridRegular);
 export const DownloadIcon = bundleIcon(ArrowDownloadFilled, ArrowDownloadRegular);
+/** Send an email (plan 4.1b, task 9). */
+export const SendIcon = bundleIcon(SendFilled, SendRegular);
+/** Preview a file (an email attachment) without saving it. */
+export const PreviewIcon = bundleIcon(EyeFilled, EyeRegular);
+/** A file by its kind: a PDF, an image, any other document. */
+export const PdfFileIcon = bundleIcon(DocumentPdfFilled, DocumentPdfRegular);
+export const ImageFileIcon = bundleIcon(ImageFilled, ImageRegular);
+export const FileIcon = bundleIcon(DocumentFilled, DocumentRegular);
 /** Site map entries: a table (with a few well-known ones), a dashboard, a page or web resource, an external address. */
 const PersonIcon = bundleIcon(PersonFilled, PersonRegular);
 export const SITEMAP_TABLE_ICONS: Record<string, FluentIcon> = {
@@ -173,6 +191,11 @@ export const SITEMAP_TABLE_ICONS: Record<string, FluentIcon> = {
   systemuser: PersonIcon,
 };
 export const SiteMapTableIcon = bundleIcon(TableFilled, TableRegular);
+/** A party of an activity by its table (a queue as a sender or a recipient, plan 4.1b); any other table gets the table icon. */
+export const PARTY_ICONS: Record<string, FluentIcon> = {
+  ...SITEMAP_TABLE_ICONS,
+  queue: bundleIcon(PeopleQueueFilled, PeopleQueueRegular),
+};
 export const SiteMapDashboardIcon = bundleIcon(BoardFilled, BoardRegular);
 export const SiteMapPageIcon = bundleIcon(DocumentFilled, DocumentRegular);
 export const SiteMapUrlIcon = bundleIcon(GlobeFilled, GlobeRegular);

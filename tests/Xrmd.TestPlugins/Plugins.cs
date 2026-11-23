@@ -169,6 +169,14 @@ namespace Xrmd.TestPlugins
 
         public ContextRecorderPlugin(string unsecure, string secure) { _entity = unsecure; }
 
+        /// <summary>The attributes (name=value) of the parent context's Target, to show what a parent holds.</summary>
+        private static string ParentTarget(IPluginExecutionContext? parent)
+        {
+            if (parent == null || !parent.InputParameters.Contains("Target")) return "";
+            var e = parent.InputParameters["Target"] as Entity;
+            return e == null ? "" : string.Join(",", e.Attributes.OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => k.Key + "=" + k.Value));
+        }
+
         public void Execute(IServiceProvider serviceProvider)
         {
             var context = (IPluginExecutionContext)serviceProvider.GetService(typeof(IPluginExecutionContext));
@@ -185,6 +193,7 @@ namespace Xrmd.TestPlugins
                 "post=" + Images(context.PostEntityImages),
                 "shared=" + string.Join(",", context.SharedVariables.Keys.OrderBy(k => k, StringComparer.Ordinal)),
                 "parent=" + (context.ParentContext == null ? "" : context.ParentContext.MessageName),
+                "parenttarget=" + ParentTarget(context.ParentContext),
                 "user=" + context.UserId,
                 "initiating=" + context.InitiatingUserId,
                 "output=" + string.Join(",", context.OutputParameters.Keys.OrderBy(k => k, StringComparer.Ordinal)),

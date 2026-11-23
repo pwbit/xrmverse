@@ -68,6 +68,8 @@ export interface CommandBarProps {
   custom?: RibbonButton[];
   /** Closes the form (back to where it was opened from, or its side pane), shown as an X at the end of the bar. */
   onClose?: () => void;
+  /** Commands of the table's own before the standard ones (an email's Send, plan 4.1b). */
+  leading?: Command[];
 }
 
 /** UI-1e ruling E6: the `ModernImage` names OpenProject365 uses, as Fluent 20 bundled icons
@@ -148,7 +150,7 @@ type Pending = 'queueAdd' | 'delete' | 'refresh' | 'discardForAssign' | 'assign'
  * Deactivate for tables with a `statecode` of at least two states, on a record the user may write (ruling R1). The form's
  * custom commands (UI-1e) follow, in `Sequence` order.
  */
-export function CommandBar({ ctx, state, onNew, onSave, onSaveAndClose, onDelete, onRefresh, onAssign, onSetState, custom = [], onClose }: CommandBarProps) {
+export function CommandBar({ ctx, state, onNew, onSave, onSaveAndClose, onDelete, onRefresh, onAssign, onSetState, custom = [], onClose, leading = [] }: CommandBarProps) {
   const surface = useSurfaceStyles();
   const styles = useStyles();
   const [pending, setPending] = useState<Pending>();
@@ -163,7 +165,7 @@ export function CommandBar({ ctx, state, onNew, onSave, onSaveAndClose, onDelete
   const id = ctx.fieldContext.record?.id;
   const set = ctx.entity.entitySetName;
 
-  const commands: Command[] = [];
+  const commands: Command[] = [...leading];
   if (ctx.canCreate) commands.push({ id: 'new', icon: <NewIcon />, label: t('record.cmd.new'), onClick: onNew });
   if (canSave) {
     commands.push({ id: 'save', icon: <SaveIcon />, label: t('record.cmd.save'), disabled: saveDisabled, onClick: onSave });

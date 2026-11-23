@@ -207,7 +207,8 @@ public sealed class BackgroundWorkflowTests(XrmdFixture fx) : IAsyncLifetime
         await using var conn = await TestProvider.OpenAsync(fx.ConnectionString);
         await using var cmd = TestSql.Command(
             $"SELECT asyncoperationid, name, messagename, primaryentitytype, regardingobjectid, {S.WorkflowActivationId}, ownerid, createdby, " +
-            "depth, statecode, statuscode, message, errorcode, postponeuntil, data, operationtype FROM data.asyncoperation ORDER BY createdon, depth", conn);
+            "depth, statecode, statuscode, message, errorcode, postponeuntil, data, operationtype FROM data.asyncoperation " +
+            $"WHERE operationtype <> {AsyncOperationQueue.EmailSend} ORDER BY createdon, depth", conn);
         await using var rd = await cmd.ExecuteReaderAsync();
         var jobs = new List<Job>();
         T? N<T>(int i) => rd.IsDBNull(i) ? default : rd.GetFieldValue<T>(i);
@@ -522,7 +523,7 @@ public sealed class BackgroundWorkflowTests(XrmdFixture fx) : IAsyncLifetime
 
         await Admin.UpdateAsync(new Entity(Order, order) { ["xrmv_amount"] = 150m });
 
-        (await RunJobsAsync()).Should().Be(1);
+        (await RunJobsAsync()).Should().Be(2, "the workflow, then the EmailSend job its SendEmail queued");
         (await SingleJobAsync()).StatusCode.Should().Be(30);
         (await WaitsAsync()).Should().BeEmpty();
         (await RegardingAsync("email", order)).Should().ContainSingle("the step after the wait sent the email");
@@ -659,7 +660,7 @@ public sealed class BackgroundWorkflowTests(XrmdFixture fx) : IAsyncLifetime
         var ran = await RunWithWriteBeforeRegisterAsync(() => Admin.UpdateAsync(new Entity(Order, order) { ["xrmv_amount"] = 150m }));
 
         // W10: the write landed after the condition read, while the job had no wait row: it is woken all the same.
-        ran.Should().Be(2, "the run that missed the write suspends woken, and the next one sees the amount");
+        ran.Should().Be(3, "the run that missed the write suspends woken, the next one sees the amount, then the EmailSend job runs");
         (await SingleJobAsync()).Should().Match<Job>(j => j.Id == job.Id && j.StateCode == 3 && j.StatusCode == 30);
         (await WaitsAsync()).Should().BeEmpty();
         (await RegardingAsync("email", order)).Should().ContainSingle();
@@ -797,7 +798,7 @@ public sealed class BackgroundWorkflowTests(XrmdFixture fx) : IAsyncLifetime
         // RF4, W4: the activation stays while the job waits, and the job goes on.
         (await WorkflowExistsAsync(activation)).Should().BeTrue();
         await Admin.UpdateAsync(new Entity(Order, order) { ["xrmv_amount"] = 150m });
-        (await RunJobsAsync()).Should().Be(1);
+        (await RunJobsAsync()).Should().Be(2, "the workflow, then the EmailSend job its SendEmail queued");
         (await SingleJobAsync()).StatusCode.Should().Be(30);
         (await RegardingAsync("email", order)).Should().ContainSingle();
         (await WorkflowExistsAsync(activation)).Should().BeFalse("its last waiting job has ended");
@@ -833,7 +834,7 @@ public sealed class BackgroundWorkflowTests(XrmdFixture fx) : IAsyncLifetime
         Waits.HasAny.Should().BeTrue("unknown until counted");
         await Admin.UpdateAsync(new Entity(Order, order) { ["xrmv_amount"] = 150m });
 
-        (await RunJobsAsync(NewWorker())).Should().Be(1);
+        (await RunJobsAsync(NewWorker())).Should().Be(2, "the workflow, then the EmailSend job its SendEmail queued");
         (await SingleJobAsync()).StatusCode.Should().Be(30);
         (await RegardingAsync("email", order)).Should().ContainSingle();
     }

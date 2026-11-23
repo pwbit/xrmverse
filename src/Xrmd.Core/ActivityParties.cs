@@ -278,12 +278,18 @@ public sealed class ActivityParties(IMetadataStore store)
 
     /// <summary>
     /// The address of the party record, read with HOLDLOCK in the write's transaction: <c>emailaddress1</c>, or
-    /// <c>internalemailaddress</c> of a <c>systemuser</c> (null when the table has no such column or it is empty).
+    /// <c>internalemailaddress</c> of a <c>systemuser</c>, or <c>emailaddress</c> of a <c>queue</c> (null when the table has no such
+    /// column or it is empty).
     /// </summary>
     /// <exception cref="XrmdFaultException">ObjectDoesNotExist (404) when the record does not exist.</exception>
     private static async Task<string?> PartyAddressAsync(DataSession s, EntityMetadata table, Guid id, CancellationToken ct)
     {
-        var column = table.LogicalName == "systemuser" ? ActivitySchema.InternalEmailAddress : "emailaddress1";
+        var column = table.LogicalName switch
+        {
+            "systemuser" => ActivitySchema.InternalEmailAddress,
+            QueueSchema.Queue => "emailaddress", // plan 4.1b
+            _ => "emailaddress1",
+        };
         var hasColumn = table.Attributes?.Any(a => a.LogicalName == column) == true;
         await using var cmd = s.Command(
             $"SELECT {(hasColumn ? $"{s.Quote(column)}" : "NULL")} FROM {s.DataTable(table.LogicalName)}{s.Dialect.LockHint(RowLock.Shared)} " +

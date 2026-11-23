@@ -832,6 +832,38 @@ public sealed class QueueMessageTests(XrmdFixture fx) : IAsyncLifetime
         (await ItemCountAsync(email)).Should().Be(0);
     }
 
+    /// <summary>Ruling P8: the Web API selects <c>objectidtypecode</c> (the EntityName companion of <c>objectid</c>) and returns the table's logical name.</summary>
+    [Fact]
+    public async Task WebApi_Select_ObjectIdTypeCode()
+    {
+        var queue = await QueueAsync("Typed");
+        var email = await EmailAsync("Typed item");
+        var id = await AddAsync(Admin, email, queue);
+
+        async Task<JsonObject> GetJsonAsync(string path)
+        {
+            var req = new HttpRequestMessage(HttpMethod.Get, Api + path);
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", DevTokenFactory.Create(fx.AdminObjectId, fx.BaseUrl));
+            var res = await fx.Client.SendAsync(req);
+            var body = await res.Content.ReadAsStringAsync();
+            res.StatusCode.Should().Be(HttpStatusCode.OK, body);
+            return JsonNode.Parse(body)!.AsObject();
+        }
+
+        var one = await GetJsonAsync($"queueitems({id})?$select=objectidtypecode,title");
+        one["objectidtypecode"]!.GetValue<string>().Should().Be("email");
+
+        var list = await GetJsonAsync($"queueitems?$select=objectidtypecode,_objectid_value&$filter=_queueid_value eq {queue}");
+        var row = list["value"]!.AsArray().Should().ContainSingle().Subject!;
+        row["objectidtypecode"]!.GetValue<string>().Should().Be("email");
+        Guid.Parse(row["_objectid_value"]!.GetValue<string>()).Should().Be(email);
+
+        var filtered = await GetJsonAsync($"queueitems?$select=queueitemid&$filter=_queueid_value eq {queue} and objectidtypecode eq 'email'");
+        filtered["value"]!.AsArray().Should().ContainSingle();
+        (await GetJsonAsync($"queueitems?$select=queueitemid&$filter=_queueid_value eq {queue} and objectidtypecode eq 'task'"))["value"]!.AsArray()
+            .Should().BeEmpty();
+    }
+
     // ---- pipeline (decision 4) ----
 
     [Fact]

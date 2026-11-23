@@ -498,6 +498,7 @@
       "Targets": [
         "account",
         "contact",
+        "queue",
         "systemuser"
       ],
       "AttributeType": "PartyList"
@@ -521,6 +522,7 @@
       "Targets": [
         "account",
         "contact",
+        "queue",
         "systemuser"
       ],
       "AttributeType": "PartyList"
@@ -544,6 +546,7 @@
       "Targets": [
         "account",
         "contact",
+        "queue",
         "systemuser"
       ],
       "AttributeType": "PartyList"
@@ -567,6 +570,7 @@
       "Targets": [
         "account",
         "contact",
+        "queue",
         "systemuser"
       ],
       "AttributeType": "PartyList"
@@ -1022,6 +1026,313 @@
           }
         ]
       }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "inreplyto",
+      "SchemaName": "InReplyTo",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "In Reply To Message",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "In Reply To Message",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 320,
+      "Format": "Text"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "conversationindex",
+      "SchemaName": "ConversationIndex",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Conversation Index",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Conversation Index",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 2048,
+      "Format": "Text"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "correlationmethod",
+      "SchemaName": "CorrelationMethod",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Correlation Method",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Correlation Method",
+          "LanguageCode": 1033
+        }
+      },
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "None",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "None",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Skipped",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Skipped",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 2,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "XHeader",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "XHeader",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 3,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "InReplyTo",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "InReplyTo",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 4,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "TrackingToken",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "TrackingToken",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 5,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "ConversationIndex",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "ConversationIndex",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 6,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "SmartMatching",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "SmartMatching",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 7,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "CustomCorrelation",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "CustomCorrelation",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      },
+      "DefaultFormValue": 0,
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "parentactivityid",
+      "SchemaName": "ParentActivityId",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Parent Activity",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Parent Activity",
+          "LanguageCode": 1033
+        }
+      },
+      "Targets": [
+        "email"
+      ]
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "attachmentcount",
+      "SchemaName": "AttachmentCount",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Attachment Count",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Attachment Count",
+          "LanguageCode": 1033
+        }
+      },
+      "MinValue": 0,
+      "MaxValue": 2147483647,
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "emailsender",
+      "SchemaName": "EmailSender",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Sender",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Sender",
+          "LanguageCode": 1033
+        }
+      },
+      "Targets": [
+        "account",
+        "contact",
+        "queue",
+        "systemuser"
+      ],
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "sender",
+      "SchemaName": "Sender",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "From",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "From",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 250,
+      "Format": "Text"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "torecipients",
+      "SchemaName": "ToRecipients",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "To Recipients",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "To Recipients",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 500,
+      "Format": "Text"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "deliveryattempts",
+      "SchemaName": "DeliveryAttempts",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Delivery Attempts",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Delivery Attempts",
+          "LanguageCode": 1033
+        }
+      },
+      "MinValue": 0,
+      "MaxValue": 1000000000
     }
   ],
   "ManyToOneRelationships": [

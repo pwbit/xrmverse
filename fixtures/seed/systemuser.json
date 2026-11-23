@@ -21,6 +21,263 @@
       "SchemaName": "QueueId",
       "DisplayName": {"LocalizedLabels": [{"Label": "Default Queue", "LanguageCode": 1033}], "UserLocalizedLabel": {"Label": "Default Queue", "LanguageCode": 1033}},
       "Targets": ["queue"]
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "emailrouteraccessapproval",
+      "SchemaName": "EmailRouterAccessApproval",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Primary Email Status",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Primary Email Status",
+          "LanguageCode": 1033
+        }
+      },
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Empty",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Empty",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Approved",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Approved",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 2,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Pending Approval",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Pending Approval",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 3,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Rejected",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Rejected",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      },
+      "DefaultFormValue": 0
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "defaultmailbox",
+      "SchemaName": "DefaultMailbox",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Mailbox",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Mailbox",
+          "LanguageCode": 1033
+        }
+      },
+      "Targets": [
+        "mailbox"
+      ],
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "incomingemaildeliverymethod",
+      "SchemaName": "IncomingEmailDeliveryMethod",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Incoming Delivery Method",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Incoming Delivery Method",
+          "LanguageCode": 1033
+        }
+      },
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "None",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "None",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Outlook",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Outlook",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 2,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Server-Side Synchronization",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Server-Side Synchronization",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 3,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Forward Mailbox",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Forward Mailbox",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "outgoingemaildeliverymethod",
+      "SchemaName": "OutgoingEmailDeliveryMethod",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Outgoing Delivery Method",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Outgoing Delivery Method",
+          "LanguageCode": 1033
+        }
+      },
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "None",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "None",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Outlook",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Outlook",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 2,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Server-Side Synchronization",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Server-Side Synchronization",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      }
     }
   ],
   "ManyToOneRelationships": [

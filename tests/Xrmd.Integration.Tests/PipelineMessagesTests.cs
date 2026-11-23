@@ -401,9 +401,12 @@ public sealed class PipelineMessagesTests(XrmdFixture fx) : IAsyncLifetime
     {
         var executor = fx.App.Services.CreateScope().ServiceProvider.GetRequiredService<Xrmd.Pipeline.PipelineExecutor>();
         EmailMessages.Refused.Should().Contain(["Book", "Reschedule", "DeliverPromoteEmail", "DeliverIncomingEmail", "CheckIncomingEmail",
-            "CheckPromoteEmail", "BackgroundSendEmail", "SendEmailFromTemplate", "SendTemplate", "InstantiateTemplate", "GetTrackingTokenEmail",
-            "AddRecurrence", "Rollup", "Restore", "AppendRelatedParty", "InitializeAnnotationBlocksUpload", "InitializeAnnotationBlocksDownload"]);
+            "CheckPromoteEmail", "BackgroundSendEmail", "SendEmailFromTemplate", "SendTemplate", "InstantiateTemplate",
+            "AddRecurrence", "Rollup", "Restore", "AppendRelatedParty", "InitializeAnnotationBlocksUpload", "InitializeAnnotationBlocksDownload", "InitializeAttachmentBlocksUpload", "InitializeAttachmentBlocksDownload"]);
         EmailMessages.Refused.Should().NotContain(EmailMessages.SendEmail);
+        // Plan 4.1b, task 7: GetTrackingTokenEmail runs (it stays a reserved name).
+        EmailMessages.Refused.Should().NotContain(EmailMessages.GetTrackingTokenEmail);
+        executor.IsReservedMessageName(EmailMessages.GetTrackingTokenEmail).Should().BeTrue();
         // Plan 4.1a: every queue message is implemented (tasks 5 and 6), none is refused.
         EmailMessages.Refused.Should().NotContain(QueueSchema.Messages);
         EmailMessages.Refused.Should().NotContain(["PickFromQueue", "ReleaseToQueue", "RetrieveUserQueues"]);

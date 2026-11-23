@@ -15,6 +15,7 @@ using Xrmd.Abstractions;
 using Xrmd.Audit;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
+using Xrmd.Pipeline.Mail;
 using Xrmd.Pipeline.Async;
 using Xrmd.Pipeline.CustomApis;
 using Xrmd.Pipeline.Bulk;
@@ -353,6 +354,11 @@ public sealed class PipelineExecutor(IPipelineCore core, StepRegistry registry, 
                     await ValidateRegistrationAsync(request, entityName, entityId, session, ct);
                     await CheckWorkflowWriteAsync(request, invocation.Caller, entityName, entityId, session, ct);
                     webhookSecret = await AuthorServiceEndpointAsync(request, entityName, entityId, session, ct);
+                    // Plan 4.1b: a mail secret leaves the Target (or the Targets of a bulk message) for good here, whatever the message that
+                    // writes it: the stage-40, asynchronous and webhook contexts, and the ParentContext of an inner Create, Update or Upsert,
+                    // never hold it (an Upsert's inner Create or Update gets the value through PendingMailSecrets.Carry).
+                    if (entityName is not null && metadata.GetEntity(session, entityName) is { } mailTable)
+                        PendingMailSecrets.StripRequest(request, mailTable);
                 }
             }
             if (perStage) state = await CommitStageAsync(session, state!, ct);

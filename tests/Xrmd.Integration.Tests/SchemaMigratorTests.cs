@@ -12,7 +12,7 @@ namespace Xrmd.Integration.Tests;
 public class SchemaMigratorTests(XrmdFixture fx)
 {
     private static readonly string[] ExpectedTables =
-        ["entity", "attribute", "relationship", "optionset", "version_stamp", "schema_version", "filesession", "filesecret", "fileorphan", "hierarchy_security_exclusion", "upgrade_step", "component_layer", "solution_rank", "matchcode_table", "serviceendpoint_secret", "workflow_wait", "customcontrol_file", "migration_package", "migration_run", "migration_chunk", "migration_idmap", "migration_deferred", "migration_issue", "migration_phase", "migration_table", "migration_deactivated"];
+        ["entity", "attribute", "relationship", "optionset", "version_stamp", "schema_version", "filesession", "filesecret", "fileorphan", "hierarchy_security_exclusion", "upgrade_step", "component_layer", "solution_rank", "matchcode_table", "serviceendpoint_secret", "workflow_wait", "customcontrol_file", "migration_package", "migration_run", "migration_chunk", "migration_idmap", "migration_deferred", "migration_issue", "migration_phase", "migration_table", "migration_deactivated", "mail_secret"];
 
     private static async Task<long> ScalarAsync(DbConnection conn, string sql)
     {
@@ -35,7 +35,7 @@ public class SchemaMigratorTests(XrmdFixture fx)
         await migrator.MigrateAsync();
 
         await using var conn = await factory.OpenAsync();
-        (await ScalarAsync(conn, "SELECT COUNT(*) FROM meta.schema_version")).Should().Be(18, "each migration is applied once");
+        (await ScalarAsync(conn, "SELECT COUNT(*) FROM meta.schema_version")).Should().Be(19, "each migration is applied once");
         (await ScalarAsync(conn, "SELECT COUNT(*) FROM meta.filesecret WHERE DATALENGTH(secret) = 32")).Should().Be(1, "0004 writes one secret");
         (await ScalarAsync(conn, "SELECT COUNT(*) FROM meta.version_stamp")).Should().Be(1);
         (await ScalarAsync(conn, "SELECT [current] FROM meta.version_stamp")).Should().Be(0);
@@ -99,7 +99,7 @@ public class SchemaMigratorTests(XrmdFixture fx)
             SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
             WHERE TABLE_SCHEMA = 'meta' AND COLUMN_NAME IN ('solution_settings_xml', 'display_mask')
             """)).Should().Be(0);
-        (await ScalarAsync(check, "SELECT COUNT(*) FROM meta.schema_version")).Should().Be(18);
+        (await ScalarAsync(check, "SELECT COUNT(*) FROM meta.schema_version")).Should().Be(19);
         await migrator.MigrateAsync(); // idempotent once upgraded
     }
 
@@ -137,7 +137,7 @@ public class SchemaMigratorTests(XrmdFixture fx)
         await migrator.MigrateAsync();
 
         await using var check = await factory.OpenAsync();
-        (await ScalarAsync(check, "SELECT COUNT(*) FROM meta.schema_version")).Should().Be(18);
+        (await ScalarAsync(check, "SELECT COUNT(*) FROM meta.schema_version")).Should().Be(19);
         (await ScalarAsync(check, "SELECT COUNT(*) FROM data.principalobjectaccess")).Should().Be(2, "every share is kept");
         (await ScalarAsync(check, """
             SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID('data.principalobjectaccess')

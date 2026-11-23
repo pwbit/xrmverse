@@ -80,7 +80,7 @@ public sealed class ActivitySeedTests(XrmdFixture fx)
         ActivitySchema.IsActivityTable(Store.GetEntity("activitypointer")!).Should().BeFalse();
         // The polymorphic lookups of the model keep their type column.
         Store.GetEntity("activityparty")!.Attributes.OfType<LookupAttributeMetadata>().Single(a => a.LogicalName == "partyid")
-            .Targets.Should().BeEquivalentTo("account", "contact", "systemuser");
+            .Targets.Should().BeEquivalentTo("account", "contact", "queue", "systemuser");
         // Seeded without targets; the startup upgrade (task 2) gives it the tables with HasNotes.
         Store.GetEntity("annotation")!.Attributes.OfType<LookupAttributeMetadata>().Single(a => a.LogicalName == "objectid")
             .Targets.Should().Contain(["account", "contact", "email", "task", "phonecall", "appointment"]);

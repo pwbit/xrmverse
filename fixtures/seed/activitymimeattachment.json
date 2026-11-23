@@ -1,0 +1,186 @@
+{
+  "LogicalName": "activitymimeattachment",
+  "SchemaName": "ActivityMimeAttachment",
+  "DisplayName": {
+    "LocalizedLabels": [
+      {
+        "Label": "Attachment",
+        "LanguageCode": 1033
+      }
+    ],
+    "UserLocalizedLabel": {
+      "Label": "Attachment",
+      "LanguageCode": 1033
+    }
+  },
+  "IsAuditEnabled": {
+    "Value": false,
+    "CanBeChanged": false,
+    "ManagedPropertyLogicalName": "canmodifyauditsettings"
+  },
+  "EntitySetName": "activitymimeattachments",
+  "ObjectTypeCode": 1001,
+  "OwnershipType": "None",
+  "PrimaryIdAttribute": "activitymimeattachmentid",
+  "PrimaryNameAttribute": "filename",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "filename",
+      "SchemaName": "FileName",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "File Name",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "File Name",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 255,
+      "Format": "Text"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "subject",
+      "SchemaName": "Subject",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Subject",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Subject",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 2000,
+      "Format": "Text"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "mimetype",
+      "SchemaName": "MimeType",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Mime Type",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Mime Type",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 256,
+      "Format": "Text"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "filesize",
+      "SchemaName": "FileSize",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "File Size (Bytes)",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "File Size (Bytes)",
+          "LanguageCode": 1033
+        }
+      },
+      "MinValue": 0,
+      "MaxValue": 1000000000,
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "attachmentnumber",
+      "SchemaName": "AttachmentNumber",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Attachment Number",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Attachment Number",
+          "LanguageCode": 1033
+        }
+      },
+      "MinValue": 0,
+      "MaxValue": 1000000000
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "body",
+      "SchemaName": "Body",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Body",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Body",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 1073741823
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "objectid",
+      "SchemaName": "ObjectId",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Item",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Item",
+          "LanguageCode": 1033
+        }
+      },
+      "Targets": [
+        "activitypointer",
+        "email"
+      ],
+      "RequiredLevel": {
+        "Value": "SystemRequired",
+        "CanBeChanged": false
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.EntityNameAttributeMetadata",
+      "LogicalName": "objecttypecode",
+      "SchemaName": "ObjectTypeCode",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Item Type",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Item Type",
+          "LanguageCode": 1033
+        }
+      },
+      "AttributeOf": "objectid"
+    }
+  ]
+}

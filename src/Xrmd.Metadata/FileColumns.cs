@@ -16,10 +16,12 @@ public static class FileColumns
 
     /// <summary>
     /// The tables that are targets of <see cref="AttachmentLookup"/> whatever their columns (plan 2.11, ruling A16): <c>annotation</c>,
-    /// whose body (<c>documentbody</c>) is a <c>fileattachment</c> row and a blob. Its target and its relationship are added at startup
+    /// whose body (<c>documentbody</c>) is a <c>fileattachment</c> row and a blob, and (plan 4.1b) <c>activitymimeattachment</c>, whose
+    /// <c>body</c> is one too. Its target and its relationship are added at startup
     /// (the activity model's links) and never removed with a file column.
     /// </summary>
-    public static IReadOnlySet<string> PermanentTargets { get; } = new HashSet<string>(StringComparer.Ordinal) { ActivitySchema.Annotation };
+    public static IReadOnlySet<string> PermanentTargets { get; } =
+        new HashSet<string>(StringComparer.Ordinal) { ActivitySchema.Annotation, MailSchema.Attachment };
 
     /// <summary>True for a table in <see cref="PermanentTargets"/>.</summary>
     public static bool IsPermanentTarget(string? entityLogicalName) => entityLogicalName is not null && PermanentTargets.Contains(entityLogicalName);

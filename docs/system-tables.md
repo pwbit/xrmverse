@@ -43,6 +43,7 @@ adds them; each feature page explains how they are used.
 | `activitypointer`, `email`, `task`, `phonecall`, `appointment` | `activitypointers`, `emails`, `tasks`, `phonecalls`, `appointments` | 4200, 4202, 4212, 4210, 4201 | User | [Activities and notes](#activities-and-notes) |
 | `activityparty` | `activityparties` | 135 | None | [Activities and notes](#activities-and-notes) |
 | `annotation` | `annotations` | 5 | User | [Activities and notes](#activities-and-notes) |
+| `emailserverprofile`, `mailbox`, `activitymimeattachment` | `emailserverprofiles`, `mailboxes`, `activitymimeattachments` | 9605, 9606, 1001 | User, User, None | [Email and queues](email-and-queues.md#outgoing-email) |
 | `workflow`, `processtrigger` | `workflows`, `processtriggers` | 4703, 4712 | User, Organization | [Classic workflows](#classic-workflows) |
 
 The tables of [Glossary and synonyms](glossary-and-synonyms.md) are described on their own page.
@@ -263,7 +264,7 @@ organization seeded by an earlier version gets the tables, columns, base currenc
 Activities and notes (see [Activities and notes](activities.md)) add seven user-owned tables, except `activityparty`, which
 has no owner: **`activitypointer`** (entity set `activitypointers`, object type code 4200), a read-only copy of the common
 columns of every activity that the server writes; **`activityparty`** (`activityparties`, 135), one row per participant of an
-activity (`activityid`, `partyid` to `account`, `contact` or `systemuser`, `participationtypemask`, `addressused`,
+activity (`activityid`, `partyid` to `account`, `contact`, `systemuser` or, for the senders and recipients of an email, `queue`, `participationtypemask`, `addressused`,
 `ispartydeleted`), read-only; the activity tables **`email`** (`emails`, 4202), **`task`** (`tasks`, 4212), **`phonecall`**
 (`phonecalls`, 4210) and **`appointment`** (`appointments`, 4201); and **`annotation`** (`annotations`, 5), the notes, whose
 `documentbody` lives in the file store. The type codes are from memory. On `systemuser`: `internalemailaddress` (String 100,

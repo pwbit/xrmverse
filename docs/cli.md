@@ -66,7 +66,8 @@ template used for the macOS archives. Nothing is published to nuget.org.
 | `currency` | `list`, `create <code> --name --symbol --rate [--precision] [--custom]`, `rate <code> <rate>`, `activate\|deactivate <code>`, `pricing-precision <0-4>`: currencies over the Web API |
 | `envvar` | `list`, `get <schemaname>`, `set <schemaname> <value>`, `unset <schemaname>`: environment variable values over the Web API; see [Environment variables](environment-variables.md) |
 | `workflow` | `apply <file.yaml> [--solution] [--activate] [--dry-run]`, `export <nameOrId> [--format yaml\|xaml] [--file]`, `list [--kind] [--entity]`, `activate\|deactivate <nameOrId>`: workflows, business rules and actions as YAML over the authoring API; see [Workflow authoring as code](workflow-authoring.md) |
-| `queue` | `list [--public]`, `create <name> [--private]`, `member add <queue> <user\|team>`, `items <queue>`: queues over the Web API; see [Email and queues](email-and-queues.md) |
+| `queue` | `list [--public]`, `create <name> [--private] [--email <address>]`, `member add <queue> <user\|team>`, `items <queue>`: queues over the Web API; see [Email and queues](email-and-queues.md) |
+| `mailbox` | `list`, `show`, `approve`, `link --profile`, `test [--wait]`, `profile create\|update\|list`: mailboxes and email server profiles over the Web API (see [Mailboxes and email server profiles](#mailboxes-and-email-server-profiles)) |
 | `dev` | `seed <table>`: sample rows |
 | `apply <schema.yaml>` | applies a schema file (tables, columns, choices, relationships) |
 | `mcp` | stdio MCP bridge to the server's `/mcp` endpoint (see [MCP](mcp.md)) |
@@ -429,7 +430,7 @@ xrmd access-team disable account                       # refused while a templat
 [Email and queues](email-and-queues.md)). It runs over the Web API as the signed-in user, so the server's privilege checks apply.
 
 ```bash
-xrmd queue create "Support"                   # a public queue; add --private for a private one
+xrmd queue create "Support"                   # a public queue; add --private for a private one, --email <address> for its mailbox
 xrmd queue list --public
 xrmd queue member add "Support" jane@example.com
 xrmd queue items "Support"
@@ -437,6 +438,45 @@ xrmd queue items "Support"
 
 - A queue is named by its name or its id. A name that matches several queues exits 5; use the id.
 - An unknown queue, user or team exits 4 (not found). Any other refusal is the server's, shown as it is.
+
+## Mailboxes and email server profiles
+
+`xrmd mailbox` sets up outgoing email (see [Email and queues](email-and-queues.md#outgoing-email)). It runs over the Web API
+as the signed-in user, so the server's privilege checks apply: profiles and approvals are for System Administrators, and a
+mailbox's test for its owner or a System Administrator.
+
+```bash
+# An SMTP profile; the password is one line of standard input
+printf '%s\n' "$SMTP_PASSWORD" | xrmd mailbox profile create --name "Relay" --type smtp \
+  --server smtp.example.com --port 587 --ssl false --username relay@example.com --secret-stdin
+# A Graph profile; the client secret is asked for on the terminal, without echo
+xrmd mailbox profile create --name "Exchange Online" --type graph --tenant example.com --client-id <application id>
+xrmd mailbox profile list
+xrmd mailbox profile update "Relay" --secret-prompt     # a new password
+
+xrmd queue create "Support" --email support@example.com   # the queue's mailbox sends from this address
+xrmd mailbox list
+xrmd mailbox link support@example.com --profile "Relay"   # the mailbox sends through the profile
+xrmd mailbox approve support@example.com              # approves the address of the mailbox's user or queue
+xrmd mailbox test support@example.com --wait          # prints the result
+xrmd mailbox show support@example.com
+```
+
+- A mailbox is named by its id or its email address; a profile by its id or its name.
+- `profile create` takes `--server`, `--port` (default 465 with `--ssl true`, else 587), `--ssl`, `--username` and
+  `--credentials profile|mailbox` for SMTP, and `--tenant` and `--client-id` for Graph. The server checks the profile as a
+  whole and answers 400 for a combination it does not accept.
+- **Secrets are never arguments.** `--secret-stdin` reads the password or client secret as one line of standard input;
+  without it the CLI asks on the terminal, without echo, and exits 2 when standard input is not a terminal. `profile update`
+  changes the secret only with `--secret-stdin` or `--secret-prompt`. An option such as `--password` is refused (exit 2)
+  without showing what was given. `show` and `profile list` print "set" or "not set", never a secret.
+- `test --wait` polls the mailbox until the test has run (`--timeout`, in minutes, default 5): exit 0 on Success, 5 on Failure
+  with the reason, 6 when the test did not run in time (is the server's job worker running?).
+- `link` sets the mailbox's profile, Server-Side Synchronization for outgoing email and `enabledforoutgoingemail` in one write
+  (see [Mailboxes](email-and-queues.md#mailboxes)); only a System Administrator may change a mailbox's profile (exit 3
+  otherwise). Test the mailbox afterwards.
+- `xrmd queue create --email` sets the queue's address. There is no command to change the address of an existing queue or
+  user: set it on the record (in a model-driven app, in the web admin's **Tables**, or with the Web API).
 
 ## Change tracking
 

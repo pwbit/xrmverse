@@ -4,7 +4,7 @@ import { optionsOf, type FieldProps } from './fieldProps';
 /** `choices` (multi-select) columns: one checkbox per option, in a group named by the column (not a Field: it labels one control). */
 export function ChoicesField(p: FieldProps) {
   const labelId = useId('choices');
-  const selected = Array.isArray(p.value) ? p.value : [];
+  const selected = Array.isArray(p.value) ? (p.value as number[]) : [];
   return (
     <div role="group" aria-labelledby={labelId}>
       <Label id={labelId} required={p.attr.required}>

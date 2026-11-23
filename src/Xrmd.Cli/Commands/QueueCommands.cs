@@ -62,13 +62,18 @@ public static class QueueCommands
     {
         var name = new Argument<string>("name") { Description = "Name of the queue." };
         var isPrivate = new Option<bool>("--private") { Description = "Make the queue private (public by default)." };
-        var create = new Command("create", "Create a queue.") { name, isPrivate };
+        var email = new Option<string?>("--email")
+        {
+            Description = "The queue's email address: its mailbox sends from it once a System Administrator approves it (see 'xrmd mailbox').",
+        };
+        var create = new Command("create", "Create a queue.") { name, isPrivate, email };
         create.SetAction(async (parse, ct) =>
         {
             var queueName = parse.GetValue(name)!;
             var visibility = parse.GetValue(isPrivate) ? 1 : 0;
-            var response = await ctx.CreateClient().SendJsonAsync(HttpMethod.Post, "queues",
-                new Dictionary<string, object?> { ["name"] = queueName, ["queueviewtype"] = visibility }, cancellationToken: ct);
+            var body = new Dictionary<string, object?> { ["name"] = queueName, ["queueviewtype"] = visibility };
+            if (parse.GetValue(email) is { Length: > 0 } address) body["emailaddress"] = address;
+            var response = await ctx.CreateClient().SendJsonAsync(HttpMethod.Post, "queues", body, cancellationToken: ct);
             var id = response.EntityId ?? throw new CliException(ExitCodes.Unexpected, "The server did not return the id of the new queue.");
             ctx.WriteResult(new { queueid = id, name = queueName, visibility = visibility == 1 ? "private" : "public" },
                 $"Created {(visibility == 1 ? "private" : "public")} queue '{queueName}' ({id}).");

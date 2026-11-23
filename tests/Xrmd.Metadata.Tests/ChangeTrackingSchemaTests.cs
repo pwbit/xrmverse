@@ -92,6 +92,8 @@ public class ChangeTrackingSchemaTests
         [("WorkflowWaits.cs", "{Table}")] = null,
         // meta.serviceendpoint_secret (plan 3.2): a meta table, not a data table.
         [("WebhookSecrets.cs", "{SecretTable}")] = null,
+        // meta.mail_secret (plan 4.1b): a meta table, not a data table.
+        [("MailSecrets.cs", "{SecretTable}")] = null,
     };
 
     private const string Intersect = "(intersect)";

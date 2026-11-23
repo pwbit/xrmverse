@@ -51,6 +51,8 @@ public static partial class LogicalNameValidator
         "InsertOptionValue", "UpdateOptionValue",
         // Plan 2.11 (A18): the refused activity and note messages, which the Web API answers as unbound operations.
         .. ActivitySchema.RefusedMessages,
+        // Plan 4.1b, task 7: the tracking token action, no longer refused.
+        ActivitySchema.GetTrackingTokenEmailMessage,
         // Plan 4.1a: the queue actions (RouteTo is unbound).
         .. QueueSchema.Messages,
     ], StringComparer.OrdinalIgnoreCase);

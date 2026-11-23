@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using Microsoft.Xrm.Sdk;
+using Xrmd.Pipeline.Mail;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
@@ -101,6 +102,8 @@ public static class StandardUpsert
                 copy[name] = value;
         if (source.KeyAttributes is { Count: > 0 } keys)
             foreach (var (name, value) in keys) copy.KeyAttributes[name] = value;
+        // Plan 4.1b: the mail secrets the outer Upsert's stage 20 took out of its Target belong to the inner Create or Update.
+        PendingMailSecrets.Carry(source, copy);
         return copy;
     }
 

@@ -133,3 +133,45 @@ describe('formColumns', () => {
     expect(formColumns(form)).toEqual(['name', 'primarycontactid', 'ownerid', 'createdon']);
   });
 });
+
+describe('loadRecord party lists (plan 4.1b, task 9)', () => {
+  const E = 'eeeeeeee-0000-0000-0000-000000000005';
+  const email = rawEntity(
+    'email',
+    'emails',
+    [
+      rawAttr('activityid', 'Uniqueidentifier', { IsPrimaryId: true }),
+      rawAttr('subject', 'String', { IsPrimaryName: true }),
+      rawAttr('to', 'Lookup', { AttributeType: 'PartyList', Targets: ['contact', 'queue'] }),
+      rawAttr('statecode', 'Picklist', { OptionSet: { Options: [{ Value: 0, Label: lbl('Open') }], IsGlobal: false } }),
+    ],
+    { SchemaName: 'Email', PrimaryIdAttribute: 'activityid', PrimaryNameAttribute: 'subject', IsActivity: true },
+  );
+  const partyRel = { ...rawOneToMany('activity_parties', 'activityparty', 'activityid', 'email', 'activityid_email'), ReferencedEntityNavigationPropertyName: 'email_activity_parties' };
+
+  it('expands the party navigation when the form shows a party list, and names it in the field context', async () => {
+    mock({ privileges: ['prvCreateActivity'] });
+    installMetadata([email], [partyRel]);
+    const seen: string[] = [];
+    server.use(
+      onPath('get', `emails(${E})`, ({ request }) => {
+        seen.push(new URL(request.url).search);
+        return HttpResponse.json({ activityid: E, subject: 'Hi', email_activity_parties: [] });
+      }),
+    );
+    const ctx = await loadRecord(api(), 'email', E, ['subject', 'to']);
+    expect(ctx.fieldContext.partyNavigation).toBe('email_activity_parties');
+    const params = new URLSearchParams(seen[0]);
+    expect(params.get('$select')).toBe('activityid,subject,statecode');
+    expect(params.get('$expand')).toBe('email_activity_parties($select=participationtypemask,_partyid_value,addressused)');
+  });
+
+  it('does not expand the parties when the form shows none', async () => {
+    mock({ privileges: ['prvCreateActivity'] });
+    installMetadata([email], [partyRel]);
+    const seen: string[] = [];
+    server.use(onPath('get', `emails(${E})`, ({ request }) => (seen.push(new URL(request.url).search), HttpResponse.json({ activityid: E }))));
+    await loadRecord(api(), 'email', E, ['subject']);
+    expect(new URLSearchParams(seen[0]).get('$expand')).toBeNull();
+  });
+});

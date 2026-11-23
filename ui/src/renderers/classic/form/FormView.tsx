@@ -15,6 +15,7 @@ import { FormSelector } from './FormSelector';
 import { FormTab } from './FormTab';
 import { RelatedTab } from './RelatedTab';
 import { CollapseItemIcon } from '../../../shell/icons';
+import type { SenderPolicy } from './PartyListControl';
 
 /** The header or footer: its visible cells in a strip, label under value. */
 function CellStrip({ cells, env, label, className, cellClass, readOnly, labelPosition = 'bottom' }: { cells: Cell[]; env: ControlEnv; label: string; className: string; cellClass: string; readOnly?: boolean; labelPosition?: 'bottom' | 'top' }) {
@@ -93,6 +94,16 @@ const useStyles = makeStyles({
   },
   panel: { paddingBlock: tokens.spacingVerticalS },
   saveStatus: { color: tokens.colorNeutralForeground3, fontSize: tokens.fontSizeBase200 },
+  // The body and its aside side by side; one column on a narrow window.
+  withAside: {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0, 1fr) minmax(16rem, 24rem)',
+    alignItems: 'start',
+    columnGap: tokens.spacingHorizontalL,
+    '@media (max-width: 900px)': { gridTemplateColumns: 'minmax(0, 1fr)' },
+  },
+  main: { minWidth: 0 },
+  aside: { paddingBlock: tokens.spacingVerticalS, minWidth: 0 },
 });
 
 const SAVE_STATUS = { unsaved: 'record.autoSave.unsaved', saving: 'record.autoSave.saving', saved: 'record.autoSave.saved' } as const;
@@ -143,6 +154,12 @@ export interface FormViewProps {
    * button runs (UI-2c, the wizard's last step). The classic form draws no such button.
    */
   onSave?: () => void;
+  /** A banner under the title card, above the notifications (an email's send status, plan 4.1b). */
+  banner?: ReactNode;
+  /** A column beside the form's body, under it on a narrow window (an email's attachments, plan 4.1b). */
+  aside?: ReactNode;
+  /** The sender policy an email's `from` offers (plan 4.1b). */
+  senderPolicy?: SenderPolicy;
 }
 
 /** A form tab with its FormXml index (its value in the tab list). */
@@ -173,7 +190,7 @@ const RELATED = 'related';
 const INTENTS = { ERROR: 'error', WARNING: 'warning', INFO: 'info' } as const;
 
 /** The title, form bar, header strip, tab list and footer of one form. */
-export function FormView({ form, state, ctx, lcid, onSelectForm, forms, notice, commandBar, currencySymbol, warnings = [], scriptNotifications = [], appId, timeline, timelineAppearance, backgrounds, subgridModes, refreshKey = 0, overlay, saveStatus = 'none', renderTabBody }: FormViewProps) {
+export function FormView({ form, state, ctx, lcid, onSelectForm, forms, notice, commandBar, currencySymbol, warnings = [], scriptNotifications = [], appId, timeline, timelineAppearance, backgrounds, subgridModes, refreshKey = 0, overlay, saveStatus = 'none', renderTabBody, banner, aside, senderPolicy }: FormViewProps) {
   const styles = useStyles();
   const uid = useId();
   // Without the page's overlay the form keeps its own, for the selected tab.
@@ -184,7 +201,7 @@ export function FormView({ form, state, ctx, lcid, onSelectForm, forms, notice, 
   // The shared reads start over with a refresh.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const cache = useMemo(() => new Map<string, Promise<unknown>>(), [refreshKey, form]);
-  const env: ControlEnv = { ctx, state, lcid, currencySymbol, formId: form.id, appId, timeline, ...(timelineAppearance ? { timelineAppearance } : {}), ...(backgrounds ? { backgrounds } : {}), ...(subgridModes ? { subgridModes } : {}), refreshKey, cache, overlay: ui };
+  const env: ControlEnv = { ctx, state, lcid, currencySymbol, formId: form.id, appId, timeline, ...(timelineAppearance ? { timelineAppearance } : {}), ...(backgrounds ? { backgrounds } : {}), ...(subgridModes ? { subgridModes } : {}), refreshKey, cache, overlay: ui, ...(senderPolicy ? { senderPolicy } : {}) };
   // Tabs keep their FormXml index as their value, so that hiding one does not move the selection.
   const tabs = form.tabs.map((tab, index) => ({ tab, index })).filter(({ tab }) => isShown(env, tab));
   // The tab the user or a script selected while it is shown, else the first one shown.
@@ -319,10 +336,23 @@ export function FormView({ form, state, ctx, lcid, onSelectForm, forms, notice, 
         </div>
         {strip}
       </div>
+      {banner}
       <FormNotifications items={notifications} />
-      <div className={styles.body} data-form-body="">
-        {body}
-        <CellStrip cells={form.footer} env={env} label={t('record.footer')} className={styles.footer} cellClass={styles.headerCell} readOnly />
+      <div className={mergeClasses(styles.body, aside !== undefined && styles.withAside)} data-form-body="">
+        {aside !== undefined ? (
+          <>
+            <div className={styles.main}>
+              {body}
+              <CellStrip cells={form.footer} env={env} label={t('record.footer')} className={styles.footer} cellClass={styles.headerCell} readOnly />
+            </div>
+            <div className={styles.aside}>{aside}</div>
+          </>
+        ) : (
+          <>
+            {body}
+            <CellStrip cells={form.footer} env={env} label={t('record.footer')} className={styles.footer} cellClass={styles.headerCell} readOnly />
+          </>
+        )}
       </div>
     </section>
   );

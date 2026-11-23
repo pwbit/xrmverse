@@ -128,7 +128,7 @@ public static class EntityValidator
 
     /// <summary>
     /// A party list value (plan 2.11 A8, A9): null, or an <see cref="EntityCollection"/> of <c>activityparty</c> entities. Each item
-    /// names a <c>partyid</c> of the party tables (<see cref="ActivitySchema.PartyTargets"/>) and/or an <c>addressused</c> (at most
+    /// names a <c>partyid</c> of the column's targets (party tables of <see cref="ActivitySchema.PartyRecordTables"/>) and/or an <c>addressused</c> (at most
     /// <see cref="ActivitySchema.AddressUsedMaxLength"/> characters; an address alone, unresolved, on <c>email</c> only); a
     /// <c>participationtypemask</c>, when given, is the column's own type (Regarding and Owner are the server's). <c>from</c> and
     /// <c>organizer</c> take one item at most (from memory: checklist 3b, 3c). The existence of the party records is the Core's
@@ -143,6 +143,10 @@ public static class EntityValidator
         var columns = ActivitySchema.PartyLists(m).Where(p => p.Attribute == a.LogicalName).ToList();
         if (columns.Count == 0) throw XrmdFaultException.InvalidArgument($"Party list '{a.LogicalName}' of entity '{m.LogicalName}' cannot be written.");
         var (_, type, single) = columns[0];
+        // The column's own targets (plan 4.1b: the email party lists also name a queue), the default party tables without them.
+        IReadOnlyList<string> targets = a is LookupAttributeMetadata { Targets.Length: > 0 } lookup
+            ? [.. lookup.Targets.Where(ActivitySchema.PartyRecordTables.Contains)]
+            : ActivitySchema.PartyTargets;
         if (single && collection.Entities.Count > 1)
             throw XrmdFaultException.InvalidArgument(
                 $"Party list '{a.LogicalName}' of entity '{m.LogicalName}' takes at most one party; {collection.Entities.Count} were given.");
@@ -160,10 +164,10 @@ public static class EntityValidator
                         if (itemValue is not EntityReference party)
                             throw XrmdFaultException.InvalidArgument(
                                 $"'{ActivitySchema.PartyId}' of a party in '{a.LogicalName}' expects an EntityReference, got {itemValue.GetType().Name}.");
-                        if (!ActivitySchema.PartyTargets.Contains(party.LogicalName ?? ""))
+                        if (!targets.Contains(party.LogicalName ?? ""))
                             throw XrmdFaultException.InvalidArgument(
                                 $"A party in '{a.LogicalName}' of entity '{m.LogicalName}' cannot be a '{party.LogicalName}' record " +
-                                $"(allowed: {string.Join(", ", ActivitySchema.PartyTargets)}).");
+                                $"(allowed: {string.Join(", ", targets)}).");
                         break;
                     case ActivitySchema.AddressUsed:
                         if (itemValue is null) break;

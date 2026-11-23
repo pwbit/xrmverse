@@ -460,3 +460,45 @@ describe('FormView renderTabBody (UI-2c)', () => {
     expect(screen.getByLabelText('xv_name label')).toHaveValue('Alpha');
   });
 });
+
+describe('FormView party lists and email (plan 4.1b, task 9)', () => {
+  const to = attr('to', { kind: 'partylist', typeName: 'PartyList', displayName: 'To', targets: ['contact'] });
+  const statecode = attr('statecode', { kind: 'choice', typeName: 'State', displayName: 'Status', options: [{ value: 0, label: 'Open' }, { value: 1, label: 'Completed' }] });
+  const LOGICAL = '@Microsoft.Dynamics.CRM.lookuplogicalname';
+  const FORMATTED = '@OData.Community.Display.V1.FormattedValue';
+  const withParties = (statecodeValue: number) => ({
+    ...RECORD,
+    statecode: statecodeValue,
+    xv_project_activity_parties: [
+      { participationtypemask: 2, _partyid_value: 'c1', [`_partyid_value${LOGICAL}`]: 'contact', [`_partyid_value${FORMATTED}`]: 'Ada' },
+      { participationtypemask: 2, _partyid_value: null, addressused: 'orders@example.com' },
+    ],
+  });
+  const ctxWith = (state: number) => {
+    const ctx = contextOf([name, to, statecode], withParties(state));
+    return { ...ctx, fieldContext: { ...ctx.fieldContext, partyNavigation: 'xv_project_activity_parties' } };
+  };
+
+  it('draws a party list as chips that can be removed', async () => {
+    renderForm(simpleForm([field('xv_name'), field('to')]), ctxWith(0));
+    const list = await screen.findByRole('list', { name: 'to label' });
+    expect(within(list).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Ada', expect.stringContaining('orders@example.com')]);
+    expect(screen.getByRole('button', { name: 'Remove Ada' })).toBeInTheDocument();
+  });
+
+  it('a completed activity (state 1) opens read-only, its parties too', async () => {
+    renderForm(simpleForm([field('xv_name'), field('to')]), ctxWith(1));
+    await screen.findByRole('list', { name: 'to label' });
+    expect(screen.queryByRole('button', { name: 'Remove Ada' })).toBeNull();
+    expect(screen.getByLabelText('xv_name label')).toBeDisabled();
+    expect(screen.getByText("Read-only: this record's status is Completed.")).toBeInTheDocument();
+  });
+
+  it('shows the banner under the title and the aside next to the body', async () => {
+    renderForm(simpleForm([field('xv_name')]), contextOf([name], RECORD), {
+      formView: { banner: <div>the banner</div>, aside: <aside aria-label="side">the aside</aside> },
+    });
+    expect(await screen.findByText('the banner')).toBeInTheDocument();
+    expect(screen.getByRole('complementary', { name: 'side' })).toBeInTheDocument();
+  });
+});

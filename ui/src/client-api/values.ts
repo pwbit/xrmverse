@@ -1,4 +1,5 @@
 import type { FieldValue, LookupValue } from '../admin/tables/formValues';
+import type { Party } from '../admin/tables/partyLists';
 import { isNumeric, isUserLocal, type AttributeMeta } from '../admin/tables/metadata';
 import { editorText, editorWallClock, wallClockOf, wallClockToUtc, type WallClock } from '../apps/timeZones';
 
@@ -64,7 +65,12 @@ export function toClientValue(a: AttributeMeta, v: FieldValue | undefined, zone:
     case 'choice':
       return typeof v === 'number' ? v : null;
     case 'choices':
-      return Array.isArray(v) && v.length > 0 ? [...v] : null;
+      return Array.isArray(v) && v.length > 0 ? [...(v as number[])] : null;
+    case 'partylist': {
+      // The resolved parties as lookups (plan 4.1b, task 9); an address alone has no record to name and is left out.
+      const parties = Array.isArray(v) ? (v as Party[]).filter((p) => p.id && p.logicalName) : [];
+      return parties.length > 0 ? parties.map((p) => ({ id: bracedUpper(p.id!), name: p.name ?? null, entityType: p.logicalName! })) : null;
+    }
     case 'datetime':
       return typeof v === 'string' && v ? toDate(a, v, zone) : null;
     default:

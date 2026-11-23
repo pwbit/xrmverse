@@ -6,6 +6,7 @@ import { AsyncPage } from './async/AsyncPage';
 import { AuditPage } from './audit/AuditPage';
 import { DuplicateRulesPage } from './duplicates/DuplicateRulesPage';
 import { CurrenciesPage } from './currencies/CurrenciesPage';
+import { EmailPage } from './email/EmailPage';
 import { EnvironmentPage } from './environment/EnvironmentPage';
 import { AccessTeamTemplatesPage } from './security/AccessTeamTemplatesPage';
 import { BusinessUnitsPage } from './security/BusinessUnitsPage';
@@ -37,6 +38,7 @@ export const adminRoutes: AdminRoute[] = [
   { path: '/manage', label: 'nav.tables', adminOnly: false, element: <Navigate to="/manage/tables" replace /> },
   { path: '/manage/environment', label: 'nav.environment', adminOnly: true, element: <EnvironmentPage /> },
   { path: '/manage/currencies', label: 'nav.currencies', adminOnly: true, element: <CurrenciesPage /> },
+  { path: '/manage/email', label: 'nav.email', adminOnly: true, element: <EmailPage /> },
   { path: '/manage/security/users', label: 'nav.users', adminOnly: false, element: <UsersPage /> },
   { path: '/manage/security/teams', label: 'nav.teams', adminOnly: false, element: <TeamsPage /> },
   { path: '/manage/security/roles', label: 'nav.roles', adminOnly: false, element: <RolesPage /> },

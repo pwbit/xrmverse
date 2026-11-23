@@ -196,6 +196,9 @@ public static class OrganizationDatabase
         var security = services.GetRequiredService<SecurityBootstrap>();
         await security.EnsureAsync(ct);
         var adminUserId = await security.EnsureSystemAdministratorAsync(seed.AdminObjectId, seed.AdminName, ct);
+        // After the administrator is inserted, so that an administrator added at a later start has its mailbox in the same start.
+        await MailboxSettingsUpgrade.EnsureAsync(services.GetRequiredService<IMetadataStore>(), services.GetRequiredService<IDbConnectionFactory>(), ct,
+            services.GetService<Microsoft.Extensions.Logging.ILoggerFactory>()?.CreateLogger(nameof(MailboxSettingsUpgrade)));
 
         var factory = services.GetRequiredService<IDbConnectionFactory>();
         await using var conn = await factory.OpenAsync(ct);

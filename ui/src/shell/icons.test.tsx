@@ -9,6 +9,7 @@ describe('shell icons', () => {
   const all: [string, ComponentType][] = [
     ...Object.entries(icons).filter(([name, v]) => typeof v === 'function' || (typeof v === 'object' && v !== null && name.endsWith('Icon'))) as [string, ComponentType][],
     ...Object.entries(icons.SITEMAP_TABLE_ICONS).map(([k, v]) => [`SITEMAP_TABLE_ICONS.${k}`, v] as [string, ComponentType]),
+    ...Object.entries(icons.PARTY_ICONS).map(([k, v]) => [`PARTY_ICONS.${k}`, v] as [string, ComponentType]),
     ...Object.entries(icons.RECORD_TYPE_ICONS).map(([k, v]) => [`RECORD_TYPE_ICONS.${k}`, v] as [string, ComponentType]),
   ].filter(([name]) => !NOT_BUNDLED.has(name));
 

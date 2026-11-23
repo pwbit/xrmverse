@@ -57,6 +57,8 @@ public static class FieldSecurability
         // Plan 2.11 A16: the note body is read from the file store after the query, outside the column checks of field security,
         // so securing it would not hide it: it is refused rather than half applied (known limit, checklist).
         if (entity.LogicalName == ActivitySchema.Annotation && name == ActivitySchema.DocumentBody) return false;
+        // Plan 4.1b: the same for an email attachment's body.
+        if (entity.LogicalName == MailSchema.Attachment && name == MailSchema.AttachmentBody) return false;
         return !IsCompanion(attribute);
     }
 

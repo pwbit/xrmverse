@@ -241,3 +241,26 @@ describe('ModernFormView', () => {
     });
   });
 });
+
+describe('ModernFormView party lists (plan 4.1b, task 9)', () => {
+  it('draws a party list with the same chips as the classic form', async () => {
+    mockApps();
+    const to = attr('to', { kind: 'partylist', typeName: 'PartyList', displayName: 'To', targets: ['contact'] });
+    const base = contextOf([name, to], {
+      ...RECORD,
+      xv_project_activity_parties: [{ participationtypemask: 2, _partyid_value: null, addressused: 'orders@example.com' }],
+    });
+    const ctx = { ...base, fieldContext: { ...base.fieldContext, partyNavigation: 'xv_project_activity_parties' } };
+    const f = formOf([tab('summary', [{ width: '100%', sections: [section([[field('xv_name')], [field('to')]])] }])], { id: `{${FORM_ID}}` });
+    render(
+      <Providers>
+        <PresentationProvider model={model({ [FORM_ID.toLowerCase()]: { layout: 'tabs', grid: { summary: {} } } })}>
+          <Page View={ModernFormView} form={f} ctx={ctx} />
+        </PresentationProvider>
+      </Providers>,
+    );
+    const list = await screen.findByRole('list', { name: 'to label' });
+    expect(within(list).getByRole('listitem').textContent).toContain('orders@example.com');
+    expect(screen.getByRole('button', { name: 'Remove orders@example.com' })).toBeInTheDocument();
+  });
+});

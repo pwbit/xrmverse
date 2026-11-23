@@ -309,7 +309,7 @@ public class ActivitySchemaTests
                  {
                      ActivitySchema.PartiesRelationship(Typed("activitypointer", "ActivityPointer", 4200, false)),
                      ActivitySchema.PartyTargetRelationship("account"), ActivitySchema.PartyTargetRelationship("contact"),
-                     ActivitySchema.PartyTargetRelationship("systemuser"),
+                     ActivitySchema.PartyTargetRelationship("queue"), ActivitySchema.PartyTargetRelationship("systemuser"),
                  })
         {
             var s = seeded.Single(x => x.SchemaName == expected.SchemaName);

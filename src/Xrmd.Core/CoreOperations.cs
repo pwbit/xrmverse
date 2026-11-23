@@ -14,6 +14,7 @@ using Xrmd.Audit;
 using Xrmd.Core.Duplicates;
 using Xrmd.Core.Elastic;
 using Xrmd.Core.Errors;
+using Xrmd.Core.Mail;
 using Xrmd.Core.Query;
 using Xrmd.Core.Validation;
 using Xrmd.Files;
@@ -71,7 +72,7 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
         "InitializeFileBlocksDownload", "DownloadBlock", AccessTeamRules.AddUserToRecordTeam, AccessTeamRules.RemoveUserFromRecordTeam,
         ChangeTracker.MessageName, DuplicateRulePublisher.PublishMessage, DuplicateRulePublisher.UnpublishMessage,
         DuplicateFinder.RetrieveMessage, BulkDetectDuplicatesJob.Message,
-        CurrencyMessages.MessageName, EmailMessages.SendEmail, ElasticUpsert.MessageName, ElasticCosmosQuery.MessageName,
+        CurrencyMessages.MessageName, EmailMessages.SendEmail, EmailMessages.GetTrackingTokenEmail, ElasticUpsert.MessageName, ElasticCosmosQuery.MessageName,
         // Plan 4.1a (tasks 5 and 6): the queue messages.
         QueueSchema.AddToQueue, QueueSchema.RemoveFromQueue, QueueSchema.RouteTo, QueueSchema.AddPrincipalToQueue,
         QueueSchema.PickFromQueue, QueueSchema.ReleaseToQueue, QueueSchema.RetrieveUserQueues,
@@ -103,6 +104,9 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
 
     /// <summary>The party lists of activities, read for the plug-in images (plan 2.11) and the activity reads.</summary>
     internal ActivityParties Parties => _parties;
+
+    /// <summary>The system job queue (plan 4.1b: the send jobs of SendEmail).</summary>
+    internal Xrmd.Pipeline.Async.AsyncOperationQueue JobQueue => duplicates.Queue;
 
     /// <summary>The record team messages' stage 30 (plan 2.16), on this instance's data paths.</summary>
     internal RecordTeams RecordTeams => _recordTeams ??= new RecordTeams(this, store, security);
@@ -468,7 +472,7 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
     /// these privileges), RemovePrivilegeRole, AddUserToRecordTeam and RemoveUserFromRecordTeam (<see cref="Core.RecordTeams"/>), PublishDuplicateRule and
     /// UnpublishDuplicateRule (<see cref="DuplicateRulePublisher"/>), RetrieveDuplicates (<see cref="Duplicates.DuplicateFinder"/>) and
     /// BulkDetectDuplicates (<see cref="BulkDetectDuplicatesJob.EnqueueAsync"/>: the job is queued),
-    /// SendEmail (<see cref="Core.EmailMessages"/>, plan 2.11), AddToQueue, RemoveFromQueue, RouteTo, AddPrincipalToQueue,
+    /// SendEmail and GetTrackingTokenEmail (<see cref="Core.EmailMessages"/>, plans 2.11 and 4.1b), AddToQueue, RemoveFromQueue, RouteTo, AddPrincipalToQueue,
     /// PickFromQueue, ReleaseToQueue and RetrieveUserQueues (<see cref="Core.QueueMessages"/>, plan 4.1a), reading the parameters from
     /// <c>request.Parameters</c> (the plug-ins' <c>InputParameters</c>) as they are after the pre-operation stages.
     /// </summary>
@@ -579,6 +583,8 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
                 throw new InvalidOperationException("ExecuteWorkflow runs through the pipeline, which hands it to the classic workflows.");
             case EmailMessages.SendEmail:
                 return await EmailMessages.ExecuteAsync(request, caller, session, ct);
+            case EmailMessages.GetTrackingTokenEmail:
+                return await EmailMessages.GetTrackingTokenAsync(request, session, ct);
             case QueueSchema.AddToQueue or QueueSchema.RemoveFromQueue or QueueSchema.RouteTo or QueueSchema.AddPrincipalToQueue
                 or QueueSchema.PickFromQueue or QueueSchema.ReleaseToQueue or QueueSchema.RetrieveUserQueues:
                 // Plan 4.1a: the item and membership writes run through the pipeline, one level deeper (decision 4).
@@ -1248,8 +1254,13 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
         if (partyLists is not null) await DemandPartiesReadableAsync(s, caller, partyLists, ct);
         // Plan 2.11 A16: a note body has no column; it is stored in the file store before the note's row is written.
         var noteBody = ExtractNoteBody(m, ref entity);
+        // Plan 4.1b: the write-only mail secrets have no column; they are stored after the row is written.
+        var mailSecrets = MailSecrets.Take(ref entity, m);
         var row = WritableValues(entity, attrs, isCreate: true);
         row[pk] = id;
+        if (m.LogicalName == MailSchema.EmailServerProfile) ApplyProfileRules(row, null);
+        Mailboxes.DemandSupportedDeliveryMethods(row, m.LogicalName);
+        TrackingTokens.DemandSupportedOrganizationColumns(row, m.LogicalName);
         // Migration spec §7.5: inside a migration scope the record keeps the system columns it carries.
         var migrated = MigrationScope.IsActive ? MigratedSystemColumns(entity, attrs) : null;
         if (migrated is not null) detectDuplicates = false;
@@ -1294,6 +1305,7 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
         // Plan 2.15 (ruling D2): before the INSERT, so a refused Create writes neither the row nor its match codes (RF3).
         if (detectDuplicates) await DuplicateFinder.DemandNoDuplicateAsync(s, m, row, id, null, ct);
         if (m.LogicalName == ActivitySchema.Annotation) await ApplyNoteBodyAsync(s, m, attrs, row, id, noteBody, isCreate: true, ct);
+        if (m.LogicalName == MailSchema.Attachment) await ApplyAttachmentAsync(s, m, attrs, row, id, noteBody, isCreate: true, ct);
 
         // Plan 2.12b, ruling R7: a new row starts with its rollups not calculated (state 0, _date now, 0 or null).
         rollups?.ApplyInitialValues(m, row, now);
@@ -1320,11 +1332,17 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
         {
             throw DuplicateUniqueValue(m.LogicalName, row);
         }
+        await MailSecrets.StoreAsync(s, id, mailSecrets, ct);
+        // Plan 4.1b, task 7: testemailconfigurationscheduled true queues the mailbox's test, in this transaction.
+        if (!MigrationScope.IsActive) await MailboxTestJob.EnqueueIfScheduledAsync(s, caller, JobQueue, m.LogicalName, id, row, ct);
         // Plan 2.15: the row's match codes, in this transaction (nothing is read when no rule matches the table).
         InvalidateDuplicateRulesOnWrite(s, m);
         await duplicates.MatchCodes.RefreshAsync(s, m, id, ct);
         if (m.LogicalName == SystemUser) await InsertUserSettingsAsync(s, caller, id, ct);
         // Plan 4.1a: a user and an owner team get a private default queue, in this transaction.
+        // Plan 4.1b: a user and a queue get their mailbox, in this transaction (a user's before its default queue, whose Create makes the queue's).
+        if (m.LogicalName is SystemUser or QueueSchema.Queue && !MigrationScope.IsActive && store.GetEntity(MailSchema.Mailbox) is not null)
+            await Mailboxes.InsertForAsync(s, caller, new EntityReference(m.LogicalName, id), ct, store);
         if (m.LogicalName is SystemUser or Team) await InsertDefaultQueueAsync(s, caller, m, id, ct);
         if (activity) await WriteActivityRowsAsync(s, m, id, partyLists!, isCreate: true, ct);
         if (CurrencyMessages.InvalidatesCatalog(m.LogicalName)) CurrencyMessages.InvalidateAfterTransaction(currencies, s);
@@ -1609,10 +1627,25 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
             partyLists = merged;
         }
         var noteBody = ExtractNoteBody(m, ref entity);
+        var mailSecrets = MailSecrets.Take(ref entity, m);
         var row = WritableValues(entity, attrs, isCreate: false);
         if (server is not null)
             foreach (var (name, value) in server.Attributes)
                 if (attrs.ContainsKey(name)) row[name] = value; // null clears the column
+        if (m.LogicalName == MailSchema.EmailServerProfile && ProfileRules.Columns.Any(row.Contains))
+            ApplyProfileRules(row, await RetrieveAsync(s, Caller.Internal, m.LogicalName, id, new ColumnSet([.. ProfileRules.Columns, "name"]), ct));
+        Mailboxes.DemandSupportedDeliveryMethods(row, m.LogicalName);
+        TrackingTokens.DemandSupportedOrganizationColumns(row, m.LogicalName);
+        if (m.LogicalName == MailSchema.Mailbox && caller != Caller.Internal)
+        {
+            var storedMailbox = await RetrieveAsync(s, Caller.Internal, m.LogicalName, id, new ColumnSet([.. MailSchema.MailboxServerColumns, "regardingobjectid"]), ct);
+            Mailboxes.DemandNotServerMaintained(row, storedMailbox, caller);
+            Mailboxes.DemandOwnerUnchanged(row, storedMailbox);
+        }
+        // Plan 4.1b: a changed address of a user or queue sends its approval back to Pending Approval (the mailbox follows after the UPDATE).
+        var mailboxTracked = m.LogicalName is SystemUser or QueueSchema.Queue && !MigrationScope.IsActive && store.GetEntity(MailSchema.Mailbox) is not null;
+        var addressChanged = mailboxTracked && await Mailboxes.ApplyAddressChangeAsync(s, m.LogicalName, id, row, ct);
+        var deliveryChanged = mailboxTracked ? await Mailboxes.ChangedDeliveryColumnsAsync(s, m.LogicalName, id, row, ct) : null;
         ApplyIsManaged(m, attrs, entity, row, caller, isCreate: false);
         await ApplyAccessTeamRulesAsync(s, m, attrs, row, isCreate: false, id, ct);
         await DuplicateRuleRules.ApplyServerColumnsAsync(s, store, m.LogicalName, row, isCreate: false, id, ct);
@@ -1621,7 +1654,7 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
         await OrganizationSettingRules.ApplyRowAsync(s, m.LogicalName, row, isCreate: false, id, ct);
         CompleteStateAndStatus(m, attrs, row, id);
         if (activity && !MigrationScope.IsActive)
-            await ApplyActivityStateOnUpdateAsync(s, m, attrs, row, partyLists!, commit?.Attribute, id, auditAction, ct);
+            await ApplyActivityStateOnUpdateAsync(s, m, attrs, row, partyLists!, commit?.Attribute, id, auditAction, server?.Attributes.Keys, ct);
         // Plan 2.10, final review I1: the currency rules on the final row (after the plug-ins), in the transaction.
         await CurrencyRules.EnforceRowAsync(row, id, isCreate: false, store, s, ct);
         SetIfDefined(row, attrs, "modifiedon", DateTime.UtcNow);
@@ -1654,6 +1687,7 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
         // Plan 2.15 (ruling D2, RF1): before the UPDATE, on the stored row overlaid with the changes.
         if (detectDuplicates) await DuplicateFinder.DemandNoDuplicateAsync(s, m, row, id, row.Attributes.Keys.ToList(), ct);
         if (m.LogicalName == ActivitySchema.Annotation) await ApplyNoteBodyAsync(s, m, attrs, row, id, noteBody, isCreate: false, ct);
+        if (m.LogicalName == MailSchema.Attachment) await ApplyAttachmentAsync(s, m, attrs, row, id, noteBody, isCreate: false, ct);
 
         // The audited columns this Update writes, read before it under an update lock (only when the table is audited).
         string[] audited = [];
@@ -1679,6 +1713,10 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
             throw DuplicateUniqueValue(m.LogicalName, row);
         }
         if (updated == 0) throw XrmdFaultException.ObjectDoesNotExist(m.LogicalName, id);
+        await MailSecrets.StoreAsync(s, id, mailSecrets, ct);
+        // Plan 4.1b, task 7: testemailconfigurationscheduled true queues the mailbox's test, in this transaction.
+        if (!MigrationScope.IsActive) await MailboxTestJob.EnqueueIfScheduledAsync(s, caller, JobQueue, m.LogicalName, id, row, ct);
+        if (mailboxTracked) await Mailboxes.SyncAsync(s, m.LogicalName, id, row, addressChanged, ct, store, deliveryChanged);
         if (writes is not null && !MigrationScope.IsActive) await writes.OnWrittenAsync(s, m.LogicalName, id, ct); // plan 2.14 (W10)
         if (activity) await WriteActivityRowsAsync(s, m, id, partyLists!, isCreate: false, ct);
         // Plan 4.1a: a queue-enabled record that leaves the active state deactivates its active items, in this transaction.
@@ -1846,6 +1884,21 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
         return await cmd.ExecuteScalarAsync(ct) as Guid?;
     }
 
+    /// <summary>
+    /// Plan 4.1b: the profile rules (<see cref="ProfileRules"/>) on <paramref name="row"/> as the row will be: the stored profile
+    /// (<paramref name="stored"/>, none on a Create) with the change on top. An SMTP profile's Auto Detect is written as Basic.
+    /// </summary>
+    private static void ApplyProfileRules(Entity row, Entity? stored)
+    {
+        var merged = new Entity(row.LogicalName);
+        if (stored is not null) foreach (var (name, value) in stored.Attributes) merged[name] = value;
+        foreach (var (name, value) in row.Attributes) merged[name] = value;
+        ProfileRules.Validate(merged);
+        var protocol = merged.GetAttributeValue<OptionSetValue>("outgoingauthenticationprotocol");
+        if (protocol is not null && protocol.Value != stored?.GetAttributeValue<OptionSetValue>("outgoingauthenticationprotocol")?.Value)
+            row["outgoingauthenticationprotocol"] = protocol;
+    }
+
     /// <summary>The note body of a write (plan 2.11, A16): <see cref="Given"/> false when the write does not carry <c>documentbody</c>.</summary>
     private readonly record struct NoteBody(bool Given, string? Base64);
 
@@ -1855,11 +1908,78 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
     /// </summary>
     private static NoteBody ExtractNoteBody(EntityMetadata m, ref Entity entity)
     {
-        if (m.LogicalName != ActivitySchema.Annotation || !entity.Attributes.TryGetValue(ActivitySchema.DocumentBody, out var value))
-            return default;
+        // Plan 4.1b: the body of an email attachment (activitymimeattachment.body) is kept in the file store the same way.
+        var attribute = m.LogicalName switch
+        {
+            ActivitySchema.Annotation => ActivitySchema.DocumentBody,
+            MailSchema.Attachment => MailSchema.AttachmentBody,
+            _ => null,
+        };
+        if (attribute is null || !entity.Attributes.TryGetValue(attribute, out var value)) return default;
         entity = Copy(entity);
-        entity.Attributes.Remove(ActivitySchema.DocumentBody);
+        entity.Attributes.Remove(attribute);
         return new NoteBody(true, value as string);
+    }
+
+    /// <summary>
+    /// The attachment of an email, on its Create or Update (plan 4.1b, ruling P4), before its row is written: the email must be an open
+    /// one (its row is locked), the file name not a blocked extension, and the body (base64, checked against
+    /// <c>organization.maxuploadfilesize</c>) is stored by <see cref="AttachmentBodies"/>, replacing the previous one. <c>filesize</c>
+    /// follows it; a new attachment takes the next <c>attachmentnumber</c> (when it names none) and <c>mimetype</c>, when not sent, the
+    /// one of the file name's extension. A body sent null or empty clears it. An Update that sends no body keeps it, and a new
+    /// <c>filename</c> or <c>mimetype</c> is copied to its <c>fileattachment</c> row. <c>email.attachmentcount</c> follows a Create.
+    /// An attachment never moves to another email.
+    /// </summary>
+    /// <exception cref="XrmdFaultException">400 InvalidArgument for a table other than an email, an email that is not open, a blocked
+    /// extension, a body that is not base64 or a change of the email; 400 0x80044a02 over the limit.</exception>
+    private async Task ApplyAttachmentAsync(DataSession s, EntityMetadata m, IReadOnlyDictionary<string, AttributeMetadata> attrs, Entity row,
+        Guid id, NoteBody body, bool isCreate, CancellationToken ct)
+    {
+        var email = EntityOf(ActivitySchema.Email);
+        string? fileName;
+        if (isCreate)
+        {
+            var emailId = await EmailAttachments.DemandOpenEmailAsync(s, email, row.GetAttributeValue<EntityReference>(ActivitySchema.ObjectId), ct);
+            fileName = row.GetAttributeValue<string>(ActivitySchema.FileName);
+            await EmailAttachments.DemandNotBlockedAsync(s, fileName, ct);
+            if (!row.Contains(MailSchema.AttachmentNumber))
+                SetIfDefined(row, attrs, MailSchema.AttachmentNumber, await EmailAttachments.NextNumberAsync(s, m, emailId, ct));
+            await EmailAttachments.RecountAsync(s, email, m, emailId, adjust: 1, ct);
+        }
+        else
+        {
+            var emailId = await EmailAttachments.StoredEmailAsync(s, m, id, ct) ?? throw XrmdFaultException.ObjectDoesNotExist(m.LogicalName, id);
+            // Any objectid in the write must be the stored email: a null (also a Disassociate) detaches the attachment.
+            if (row.Contains(ActivitySchema.ObjectId)
+                && (row.GetAttributeValue<EntityReference>(ActivitySchema.ObjectId) is not { } moved || moved.Id != emailId || moved.LogicalName != ActivitySchema.Email))
+                throw XrmdFaultException.InvalidArgument($"The attachment {id} belongs to the email {emailId}: it cannot be moved to another record or detached.");
+            await EmailAttachments.DemandOpenAsync(s, email, emailId, ct);
+            await LockRowAsync(s, m, id, ct);
+            fileName = row.Contains(ActivitySchema.FileName)
+                ? row.GetAttributeValue<string>(ActivitySchema.FileName)
+                : await EmailAttachments.StoredStringAsync(s, m, id, ActivitySchema.FileName, ct);
+            if (row.Contains(ActivitySchema.FileName) || body.Given) await EmailAttachments.DemandNotBlockedAsync(s, fileName, ct);
+        }
+        var bodies = files.Attachments;
+        if (!body.Given)
+        {
+            if (isCreate) SetIfDefined(row, attrs, ActivitySchema.FileSize, 0);
+            else if (row.Contains(ActivitySchema.FileName) || row.Contains(ActivitySchema.MimeType))
+                await bodies.DescribeAsync(s, id, row.Contains(ActivitySchema.FileName) ? row.GetAttributeValue<string>(ActivitySchema.FileName) ?? "" : null,
+                    row.Contains(ActivitySchema.MimeType) ? row.GetAttributeValue<string>(ActivitySchema.MimeType) ?? "" : null, ct);
+            return;
+        }
+        if (string.IsNullOrEmpty(body.Base64))
+        {
+            if (!isCreate) await bodies.ClearAsync(s, id, ct);
+            SetIfDefined(row, attrs, ActivitySchema.FileSize, 0);
+            return;
+        }
+        var mimeType = row.GetAttributeValue<string>(ActivitySchema.MimeType);
+        var stored = await bodies.WriteAsync(s, id, body.Base64, fileName, mimeType,
+            MigrationScope.IsActive ? int.MaxValue : await MaxUploadFileSizeAsync(s, ct), ct);
+        SetIfDefined(row, attrs, ActivitySchema.FileSize, checked((int)stored.Size));
+        if (string.IsNullOrEmpty(mimeType)) SetIfDefined(row, attrs, ActivitySchema.MimeType, stored.MimeType);
     }
 
     /// <summary>
@@ -1999,6 +2119,9 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
         if (m.LogicalName == Team) await DeleteDefaultQueueAsync(s, caller, id, ct);
         // Plan 4.1a: a queue goes only once its items are inactive (they then go by the cascade of queue_entries).
         if (m.LogicalName == QueueSchema.Queue && !MigrationScope.IsActive) await QueueMessages.DemandNoActiveItemsAsync(s, id, ct);
+        // Plan 4.1b: a queue goes with its mailbox and the mailbox's secrets (internal deletes: the caller's rights are those on the queue).
+        if (m.LogicalName == QueueSchema.Queue && store.GetEntity(MailSchema.Mailbox) is not null)
+            foreach (var mailbox in await Mailboxes.DetachAsync(s, m.LogicalName, id, ct)) await DeleteAsync(s, Caller.Internal, MailSchema.Mailbox, mailbox, null, ct);
         await CheckDeleteRulesAsync(s, m.LogicalName, id, ct);
         // Plan 2.14 (W14): an action's message goes with its definition, before the cascades (its activations) run.
         if (writes is not null && !MigrationScope.IsActive) await writes.OnDeletingAsync(s, m.LogicalName, id, ct);
@@ -2029,10 +2152,19 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
             Entity? before = null;
             if (await audit.IsAuditedAsync(s, m, ct) && await LockRowAsync(s, m, id, ct))
                 before = await AuditImageAsync(s, m, id, AuditPolicy.AuditedAttributes(m).Select(a => a.LogicalName), ct);
+            // Plan 4.1b: an attachment's email counts its attachments (unless the email is the one being deleted); locked before the row goes.
+            Guid? attachedTo = null;
+            if (m.LogicalName == MailSchema.Attachment && await EmailAttachments.StoredEmailAsync(s, m, id, ct) is { } owner
+                && !deleting.Records.Contains((ActivitySchema.Email, owner)))
+            {
+                attachedTo = owner;
+                await LockRowAsync(s, EntityOf(ActivitySchema.Email), owner, ct);
+            }
             var sql = $"DELETE FROM {s.DataTable(m.LogicalName)} WHERE {s.Quote(SystemAttributes.PrimaryIdName(m))} = {IdParameter}";
             var parameters = new[] { new DetachedParameter(IdParameter, DbType.Guid, id) };
             if (await ExecuteNonQueryAsync(s, sql, parameters, ct) == 0)
                 throw XrmdFaultException.ObjectDoesNotExist(m.LogicalName, id);
+            if (attachedTo is { } counted) await EmailAttachments.RecountAsync(s, EntityOf(ActivitySchema.Email), m, counted, adjust: 0, ct);
             // Plan 2.14 (W4, W10): before the links to the record are cleared (a job still names its deleted activation).
             if (writes is not null && !MigrationScope.IsActive) await writes.OnDeletedAsync(s, m.LogicalName, id, ct);
             if (CurrencyMessages.InvalidatesCatalog(m.LogicalName)) CurrencyMessages.InvalidateAfterTransaction(currencies, s);
@@ -2047,12 +2179,14 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
             if (before is not null) await WriteAuditAsync(s, caller, AuditActions.Delete, AuditOperations.Delete, m, id, before, null, ct);
             await DeleteDependentRowsAsync(s, m.LogicalName, id, ct);
             // Plan 2.11 (A10, pre-flight C10): a deleted party record keeps its party rows, marked ispartydeleted (users are never deleted).
-            if (ActivitySchema.PartyTargets.Contains(m.LogicalName) || m.LogicalName == Team)
+            if (ActivitySchema.PartyRecordTables.Contains(m.LogicalName) || m.LogicalName == Team)
                 await _parties.MarkPartyDeletedAsync(s, m.LogicalName, id, ct);
             await RemoveLinksAsync(s, m.LogicalName, id, ct);
             await files.DeleteRecordFilesAsync(s, m, id, ct); // ruling F8: the blobs go after the commit
             // Plan 3.5 UI-1d (ruling R2): a custom control's files go with its row, in this transaction.
             if (m.LogicalName == CustomControlSchema.Table) await CustomControlFiles.DeleteRowsAsync(s, id, ct);
+            // Plan 4.1b: the write-only mail secrets go with their record, in this transaction.
+            if (MailSecrets.HasSecrets(m.LogicalName)) await MailSecrets.DeleteAsync(s, id, ct);
             var images = m.LogicalName == StepTable ? await DeleteStepImagesAsync(s, id, ct) : [];
             if (ComponentType.OfTable(m.LogicalName) is not null) await tracker.RemoveDeletedAsync(s, [id, .. images], ct);
             if (parentComponent is not null) await MarkParentChangedAsync(s, caller, m.LogicalName, id, parentComponent, ct);
@@ -2140,7 +2274,8 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
                 // every client write, a step registered on it included). The same pattern for appmodulecomponent (plan 3.5 UI-1a final
                 // review, I3): the table is import-only for requests (AppModuleSchema.ImportOnly), so its rows go with their app module
                 // in the core, not through a nested Delete. Likewise postregarding (plan 3.5 UI-1g), which refuses every client write;
-                // its posts then go as nested Deletes (their steps fire), through the nested Delete passed on below.
+                // its posts then go as nested Deletes (their steps fire), through the nested Delete passed on below. The attachments of an email
+                // (plan 4.1b) go as nested Deletes too (their steps fire); the guard accepts that marked cascade without Write on the email.
                 if (nested is not null && r.ReferencingEntity is not (DuplicateDetectionSchema.Record or WorkflowSchema.TriggerTable
                         or AppModuleSchema.Component or PostSchema.Regarding))
                 {
@@ -2727,7 +2862,8 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
     /// </summary>
     /// <exception cref="XrmdFaultException">InvalidArgument (400) for a change of a closed activity.</exception>
     private static async Task ApplyActivityStateOnUpdateAsync(DataSession s, EntityMetadata m, IReadOnlyDictionary<string, AttributeMetadata> attrs,
-        Entity row, IReadOnlyDictionary<string, EntityCollection> partyLists, string? committedFile, Guid id, int auditAction, CancellationToken ct)
+        Entity row, IReadOnlyDictionary<string, EntityCollection> partyLists, string? committedFile, Guid id, int auditAction,
+        IEnumerable<string>? serverColumns, CancellationToken ct)
     {
         int? state;
         DateTime? actualEnd;
@@ -2745,7 +2881,9 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
         if (IsClosedState(state) && auditAction != AuditActions.Assign)
         {
             // A file commit's column was taken out of the entity before (ruling F4): it is a change all the same.
-            var changed = row.Attributes.Keys.Where(k => k is not ("statecode" or "statuscode")).Concat(partyLists.Keys)
+            // The columns a message's server writes with the state (plan 4.1b: the send job's senton on a Pending Send email) are no change.
+            var server = serverColumns?.ToHashSet(StringComparer.Ordinal) ?? [];
+            var changed = row.Attributes.Keys.Where(k => k is not ("statecode" or "statuscode") && !server.Contains(k)).Concat(partyLists.Keys)
                 .Concat(committedFile is null ? [] : [committedFile]).Distinct().ToList();
             if (changed.Count > 0)
                 throw XrmdFaultException.InvalidArgument(

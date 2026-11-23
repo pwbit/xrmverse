@@ -318,6 +318,14 @@ public sealed class XrmdFaultException(int errorCode, string message, int httpSt
             $"The note attachment is {size} bytes long; the organization's maximum upload file size (maxuploadfilesize) is {maxBytes} bytes.", 400);
 
     /// <summary>
+    /// 400 <see cref="ErrorCodes.AttachmentInvalidFileSize"/>: an email attachment's body (<c>activitymimeattachment.body</c>) over the
+    /// organization's <c>maxuploadfilesize</c> (plan 4.1b). Our own text.
+    /// </summary>
+    public static XrmdFaultException AttachmentBodyTooBig(long size, long maxBytes) =>
+        new(ErrorCodes.AttachmentInvalidFileSize,
+            $"The email attachment is {size} bytes long; the organization's maximum upload file size (maxuploadfilesize) is {maxBytes} bytes.", 400);
+
+    /// <summary>
     /// 400 <see cref="ErrorCodes.ProcessImageFailure"/> for an image over <c>MaxSizeInKB</c>. The sizes are whole MB (truncated).
     /// </summary>
     public static XrmdFaultException ImageTooBig(long maxBytes, long uploadedBytes) =>

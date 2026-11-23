@@ -1,6 +1,7 @@
 import type { en } from '../../shell/i18n/en';
 import { editorText, editorWallClock, utcText, wallClockOf, wallClockToUtc } from '../../apps/timeZones';
 import { isFileKind, isNumeric, isUserLocal, isWholeNumber, recordKey, type AttributeMeta } from './metadata';
+import { sameParties, type Party } from './partyLists';
 
 /** A lookup's value: the record picked, with what the bind needs (`nav` is the relationship's navigation property). */
 export interface LookupValue {
@@ -17,9 +18,10 @@ export interface LookupValue {
  * What an editor holds: text and numbers as strings (so partial input survives), a boolean, a choice value, the
  * values of a multi-select, a date as `YYYY-MM-DD` or `YYYY-MM-DDTHH:mm` (a User Local column in the form's time zone, UTC
  * without one; the other behaviours as stored), or a lookup. A file column holds its file
- * id and an image column its thumbnail (base64), as the record carries them; both are read-only here.
+ * id and an image column its thumbnail (base64), as the record carries them; both are read-only here. A party list holds its
+ * parties (plan 4.1b, task 9), written by the record form through the party navigation, never by the bodies built here.
  */
-export type FieldValue = string | boolean | number | number[] | LookupValue | null;
+export type FieldValue = string | boolean | number | number[] | Party[] | LookupValue | null;
 export type FormValues = Record<string, FieldValue>;
 
 /** A value the form cannot send; names the field and carries a catalogue key (rendered with `t()` next to the editor). */
@@ -155,6 +157,8 @@ export function sameValue(a: AttributeMeta, x: FieldValue | undefined, y: FieldV
       return (x as LookupValue).id === (y as LookupValue).id;
     case 'choices':
       return [...(x as number[])].sort().join() === [...(y as number[])].sort().join();
+    case 'partylist':
+      return sameParties(x as Party[], y as Party[]);
     default:
       return x === y;
   }

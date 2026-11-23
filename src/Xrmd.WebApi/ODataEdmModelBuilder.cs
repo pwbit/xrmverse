@@ -230,10 +230,23 @@ public sealed class ODataEdmModelBuilder(IMetadataStore store, CustomApiRegistry
     /// <summary>
     /// Attributes stored in another attribute's column (<c>AttributeOf</c>, e.g. lookup names) are not properties, except the
     /// companions of file and image columns, which Dataverse declares (read-only): those that have a column of their own (e.g.
-    /// <c>&lt;file&gt;_name</c>) and the computed url of an image column (<c>&lt;image&gt;_url</c>, e.g. <c>entityimage_url</c>).
+    /// <c>&lt;file&gt;_name</c>) and the computed url of an image column (<c>&lt;image&gt;_url</c>, e.g. <c>entityimage_url</c>), and
+    /// <see cref="IsExposedTypeCompanion"/>.
     /// </summary>
     internal static bool IsExposed(AttributeMetadata a) =>
-        a.LogicalName is not null && (a.AttributeOf is null || FileColumns.IsStoredCompanion(a) || FileColumns.IsUrlCompanion(a));
+        a.LogicalName is not null
+        && (a.AttributeOf is null || FileColumns.IsStoredCompanion(a) || FileColumns.IsUrlCompanion(a) || IsExposedTypeCompanion(a));
+
+    /// <summary>
+    /// Plan 4.1b, ruling P8: <c>queueitem.objectidtypecode</c>, the EntityName companion of <c>objectid</c>, is a Web API property
+    /// as in Dataverse (the table's logical name; it reads the type column of <c>objectid</c>, and a written value must name
+    /// <c>objectid</c>'s table, plan 2.11 A7). The other EntityName companions (<c>regardingobjecttypecode</c>, …) stay out.
+    /// </summary>
+    internal static bool IsExposedTypeCompanion(AttributeMetadata a) =>
+        a is EntityNameAttributeMetadata { LogicalName: QueueObjectTypeCode, AttributeOf: "objectid" };
+
+    /// <summary>The EntityName companion of <c>queueitem.objectid</c> (<see cref="IsExposedTypeCompanion"/>).</summary>
+    internal const string QueueObjectTypeCode = "objectidtypecode";
 
     /// <summary>EDM type of a non-lookup attribute; null for types without a Web API property mapping.</summary>
     private static IEdmPrimitiveTypeReference? EdmType(AttributeMetadata a)

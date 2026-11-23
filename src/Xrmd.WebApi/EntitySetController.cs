@@ -369,7 +369,7 @@ public static class EntitySetController
             throw XrmdFaultException.InvalidArgument("If-Match and If-None-Match cannot be combined on the same request.");
 
         var suppress = SuppressDuplicateDetection(context.Request);
-        var entity = ODataJson.FromJson(await ODataJson.ReadBodyAsync(context.Request), m, store);
+        var entity = ODataJson.FromJson(await ODataJson.ReadBodyAsync(context.Request), m, store, replacePartyLists: true);
         var elastic = ElasticTables.IsElastic(m);
         if (!elastic && entity.Attributes.TryGetValue(SystemAttributes.PrimaryIdName(m), out var bodyKey) && bodyKey is Guid g && g != key)
             throw XrmdFaultException.InvalidArgument("The primary key in the body does not match the URL.");

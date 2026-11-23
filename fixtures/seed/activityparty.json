@@ -84,6 +84,7 @@
       "Targets": [
         "account",
         "contact",
+        "queue",
         "systemuser"
       ]
     },
@@ -416,6 +417,23 @@
       "ReferencingEntity": "activityparty",
       "ReferencingAttribute": "partyid",
       "ReferencingEntityNavigationPropertyName": "partyid_contact",
+      "CascadeConfiguration": {
+        "Assign": "NoCascade",
+        "Delete": "NoCascade",
+        "Merge": "NoCascade",
+        "Reparent": "NoCascade",
+        "Share": "NoCascade",
+        "Unshare": "NoCascade",
+        "Archive": "NoCascade",
+        "RollupView": "NoCascade"
+      }
+    },
+    {
+      "SchemaName": "queue_activity_parties",
+      "ReferencedEntity": "queue",
+      "ReferencingEntity": "activityparty",
+      "ReferencingAttribute": "partyid",
+      "ReferencingEntityNavigationPropertyName": "partyid_queue",
       "CascadeConfiguration": {
         "Assign": "NoCascade",
         "Delete": "NoCascade",

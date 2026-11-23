@@ -162,7 +162,7 @@ public sealed class AnnotationBodies
     /// The number of bytes <paramref name="base64"/> decodes to, from its length: whitespace (which base64 decoding skips) is not
     /// counted and trailing padding is taken off. Exact for valid base64; for other text an estimate (the decoding refuses it).
     /// </summary>
-    private static long DecodedLength(string base64)
+    internal static long DecodedLength(string base64)
     {
         long characters = 0, padding = 0;
         foreach (var c in base64)

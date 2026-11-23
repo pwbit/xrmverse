@@ -34,6 +34,7 @@ public static class CliApp
         HierarchySecurityCommands.Build,
         AccessTeamCommands.Build,
         QueueCommands.Build,
+        MailboxCommands.Build,
         CurrencyCommands.Build,
         EnvVarCommands.Build,
         ChangeTrackingCommands.Build,
@@ -76,7 +77,11 @@ public static class CliApp
         ctx.ParseResult = parse;
         if (parse.Errors.Count > 0)
         {
-            foreach (var error in parse.Errors) await env.Err.WriteLineAsync(error.Message);
+            // A command that takes a secret never echoes what the parser did not match: it may be a secret typed as an argument.
+            var messages = MailboxCommands.TakesSecret(parse.CommandResult.Command)
+                ? MailboxCommands.RedactedErrors(parse)
+                : parse.Errors.Select(e => e.Message);
+            foreach (var message in messages) await env.Err.WriteLineAsync(message);
             await env.Err.WriteLineAsync("Run 'xrmd --help' for usage.");
             return ExitCodes.Usage;
         }

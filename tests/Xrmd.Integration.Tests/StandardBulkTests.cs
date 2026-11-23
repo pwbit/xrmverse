@@ -245,6 +245,19 @@ public sealed class StandardBulkTests(XrmdFixture fx) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task NullRow_InTargets_Is400_NotAnException()
+    {
+        // Plan 4.1b (P6): the mail secret strip skips a null row, so BulkTargets still reports it as a 400.
+        var message = await BadRequestAsync(() => Admin.ExecuteAsync(new CreateMultipleRequest
+        {
+            Targets = new EntityCollection(new List<Entity> { NewAccount("-good"), null! }) { EntityName = Account },
+        }));
+
+        message.Should().Contain("Target 1").And.Contain("(none)");
+        (await AccountsAsync(_tag)).Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Invalid_target_runs_no_prevalidation_step()
     {
         // Validated before the pipeline, as a direct Create: the bulk's PreValidation step (outside the transaction) never runs.

@@ -138,7 +138,8 @@ ignored.
 
 ## Other settings
 
-Feature pages document their own keys: [Webhooks](webhooks.md#configuration) (`Pipeline:*`), [Observability](observability.md)
+Feature pages document their own keys: [Webhooks](webhooks.md#configuration) (`Pipeline:*`), [Email and queues](email-and-queues.md#configuration)
+(`Mail:*`), [Observability](observability.md)
 (`Observability:*`), [Files and images](files-and-images.md), [SQL endpoint](sql-endpoint.md) and
 [Rollup columns](rollup-columns.md#jobs).
 

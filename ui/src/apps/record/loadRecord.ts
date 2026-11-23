@@ -1,6 +1,7 @@
 import type { FieldContext } from '../../admin/tables/fields/fieldProps';
 import { recordKey, type AttributeMeta, type EntityMeta } from '../../admin/tables/metadata';
-import { loadEntity, loadGlobalChoices, loadRelationships, lookupsOf } from '../../admin/tables/tableApi';
+import { PARTY_SELECT, PARTY_TYPE_OF } from '../../admin/tables/partyLists';
+import { loadEntity, loadGlobalChoices, loadRelationships, lookupsOf, partyNavigationOf } from '../../admin/tables/tableApi';
 import type { XrmApi } from '../../shell/api/client';
 import { XrmError } from '../../shell/api/errors';
 import { t } from '../../shell/i18n/t';
@@ -38,16 +39,22 @@ export function formColumns(form: FormModel): string[] {
   return [...new Set(names.filter(Boolean))];
 }
 
+/** The party list columns among `columns` that the form can show (a participation type is known for them). */
+const partyColumns = (entity: EntityMeta, columns?: string[]): AttributeMeta[] =>
+  entity.attributes.filter((a) => a.kind === 'partylist' && PARTY_TYPE_OF[a.logicalName] !== undefined && (!columns || columns.includes(a.logicalName)));
+
 /**
  * The record `id` of `entity` with annotations; with `columns`, only those (plus the key, the primary name for the form title, `statecode`, `statuscode`, `ownerid` and `transactioncurrencyid` for the currency symbol). A 404 or 403 (the record does not exist, or the user may not read it) throws an
  * {@link XrmError} with the message "This record does not exist or you do not have access to it."; any other failure is rethrown.
+ * With `partyNavigation` (plan 4.1b, task 9) the party rows are expanded when a party list is among the columns.
  */
-export async function fetchRecord(api: XrmApi, entity: EntityMeta, id: string, columns?: string[]): Promise<Record<string, unknown>> {
+export async function fetchRecord(api: XrmApi, entity: EntityMeta, id: string, columns?: string[], partyNavigation?: string): Promise<Record<string, unknown>> {
   const wanted = columns && new Set([entity.primaryIdAttribute, entity.primaryNameAttribute ?? '', ...columns, 'statecode', 'statuscode', 'ownerid', 'transactioncurrencyid']);
   const attributes = entity.attributes.filter((a) => readable(a) && (!wanted || wanted.has(a.logicalName)));
   const select = [...new Set([entity.primaryIdAttribute, ...attributes.flatMap(properties)])].join(',');
+  const expand = partyNavigation && partyColumns(entity, columns).length > 0 ? `&$expand=${partyNavigation}($select=${PARTY_SELECT})` : '';
   try {
-    return await api.get<Record<string, unknown>>(`${entity.entitySetName}(${id})?$select=${select}`, { headers: PREFER_ANNOTATIONS });
+    return await api.get<Record<string, unknown>>(`${entity.entitySetName}(${id})?$select=${select}${expand}`, { headers: PREFER_ANNOTATIONS });
   } catch (e) {
     if (e instanceof XrmError && (e.status === 404 || e.status === 403)) throw new XrmError(e.status, t('record.notFound'));
     throw e;
@@ -65,16 +72,24 @@ export async function loadRecord(api: XrmApi, table: string, id?: string, column
   const set = entity.entitySetName;
   if (!set) throw new XrmError(0, t('records.noSet', { table }));
   const needsGlobalChoices = entity.attributes.some((a) => a.globalOptionSet && a.options.length === 0);
+  const relationships = loadRelationships(api);
+  // A party list is read through the party navigation, whose name the relationships give (never guessed).
+  const withParties = partyColumns(entity, columns).length > 0;
   const [[rights, canCreate], rels, globalChoices, record] = await Promise.all([
     options.readOnly
       ? Promise.resolve([['Read'] as AccessRight[], false] as const)
       : api.get<{ UserId: string }>('WhoAmI').then((me) =>
           Promise.all([id ? retrievePrincipalAccess(api, me.UserId, set, id) : Promise.resolve([] as AccessRight[]), holdsCreate(api, me.UserId, entity)]),
         ),
-    loadRelationships(api),
+    relationships,
     needsGlobalChoices ? loadGlobalChoices(api) : Promise.resolve({}),
-    id ? fetchRecord(api, entity, id, columns) : Promise.resolve(undefined),
+    id
+      ? withParties
+        ? relationships.then((r) => fetchRecord(api, entity, id, columns, partyNavigationOf(r, table)))
+        : fetchRecord(api, entity, id, columns)
+      : Promise.resolve(undefined),
   ]);
+  const partyNavigation = entity.attributes.some((a) => a.kind === 'partylist') ? partyNavigationOf(rels, table) : undefined;
   return {
     entity,
     fieldContext: {
@@ -82,6 +97,7 @@ export async function loadRecord(api: XrmApi, table: string, id?: string, column
       lookups: lookupsOf(rels, table),
       globalChoices,
       record: id && record ? { set, id, data: record } : undefined,
+      ...(partyNavigation ? { partyNavigation } : {}),
     },
     record,
     rights,

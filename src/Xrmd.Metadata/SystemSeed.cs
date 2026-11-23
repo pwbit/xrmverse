@@ -109,6 +109,13 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
     /// </summary>
     public const string TextKeysStep = "pg-text-keys-299";
 
+    /// <summary>
+    /// The <c>meta.upgrade_step</c> name of the one-time default of <c>organization.blockedattachments</c> (plan 4.1b, final review I2;
+    /// never renamed): an organization whose value is empty gets <see cref="MailSchema.DefaultBlockedAttachments"/> once, so a list an
+    /// administrator clears afterwards is not set again at every startup, and a list an administrator set is never replaced.
+    /// </summary>
+    public const string BlockedAttachmentsDefaultStep = "organization-blockedattachments-default";
+
     private const string ResourcePrefix = "Xrmd.Metadata.Seed.";
 
     // Referenced entities first, though lookup targets are not validated.
@@ -149,6 +156,8 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
         PostSchema.Regarding, PostSchema.Post, PostSchema.Comment,
         // The queues (plan 4.1a): the queue before the items and memberships that name it.
         QueueSchema.Queue, QueueSchema.QueueItem, QueueSchema.QueueMembership,
+        // Outgoing email (plan 4.1b): the profile before the mailbox that names it, then the attachments of the emails.
+        MailSchema.EmailServerProfile, MailSchema.Mailbox, MailSchema.Attachment,
     ];
 
     /// <summary>The seeded tables a custom table must not take the name of (an object type code of 10000 or more).</summary>
@@ -158,6 +167,7 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
         ActivitySchema.PhoneCall, ActivitySchema.Appointment, ActivitySchema.Annotation,
         PostSchema.Regarding, PostSchema.Post, PostSchema.Comment,
         QueueSchema.Queue, QueueSchema.QueueItem, QueueSchema.QueueMembership,
+        MailSchema.EmailServerProfile, MailSchema.Mailbox, MailSchema.Attachment,
     ];
 
     /// <summary>The id of the system solution <c>Default</c>, which holds every component (Dataverse's well-known id).</summary>
@@ -187,8 +197,13 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
         o.BaseCurrency?.Validate();
 
         DemandNoCustomBusinessTables(o.OrgName);
+        var deferred = new HashSet<string>(StringComparer.Ordinal);
         foreach (var name in EntityOrder)
-            await EnsureEntityAsync(name, ct);
+            await EnsureEntityAsync(name, deferred, ct);
+        // A column added to an existing table whose lookup targets a table created later in the order (systemuser.defaultmailbox,
+        // plan 4.1b) waits for the second pass: the public API refuses a lookup to a table that does not exist yet.
+        foreach (var name in EntityOrder.Where(deferred.Contains))
+            await EnsureEntityAsync(name, null, ct);
         // The many-to-many relationship of the seeded intersect table queuemembership (plan 4.1a; name from Learn). Only the server's
         // store has the seed path: another one would leave the intersect without its relationship, so it fails instead.
         if (store is not MetadataStore queueStore)
@@ -232,13 +247,13 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
                 INSERT INTO data.organization (organizationid, name, plugintracelogsetting, fullnameconventioncode,
                     isauditenabled, auditretentionperiodv2, isuseraccessauditenabled, useraccessauditinginterval,
                     ishierarchicalsecuritymodelenabled, maxdepthforhierarchicalsecuritymodel, usepositionhierarchy, expirechangetrackingindays,
-                    {ActivitySchema.MaxUploadFileSize}, {AppModuleSchema.AutoSaveEnabled}, owningbusinessunit, createdon, createdby, modifiedon,
-                    modifiedby, statecode, statuscode)
+                    {ActivitySchema.MaxUploadFileSize}, {AppModuleSchema.AutoSaveEnabled}, {MailSchema.BlockedAttachments}, owningbusinessunit,
+                    createdon, createdby, modifiedon, modifiedby, statecode, statuscode)
                 VALUES (@id, @name, 1, 0, {dialect.BooleanLiteral(false)}, 30, {dialect.BooleanLiteral(false)}, 4, {dialect.BooleanLiteral(false)}, @depth,
-                    {dialect.BooleanLiteral(false)}, @expire, @maxupload, {dialect.BooleanLiteral(true)}, @bu, @now, @by, @now, @by, 0, 1)
+                    {dialect.BooleanLiteral(false)}, @expire, @maxupload, {dialect.BooleanLiteral(true)}, @blocked, @bu, @now, @by, @now, @by, 0, 1)
                 """, ct, ("@id", Guid.NewGuid()), ("@name", o.OrgName), ("@depth", DefaultHierarchyDepth),
-                ("@expire", ChangeTrackingSchema.DefaultExpireDays), ("@maxupload", ActivitySchema.DefaultMaxUploadFileSize), ("@bu", rootId.Value),
-                ("@now", now), ("@by", creator));
+                ("@expire", ChangeTrackingSchema.DefaultExpireDays), ("@maxupload", ActivitySchema.DefaultMaxUploadFileSize),
+                ("@blocked", MailSchema.DefaultBlockedAttachments), ("@bu", rootId.Value), ("@now", now), ("@by", creator));
         }
 
         var systemUserId = SeedOptions.DeriveSystemUserId(o.OrgName);
@@ -309,6 +324,11 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
         // Auto-save of the model-driven forms (#117): on, as in Dataverse, for an organization made before the column.
         await ExecuteAsync(conn, tx,
             $"UPDATE data.organization SET {AppModuleSchema.AutoSaveEnabled} = {dialect.BooleanLiteral(true)} WHERE {AppModuleSchema.AutoSaveEnabled} IS NULL", ct);
+        // The blocked attachment extensions (plan 4.1b, final review I2): Dataverse's default list for an organization made before the
+        // column, once (meta.upgrade_step), and only where the value is empty: a list an administrator set is kept.
+        await UpgradeOnceAsync(conn, tx, BlockedAttachmentsDefaultStep, now,
+            $"UPDATE data.organization SET {MailSchema.BlockedAttachments} = @blocked WHERE {MailSchema.BlockedAttachments} IS NULL", ct,
+            ("@blocked", MailSchema.DefaultBlockedAttachments));
         // The duplicate detection settings (plan 2.15): all four off (Learn: default false).
         await ExecuteAsync(conn, tx,
             "UPDATE data.organization SET " + string.Join(", ", DuplicateDetectionSchema.OrganizationColumns.Select(c => $"{c} = {dialect.IsNull(c, dialect.BooleanLiteral(false))}")) +
@@ -589,7 +609,7 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
     /// <see cref="AppModuleSchema.AsyncOnSave"/>, plus the timeline options <see cref="AppModuleSchema.TimelineGroupByDate"/>,
     /// <see cref="AppModuleSchema.TimelineRememberFilters"/> (UI-1g) and <see cref="AppModuleSchema.TimelinePosts"/> (UI-1g, posts),
     /// with their well-known ids and the default <c>false</c>, and the presentation settings <see cref="AppModuleSchema.Renderer"/>
-    /// (default <c>classic</c>) and <see cref="AppModuleSchema.Presentation"/> (default empty; UI-2a) and <see cref="AppModuleSchema.LookupOpenMode"/> (default <c>sidepane</c>) and <see cref="AppModuleSchema.AppOnLoad"/> (default empty; X.10), each inserted only when its row is missing (an administrator's change
+    /// (default <c>classic</c>) and <see cref="AppModuleSchema.Presentation"/> (default empty; UI-2a) and <see cref="AppModuleSchema.LookupOpenMode"/> (default <c>sidepane</c>) and <see cref="AppModuleSchema.AppOnLoad"/> (default empty; X.10) and <see cref="AppModuleSchema.EmailSendFrom"/> (default <c>userOrQueue</c>; plan 4.1b), each inserted only when its row is missing (an administrator's change
     /// to a row stays).
     /// </summary>
     private static async Task EnsureSettingDefinitionsAsync(
@@ -605,7 +625,7 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
                 (@remember, @remembername, @false), (@posts, @postsname, @false),
                 (@renderer, @renderername, @rendererdefault), (@presentation, @presentationname, @presentationdefault),
                 (@lookupopen, @lookupopenname, @lookupopendefault),
-                (@apponload, @apponloadname, @apponloaddefault))
+                (@apponload, @apponloadname, @apponloaddefault), (@emailsendfrom, @emailsendfromname, @emailsendfromdefault))
                 AS j (id, name, defaultvalue)
             WHERE NOT EXISTS (SELECT 1 FROM data.{AppModuleSchema.SettingDefinition} d{dialect.LockHint(RowLock.UpdateRange)}
                 WHERE d.{AppModuleSchema.SettingDefinition}id = j.id OR d.uniquename = j.name);
@@ -623,6 +643,8 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
             ("@lookupopendefault", AppModuleSchema.LookupOpenModeDefault),
             ("@apponload", AppModuleSchema.AppOnLoadId), ("@apponloadname", AppModuleSchema.AppOnLoad),
             ("@apponloaddefault", AppModuleSchema.AppOnLoadDefault),
+            ("@emailsendfrom", AppModuleSchema.EmailSendFromId), ("@emailsendfromname", AppModuleSchema.EmailSendFrom),
+            ("@emailsendfromdefault", AppModuleSchema.EmailSendFromUserOrQueue),
             // A parameter, not N'false': on PostgreSQL a VALUES column cannot mix a character literal with citext parameters.
             ("@false", "false"),
             ("@bu", rootId), ("@now", now), ("@by", creator));
@@ -653,7 +675,7 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
                     $"but xrmverse seeds its own '{name}' table. Rename or delete the custom table, then restart the server.");
     }
 
-    private async Task EnsureEntityAsync(string logicalName, CancellationToken ct)
+    private async Task EnsureEntityAsync(string logicalName, ISet<string>? deferred, CancellationToken ct)
     {
         var entity = LoadDefinition(logicalName);
         // A seed definition may declare saved relationships (a Customer lookup has one per target); they are not part of the
@@ -693,9 +715,17 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
 
         // Entities created by an earlier version miss the attributes added since.
         var present = (existing.Attributes ?? []).Select(a => a.LogicalName).ToHashSet(StringComparer.Ordinal);
+        var waits = false;
         foreach (var attribute in entity.Attributes ?? [])
             if (!present.Contains(attribute.LogicalName) && !SystemAttributes.IsReservedName(logicalName, attribute.LogicalName))
             {
+                if (deferred is not null && attribute is LookupAttributeMetadata { Targets: { } targets }
+                    && targets.Any(t => store.GetEntity(t) is null))
+                {
+                    deferred.Add(logicalName);
+                    waits = true;
+                    continue;
+                }
                 // A Customer column is refused by the public API (CreateCustomerRelationships only): the seed has its own way in.
                 if (CustomerColumns.IsCustomer(attribute) && store is MetadataStore customerStore)
                     await customerStore.AddSeedAttributeAsync(logicalName, attribute, ct);
@@ -705,13 +735,24 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
         if (store is MetadataStore optionStore)
             foreach (var picklist in (entity.Attributes ?? []).OfType<PicklistAttributeMetadata>().Where(a => a.OptionSet is { IsGlobal: not true }))
                 await optionStore.EnsureSeedOptionsAsync(logicalName, picklist, ct);
-        // A lookup that gained targets since (sdkmessageprocessingstep.eventhandler: serviceendpoint, plan 3.2).
+        // A lookup that gained targets since (sdkmessageprocessingstep.eventhandler: serviceendpoint, plan 3.2; activityparty.partyid
+        // and the email party lists: queue, plan 4.1b). A new target created later in the order waits for the second pass, with the
+        // table's relationships.
         if (store is MetadataStore targetStore)
             foreach (var lookup in (entity.Attributes ?? []).OfType<LookupAttributeMetadata>())
                 if (existing.Attributes?.FirstOrDefault(a => a.LogicalName == lookup.LogicalName) is LookupAttributeMetadata stored
                     && (lookup.Targets ?? []).Except(stored.Targets ?? []).Any())
+                {
+                    if (deferred is not null && (lookup.Targets ?? []).Any(t => store.GetEntity(t) is null))
+                    {
+                        deferred.Add(logicalName);
+                        waits = true;
+                        continue;
+                    }
                     await targetStore.SetSeedLookupTargetsAsync(logicalName, lookup.LogicalName, lookup.Targets!, ct);
-        await EnsureRelationshipsAsync(relationships, ct);
+                }
+        // The relationships of a table with a column that waits (queue_system_user names systemuser.queueid) wait with it.
+        if (!waits) await EnsureRelationshipsAsync(relationships, ct);
     }
 
     /// <summary>

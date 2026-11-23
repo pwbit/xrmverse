@@ -311,6 +311,11 @@ public sealed partial class MetadataStore
                 target => ActivitySchema.RegardingRelationship(target, holder), ct);
         await SyncManagedLookupAsync(session, pending, ActivitySchema.Annotation, ActivitySchema.ObjectId, notes, ActivitySchema.NotesRelationship, ct);
         await SyncManagedLookupAsync(session, pending, ActivitySchema.Party, ActivitySchema.ActivityId, holders, ActivitySchema.PartiesRelationship, ct);
+        // Plan 4.1b (ruling P4): an email's attachments, with the Delete cascade of the email (and of the pointer, which no Delete reaches).
+        await SyncManagedLookupAsync(session, pending, MailSchema.Attachment, ActivitySchema.ObjectId,
+            cache.ByLogicalName.Values.Where(e => e.LogicalName is ActivitySchema.Pointer or ActivitySchema.Email)
+                .OrderBy(e => e.LogicalName == ActivitySchema.Pointer ? 0 : 1).ToList(),
+            ActivitySchema.AttachmentRelationship, ct);
         await SyncManagedLookupAsync(session, pending, PostSchema.Regarding, ActivitySchema.RegardingObjectId, posts,
             PostSchema.PostRegardingsRelationship, ct);
         // post.regardingobjectid has the same targets and no relationships, as on Learn.

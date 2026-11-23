@@ -17,14 +17,22 @@ namespace Xrmd.Core.Query;
 /// toward <c>Files:MaxNoteBodyBytesPerRead</c> (ruling Y5). Only the rows the query returned get their body, so a body is read
 /// exactly where its note is (the note's read security); a note without a body has no value, as a null column. The body cannot be
 /// used in a condition, an order, a join or an aggregate, nor take an alias (400). A distinct query reads it only with the note's
-/// primary key.
+/// primary key. Plan 4.1b: the same holds for <c>activitymimeattachment.body</c>, read from <see cref="AttachmentBodies"/> for the
+/// attachments the query returned (so for the emails the caller can read).
 /// </summary>
 internal sealed class NoteBodyRead
 {
-    private const string Body = ActivitySchema.DocumentBody;
+    /// <summary>A body kept in the file store: the table and attribute that name it, and what the 400s call it.</summary>
+    private sealed record Kind(string Table, string Attribute, string Label);
 
-    /// <summary>A scope whose notes get their body: the root (<see cref="Alias"/> null) or a link-entity by its result alias.</summary>
-    private sealed record Target(string? Alias, string PrimaryKey, bool AddedKey);
+    private static readonly Kind Note = new(ActivitySchema.Annotation, ActivitySchema.DocumentBody, "note body");
+    private static readonly Kind Attachment = new(MailSchema.Attachment, MailSchema.AttachmentBody, "attachment body");
+    private static readonly Kind[] Kinds = [Note, Attachment];
+
+    private static Kind? KindOf(string? table) => Kinds.FirstOrDefault(k => k.Table == table);
+
+    /// <summary>A scope whose records get their body: the root (<see cref="Alias"/> null) or a link-entity by its result alias.</summary>
+    private sealed record Target(string? Alias, string PrimaryKey, bool AddedKey, Kind Kind);
 
     private NoteBodyRead(QueryModel query, IReadOnlyList<Target> targets)
     {
@@ -45,10 +53,8 @@ internal sealed class NoteBodyRead
         var aliases = new Dictionary<string, string>(StringComparer.Ordinal);
         CollectAliases(query.Root, aliases);
         DemandNoBodyUse(query.Root, parent: null, aliases);
-        if (query.Aggregate || store.GetEntity(ActivitySchema.Annotation) is not { } annotation
-            || (annotation.Attributes ?? []).All(a => a.LogicalName != Body))
-            return new NoteBodyRead(query, []);
-        var pk = SystemAttributes.PrimaryIdName(annotation);
+        var present = Kinds.Where(k => store.GetEntity(k.Table) is { } table && (table.Attributes ?? []).Any(a => a.LogicalName == k.Attribute)).ToList();
+        if (query.Aggregate || present.Count == 0) return new NoteBodyRead(query, []);
 
         var targets = new List<Target>();
         var changed = false;
@@ -57,11 +63,12 @@ internal sealed class NoteBodyRead
         EntityNode Visit(EntityNode node, string? alias)
         {
             var copy = node;
-            if (node.EntityName == ActivitySchema.Annotation)
+            if (present.FirstOrDefault(k => k.Table == node.EntityName) is { } kind)
             {
-                var named = node.Columns.Where(c => c.Attribute == Body).ToList();
+                var pk = SystemAttributes.PrimaryIdName(store.GetEntity(kind.Table)!);
+                var named = node.Columns.Where(c => c.Attribute == kind.Attribute).ToList();
                 if (named.FirstOrDefault(c => c.Alias is not null) is { } aliased)
-                    throw XrmdFaultException.InvalidArgument($"The note body '{aliased.Attribute}' of '{ActivitySchema.Annotation}' cannot take an alias.");
+                    throw XrmdFaultException.InvalidArgument($"The {kind.Label} '{aliased.Attribute}' of '{kind.Table}' cannot take an alias.");
                 if (node.AllColumns || named.Count > 0)
                 {
                     // The root always reads its key outside a distinct query; a link-entity reads it with all columns only.
@@ -69,12 +76,12 @@ internal sealed class NoteBodyRead
                                  || (alias is null && !query.Distinct);
                     if (!hasKey && query.Distinct)
                         throw XrmdFaultException.InvalidArgument(
-                            $"A distinct query reads the note body '{Body}' only with its primary key '{pk}': select it too.");
-                    targets.Add(new Target(alias, pk, AddedKey: !hasKey));
+                            $"A distinct query reads the {kind.Label} '{kind.Attribute}' only with its primary key '{pk}': select it too.");
+                    targets.Add(new Target(alias, pk, AddedKey: !hasKey, kind));
                     if (named.Count > 0 || !hasKey)
                     {
                         copy = Shallow(node);
-                        copy.Columns.AddRange(node.Columns.Where(c => c.Attribute != Body));
+                        copy.Columns.AddRange(node.Columns.Where(c => c.Attribute != kind.Attribute));
                         if (!hasKey) copy.Columns.Add(new ColumnNode(pk));
                         changed = true;
                     }
@@ -113,18 +120,20 @@ internal sealed class NoteBodyRead
             target.Alias is null
                 ? entity.Id != Guid.Empty ? entity.Id : null
                 : entity.Attributes.TryGetValue($"{target.Alias}.{target.PrimaryKey}", out var value) && value is AliasedValue { Value: Guid id } ? id : null;
-        var ids = result.Entities.SelectMany(e => _targets.Select(t => NoteOf(e, t))).OfType<Guid>().Distinct().ToList();
-        if (ids.Count > 0)
+        foreach (var kind in _targets.Select(t => t.Kind).Distinct())
         {
+            var targets = _targets.Where(t => t.Kind == kind).ToList();
+            var ids = result.Entities.SelectMany(e => targets.Select(t => NoteOf(e, t))).OfType<Guid>().Distinct().ToList();
+            if (ids.Count == 0) continue;
             if (files is null)
-                throw new InvalidOperationException("Note bodies are read from the file store: this query executor has no file service.");
-            var bodies = await files.Annotations.ReadAsync(session, ids, ct);
+                throw new InvalidOperationException($"Note and attachment bodies are read from the file store: this query executor has no file service.");
+            var bodies = kind == Attachment ? await files.Attachments.ReadAsync(session, ids, ct) : await files.Annotations.ReadAsync(session, ids, ct);
             foreach (var entity in result.Entities)
-                foreach (var target in _targets)
+                foreach (var target in targets)
                 {
                     if (NoteOf(entity, target) is not { } id || !bodies.TryGetValue(id, out var body)) continue;
-                    if (target.Alias is null) entity[Body] = body;
-                    else entity[$"{target.Alias}.{Body}"] = new AliasedValue(ActivitySchema.Annotation, Body, body);
+                    if (target.Alias is null) entity[kind.Attribute] = body;
+                    else entity[$"{target.Alias}.{kind.Attribute}"] = new AliasedValue(kind.Table, kind.Attribute, body);
                 }
         }
         foreach (var target in _targets.Where(t => t.AddedKey && t.Alias is not null))
@@ -189,9 +198,9 @@ internal sealed class NoteBodyRead
 
     private static void Demand(string table, string? attribute, string use)
     {
-        if (table != ActivitySchema.Annotation || attribute != ActivitySchema.DocumentBody) return;
+        if (KindOf(table) is not { } kind || attribute != kind.Attribute) return;
         throw XrmdFaultException.InvalidArgument(
-            $"The note body '{attribute}' of '{table}' cannot be {use}: it is kept in the file store, not in a column. " +
+            $"The {kind.Label} '{attribute}' of '{table}' cannot be {use}: it is kept in the file store, not in a column. " +
             "It can only be selected.");
     }
 }

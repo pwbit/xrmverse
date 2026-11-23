@@ -227,6 +227,8 @@ export default async function globalSetup(): Promise<void> {
         Ui__RootPath: join(uiDir, 'dist'),
         // The file store of file and image columns: the run's own folder, removed by the teardown.
         Files__FileSystem__Root: join(workDir, 'files'),
+        // e2e/email.spec.ts sends through GreenMail, which offers no STARTTLS.
+        Mail__AllowInsecureSmtp: 'true',
       },
     });
     host.unref();

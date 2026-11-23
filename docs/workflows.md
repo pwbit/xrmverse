@@ -182,7 +182,7 @@ of the designer that run:
 | Update record (primary or related through an N:1 lookup) | `Update`; an empty value clears the column; at stage 20 on the primary record, see [above](#stages-and-order-with-plug-ins) |
 | Assign record | `Assign` to a user or a team |
 | Change status | `SetState` |
-| Send email | creates the email, then `SendEmail` with `IssueSend` true; with no email provider the email stays Pending Send (state 1, status 6), as described in [Activities and notes](activities.md) |
+| Send email | creates the email, then `SendEmail` with `IssueSend` true: the email is Pending Send (state 1, status 6) and the send job sends it through the sender's mailbox, or sets it to Failed when that mailbox cannot send (see [Email and queues](email-and-queues.md#sending)) |
 | Check condition, conditional branch, default action | the first true branch runs, otherwise the default branch |
 | Wait condition, timeout | background only; see [Waits](#background-jobs-and-waits) |
 | Start child workflow | queues a background job of the child (below) |
@@ -477,8 +477,7 @@ Each item is refused with an error or stated here; none is a silent difference.
 - **No Assign over the Web API.** `PATCH workflows(<id>)` with `ownerid@odata.bind` is 400; assign a process with
   `AssignRequest` (SDK or SOAP).
 - **Form-scope business rules** do not run on the server (no forms until phase 3).
-- **"Send email from template"** is an unsupported step: xrmverse has no email templates. Email is not sent until plan 4.1
-  (the email stays Pending Send).
+- **"Send email from template"** is an unsupported step: xrmverse has no email templates.
 - **Custom workflow activities** run on .NET: an API that exists only on .NET Framework fails with the plug-in "could not be
   loaded" error. There is no isolation: the activity runs in the `xrmd` process, as plug-ins do.
 - **`primaryentity`** and `processtrigger.primaryentitytypecode` are text columns (String 100) holding the table's logical

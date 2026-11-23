@@ -26,9 +26,10 @@ what xrmverse does and where it stops.
 |---|---|---|
 | Tables | `activitypointer`, `activityparty`, `email`, `task`, `phonecall`, `appointment`, `annotation`, custom activities | Same model; object type codes from memory |
 | `activitypointer` | A stored copy written in the same transaction | **Differs** in storage; same query behaviour |
-| Sending email | `SendEmail` only changes the email's state (until roadmap item 4.1); the sender must be the caller | **Narrower** |
+| Sending email | `SendEmail` with `IssueSend` true sends through the sender's mailbox (SMTP or Microsoft Graph); the sender is the caller or a queue the caller can read (see [Email and queues](email-and-queues.md#outgoing-email)) | Same idea; **Narrower** in the details |
 | Queues | Queue items for the activity tables (see [Email and queues](email-and-queues.md)) | Same idea |
-| Recurring appointments, email attachments, templates | Refused | **Narrower** (see [What is refused](#what-is-refused)) |
+| Email attachments | `activitymimeattachment`, body in the file store, sent with the email | Same idea; no chunked transfer |
+| Recurring appointments, templates | Refused | **Narrower** (see [What is refused](#what-is-refused)) |
 | Note attachments | One piece, up to 125 MiB | **Narrower**: no chunked transfer |
 | Posts | Create, read, delete, replies, @mentions; cannot be updated; auto posts refused | **Narrower** (see [Posts](#posts)) |
 | Verification | Several behaviours not verified on a real Dataverse | **Unverified** where stated |
@@ -196,7 +197,7 @@ lookups. The shared Activity privileges stay (see [Security](#security)).
 
 A party list column holds the participants of one kind (`to`, `cc`, …). It has no column of its own in SQL: each
 participant is a row of `activityparty` with the activity's id, the participant (`partyid`, an account, contact or
-systemuser), the address used (`addressused`, up to 320 characters) and the participation type (`participationtypemask`):
+systemuser, and also a queue in the `from`, `to`, `cc` and `bcc` of an email), the address used (`addressused`, up to 320 characters) and the participation type (`participationtypemask`):
 
 | Type | Meaning | Type | Meaning |
 |---|---|---|---|
@@ -253,19 +254,22 @@ other collection-valued navigation in a POST or PATCH body (a generic deep inser
 
 **Rules on writes.**
 
-- On Create, each party list sent is written as rows of its type. On Update, a party list sent **replaces the rows of its
-  type only**; the other types stay. In the SDK, an empty collection or null clears the type. On a Web API PATCH, the types
-  present in `{activity}_activity_parties` replace theirs, and an empty array changes nothing.
+- On Create, each party list sent is written as rows of its type. In the SDK, an Update with a party list **replaces the
+  rows of its type only**; the other types stay, and an empty collection or null clears the type.
+- On a Web API PATCH, `{activity}_activity_parties` is the activity's **whole party set**: every party list type is
+  replaced by the items of its type in the array, a type with no item is cleared, and an empty array clears every party
+  list. The Owner and Regarding rows stay (the server keeps them). Send every party you want to keep. That Dataverse treats
+  the array this way is from memory (checklist 3a).
 - `from` and `organizer` take at most one party. Types 8 and 9 are written by the server and refused when sent. A type the
   table does not have, and type 12, are refused. The same party twice in one list gives two rows.
-- `partyid` must name an existing account, contact or systemuser (404 `ObjectDoesNotExist` when missing; another table is a
-  400). **The caller must be able to read the party record** (403 otherwise); Append or AppendTo on it is not needed.
+- `partyid` must name an existing record of a table the column accepts: account, contact or systemuser, and queue for the
+  `from`, `to`, `cc` and `bcc` of an email (404 `ObjectDoesNotExist` when missing; another table is a 400). **The caller must be able to read the party record** (403 otherwise); Append or AppendTo on it is not needed.
 - An empty `addressused` is filled from the party: `emailaddress1` of an account or contact, `internalemailaddress` of a
-  user.
+  user, `emailaddress` of a queue.
 - The server keeps one Owner row (type 9, the activity's owner, user or team) and, when there is a regarding record, one
   Regarding row (type 8) up to date on Create, Update and Assign. These two rows have no `addressused`.
-- Deleting an activity deletes its party rows. Deleting a party record (an account or contact) keeps its rows and sets their
-  `ispartydeleted` to true.
+- Deleting an activity deletes its party rows. Deleting a party record (an account, contact or queue) keeps its rows and sets
+  their `ispartydeleted` to true.
 
 **`activityparty` itself** is read-only: Create, Update and Delete of its rows are 400, through the SDK and the Web API.
 Query it with `RetrieveMultiple` or link to it from an activity (`activityparty.activityid`) to filter by participant:
@@ -296,10 +300,11 @@ status (a task is Not Started). A status must belong to its state (400 otherwise
 
 ## SendEmail
 
-`SendEmail` marks an email as sent. **xrmverse has no email provider before plan 4.1: no email leaves the server.**
+`SendEmail` sends an email, or marks it as sent. Sending for real goes through the sender's mailbox and an email server
+profile, set up as [Email and queues](email-and-queues.md#outgoing-email) describes.
 
 - SDK: `SendEmailRequest { EmailId, IssueSend, TrackingToken }`, response `Subject`.
-- Web API: `POST emails(<id>)/Microsoft.Dynamics.CRM.SendEmail` with `{ "IssueSend": false, "TrackingToken": "…" }`,
+- Web API: `POST emails(<id>)/Microsoft.Dynamics.CRM.SendEmail` with `{ "IssueSend": true, "TrackingToken": "…" }`,
   answer `{ "Subject": "…" }`. The action is declared in `$metadata`.
 
 What it does, in one transaction through the normal Update path (the pointer is updated and the change is audited as an
@@ -307,12 +312,18 @@ Update):
 
 - the caller needs Write on the email;
 - the email must be open (Draft or Failed), else 400; it needs at least one party in `to`, `cc` or `bcc`, else 400;
-- the sender must be the caller: an empty `from` is filled with the caller's own `systemuser`, and a `from` naming another
-  user, a contact, an account or an address is a 400 (sending on behalf of someone else is not modelled yet);
-- `IssueSend` false: state Completed, status 3 Sent, `senton` now;
-- `IssueSend` true: status 6 Pending Send and an empty `senton` (a Failed email's `senton` from an earlier attempt is
-  cleared); the server logs one information line, and the email stays Pending Send, because nothing sends it until plan 4.1;
-- `directioncode` becomes true, and `trackingtoken` is stored when one is given (an empty one counts as not given);
+- the sender is the caller or a queue: an empty `from` is filled with the caller's own `systemuser`; a `from` naming a queue
+  needs Read on that queue (403 otherwise); a `from` naming another user, a contact, an account or an address is a 400
+  (sending on behalf of someone else is not modelled). The environment setting `xrmverse_EmailSendFrom` can allow queues only
+  (see [Sender policy](email-and-queues.md#sender-policy-xrmverse_emailsendfrom));
+- `IssueSend` false: state Completed, status 3 Sent, `senton` now; nothing leaves the server;
+- `IssueSend` true: status 6 Pending Send, an empty `senton` (a Failed email's `senton` from an earlier attempt is
+  cleared) and `deliveryattempts` 0, and one send job is queued. A recipient that is only an address is a 400 unless
+  `organization.allowunresolvedpartiesonemailsend` is on. The job ends with status 3 Sent, or state 0 status 8 Failed with
+  the reason on the job (see [Sending](email-and-queues.md#sending));
+- `directioncode` becomes true, and `trackingtoken` is stored when one is given (an empty one counts as not given); with
+  tracking tokens on, a token is taken and appended to the subject (see
+  [Tracking tokens](email-and-queues.md#tracking-tokens));
 - `IssueSend` is required (400 when missing or not a Boolean), and so is `EmailId`; an unknown email is 404.
 
 Plug-in steps register on `SendEmail` with the filter `email` and get pre and post images of the email (see
@@ -454,12 +465,14 @@ timeline writes a user as `@[8,{a1b2c3d4-...},"Full Name"]` (type code 8, the id
 These messages are answered with a 400 that says why (through the SDK, SOAP and the Web API, unbound or bound), and no
 custom API or custom action can take their names: `Book`, `Reschedule`, `AddRecurrence`, `DeliverPromoteEmail`,
 `DeliverIncomingEmail`, `CheckIncomingEmail`, `CheckPromoteEmail`, `BackgroundSendEmail`, `SendEmailFromTemplate`,
-`SendTemplate`, `InstantiateTemplate`, `GetTrackingTokenEmail`, `Rollup`, `Restore`, `AppendRelatedParty`,
+`SendTemplate`, `InstantiateTemplate`, `Rollup`, `Restore`, `AppendRelatedParty`,
 `InitializeAnnotationBlocksUpload` and `InitializeAnnotationBlocksDownload`. The queue messages run (see [Email and queues](email-and-queues.md)).
 An `sdkmessage` row with one of these names does not make it run. These names are also reserved as entity set names, so a new table, or a table in a solution import, whose entity set is named `Rollup`, `Book` and so on is a
 400.
 
-The tables `activitymimeattachment`, `letter`, `fax`, `recurringappointmentmaster`, `socialactivity`,
+`InitializeAttachmentBlocksUpload` and `InitializeAttachmentBlocksDownload` are refused too: an email attachment's body (`activitymimeattachment.body`, base64) is written with Create or Update and read with Retrieve, like a note's `documentbody`, and lives in the file store. The table follows its email: read needs read on the email, create, update and delete need write on it, and the email must be open to add or change attachments (deleting one is not refused on a sent email: checklist 5); `email.attachmentcount` follows the rows and `organization.blockedattachments` and `maxuploadfilesize` are checked.
+
+The tables `letter`, `fax`, `recurringappointmentmaster`, `socialactivity`,
 `template`, `serviceappointment` and `campaignactivity` are not seeded: they give the usual "entity not found" 400.
 
 ## Surfaces
@@ -472,6 +485,8 @@ Where you manage activities and notes:
 - **Schema files.** `isActivity`, `hasNotes`, `hasActivities` (see [CLI](cli.md#tables-plug-ins-data-and-schema-files)).
 - **Web admin.** The **Activity table** switch when creating a table, the **Notes** and **Activities** switches on a table's
   page, party lists shown read-only on a record form (see [Web admin](web-admin.md#activities-and-notes)).
+- **Model-driven apps.** Party lists are edited on activity forms, and an email form has **Send**, the send status and the
+  attachments (see [Model-driven apps](model-driven-apps.md#email-form)).
 - **MCP.** The record tools work on activities and notes; party lists are left out of the records they return.
 - **Solutions.** See [Solutions](solutions.md).
 
@@ -490,17 +505,20 @@ None of these is silent: each is refused with an explicit error or stated here.
   2000 characters (possible on `email`, whose `description` is far longer) is cut to 2000, the pointer's declared length;
   what Dataverse's pointer holds in both cases is on the checklist.
 - **Not modelled.** Team-owned and organization-owned custom activities; the party list `partners` and any other party
-  column not listed above; `knowledgearticle` and `queue` records as parties (a queue is not a party in 4.1a); an address without a record outside `email`;
-  email attachments (`activitymimeattachment`); recurring appointments; any standard column outside the lists above.
+  column not listed above; `knowledgearticle` records as parties; a queue as a party outside the `from`, `to`, `cc` and `bcc` of
+  an email; an address without a record outside `email`;
+  inline (content id) attachments; recurring appointments; any standard column outside the lists above.
   `activityparty` has a `statecode` and `statuscode` like every xrmverse table, which Dataverse's does not.
-- **No email is sent.** `SendEmail` with `IssueSend` true leaves the email Pending Send until plan 4.1. The sender must be the
-  caller (no send-as, no queue). The plug-in message is named `SendEmail`; whether Dataverse names it `Send` for plug-ins is
-  on the checklist. The `Update` steps of `email` do not fire on a send, and the send is audited as an Update.
+- **Sending email.** The sender is the caller or a queue the caller can read (no send-as another user, no delegate access).
+  The limits of outgoing email are in [Email and queues](email-and-queues.md#known-limits). The plug-in message is named
+  `SendEmail`; whether Dataverse names it `Send` for plug-ins is on the checklist. The `Update` steps of `email` do not fire on
+  a send, and the send is audited as an Update.
 - **Party reads and writes.** Writing a party needs Read on the party record (stricter than Dataverse may be). A reader of an
   activity sees each party's name and address even without Read on the party record. An empty party list is left out of a
   read. A party list cannot be a link-entity column. The Owner and Regarding rows have no `addressused`. The Owner row of a
   team-owned activity has no `associatednavigationproperty` annotation on the Web API (`team` is not a `partyid` target).
-  A Web API PATCH cannot clear a party type (an empty array changes nothing): use the SDK.
+  A Web API PATCH with `{activity}_activity_parties` replaces the whole party set (a type left out is cleared, an empty
+  array clears them all), while an SDK Update replaces only the types it sends (checklist 3a).
 - **`$expand`.** The per-target navigations (`regardingobjectid_{table}`, `regardingobjectid_{table}_{activity}`,
   `activityid_{activity}`, `partyid_{table}`) expand one level, with no nested `$expand`. Other multi-target lookups
   (Customer, Owner) still cannot be expanded. `fileattachment` lists its `objectid` navigation in `$metadata` for its first

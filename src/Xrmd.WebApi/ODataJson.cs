@@ -152,9 +152,14 @@ public static class ODataJson
     /// (keys containing <c>@</c>) are skipped. Values are not validated against metadata constraints (length, options):
     /// the organization service does that.
     /// </summary>
+    /// <param name="replacePartyLists">
+    /// True for a PATCH (plan 4.1b, task 9, ruling P12): <c>{activity}_activity_parties</c> is then the activity's whole party set, as in
+    /// Dataverse, so every party list column of the table is written and a type with no item (or an empty array) is cleared. False for
+    /// a POST, where a type with no item is simply not set (the Core's defaults, such as the sender of an email, still apply).
+    /// </param>
     /// <exception cref="XrmdFaultException">InvalidArgument naming the property: unknown property, read-only
     /// <c>_{name}_value</c>, lookup without <c>@odata.bind</c>, malformed bind, or a value of the wrong JSON type.</exception>
-    public static Entity FromJson(JsonObject body, EntityMetadata m, IMetadataStore store)
+    public static Entity FromJson(JsonObject body, EntityMetadata m, IMetadataStore store, bool replacePartyLists = false)
     {
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(m);
@@ -164,6 +169,7 @@ public static class ODataJson
         var entity = new Entity(m.LogicalName);
         var boundCustomers = new Dictionary<string, string>(StringComparer.Ordinal); // per-target lookup -> the navigation property bound
         var partyNavigation = PartyNavigation(m, relationships);
+        string? objectTypeCode = null;
 
         foreach (var (key, node) in body)
         {
@@ -179,7 +185,19 @@ public static class ODataJson
             // Plan 2.11 A8: the party rows of an activity, by participation type, become its party list columns.
             if (key == partyNavigation)
             {
-                foreach (var (column, parties) in ReadParties(m, key, node, store)) entity[column] = parties;
+                var lists = ReadParties(m, key, node, store);
+                if (replacePartyLists)
+                    foreach (var (column, _, _) in ActivitySchema.PartyLists(m))
+                        lists.TryAdd(column, new EntityCollection { EntityName = ActivitySchema.Party });
+                foreach (var (column, parties) in lists) entity[column] = parties;
+                continue;
+            }
+            // Plan 4.1b, task 9 (ruling P13): the attachment's item type, as Dataverse's create samples send it next to the objectid
+            // bind. It is not stored (the type is objectid's own); it must name the bound record's table.
+            if (m.LogicalName == MailSchema.Attachment && key == ActivitySchema.ObjectTypeCode)
+            {
+                objectTypeCode = node is JsonValue code && code.TryGetValue<string>(out var name) ? name
+                    : throw XrmdFaultException.InvalidArgument($"'{ActivitySchema.ObjectTypeCode}' of '{m.LogicalName}' must be the logical name of a table.");
                 continue;
             }
             if (IsCollectionNavigation(m, key, relationships, store))
@@ -201,6 +219,16 @@ public static class ODataJson
                     $"'{key}' is a navigation property: set it with {BindHint(m, lookupAttribute, relationships)}: \"/<entityset>(<id>)\".");
 
             entity[key] = node is null ? null : ReadValue(m, attribute, JsonSerializer.SerializeToElement(node));
+        }
+        if (objectTypeCode is not null)
+        {
+            var bound = entity.GetAttributeValue<EntityReference>(ActivitySchema.ObjectId);
+            if (bound is null)
+                throw XrmdFaultException.InvalidArgument(
+                    $"'{ActivitySchema.ObjectTypeCode}' is set together with the record of '{ActivitySchema.ObjectId}' (its @odata.bind).");
+            if (!string.Equals(bound.LogicalName, objectTypeCode, StringComparison.Ordinal))
+                throw XrmdFaultException.InvalidArgument(
+                    $"'{ActivitySchema.ObjectTypeCode}' is '{objectTypeCode}', but '{ActivitySchema.ObjectId}' is bound to a record of '{bound.LogicalName}'.");
         }
         return entity;
     }
@@ -254,8 +282,10 @@ public static class ODataJson
     /// The items of <c>{activity}_activity_parties</c> in a POST or PATCH body (plan 2.11, A8, A9), grouped into the party list
     /// columns of <paramref name="m"/> by their <c>participationtypemask</c>, in the body's order. Each item takes
     /// <c>participationtypemask</c> (required), <c>partyid_{table}@odata.bind</c> and <c>addressused</c>; the Core validates the
-    /// rest (existence, an address alone only on email, at most one sender). Only the types present are written: on PATCH, the
-    /// other types keep their rows, and an empty array changes nothing (from memory: checklist 3a).
+    /// rest (existence, an address alone only on email, at most one sender). Only the types present are returned; on PATCH,
+    /// <see cref="FromJson"/> adds every other party list of the table as an empty collection, so the array replaces the activity's
+    /// whole party set and an empty array clears it (plan 4.1b, task 9, ruling P12; checklist 3a: Dataverse treats the collection as
+    /// the complete set, from memory).
     /// </summary>
     /// <exception cref="XrmdFaultException">InvalidArgument (400): not an array of objects, a missing or unknown participation type,
     /// a type the server maintains (Regarding, Owner), or another property.</exception>

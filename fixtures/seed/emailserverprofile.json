@@ -1,0 +1,1232 @@
+{
+  "LogicalName": "emailserverprofile",
+  "SchemaName": "EmailServerProfile",
+  "DisplayName": {
+    "LocalizedLabels": [
+      {
+        "Label": "Email Server Profile",
+        "LanguageCode": 1033
+      }
+    ],
+    "UserLocalizedLabel": {
+      "Label": "Email Server Profile",
+      "LanguageCode": 1033
+    }
+  },
+  "IsAuditEnabled": {
+    "Value": false,
+    "CanBeChanged": false,
+    "ManagedPropertyLogicalName": "canmodifyauditsettings"
+  },
+  "EntitySetName": "emailserverprofiles",
+  "ObjectTypeCode": 9605,
+  "OwnershipType": "UserOwned",
+  "PrimaryIdAttribute": "emailserverprofileid",
+  "PrimaryNameAttribute": "name",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "name",
+      "SchemaName": "Name",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Name",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Name",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 100,
+      "Format": "Text",
+      "RequiredLevel": {
+        "Value": "ApplicationRequired",
+        "CanBeChanged": false
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "description",
+      "SchemaName": "Description",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Description",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Description",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 2000
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "servertype",
+      "SchemaName": "ServerType",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Server Type",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Server Type",
+          "LanguageCode": 1033
+        }
+      },
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Exchange Server",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Exchange Server",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Other (POP3/SMTP)",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Other (POP3/SMTP)",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 2,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Exchange Server (Hybrid)",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Exchange Server (Hybrid)",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 3,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Exchange Online (Hybrid)",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Exchange Online (Hybrid)",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 4,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "IMAP/SMTP",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "IMAP/SMTP",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      },
+      "RequiredLevel": {
+        "Value": "ApplicationRequired",
+        "CanBeChanged": false
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "incomingserverlocation",
+      "SchemaName": "IncomingServerLocation",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Incoming Server",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Incoming Server",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 2084,
+      "Format": "Text"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "incomingportnumber",
+      "SchemaName": "IncomingPortNumber",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Incoming Port",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Incoming Port",
+          "LanguageCode": 1033
+        }
+      },
+      "MinValue": -2147483648,
+      "MaxValue": 2147483647
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "incomingusessl",
+      "SchemaName": "IncomingUseSSL",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Incoming Use SSL",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Incoming Use SSL",
+          "LanguageCode": 1033
+        }
+      },
+      "DefaultValue": true
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "incomingusername",
+      "SchemaName": "IncomingUserName",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Incoming User Name",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Incoming User Name",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 250,
+      "Format": "Text"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "incomingpassword",
+      "SchemaName": "IncomingPassword",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Incoming Password",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Incoming Password",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 250,
+      "Format": "Text",
+      "IsValidForRead": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "isincomingpasswordset",
+      "SchemaName": "IsIncomingPasswordSet",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Incoming Password Set",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Incoming Password Set",
+          "LanguageCode": 1033
+        }
+      },
+      "DefaultValue": false,
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "incomingauthenticationprotocol",
+      "SchemaName": "IncomingAuthenticationProtocol",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Incoming Authentication",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Incoming Authentication",
+          "LanguageCode": 1033
+        }
+      },
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Auto Detect",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Auto Detect",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Negotiate",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Negotiate",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 2,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "NTLM",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "NTLM",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 3,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Basic",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Basic",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 4,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "OAuth",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "OAuth",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      },
+      "DefaultFormValue": 0
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "incomingcredentialretrieval",
+      "SchemaName": "IncomingCredentialRetrieval",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Incoming Credentials",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Incoming Credentials",
+          "LanguageCode": 1033
+        }
+      },
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "By User or Queue",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "By User or Queue",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "In Profile",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "In Profile",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 2,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Server to Server",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Server to Server",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 3,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Windows Integrated",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Windows Integrated",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 4,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Anonymous",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Anonymous",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 5,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Gmail OAuth",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Gmail OAuth",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 6,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Hybrid Modern Auth",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Hybrid Modern Auth",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 7,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "OAuth with Entra ID",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "OAuth with Entra ID",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 8,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Managed Identity",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Managed Identity",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      },
+      "DefaultFormValue": 0
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "outgoingserverlocation",
+      "SchemaName": "OutgoingServerLocation",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Outgoing Server",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Outgoing Server",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 2084,
+      "Format": "Text"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "outgoingportnumber",
+      "SchemaName": "OutgoingPortNumber",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Outgoing Port",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Outgoing Port",
+          "LanguageCode": 1033
+        }
+      },
+      "MinValue": -2147483648,
+      "MaxValue": 2147483647
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "outgoingusessl",
+      "SchemaName": "OutgoingUseSSL",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Outgoing Use SSL",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Outgoing Use SSL",
+          "LanguageCode": 1033
+        }
+      },
+      "DefaultValue": true
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "outgoingusername",
+      "SchemaName": "OutgoingUserName",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Outgoing User Name",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Outgoing User Name",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 250,
+      "Format": "Text"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "outgoingpassword",
+      "SchemaName": "OutgoingPassword",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Outgoing Password",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Outgoing Password",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 250,
+      "Format": "Text",
+      "IsValidForRead": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "isoutgoingpasswordset",
+      "SchemaName": "IsOutgoingPasswordSet",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Outgoing Password Set",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Outgoing Password Set",
+          "LanguageCode": 1033
+        }
+      },
+      "DefaultValue": false,
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "outgoingauthenticationprotocol",
+      "SchemaName": "OutgoingAuthenticationProtocol",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Outgoing Authentication",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Outgoing Authentication",
+          "LanguageCode": 1033
+        }
+      },
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Auto Detect",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Auto Detect",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Negotiate",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Negotiate",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 2,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "NTLM",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "NTLM",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 3,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Basic",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Basic",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 4,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "OAuth",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "OAuth",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      },
+      "DefaultFormValue": 0
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "outgoingcredentialretrieval",
+      "SchemaName": "OutgoingCredentialRetrieval",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Outgoing Credentials",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Outgoing Credentials",
+          "LanguageCode": 1033
+        }
+      },
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "By User or Queue",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "By User or Queue",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "In Profile",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "In Profile",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 2,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Server to Server",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Server to Server",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 3,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Windows Integrated",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Windows Integrated",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 4,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Anonymous",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Anonymous",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 5,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Gmail OAuth",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Gmail OAuth",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 6,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Hybrid Modern Auth",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Hybrid Modern Auth",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 7,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "OAuth with Entra ID",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "OAuth with Entra ID",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 8,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Managed Identity",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Managed Identity",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "usesamesettingsforoutgoingconnections",
+      "SchemaName": "UseSameSettingsForOutgoingConnections",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Same Settings for Outgoing",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Same Settings for Outgoing",
+          "LanguageCode": 1033
+        }
+      },
+      "DefaultValue": true
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      "LogicalName": "serverauthority",
+      "SchemaName": "ServerAuthority",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Server Authority",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Server Authority",
+          "LanguageCode": 1033
+        }
+      },
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Picklist",
+        "Options": [
+          {
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Public",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Public",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "US Government",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "US Government",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 2,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "China",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "China",
+                "LanguageCode": 1033
+              }
+            }
+          },
+          {
+            "Value": 3,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Automatic",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Automatic",
+                "LanguageCode": 1033
+              }
+            }
+          }
+        ]
+      },
+      "RequiredLevel": {
+        "Value": "SystemRequired",
+        "CanBeChanged": false
+      },
+      "DefaultFormValue": 0
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "exchangeonlinetenantid",
+      "SchemaName": "ExchangeOnlineTenantId",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Tenant Id",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Tenant Id",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 36,
+      "Format": "Text"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "usedefaulttenantid",
+      "SchemaName": "UseDefaultTenantId",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Use Default Tenant",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Use Default Tenant",
+          "LanguageCode": 1033
+        }
+      },
+      "DefaultValue": true
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "oauthclientid",
+      "SchemaName": "OAuthClientId",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "OAuth Client Id",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "OAuth Client Id",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 1024,
+      "Format": "Text"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "oauthclientsecret",
+      "SchemaName": "OAuthClientSecret",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "OAuth Client Secret",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "OAuth Client Secret",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 1024,
+      "Format": "Text",
+      "IsValidForRead": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "isoauthclientsecretset",
+      "SchemaName": "IsOAuthClientSecretSet",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "OAuth Client Secret Set",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "OAuth Client Secret Set",
+          "LanguageCode": 1033
+        }
+      },
+      "DefaultValue": false,
+      "IsValidForCreate": false,
+      "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StateAttributeMetadata",
+      "LogicalName": "statecode",
+      "SchemaName": "StateCode",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Status",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Status",
+          "LanguageCode": 1033
+        }
+      },
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "State",
+        "Options": [
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StateOptionMetadata",
+            "Value": 0,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Active",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Active",
+                "LanguageCode": 1033
+              }
+            },
+            "DefaultStatus": 1
+          },
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StateOptionMetadata",
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Inactive",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Inactive",
+                "LanguageCode": 1033
+              }
+            },
+            "DefaultStatus": 2
+          }
+        ]
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StatusAttributeMetadata",
+      "LogicalName": "statuscode",
+      "SchemaName": "StatusCode",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Status Reason",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Status Reason",
+          "LanguageCode": 1033
+        }
+      },
+      "OptionSet": {
+        "IsGlobal": false,
+        "OptionSetType": "Status",
+        "Options": [
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StatusOptionMetadata",
+            "Value": 1,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Active",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Active",
+                "LanguageCode": 1033
+              }
+            },
+            "State": 0
+          },
+          {
+            "@odata.type": "Microsoft.Dynamics.CRM.StatusOptionMetadata",
+            "Value": 2,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Inactive",
+                  "LanguageCode": 1033
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Inactive",
+                "LanguageCode": 1033
+              }
+            },
+            "State": 1
+          }
+        ]
+      }
+    }
+  ]
+}

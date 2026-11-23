@@ -239,3 +239,13 @@ describe('CommandBar', () => {
     expect(run).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('CommandBar leading commands (plan 4.1b, task 9)', () => {
+  it('puts the leading commands first, in their order, and runs them', async () => {
+    const onSend = vi.fn();
+    render(<CommandBar {...props()} leading={[{ id: 'email:send', label: 'Send', onClick: onSend }]} />);
+    expect(names()[0]).toBe('Send');
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+    expect(onSend).toHaveBeenCalledTimes(1);
+  });
+});

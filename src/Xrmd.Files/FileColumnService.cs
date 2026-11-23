@@ -90,6 +90,14 @@ public sealed class FileColumnService(IFileStore store, IMetadataStore metadata,
     /// </summary>
     public AnnotationBodies Annotations => _annotations ??= new AnnotationBodies(this);
 
+    private AttachmentBodies? _attachments;
+
+    /// <summary>
+    /// The bodies of email attachments (<c>activitymimeattachment.body</c>, plan 4.1b), kept like the note bodies: a
+    /// <c>fileattachment</c> row and a blob each.
+    /// </summary>
+    public AttachmentBodies Attachments => _attachments ??= new AttachmentBodies(this);
+
     /// <summary>The blob store (for <see cref="AnnotationBodies"/>).</summary>
     internal IFileStore Store => store;
 
@@ -588,6 +596,9 @@ public sealed class FileColumnService(IFileStore store, IMetadataStore metadata,
         if (m.LogicalName == ActivitySchema.Annotation && attribute == AnnotationBodies.Attribute)
             throw XrmdFaultException.InvalidArgument(
                 $"The file {fileId} is the body of a note: clear it with an Update of the note's '{AnnotationBodies.Attribute}' to null.");
+        if (m.LogicalName == MailSchema.Attachment && attribute == AttachmentBodies.Attribute)
+            throw XrmdFaultException.InvalidArgument(
+                $"The file {fileId} is the body of an email attachment: clear it with an Update of the attachment's '{AttachmentBodies.Attribute}' to null.");
         var column = UploadColumn(m, attribute);
         // An image kept without its full image has no fileattachment row, so DeleteFile on its image id is the 404 above (what
         // Dataverse answers then is not documented); an Update to null clears such an image.

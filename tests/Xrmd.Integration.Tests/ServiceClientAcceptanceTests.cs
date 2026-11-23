@@ -2111,4 +2111,151 @@ public sealed class ServiceClientAcceptanceTests(ServiceClientFixture fx, ITestO
             }
         }
     }
+
+    /// <summary>
+    /// Plan 4.1b, task 8: outgoing email through the real <see cref="ServiceClient"/>. An SMTP profile on GreenMail, a queue's mailbox
+    /// approved and tested (the mailbox test job), an email about an account with one attachment sent with <c>SendEmail</c>
+    /// (<c>IssueSend</c> true): it arrives with the attachment and its <c>Message-ID</c> is <c>email.messageid</c>. A second queue's
+    /// mailbox on a server that refuses its password fails its test (<c>outgoingemailstatus</c> Failure, the reason in
+    /// <c>lastsyncerror</c>), and an email sent from it ends Failed.
+    /// </summary>
+    [Fact]
+    public async Task ServiceClient_SendEmail_ArrivesWithAttachment()
+    {
+        await using var greenMail = await GreenMail.StartAsync();
+        await using var refusing = FakeSmtpServer.Start(mailReply: "250 ok"); // answers 535 to AUTH
+        using var admin = Connect();
+        admin.IsReady.Should().BeTrue(admin.LastError);
+        await fx.App.Services.GetRequiredService<SdkMessageCatalog>().EnsureAsync(default);
+        var tag = "m" + Guid.NewGuid().ToString("N")[..8];
+        var created = new List<(string Table, Guid Id)>();
+        Guid Make(Entity e) { var id = admin.Create(e); created.Add((e.LogicalName, id)); return id; }
+
+        Guid Profile(string host, int port, string password) => Make(new Entity("emailserverprofile")
+        {
+            ["name"] = $"{tag} SMTP {port}", ["servertype"] = new OptionSetValue(4), ["outgoingserverlocation"] = host,
+            ["outgoingportnumber"] = port, ["outgoingusessl"] = false, ["outgoingauthenticationprotocol"] = new OptionSetValue(3),
+            ["outgoingcredentialretrieval"] = new OptionSetValue(1), ["outgoingusername"] = GreenMail.SenderUser, ["outgoingpassword"] = password,
+        });
+
+        // A queue with an address has a mailbox; approved, on the profile, Server-Side Synchronization, then tested.
+        Guid ReadyQueue(string name, Guid profile)
+        {
+            var queue = Make(new Entity("queue")
+            {
+                ["name"] = $"{tag} {name}", ["emailaddress"] = $"{name.ToLowerInvariant()}.{tag}@example.com",
+                ["queueviewtype"] = new OptionSetValue(0), ["queuetypecode"] = new OptionSetValue(1),
+            });
+            admin.Update(new Entity("queue", queue) { ["emailrouteraccessapproval"] = new OptionSetValue(1) });
+            var mailbox = admin.Retrieve("queue", queue, new ColumnSet("defaultmailbox")).GetAttributeValue<EntityReference>("defaultmailbox").Id;
+            admin.Update(new Entity("mailbox", mailbox)
+            {
+                ["emailserverprofile"] = new EntityReference("emailserverprofile", profile), ["outgoingemaildeliverymethod"] = new OptionSetValue(2),
+                ["enabledforoutgoingemail"] = true,
+            });
+            admin.Update(new Entity("mailbox", mailbox) { ["testemailconfigurationscheduled"] = true });
+            return mailbox;
+        }
+
+        async Task<Entity> TestedMailbox(Guid mailbox)
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(60);
+            while (true)
+            {
+                var row = admin.Retrieve("mailbox", mailbox, new ColumnSet("testemailconfigurationscheduled", "outgoingemailstatus", "lastsyncerror"));
+                if (row.GetAttributeValue<bool?>("testemailconfigurationscheduled") == false
+                    && row.GetAttributeValue<OptionSetValue>("outgoingemailstatus")?.Value is 1 or 2)
+                    return row;
+                DateTime.UtcNow.Should().BeBefore(deadline, "the mailbox test job should complete");
+                await Task.Delay(100);
+            }
+        }
+
+        async Task<Entity> Sent(Guid email)
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(60);
+            while (true)
+            {
+                var row = admin.Retrieve("email", email, new ColumnSet("statecode", "statuscode", "messageid", "senton"));
+                if (row.GetAttributeValue<OptionSetValue>("statuscode").Value is 3 or 8) return row;
+                DateTime.UtcNow.Should().BeBefore(deadline, "the send job should complete");
+                await Task.Delay(100);
+            }
+        }
+
+        Guid Email(Guid fromQueue, Guid to, Guid account, string subject) => Make(new Entity("email")
+        {
+            ["subject"] = subject, ["description"] = "<p>The figures are attached.</p>",
+            ["regardingobjectid"] = new EntityReference("account", account),
+            ["from"] = new EntityCollection([new Entity("activityparty") { ["partyid"] = new EntityReference("queue", fromQueue) }]),
+            ["to"] = new EntityCollection([new Entity("activityparty") { ["partyid"] = new EntityReference("contact", to) }]),
+        });
+
+        try
+        {
+            var account = Make(new Entity("account") { ["name"] = $"{tag} Fabrikam Example" });
+            var contact = Make(new Entity("contact") { ["firstname"] = "Grace", ["lastname"] = tag, ["emailaddress1"] = GreenMail.RecipientAddress });
+
+            // The mailbox that works.
+            var good = ReadyQueue("Sales", Profile(greenMail.Hostname, greenMail.SmtpPort, GreenMail.SenderPassword));
+            var goodQueue = admin.Retrieve("mailbox", good, new ColumnSet("regardingobjectid")).GetAttributeValue<EntityReference>("regardingobjectid").Id;
+            var tested = await TestedMailbox(good);
+            tested.GetAttributeValue<OptionSetValue>("outgoingemailstatus").Value.Should().Be(1, tested.GetAttributeValue<string>("lastsyncerror"));
+
+            var subject = $"{tag} Quarterly numbers";
+            var email = Email(goodQueue, contact, account, subject);
+            admin.Create(new Entity("activitymimeattachment")
+            {
+                ["objectid"] = new EntityReference("email", email), ["objecttypecode"] = "email", ["filename"] = "numbers.txt",
+                ["mimetype"] = "text/plain", ["body"] = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("Q3: 42")),
+            });
+
+            admin.Execute(new SendEmailRequest { EmailId = email, IssueSend = true, TrackingToken = "" });
+
+            var sent = await Sent(email);
+            sent.GetAttributeValue<OptionSetValue>("statuscode").Value.Should().Be(3, "the email is Sent");
+            sent.GetAttributeValue<OptionSetValue>("statecode").Value.Should().Be(1);
+            sent.GetAttributeValue<DateTime?>("senton").Should().NotBeNull();
+            var messageId = sent.GetAttributeValue<string>("messageid");
+            messageId.Should().NotBeNullOrEmpty();
+
+            var inbox = await greenMail.RecipientInboxAsync();
+            var received = inbox.Should().ContainSingle(m => m.Subject == subject).Subject;
+            ("<" + received.MessageId + ">").Should().Be(messageId);
+            received.HtmlBody.Should().Contain("The figures are attached.");
+            var attachment = received.Attachments.OfType<MimeKit.MimePart>().Should().ContainSingle().Subject;
+            attachment.FileName.Should().Be("numbers.txt");
+            using (var content = new MemoryStream())
+            {
+                await attachment.Content!.DecodeToAsync(content);
+                System.Text.Encoding.UTF8.GetString(content.ToArray()).Should().Be("Q3: 42");
+            }
+
+            // The mailbox whose password the server refuses: its test fails with the reason, and an email from it ends Failed.
+            var bad = ReadyQueue("Billing", Profile("127.0.0.1", refusing.Port, "wrong-password"));
+            var badQueue = admin.Retrieve("mailbox", bad, new ColumnSet("regardingobjectid")).GetAttributeValue<EntityReference>("regardingobjectid").Id;
+            var failed = await TestedMailbox(bad);
+            failed.GetAttributeValue<OptionSetValue>("outgoingemailstatus").Value.Should().Be(2, "the test fails");
+            failed.GetAttributeValue<string>("lastsyncerror").Should().Contain("authentication failed").And.NotContain("wrong-password");
+
+            var refused = Email(badQueue, contact, account, $"{tag} Not delivered");
+            admin.Execute(new SendEmailRequest { EmailId = refused, IssueSend = true, TrackingToken = "" });
+            var outcome = await Sent(refused);
+            outcome.GetAttributeValue<OptionSetValue>("statuscode").Value.Should().Be(8, "the email is Failed");
+            outcome.GetAttributeValue<OptionSetValue>("statecode").Value.Should().Be(0);
+            (await greenMail.RecipientInboxAsync(atLeast: 2, TimeSpan.FromSeconds(1))).Should().ContainSingle("nothing else arrived");
+        }
+        finally
+        {
+            foreach (var (table, id) in Enumerable.Reverse(created))
+                try
+                {
+                    admin.Delete(table, id);
+                }
+                catch (FaultException<OrganizationServiceFault> ex)
+                {
+                    output.WriteLine($"Cleanup: {table} {id} was not deleted: {ex.Message}");
+                }
+        }
+    }
 }

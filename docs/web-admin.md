@@ -32,6 +32,7 @@ from (`authMode`, `audience`, `authority`, `clientId`, `scope`, `apiVersion`); n
 | Edit a view | the view designer | [Views](#views) |
 | Edit a form | the form designer | [Forms](#forms) |
 | Delete a solution | the Solutions page | [Deleting a solution in the UI](#deleting-a-solution-in-the-ui) |
+| Set up outgoing email | the Email page | [Email](#email) |
 | Work on the UI itself | `pnpm -C ui dev` | [Development loop](#development-loop) |
 
 ## Opening the web admin
@@ -61,6 +62,7 @@ by the role template, not by name). Anyone else sees an "Access denied" page nam
 | Plug-ins | assemblies, steps, trace log | Administrators and Customizers |
 | Async operations, Audit, Duplicate detection | system jobs, audit history, duplicate detection rules | Administrators and Customizers |
 | Field security, Hierarchy security | secured columns and profiles; the hierarchy model | System Administrators only |
+| Email | email server profiles, mailboxes (approve, test) and the sender policy | System Administrators only |
 | About | the trademark notice, where the third-party notices are, and a link to `SECURITY.md` | every signed-in administrator or customizer |
 
 ## Signing in
@@ -218,6 +220,26 @@ In **Tables** (see [Activities and notes](activities.md)):
 `queue`, `queueitem` and `queuemembership` are tables like the others: Tables lists them, and you can add your own columns,
 forms and views to `queue` and `queueitem`. There is no queue-specific page, apart from the one-way **enable queues** switch on a table's page; working queue items is done in a model-driven
 app or with `xrmd queue` (see [Email and queues](email-and-queues.md)).
+
+## Email
+
+The **Email** page (`/manage/email`, System Administrators only) sets up outgoing email (see
+[Email and queues](email-and-queues.md#outgoing-email)). It has three parts:
+
+- **Email server profiles**: name, type (SMTP or Exchange Online through Microsoft Graph), server or tenant, where the
+  credentials are, whether the secret is set, and state. **New profile** and **Edit profile** open a dialog with the fields
+  of the type. The secret is an empty password box with the hint "Set" or "Not set": it is sent only when you type one,
+  and it is never shown.
+- **Mailboxes** of the users and queues: name, email address, approval, profile, the last outgoing test (or "Scheduled"),
+  when it ran, and the last error. Select a mailbox for **Approve** (approves its user's or queue's address), **Link to
+  profile** (a dialog to choose an active profile; saving sets the profile, Server-Side Synchronization and outgoing email on)
+  or **Test** (schedules a test; reload the page to see the result).
+- **Sender policy**: the switch **Send only from queues** sets the xrmverse setting `xrmverse_EmailSendFrom` to `queueOnly`
+  (see [Sender policy](email-and-queues.md#sender-policy-xrmverse_emailsendfrom)).
+
+The page does not change a user's or queue's email address: set it on the record (see
+[Mailboxes](email-and-queues.md#mailboxes)). A refusal of the server is shown as it is. The CLI does the same with
+`xrmd mailbox` (see [CLI](cli.md#mailboxes-and-email-server-profiles)).
 
 ## Currencies
 

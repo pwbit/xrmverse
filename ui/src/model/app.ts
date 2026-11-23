@@ -37,4 +37,6 @@ export interface AppModel {
   recordOpenMode?: 'sidepane' | 'page';
   /** The `xrmverse_AppOnLoad` setting, parsed; undefined when the setting is empty, `{ error }` when its value is malformed. */
   appOnLoad?: { handlers: AppOnLoadHandler[] } | { error: string };
+  /** The email sender policy `xrmverse_EmailSendFrom` (plan 4.1b, environment value, else default): who an email's From offers. */
+  emailSendFrom?: 'userOrQueue' | 'queueOnly';
 }

@@ -209,8 +209,12 @@ public sealed class ActivityWebApiTests(XrmdFixture fx)
             .Should().Contain("nosuchtable");
     }
 
+    /// <summary>
+    /// Plan 4.1b, task 9 (ruling P12, checklist 3a): on PATCH the array is the activity's whole party set, as in Dataverse: every party
+    /// list type of the table is replaced, a type with no item is cleared, and an empty array clears them all.
+    /// </summary>
     [Fact]
-    public async Task Patch_replaces_present_party_types()
+    public async Task Patch_replaces_every_party_type()
     {
         var ada = await ContactAsync("Ada");
         var bob = await ContactAsync("Bob");
@@ -226,12 +230,13 @@ public sealed class ActivityWebApiTests(XrmdFixture fx)
         res.StatusCode.Should().Be(HttpStatusCode.NoContent, await res.Content.ReadAsStringAsync());
         var email = await Admin.RetrieveAsync("email", id, new ColumnSet("to", "cc"));
         PartyIds(email, "to").Should().Equal(cy);
-        PartyIds(email, "cc").Should().Equal(bob);
+        PartyIds(email, "cc").Should().BeEmpty("a type with no item in the array is cleared");
 
-        // An empty array names no type: nothing changes (A9, checklist 3a).
+        // An empty array clears every party list.
         (await SendAsync(HttpMethod.Patch, $"emails({id})", """{ "email_activity_parties": [] }""")).StatusCode.Should().Be(HttpStatusCode.NoContent);
         email = await Admin.RetrieveAsync("email", id, new ColumnSet("to", "cc"));
-        PartyIds(email, "to").Should().Equal(cy);
+        PartyIds(email, "to").Should().BeEmpty();
+        PartyIds(email, "cc").Should().BeEmpty();
 
         // Types the server keeps (Owner, Regarding) or the table does not have are refused.
         (await ErrorMessageAsync(await SendAsync(HttpMethod.Patch, $"emails({id})", """{ "email_activity_parties": [ { "participationtypemask": 9 } ] }""")))
@@ -245,6 +250,31 @@ public sealed class ActivityWebApiTests(XrmdFixture fx)
         (await ErrorMessageAsync(await SendAsync(HttpMethod.Patch, $"emails({id})",
                 """{ "email_activity_parties": [ { "participationtypemask": 2, "addressused": "a@example.com", "ispartydeleted": true } ] }""")))
             .Should().Contain("ispartydeleted");
+    }
+
+    /// <summary>Plan 4.1b, task 9 (P12): a form that empties To sends the other lists whole; To loses its rows, the others keep theirs.</summary>
+    [Fact]
+    public async Task Patch_with_an_emptied_to_list_clears_to_and_keeps_the_others()
+    {
+        var caller = await CallerIdAsync();
+        var ada = await ContactAsync("Ada");
+        var bob = await ContactAsync("Bob");
+        var id = await Admin.CreateAsync(new Entity("email")
+        {
+            ["subject"] = Tag("Emptied"), ["from"] = Parties(new EntityReference("systemuser", caller)),
+            ["to"] = Parties(new EntityReference("contact", ada)), ["cc"] = Parties(new EntityReference("contact", bob)),
+        });
+
+        var res = await SendAsync(HttpMethod.Patch, $"emails({id})", $$"""
+            { "email_activity_parties": [
+                { "participationtypemask": 1, "partyid_systemuser@odata.bind": "/systemusers({{caller}})" },
+                { "participationtypemask": 3, "partyid_contact@odata.bind": "/contacts({{bob}})" } ] }
+            """);
+        res.StatusCode.Should().Be(HttpStatusCode.NoContent, await res.Content.ReadAsStringAsync());
+        var email = await Admin.RetrieveAsync("email", id, new ColumnSet("from", "to", "cc"));
+        PartyIds(email, "to").Should().BeEmpty();
+        PartyIds(email, "cc").Should().Equal(bob);
+        PartyIds(email, "from").Should().Equal(caller);
     }
 
     [Fact]

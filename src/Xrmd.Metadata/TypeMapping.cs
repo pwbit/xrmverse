@@ -152,15 +152,15 @@ public static class TypeMapping
     /// All physical columns for an attribute: Money adds <c>&lt;name&gt;_base</c>, polymorphic lookups add
     /// <c>&lt;name&gt;type int</c>, <c>versionnumber</c> is the row version (<c>rowversion</c> on SQL Server; on PostgreSQL a <c>bigint</c>
     /// that the table's trigger draws from the organization's sequence, plan 2.7a, ruling P4). The write-only <c>serviceendpoint.authvalue</c>
-    /// has none (<see cref="ServiceEndpointSchema.IsAuthValue"/>).
+    /// has none (<see cref="ServiceEndpointSchema.IsAuthValue"/>), nor have the mail secrets (<see cref="MailSchema.IsSecret"/>).
     /// </summary>
     public static IReadOnlyList<SqlColumn> ToColumns(AttributeMetadata a)
     {
-        if (IsStoredByOtherAttribute(a) || ServiceEndpointSchema.IsAuthValue(a)) return [];
+        if (IsStoredByOtherAttribute(a) || ServiceEndpointSchema.IsAuthValue(a) || MailSchema.IsSecret(a)) return [];
         // Plans 2.12a and 2.12c: a calculated or formula column is evaluated by the query, it has no column.
         if (Computed.ComputedColumnRules.IsComputed(a)) return [];
-        // Plan 2.11: a party list's rows live in activityparty (A8) and a note body in the file store (A16).
-        if (ActivitySchema.IsPartyList(a) || ActivitySchema.IsDocumentBody(a)) return [];
+        // Plan 2.11: a party list's rows live in activityparty (A8) and a note body in the file store (A16); plan 4.1b: an email attachment's too.
+        if (ActivitySchema.IsPartyList(a) || ActivitySchema.IsDocumentBody(a) || ActivitySchema.IsAttachmentBody(a)) return [];
         if (a is BigIntAttributeMetadata && a.LogicalName == VersionNumber) return [new(a.LogicalName, SqlColumnKind.Int64, IsRowVersion: true)];
 
         var column = Column(a);

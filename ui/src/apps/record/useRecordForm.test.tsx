@@ -435,3 +435,108 @@ describe('useRecordForm state', () => {
     expect(active.hook.result.current.inactiveLabel).toBeUndefined();
   });
 });
+
+describe('useRecordForm party lists (plan 4.1b, task 9)', () => {
+  const to = attr('to', { kind: 'partylist', typeName: 'PartyList', targets: ['contact', 'queue'] });
+  const cc = attr('cc', { kind: 'partylist', typeName: 'PartyList', targets: ['contact', 'queue'] });
+  const FORMATTED = '@OData.Community.Display.V1.FormattedValue';
+  const LOGICAL = '@Microsoft.Dynamics.CRM.lookuplogicalname';
+  const WITH_PARTIES = {
+    ...RECORD,
+    xv_project_activity_parties: [
+      { participationtypemask: 2, _partyid_value: 'c1', [`_partyid_value${LOGICAL}`]: 'contact', [`_partyid_value${FORMATTED}`]: 'Ada', addressused: 'ada@example.com' },
+      { participationtypemask: 3, _partyid_value: null, addressused: 'cc@example.com' },
+      // Not on the form: kept as it is on update. Regarding (8) is the server's and never sent.
+      { participationtypemask: 4, _partyid_value: null, addressused: 'bcc@example.com' },
+      { participationtypemask: 8, _partyid_value: 'p1', [`_partyid_value${LOGICAL}`]: 'account', [`_partyid_value${FORMATTED}`]: 'Contoso' },
+    ],
+  };
+  const bcc = attr('bcc', { kind: 'partylist', typeName: 'PartyList', targets: ['contact', 'queue'] });
+  const withNav = (ctx: RecordContext): RecordContext => ({ ...ctx, fieldContext: { ...ctx.fieldContext, partyNavigation: 'xv_project_activity_parties' } });
+  const sets = () =>
+    server.use(
+      onPath('get', "EntityDefinitions(LogicalName='contact')", () => HttpResponse.json({ EntitySetName: 'contacts' })),
+      onPath('get', "EntityDefinitions(LogicalName='queue')", () => HttpResponse.json({ EntitySetName: 'queues' })),
+    );
+
+  it('loads the parties of each column and stays clean', async () => {
+    const { hook } = setup(withNav(contextOf([name, to, cc], WITH_PARTIES)), formOf([cell('xv_name'), cell('to'), cell('cc')]));
+    await ready(hook);
+    expect(hook.result.current.values.to).toEqual([{ id: 'c1', logicalName: 'contact', name: 'Ada', address: 'ada@example.com' }]);
+    expect(hook.result.current.values.cc).toEqual([{ address: 'cc@example.com' }]);
+    expect(hook.result.current.isReadOnly('to')).toBe(false);
+    expect(hook.result.current.dirty).toBe(false);
+  });
+
+  it('is read-only without the party navigation', async () => {
+    const { hook } = setup(contextOf([name, to], WITH_PARTIES), formOf([cell('xv_name'), cell('to')]));
+    await ready(hook);
+    expect(hook.result.current.isReadOnly('to')).toBe(true);
+  });
+
+  it('create sends the parties through the party navigation', async () => {
+    sets();
+    const { hook, sent } = setup(withNav(contextOf([name, to, cc], undefined)), formOf([cell('xv_name'), cell('to'), cell('cc')]));
+    await ready(hook);
+    act(() => hook.result.current.setValue('xv_name', 'Hi'));
+    act(() => hook.result.current.setValue('to', [{ id: 'q1', logicalName: 'queue', name: 'Support' }, { address: 'x@example.com' }]));
+    await act(async () => {
+      await hook.result.current.save();
+    });
+    expect(sent[0]).toEqual({
+      method: 'POST',
+      path: 'xv_projects',
+      body: {
+        xv_name: 'Hi',
+        xv_project_activity_parties: [
+          { participationtypemask: 2, 'partyid_queue@odata.bind': '/queues(q1)' },
+          { participationtypemask: 2, addressused: 'x@example.com' },
+        ],
+      },
+    });
+  });
+
+  it('update sends every party list whole: the server replaces the whole party set', async () => {
+    sets();
+    const { hook, sent } = setup(withNav(contextOf([name, to, cc, bcc], WITH_PARTIES)), formOf([cell('xv_name'), cell('to'), cell('cc')]));
+    await ready(hook);
+    act(() => hook.result.current.setValue('to', [...(hook.result.current.values.to as object[]), { address: 'new@example.com' }] as never));
+    expect(hook.result.current.dirty).toBe(true);
+    await act(async () => {
+      await hook.result.current.save();
+    });
+    expect(sent[0]).toEqual({
+      method: 'PATCH',
+      path: `xv_projects(${ID})`,
+      body: {
+        xv_project_activity_parties: [
+          { participationtypemask: 2, 'partyid_contact@odata.bind': '/contacts(c1)' },
+          { participationtypemask: 2, addressused: 'new@example.com' },
+          { participationtypemask: 3, addressused: 'cc@example.com' },
+          { participationtypemask: 4, addressused: 'bcc@example.com' },
+        ],
+      },
+    });
+  });
+
+  it('a party list emptied after it was saved is cleared: its type is left out of the whole set', async () => {
+    sets();
+    const { hook, sent } = setup(withNav(contextOf([name, to, cc, bcc], WITH_PARTIES)), formOf([cell('xv_name'), cell('to'), cell('cc')]));
+    await ready(hook);
+    act(() => hook.result.current.setValue('cc', []));
+    await act(async () => {
+      await hook.result.current.save();
+    });
+    expect(hook.result.current.errors.cc).toBeUndefined();
+    expect(sent[0]).toEqual({
+      method: 'PATCH',
+      path: `xv_projects(${ID})`,
+      body: {
+        xv_project_activity_parties: [
+          { participationtypemask: 2, 'partyid_contact@odata.bind': '/contacts(c1)' },
+          { participationtypemask: 4, addressused: 'bcc@example.com' },
+        ],
+      },
+    });
+  });
+});

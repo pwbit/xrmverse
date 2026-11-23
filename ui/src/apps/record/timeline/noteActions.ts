@@ -37,7 +37,7 @@ export function tooLargeMessage(file: File, limit: number): string | undefined {
 }
 
 /** The base64 of `blob`, read with a FileReader (every browser and the tests' DOM have it). */
-function base64Of(blob: Blob): Promise<string> {
+export function base64Of(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result).replace(/^data:[^,]*,/, ''));

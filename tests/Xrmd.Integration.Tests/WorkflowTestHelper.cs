@@ -303,9 +303,10 @@ public static class WorkflowParityAssertions
                 client.Update(new Entity(TestEntities.Order, order) { ["xrmv_amount"] = 150m });
 
                 // SendEmailStep3, with the values its XAML sets. A background step commits each request on its own, so the email
-                // can be read as a Draft between its Create and its SendEmail: wait until it has left Draft (state 0).
+                // can be read as a Draft between its Create and its SendEmail: wait until it has left Draft (status 1). The EmailSend
+                // job SendEmail queues (plan 4.1b) may already have run and failed it (the sender's mailbox is not approved): 0/8.
                 var email = await EventuallyAsync(() => client.RetrieveMultiple(Emails()).Entities
-                    .SingleOrDefault(e => e.GetAttributeValue<OptionSetValue>("statecode").Value != 0), "the email should be sent");
+                    .SingleOrDefault(e => e.GetAttributeValue<OptionSetValue>("statuscode").Value != 1), "the email should be sent");
                 email.GetAttributeValue<EntityCollection>("to").Entities.Should().ContainSingle()
                     .Which.GetAttributeValue<EntityReference>("partyid").Should().Be(new EntityReference("contact", contact));
                 email.GetAttributeValue<EntityReference>("regardingobjectid").Id.Should().Be(order);
@@ -318,7 +319,7 @@ public static class WorkflowParityAssertions
                 email.GetAttributeValue<OptionSetValue>("prioritycode").Value.Should().Be(1);
                 email.GetAttributeValue<EntityReference>("transactioncurrencyid").Id.Should().Be(Currency);
                 (email.GetAttributeValue<OptionSetValue>("statecode").Value, email.GetAttributeValue<OptionSetValue>("statuscode").Value)
-                    .Should().Be((1, 6), "sent with IssueSend: Pending Send (no email provider, plan 2.11)");
+                    .Should().BeOneOf([(1, 6), (0, 8)], "sent with IssueSend: Pending Send, then Failed once the EmailSend job ran (plan 4.1b)");
             });
         }
         finally

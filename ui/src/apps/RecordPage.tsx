@@ -31,6 +31,9 @@ import { initializeFromPath, mappedValues, nameLookups, type CreateFrom } from '
 import { useAutoSave } from './record/useAutoSave';
 import { useUnsavedGuard } from './record/useUnsavedGuard';
 import { useUserSettings } from './userSettings';
+import { AttachmentsSection } from './email/AttachmentsSection';
+import { emailSendCommands, sendEmail, SEND_NOTIFICATION } from './email/emailCommands';
+import { EmailStatusBanner } from './email/EmailStatusBanner';
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -197,6 +200,7 @@ export function RecordPage({ app, etn, id, formId, parameters, onSaved }: Record
       appId={app.id}
       asyncHandlers={app.asyncHandlers}
       timeline={app.timeline}
+      emailSendFrom={app.emailSendFrom}
       refreshKey={refreshKey}
       loadKey={loadKey}
       formId={formId}
@@ -232,6 +236,8 @@ interface LoadedProps {
   asyncHandlers?: AsyncHandlers;
   /** The app's timeline options; the form's timeline control reads them. */
   timeline?: TimelineOptions;
+  /** The email sender policy (plan 4.1b): who an email's From offers. */
+  emailSendFrom?: AppModel['emailSendFrom'];
   refreshKey: number;
   /** Bumped when a Refresh finished; the form's OnLoad runs again. */
   loadKey: number;
@@ -252,7 +258,7 @@ interface LoadedProps {
 }
 
 /** The form of a loaded record, with its state. */
-function LoadedRecord({ ctx, form, forms, notice, lcid, appId, asyncHandlers, timeline, refreshKey, loadKey, formId, parameters, onRefreshed, onReload, onSelectForm, onCreated, onSaved }: LoadedProps) {
+function LoadedRecord({ ctx, form, forms, notice, lcid, appId, asyncHandlers, timeline, emailSendFrom, refreshKey, loadKey, formId, parameters, onRefreshed, onReload, onSelectForm, onCreated, onSaved }: LoadedProps) {
   const { CommandBar, FormView } = useRenderer();
   const { api } = useAuth();
   const xrmHost = useContext(XrmHostContext);
@@ -500,8 +506,32 @@ function LoadedRecord({ ctx, form, forms, notice, lcid, appId, asyncHandlers, ti
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api, userId, hasMoney, recordCurrency, creating, ctx, form]);
 
+  // Plan 4.1b, task 9: an email has Send first in its bar, its send status under the title and its attachments beside the form.
+  const isEmail = etn === 'email';
+  const emailId = isEmail ? ctx.fieldContext.record?.id : undefined;
+  const sendCommands = emailSendCommands({
+    ctx,
+    record: state.record,
+    busy: state.busy,
+    onSend: () => {
+      if (!api || !emailId) return;
+      void sendEmail({
+        api,
+        id: emailId,
+        save: async () => (await save(false).then((outcome) => (autoSave.noteSaved(outcome), outcome))) === 'saved',
+        values: () => state.latest().values,
+        notify: (text) => notifyForm({ key: SEND_NOTIFICATION, intent: 'error', text }),
+        clear: () => void overlay.clearFormNotification(SEND_NOTIFICATION),
+        reload: onReload,
+        // An auto-save in flight: Send waits for it (a second save would not run, and Send would stop silently).
+        saving: () => saving.current,
+      });
+    },
+  });
+
   const commandBar = (
     <CommandBar
+      leading={sendCommands}
       ctx={ctx}
       state={state}
       onNew={() => navigate(mainAspxUrl({ appId, pageType: 'entityrecord', etn, formId: form.id }), { state: location.state })}
@@ -544,6 +574,9 @@ function LoadedRecord({ ctx, form, forms, notice, lcid, appId, asyncHandlers, ti
         overlay={overlay}
         saveStatus={autoSave.status}
         onSave={() => void save(false).then(autoSave.noteSaved)}
+        senderPolicy={isEmail ? { mode: emailSendFrom ?? 'userOrQueue', userId } : undefined}
+        banner={emailId ? <EmailStatusBanner id={emailId} record={state.record} onChanged={onReload} /> : undefined}
+        aside={emailId ? <AttachmentsSection emailId={emailId} readOnly={state.readOnly} /> : undefined}
         warnings={
           currencyFailed || ignoredParameters.length || mappingError || associateError
             ? [

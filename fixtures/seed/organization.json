@@ -541,6 +541,157 @@
       "MaxValue": 10,
       "IsValidForCreate": false,
       "IsValidForUpdate": false
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+      "LogicalName": "blockedattachments",
+      "SchemaName": "BlockedAttachments",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Blocked Attachments",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Blocked Attachments",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 1073741823
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "trackingprefix",
+      "SchemaName": "TrackingPrefix",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Tracking Prefix",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Tracking Prefix",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 256,
+      "Format": "Text"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "trackingtokenidbase",
+      "SchemaName": "TrackingTokenIdBase",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Tracking Token Base",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Tracking Token Base",
+          "LanguageCode": 1033
+        }
+      },
+      "MinValue": 0,
+      "MaxValue": 2147483647
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "trackingtokeniddigits",
+      "SchemaName": "TrackingTokenIdDigits",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Tracking Token Digits",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Tracking Token Digits",
+          "LanguageCode": 1033
+        }
+      },
+      "MinValue": -2147483648,
+      "MaxValue": 2147483647
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "maximumtrackingnumber",
+      "SchemaName": "MaximumTrackingNumber",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Max Tracking Number",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Max Tracking Number",
+          "LanguageCode": 1033
+        }
+      },
+      "MinValue": 0,
+      "MaxValue": 2147483647
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "nexttrackingnumber",
+      "SchemaName": "NextTrackingNumber",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Next Tracking Number",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Next Tracking Number",
+          "LanguageCode": 1033
+        }
+      },
+      "MinValue": -2147483648,
+      "MaxValue": 2147483647
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+      "LogicalName": "defaultemailserverprofileid",
+      "SchemaName": "DefaultEmailServerProfileId",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Default Email Server Profile",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Default Email Server Profile",
+          "LanguageCode": 1033
+        }
+      },
+      "Targets": [
+        "emailserverprofile"
+      ]
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      "LogicalName": "allowunresolvedpartiesonemailsend",
+      "SchemaName": "AllowUnresolvedPartiesOnEmailSend",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Allow Unresolved Parties on Send",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Allow Unresolved Parties on Send",
+          "LanguageCode": 1033
+        }
+      },
+      "DefaultValue": false
     }
   ],
   "ManyToOneRelationships": [

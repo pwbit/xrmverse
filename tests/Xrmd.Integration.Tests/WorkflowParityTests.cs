@@ -198,14 +198,15 @@ public sealed class WorkflowParityTests(XrmdFixture fx) : IAsyncLifetime
     }
 
     /// <summary>Changes the status (OnUpdate's trigger), runs the job to its wait, raises the amount above 100, runs it again.</summary>
-    private async Task TriggerAndWakeAsync(Guid order)
+    /// <param name="sends">True when the step after the wait sends its email: the EmailSend job SendEmail queues (plan 4.1b) runs too.</param>
+    private async Task TriggerAndWakeAsync(Guid order, bool sends = false)
     {
         await Admin.UpdateAsync(new Entity(Order, order) { ["xrmv_status"] = new OptionSetValue(128830001) });
         (await RunJobsAsync()).Should().Be(1);
         (await JobOfAsync(order)).Should().Match<(int State, int Status, string? Message)>(j => j.State == 1 && j.Status == 10,
             "the job waits: the amount is not above 100");
         await Admin.UpdateAsync(new Entity(Order, order) { ["xrmv_amount"] = 150m });
-        (await RunJobsAsync()).Should().Be(1);
+        (await RunJobsAsync()).Should().Be(sends ? 2 : 1);
     }
 
     private async Task<List<Entity>> EmailsOfAsync(Guid order) =>
@@ -246,7 +247,7 @@ public sealed class WorkflowParityTests(XrmdFixture fx) : IAsyncLifetime
             created.Add(currency);
             var (order, contact) = await OrderAsync();
             orders.Add(order);
-            await TriggerAndWakeAsync(order);
+            await TriggerAndWakeAsync(order, sends: true);
             // Succeeded: OnUpdate's AsyncAutoDelete (1 in the export) deletes the job.
             (await ScalarAsync($"SELECT COUNT(*) FROM data.asyncoperation WHERE regardingobjectid = '{order}'")).Should().Be(0);
 
@@ -264,9 +265,10 @@ public sealed class WorkflowParityTests(XrmdFixture fx) : IAsyncLifetime
             email.GetAttributeValue<OptionSetValue>("prioritycode").Value.Should().Be(1);
             email.GetAttributeValue<EntityReference>("transactioncurrencyid").Id.Should().Be(ExportCurrencyId);
             email.GetAttributeValue<bool>("isworkflowcreated").Should().BeTrue();
-            // SendEmail with IssueSend: Pending Send, as xrmverse has no email provider (plan 2.11, A17).
+            // SendEmail with IssueSend: Pending Send, then the EmailSend job it queued (plan 4.1b) ran and failed the email, as the
+            // sender's mailbox is not approved: Open, Failed.
             (email.GetAttributeValue<OptionSetValue>("statecode").Value, email.GetAttributeValue<OptionSetValue>("statuscode").Value)
-                .Should().Be((1, 6));
+                .Should().Be((0, 8));
         }
         finally
         {

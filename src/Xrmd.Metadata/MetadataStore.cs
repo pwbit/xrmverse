@@ -767,7 +767,8 @@ public sealed partial class MetadataStore(IDbConnectionFactory factory, IEnumera
         {
             var pending = await EnterAsync(session, ct);
             var (table, attribute) = FindAttribute(pending.Working, entity, lookup);
-            if (attribute is not LookupAttributeMetadata { AttributeType: null or AttributeTypeCode.Lookup } stored)
+            // A party list (plan 4.1b: the email party lists gain queue) has no data column: only its targets change.
+            if (attribute is not LookupAttributeMetadata { AttributeType: null or AttributeTypeCode.Lookup or AttributeTypeCode.PartyList } stored)
                 throw new InvalidOperationException($"Seed targets of '{entity}.{lookup}': the attribute is not a lookup.");
             if ((stored.Targets ?? []).SequenceEqual(targets)) return;
             var updated = (LookupAttributeMetadata)MetadataSerializer.Clone(stored);
@@ -783,7 +784,7 @@ public sealed partial class MetadataStore(IDbConnectionFactory factory, IEnumera
 
             var stamp = await BumpVersionStampAsync(session, pending, ct);
             await StoreAttributeAsync(session, entity, updated, stamp, ct, pending.Working.ImageOrder);
-            if (!TypeMapping.IsPolymorphicLookup(stored) && TypeMapping.IsPolymorphicLookup(updated))
+            if (stored.AttributeType != AttributeTypeCode.PartyList && !TypeMapping.IsPolymorphicLookup(stored) && TypeMapping.IsPolymorphicLookup(updated))
             {
                 var typeColumn = lookup + TypeMapping.TypeColumnSuffix;
                 await ExecuteAsync(session,

@@ -239,6 +239,9 @@ public static partial class ActionController
         // The rate of a currency (plan 2.10, ruling X12).
         new("RetrieveExchangeRate", true, [new("TransactionCurrencyId", Kind.Guid, false)], "RetrieveExchangeRateResponse",
             [new("ExchangeRate", EdmPrimitiveTypeKind.Decimal)]),
+        // The next tracking token of the organization (plan 4.1b, task 7; Learn: an unbound action with an optional Subject).
+        new("GetTrackingTokenEmail", false, [new("Subject", Kind.String, true)], "GetTrackingTokenEmailResponse",
+            [new("TrackingToken", EdmPrimitiveTypeKind.String)]),
     ];
 
     /// <summary>The parameters of the two autonumber functions: the table and the column, both strings.</summary>

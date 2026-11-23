@@ -102,6 +102,7 @@ async function readApps(client: XrmApi): Promise<AppModel[]> {
       presentation: settings.presentation(row.appmoduleid),
       recordOpenMode: settings.recordOpenMode(row.appmoduleid),
       appOnLoad: settings.appOnLoad(row.appmoduleid),
+      emailSendFrom: settings.emailSendFrom(row.appmoduleid),
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -113,7 +114,9 @@ const TIMELINE_REMEMBER_FILTERS = 'xrmverse_TimelineRememberFilters';
 const TIMELINE_POSTS = 'xrmverse_TimelinePosts';
 const LOOKUP_OPEN_MODE = 'xrmverse_LookupOpenMode';
 const APP_ON_LOAD = 'xrmverse_AppOnLoad';
-const SETTING_NAMES = [ASYNC_ON_LOAD, ASYNC_ON_SAVE, TIMELINE_GROUP_BY_DATE, TIMELINE_REMEMBER_FILTERS, TIMELINE_POSTS, RENDERER, PRESENTATION, APP_ON_LOAD, LOOKUP_OPEN_MODE];
+/** The sender policy of email (plan 4.1b, an xrmverse extension), set at environment level. */
+const EMAIL_SEND_FROM = 'xrmverse_EmailSendFrom';
+const SETTING_NAMES = [ASYNC_ON_LOAD, ASYNC_ON_SAVE, TIMELINE_GROUP_BY_DATE, TIMELINE_REMEMBER_FILTERS, TIMELINE_POSTS, RENDERER, PRESENTATION, APP_ON_LOAD, LOOKUP_OPEN_MODE, EMAIL_SEND_FROM];
 
 /**
  * The app settings of `appIds` the forms read: AsyncOnLoad and AsyncOnSave (#129), and the timeline options (UI-1g). A setting is
@@ -124,7 +127,7 @@ const SETTING_NAMES = [ASYNC_ON_LOAD, ASYNC_ON_SAVE, TIMELINE_GROUP_BY_DATE, TIM
 async function readAppSettings(
   client: XrmApi,
   appIds: string[],
-): Promise<{ asyncHandlers: (appId: string) => { onLoad: boolean; onSave: boolean }; timeline: (appId: string) => TimelineOptions; presentation: (appId: string) => NonNullable<AppModel['presentation']>; appOnLoad: (appId: string) => AppModel['appOnLoad']; recordOpenMode: (appId: string) => RecordOpenMode }> {
+): Promise<{ asyncHandlers: (appId: string) => { onLoad: boolean; onSave: boolean }; timeline: (appId: string) => TimelineOptions; presentation: (appId: string) => NonNullable<AppModel['presentation']>; appOnLoad: (appId: string) => AppModel['appOnLoad']; recordOpenMode: (appId: string) => RecordOpenMode; emailSendFrom: (appId: string) => NonNullable<AppModel['emailSendFrom']> }> {
   const filter = SETTING_NAMES.map((n) => `uniquename eq '${n}'`).join(' or ');
   const definitions = await collect<SettingDefinitionRow>(
     client,
@@ -136,8 +139,9 @@ async function readAppSettings(
     '_parentappmoduleid_value',
     appIds,
   );
-  // The environment values (`organizationsetting`, at most one per definition), read for the look definitions and the record open mode only.
-  const lookIds = [RENDERER, PRESENTATION, LOOKUP_OPEN_MODE].map((n) => definitions.find((d) => d.uniquename.toLowerCase() === n.toLowerCase())?.settingdefinitionid).filter((id): id is string => !!id);
+  // The environment values (`organizationsetting`, at most one per definition), read for the look definitions, the record open
+  // mode and the email sender policy only.
+  const lookIds = [RENDERER, PRESENTATION, LOOKUP_OPEN_MODE, EMAIL_SEND_FROM].map((n) => definitions.find((d) => d.uniquename.toLowerCase() === n.toLowerCase())?.settingdefinitionid).filter((id): id is string => !!id);
   const environment = lookIds.length
     ? await collectByIds<EnvironmentSettingRow>(client, 'organizationsettings?$select=_settingdefinitionid_value,value', '_settingdefinitionid_value', lookIds)
     : [];
@@ -159,9 +163,18 @@ async function readAppSettings(
     const env = environment.find((r) => lower(r._settingdefinitionid_value) === id)?.value;
     return [app, env, d.defaultvalue].find((v) => !!v?.trim())?.trim() || undefined;
   };
+  /** The text of an environment-only setting: the environment's value, else the default (an app row is ignored). */
+  const environmentText = (name: string): string | undefined => {
+    const d = definition(name);
+    if (!d) return undefined;
+    const env = environment.find((r) => lower(r._settingdefinitionid_value) === lower(d.settingdefinitionid))?.value;
+    return [env, d.defaultvalue].find((v) => !!v?.trim())?.trim() || undefined;
+  };
   return {
     presentation: (appId) => ({ renderer: text(appId, RENDERER), overlay: text(appId, PRESENTATION) }),
     recordOpenMode: (appId) => parseRecordOpenMode(text(appId, LOOKUP_OPEN_MODE)),
+    // Environment-only, as the server applies it (an app value is ignored); any value but queueOnly (the definition missing too) is the default.
+    emailSendFrom: () => (environmentText(EMAIL_SEND_FROM)?.toLowerCase() === 'queueonly' ? 'queueOnly' : 'userOrQueue'),
     appOnLoad: (appId) => {
       const value = text(appId, APP_ON_LOAD);
       return value === undefined ? undefined : parseAppOnLoad(value);

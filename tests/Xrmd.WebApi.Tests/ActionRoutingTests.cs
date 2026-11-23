@@ -224,7 +224,7 @@ public class ActionRoutingTests
              "SetAutoNumberSeed", "GetAutoNumberSeed", "GetNextAutoNumberValue", "RetrieveExchangeRate", "CloneAsPatch", "CloneAsSolution",
              "UnpublishDuplicateRule", "RetrieveDuplicates", "BulkDetectDuplicates",
              "RetrieveSharedPrincipalsAndAccess", "GrantAccess", "ModifyAccess", "RevokeAccess", "CalculateRollupField",
-             "InsertOptionValue", "UpdateOptionValue"]);
+             "InsertOptionValue", "UpdateOptionValue", "GetTrackingTokenEmail"]);
         foreach (var name in ActionController.OperationNames)
             LogicalNameValidator.ReservedEntitySetNames.Contains(name.ToLowerInvariant()).Should().BeTrue($"'{name}' is reserved, ignoring case");
     }

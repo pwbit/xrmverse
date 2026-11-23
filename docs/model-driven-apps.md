@@ -26,6 +26,7 @@ that names the member.
 | Dashboards and charts | system dashboards and charts, drawn with Fluent UI React Charts | Differs: own chart drawing |
 | Timeline | activities, notes and, when switched on, posts | Same idea; own look |
 | Queues | **Add to queue** on lists of queue-enabled tables; **Pick**, **Release**, **Route** and **Remove from queue** on the queue item grid | Same idea; own look (see [Email and queues](email-and-queues.md)) |
+| Email form | editable party lists, **Send**, the send status, attachments with a preview of PDF files, images and plain text | Same idea; own look (see [Email form](#email-form)) |
 | Modern look | presentation overlay, board, calendar, cards, wizard, free grid, coloured choice values | Extra; the background colour of a choice value is Dataverse's own `Color` |
 | `XrmVerse`, app side panes, app notifications, app OnLoad | a client extension, panes beside the page, app-wide notifications and a `xrmverse_AppOnLoad` setting | Extra; not importable into Dataverse (see [xrmverse extensions](#xrmverse-extensions)) |
 | Business process flows, client-side business rules, editable grids, offline, canvas apps, custom pages | not available | Narrower |
@@ -687,7 +688,8 @@ column, is drawn with the standard control).
 
 - **Columns:** single line and multiple lines of text, whole number, decimal, float, currency (with the record's
   currency symbol), date only and date and time, choice, multi-select choice, two options, lookup with search (one target
-  or several, owner and customer included), status reason (only the reasons of the record's `statecode`), file and image.
+  or several, owner and customer included), party list (see [Email form](#email-form)), status reason (only the reasons of
+  the record's `statecode`), file and image.
   `statecode` is read-only. Dates follow the column's behaviour and the user's time zone (see
   [User time zone and date formats](#user-time-zone-and-date-formats)).
 - **Numbers and currency** show digit grouping and the column's decimals in the user's language (`1.234.567,50` in
@@ -772,6 +774,33 @@ the behaviour: `sidepane` (the default) or `page`, which navigates to the record
 look settings are: the app's `appsetting` value, else the environment's `organizationsetting` value (through the Web
 API), else the default. An unknown value gives a console warning and `sidepane`. The side pane is an xrmverse extension:
 Dataverse opens a lookup's record on the full page.
+
+### Email form
+
+Roadmap item 4.1b adds what an email form needs to write and send an email (see
+[Email and queues](email-and-queues.md#outgoing-email)). The system activity tables still have no seeded form, so the app's
+solution brings the email form.
+
+- **Party lists.** Every party list column (`from`, `to`, `cc`, `bcc`, `requiredattendees` and the others) is an editable
+  list of chips, on classic and modern forms. Typing searches the column's tables by name or email address; an address that
+  matches one record becomes that record, several matches ask which one, and no match stays as an address alone (a dashed
+  chip marked "unresolved"). Pasted text is split at `;` and `,`. Backspace or **Remove** drops a chip; the search button
+  opens the lookup dialog. **From** holds one party, chosen from the user and the queues the user can read; with the sender
+  policy `queueOnly` the user is listed but cannot be chosen. On save, each changed list is written in
+  `{activity}_activity_parties` (on an update, the whole party set; see
+  [Activities and notes](activities.md#party-lists)). A read-only form shows the chips only.
+- **Send.** The command bar of an open email that the user can write has **Send** first. It saves the form, warns before
+  sending to unresolved recipients when the organization does not allow them, and runs `SendEmail` with `IssueSend` true. A
+  refusal of the server shows as a form notification.
+- **Send status.** A banner shows Pending Send (and follows the send until it ends, then reloads the form), Sent (with
+  `senton`, the sender and the `Message-ID`) or Failed (with the reason of the email's newest send job).
+- **Attachments.** A section beside the form lists the attachments with their size, with **Preview**, **Download** and
+  **Delete**, and adds files by browsing or by dropping them. A file over `maxuploadfilesize` or with a blocked extension is
+  refused before it is sent. The section is hidden on a new email and read-only once the email is sent.
+- **Preview** opens in a side surface with the name, the size, "n of m", previous and next, and **Download**. It shows PDF
+  files, images and plain text only. HTML, SVG and XML files, and any other type, are never rendered: they show "No preview"
+  with **Download**. A file named `.pdf` that does not start like a PDF shows "No preview" too.
+- A sent email (state Completed) opens read-only.
 
 ## Commands
 
@@ -1968,7 +1997,8 @@ None of these is silent: each is refused with an explicit error or stated here.
 - **Card forms and the sort date column** are not read: every item uses xrmverse's own card, and the sort is by
   `modifiedon` for activities and notes.
 - **Pin and unpin** are not offered.
-- **Email reply, reply all and forward** are not offered: sending mail waits for plan 4.1.
+- **Email reply, reply all and forward** are not offered; an email is written and sent on its form (see
+  [Email form](#email-form)).
 - **Notes use a plain multi-line editor**; the rich text editor and its configuration URL are not supported.
 - **The system activity tables have no form.** xrmverse seeds no main form for `task`, `phonecall`, `appointment`,
   `email` and the other system activity tables, and an app's solution rarely brings one. So + offers them, but the new

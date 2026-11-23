@@ -87,6 +87,26 @@ public sealed class AsyncOperationQueue
     /// <summary>The <c>name</c> and <c>messagename</c> of a migration import job.</summary>
     public const string MigrationImportMessage = "MigrationImport";
 
+    /// <summary>
+    /// <c>asyncoperation.operationtype</c> "Email Send": the send of one email through the mailbox of its sender (plan 4.1b), queued by
+    /// SendEmail with <c>IssueSend</c> true. Dataverse has no such type; the value is xrmverse's own, next to
+    /// <see cref="MigrationImport"/> (99012 is the mailbox test of plan 4.1b).
+    /// </summary>
+    public const int EmailSend = 99011;
+
+    /// <summary>The <c>name</c> and <c>messagename</c> of an email send job.</summary>
+    public const string EmailSendMessage = "SendEmail";
+
+    /// <summary>
+    /// <c>asyncoperation.operationtype</c> "Mailbox Test": the test of one mailbox's outgoing configuration (plan 4.1b), queued when
+    /// <c>mailbox.testemailconfigurationscheduled</c> is set to true. Dataverse has no such type; the value is xrmverse's own, next to
+    /// <see cref="EmailSend"/>.
+    /// </summary>
+    public const int MailboxTest = 99012;
+
+    /// <summary>The <c>name</c> and <c>messagename</c> of a mailbox test job.</summary>
+    public const string MailboxTestMessage = "TestMailbox";
+
     /// <summary>Object type code of <c>systemuser</c> (the type column of the polymorphic <c>ownerid</c>).</summary>
     private const int SystemUserTypeCode = 8;
 

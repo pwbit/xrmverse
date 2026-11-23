@@ -8,7 +8,6 @@ using FluentAssertions;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
@@ -22,9 +21,9 @@ using static Xrmd.Integration.Tests.TestHelpers;
 namespace Xrmd.Integration.Tests;
 
 /// <summary>
-/// Plan 2.11, task 6 (A17): SendEmail changes the email's state only. There is no email provider before 4.1, so IssueSend true
-/// leaves the email Pending Send. It runs as a core message: through the pipeline (its own plug-in steps, not the Update
-/// steps), the SDK, SOAP and the Web API bound action.
+/// Plan 2.11, task 6 (A17): SendEmail changes the email's state. IssueSend true leaves the email Pending Send; since plan 4.1b it also
+/// queues the send job (<see cref="EmailSendTests"/>), which these tests do not run. It runs as a core message: through the pipeline
+/// (its own plug-in steps, not the Update steps), the SDK, SOAP and the Web API bound action.
 /// </summary>
 [Collection("xrmd")]
 public sealed class SendEmailTests(XrmdFixture fx) : IAsyncLifetime
@@ -42,7 +41,12 @@ public sealed class SendEmailTests(XrmdFixture fx) : IAsyncLifetime
         await PluginTestHelper.ClearAsync(fx);
     }
 
-    public Task DisposeAsync() => PluginTestHelper.ClearAsync(fx);
+    public async Task DisposeAsync()
+    {
+        await PluginTestHelper.ClearAsync(fx);
+        // Plan 4.1b: the send jobs these tests queue are not run.
+        await TestSql.ExecAsync(fx.ConnectionString, $"DELETE FROM data.asyncoperation WHERE operationtype = {Xrmd.Pipeline.Async.AsyncOperationQueue.EmailSend}");
+    }
 
     // ---- helpers ----
 
@@ -231,26 +235,6 @@ public sealed class SendEmailTests(XrmdFixture fx) : IAsyncLifetime
         var email = await Admin.RetrieveAsync("email", id, new ColumnSet("statuscode", "senton"));
         email.GetAttributeValue<OptionSetValue>("statuscode").Value.Should().Be(6);
         email.GetAttributeValue<DateTime?>("senton").Should().BeNull();
-    }
-
-    [Fact]
-    public async Task Pending_send_logs_one_information_line()
-    {
-        var id = await DraftAsync();
-        using var scope = fx.App.Services.CreateScope();
-        var core = scope.ServiceProvider.GetRequiredService<CoreOperations>();
-        var logger = new ListLogger<EmailMessages>();
-        var messages = new EmailMessages(core, fx.App.Services.GetRequiredService<IMetadataStore>(), logger);
-        var caller = await TestServices.CallerAsync(fx.App.Services, fx.AdminObjectId);
-        await using var conn = await TestProvider.OpenAsync(fx.ConnectionString);
-        await using var tx = await conn.BeginTransactionAsync();
-
-        await messages.ExecuteAsync(Send(id, issueSend: true), caller, new DataSession(conn, tx), default);
-        await tx.CommitAsync();
-
-        logger.Entries.Should().ContainSingle().Which.Should().Match<(LogLevel Level, string Message)>(e =>
-            e.Level == LogLevel.Information && e.Message.Contains(id.ToString()) && e.Message.Contains("Pending Send"));
-        (await ScalarAsync("SELECT statuscode FROM data.email WHERE activityid = @id", ("@id", id))).Should().Be(6);
     }
 
     // ---- refusals ----

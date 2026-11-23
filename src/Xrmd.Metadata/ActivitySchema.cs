@@ -84,10 +84,13 @@ public static class ActivitySchema
     /// <summary>The activity message xrmverse implements (A17): it changes the email's state, no email is sent before 4.1.</summary>
     public const string SendEmailMessage = "SendEmail";
 
+    /// <summary>The message that hands out the next tracking token of the organization (plan 4.1b, task 7).</summary>
+    public const string GetTrackingTokenEmailMessage = "GetTrackingTokenEmail";
+
     private const string SchedulingReason =
         "appointment scheduling and recurrence are not replicated; create or update the appointment instead";
     private const string EmailReason =
-        "xrmverse has no email provider, email templates or incoming email processing yet; use SendEmail, which only changes the email's state";
+        "email templates, background sending and incoming email processing are not replicated yet; send an email with SendEmail";
 
     /// <summary>
     /// The activity and note messages a caller could reach that xrmverse refuses explicitly (A18), with the reason given in the
@@ -108,7 +111,6 @@ public static class ActivitySchema
             ["SendEmailFromTemplate"] = EmailReason,
             ["SendTemplate"] = EmailReason,
             ["InstantiateTemplate"] = EmailReason,
-            ["GetTrackingTokenEmail"] = EmailReason,
             ["Rollup"] = "activity rollups are not replicated; query activitypointer by regardingobjectid instead",
             ["Restore"] = "deleted records cannot be restored in xrmverse",
             ["AppendRelatedParty"] = "party rows are written only through the party list columns of their activity",
@@ -116,6 +118,10 @@ public static class ActivitySchema
                 "chunked note attachments are not supported; write annotation.documentbody (base64) with Create or Update",
             ["InitializeAnnotationBlocksDownload"] =
                 "chunked note attachments are not supported; read annotation.documentbody (base64) with Retrieve or RetrieveMultiple",
+            ["InitializeAttachmentBlocksUpload"] =
+                "chunked email attachments are not supported; write activitymimeattachment.body (base64) with Create or Update",
+            ["InitializeAttachmentBlocksDownload"] =
+                "chunked email attachments are not supported; read activitymimeattachment.body (base64) with Retrieve or RetrieveMultiple",
         };
 
     /// <summary>The names of <see cref="RefusedMessageReasons"/>, in a stable order.</summary>
@@ -154,14 +160,14 @@ public static class ActivitySchema
     /// <c>activityparty.partyid</c> and <c>activityparty.activityid</c>. They keep a type column whatever the number of their targets.
     /// A <c>regardingobjectid</c> outside the seeded tables that have their own
     /// (<c>team</c> for access teams, <c>audit</c>, <c>asyncoperation</c>, whose column is a UniqueIdentifier, and
-    /// <c>duplicaterulecondition</c>, a lookup to its rule) can only be an activity's or a post's: the name has no publisher prefix, so no
+    /// <c>duplicaterulecondition</c>, a lookup to its rule; <c>mailbox</c>, a lookup to its user or queue) can only be an activity's or a post's: the name has no publisher prefix, so no
     /// custom column takes it. A guard test (<c>ActivitySchemaTests</c>) checks every seeded table with the column.
     /// </summary>
     public static bool IsManagedLookup(string? entityLogicalName, string? attributeLogicalName) =>
         (entityLogicalName, attributeLogicalName) switch
         {
             (null, _) or (_, null) => false,
-            (AccessTeamSchema.Team or AuditTable.Name or "asyncoperation" or DuplicateDetectionSchema.Condition, RegardingObjectId) => false,
+            (AccessTeamSchema.Team or AuditTable.Name or "asyncoperation" or DuplicateDetectionSchema.Condition or MailSchema.Mailbox, RegardingObjectId) => false,
             (_, RegardingObjectId) => true,
             (Annotation or QueueSchema.QueueItem, ObjectId) => true,
             (Party, PartyId or ActivityId) => true,
@@ -174,6 +180,12 @@ public static class ActivitySchema
 
     /// <summary>True for <c>annotation.documentbody</c>, which has no SQL column: the body lives in the file store (A16).</summary>
     public static bool IsDocumentBody(AttributeMetadata a) => a.EntityLogicalName == Annotation && a.LogicalName == DocumentBody;
+
+    /// <summary>
+    /// True for <c>activitymimeattachment.body</c> (plan 4.1b), which has no SQL column either: the body lives in the file store, as
+    /// a note's does.
+    /// </summary>
+    public static bool IsAttachmentBody(AttributeMetadata a) => a.EntityLogicalName == MailSchema.Attachment && a.LogicalName == MailSchema.AttachmentBody;
 
     /// <summary>True for a party list column (AttributeType PartyList): it has no SQL column, its rows live in <see cref="Party"/>.</summary>
     public static bool IsPartyList(AttributeMetadata? a) => a is LookupAttributeMetadata { AttributeType: AttributeTypeCode.PartyList };
@@ -281,8 +293,17 @@ public static class ActivitySchema
             ["organizer"] = ("Organizer", "Organizer"), ["customers"] = ("Customers", "Customers"), ["resources"] = ("Resources", "Resources"),
         };
 
-    /// <summary>The tables a party list or <c>activityparty.partyid</c> names (A10: <c>knowledgearticle</c> and <c>queue</c> are not modelled).</summary>
+    /// <summary>
+    /// The tables a party list names by default, and those of a custom activity's party lists (A10: <c>knowledgearticle</c> is not
+    /// modelled). Plan 4.1b adds <c>queue</c> to the party lists of <c>email</c> (<see cref="PartyRecordTables"/>).
+    /// </summary>
     public static readonly IReadOnlyList<string> PartyTargets = ["account", "contact", "systemuser"];
+
+    /// <summary>
+    /// The tables <c>activityparty.partyid</c> names: <see cref="PartyTargets"/> and, since plan 4.1b, <c>queue</c> (the sender or a
+    /// recipient of an email; the email party lists target it, the others do not).
+    /// </summary>
+    public static readonly IReadOnlyList<string> PartyRecordTables = ["account", "contact", "queue", "systemuser"];
 
     /// <summary>
     /// What a custom activity gets besides the caller's columns (A4): the common columns (<see cref="CommonAttributes"/>), the
@@ -382,6 +403,18 @@ public static class ActivitySchema
         return Relationship(name, target.LogicalName, Annotation, ObjectId, $"{ObjectId}_{target.LogicalName}",
             Cascade(assign: CascadeType.Cascade, delete: CascadeType.Cascade, reparent: CascadeType.Cascade, share: CascadeType.Cascade,
                 unshare: CascadeType.Cascade));
+    }
+
+    /// <summary>
+    /// The relationship of <c>activitymimeattachment.objectid</c> to <paramref name="target"/> (the pointer or <c>email</c>, plan 4.1b,
+    /// ruling P4): <c>{target}_activity_mime_attachments</c>, navigation <c>objectid_{target}</c>; Delete Cascade (an email's
+    /// attachments go with it), everything else NoCascade. The name is from memory: checklist 2a.
+    /// </summary>
+    public static OneToManyRelationshipMetadata AttachmentRelationship(EntityMetadata target)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        return Relationship($"{target.LogicalName}_activity_mime_attachments", target.LogicalName, MailSchema.Attachment, ObjectId,
+            $"{ObjectId}_{target.LogicalName}", Cascade(delete: CascadeType.Cascade));
     }
 
     /// <summary>

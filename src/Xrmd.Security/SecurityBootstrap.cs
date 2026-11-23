@@ -373,6 +373,8 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
         yield return ("queue-role-privileges", QueueGrants().Select(g => PrivilegeNames.IdOf(g.Privilege)).ToHashSet());
         // Plan 4.1a (ruling R23): Basic User's Append and Append To on the queue items, added after the grants above.
         yield return ("queue-item-append-privileges", QueueItemAppendGrants().Select(g => PrivilegeNames.IdOf(g.Privilege)).ToHashSet());
+        // Plan 4.1b (from memory, checklist 3): Basic User's Read and Write on its own mailbox, nothing on the email server profiles.
+        yield return ("mailbox-role-privileges", MailboxGrants().Select(g => PrivilegeNames.IdOf(g.Privilege)).ToHashSet());
         // UI-2a: Basic User's Read (Global) and System Customizer's privileges on the environment values of the settings
         // (organizationsetting). Its own top-up: app-setting-role-privileges already ran on an existing organization.
         yield return ("organization-setting-privileges",
@@ -391,6 +393,18 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
         var item = store.GetEntity(QueueSchema.QueueItem)!;
         foreach (var right in new[] { AccessRights.ReadAccess, AccessRights.WriteAccess, AccessRights.CreateAccess, AccessRights.DeleteAccess })
             yield return (StandardRoles.BasicUser, PrivilegeNames.For(right, item), Global);
+    }
+
+    /// <summary>
+    /// Basic User's grants on the mailboxes (plan 4.1b, from memory: checklist 3): Read and Write Mailbox at user (Basic) depth, so that a
+    /// user reads and changes the mailbox of their own, and nothing on <c>emailserverprofile</c>: a profile names a server and holds
+    /// credentials, so only an administrator manages it. Create and Delete stay with the administrator too.
+    /// </summary>
+    private IEnumerable<(Guid Role, string Privilege, int Depth)> MailboxGrants()
+    {
+        var mailbox = store.GetEntity(MailSchema.Mailbox)!;
+        foreach (var right in new[] { AccessRights.ReadAccess, AccessRights.WriteAccess })
+            yield return (StandardRoles.BasicUser, PrivilegeNames.For(right, mailbox), Basic);
     }
 
     /// <summary>
@@ -627,6 +641,7 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
         foreach (var grant in PostGrants()) yield return grant;
         foreach (var grant in QueueGrants()) yield return grant;
         foreach (var grant in QueueItemAppendGrants()) yield return grant;
+        foreach (var grant in MailboxGrants()) yield return grant;
 
         yield return (StandardRoles.Delegate, PrivilegeNames.ActOnBehalfOfAnotherUser, Global);
     }

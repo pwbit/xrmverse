@@ -156,6 +156,7 @@ public sealed class ReadSecurity(IReadOnlyList<SecurityProfile> principals, Busi
         if (entity.IsIntersect == true) return null; // readable by every member of the organization, no privilege
         if (entity.LogicalName == FileColumns.AttachmentEntity) return AttachmentFilter(p, entity, isQueryUser);
         if (entity.LogicalName == ActivitySchema.Party) return PartyFilter(p, entity, isQueryUser);
+        if (entity.LogicalName == MailSchema.Attachment) return MimeAttachmentFilter(p, entity, isQueryUser);
         if (PostSchema.IsPostTable(entity.LogicalName)) return PostFilter(p, entity, isQueryUser);
         var privilege = PrivilegeNames.For(AccessRights.ReadAccess, entity);
         var depth = p.DepthOf(privilege);
@@ -219,7 +220,8 @@ public sealed class ReadSecurity(IReadOnlyList<SecurityProfile> principals, Busi
         foreach (var name in lookup.Targets ?? [])
         {
             if (store.GetEntity(name) is not { ObjectTypeCode: { } otc } parent) continue;
-            if (p.DepthOf(PrivilegeNames.For(AccessRights.ReadAccess, parent)) == DepthMask.None) continue;
+            // An email attachment has no privilege of its own: it is read through its email (MimeAttachmentFilter).
+            if (parent.LogicalName != MailSchema.Attachment && p.DepthOf(PrivilegeNames.For(AccessRights.ReadAccess, parent)) == DepthMask.None) continue;
             targets.Add(new ParentTarget(parent.LogicalName, otc, PrincipalFilter(p, parent, isQueryUser), HiddenFiles(parent)));
         }
         var filter = new FilterNode();
@@ -313,6 +315,27 @@ public sealed class ReadSecurity(IReadOnlyList<SecurityProfile> principals, Busi
         if (depth != DepthMask.None)
             targets.Add(new ParentTarget(pointer.LogicalName, ObjectTypeCode: null, PrincipalFilter(p, pointer, isQueryUser),
                 TypeAttribute: ActivitySchema.ActivityTypeCode));
+        var filter = new FilterNode();
+        filter.Parents.Add(new ParentRecordsNode(lookup.LogicalName, targets));
+        return filter;
+    }
+
+    /// <summary>
+    /// <c>activitymimeattachment</c> (plan 4.1b, ruling P4): a row is readable when the <c>email</c> it belongs to (<c>objectid</c>) is,
+    /// with the email's restriction (<c>prvReadActivity</c>, owner, depth, shares, hierarchy), whatever the privileges on the table,
+    /// which has none (its rows follow their email, as <c>activityparty</c> rows follow their activity). Without <c>prvReadActivity</c>
+    /// no row is readable (no fault: the table has no privilege to name). A System Administrator reads every row.
+    /// </summary>
+    private FilterNode? MimeAttachmentFilter(SecurityProfile p, EntityMetadata attachment, bool isQueryUser)
+    {
+        if (p.IsSystemAdministrator) return null;
+        var lookup = (attachment.Attributes ?? []).FirstOrDefault(a => a.LogicalName == ActivitySchema.ObjectId)
+                     ?? throw new InvalidOperationException($"'{attachment.LogicalName}' has no '{ActivitySchema.ObjectId}' lookup."); // fail closed
+        var email = store.GetEntity(ActivitySchema.Email)
+                    ?? throw new InvalidOperationException($"The table '{ActivitySchema.Email}' does not exist."); // fail closed
+        var targets = new List<ParentTarget>();
+        if (p.DepthOf(PrivilegeNames.For(AccessRights.ReadAccess, email)) != DepthMask.None)
+            targets.Add(new ParentTarget(email.LogicalName, email.ObjectTypeCode, PrincipalFilter(p, email, isQueryUser)));
         var filter = new FilterNode();
         filter.Parents.Add(new ParentRecordsNode(lookup.LogicalName, targets));
         return filter;

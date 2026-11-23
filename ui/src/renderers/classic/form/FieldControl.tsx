@@ -11,6 +11,8 @@ import { labelFor } from '../../../parsers/formXml';
 import { PcfFieldControl } from '../../../pcf/PcfFieldControl';
 import { t } from '../../../shell/i18n/t';
 import type { ControlEnv } from './controlEnv';
+import { PARTY_TYPE_OF, type Party } from '../../../admin/tables/partyLists';
+import { PartyListControl } from './PartyListControl';
 
 const useStyles = makeStyles({
   recommendation: { display: 'block', marginBlockStart: tokens.spacingVerticalXXS, color: tokens.colorPaletteMarigoldForeground2 },
@@ -83,8 +85,22 @@ export function FieldControl({ cell, control, env, forceReadOnly = false }: { ce
   // The server leaves out a secured column the caller may not read.
   const properties = column.kind === 'file' ? [column.logicalName, `${column.logicalName}_name`] : [recordKey(column)];
   const unreadable = column.secured && !!record && !properties.some((p) => p in record);
+  // Plan 4.1b, task 9: a party list the form can write through the party navigation gets its chips and search; any other one
+  // keeps the admin's read-only list.
+  const partyList = column.kind === 'partylist' && PARTY_TYPE_OF[column.logicalName] !== undefined && !!ctx.fieldContext.partyNavigation;
+  const value = state.values[column.logicalName];
   const editor = unreadable ? (
     <NoAccessField attr={attr} />
+  ) : partyList ? (
+    <PartyListControl
+      key={env.refreshKey ?? 0}
+      attr={attr}
+      value={Array.isArray(value) ? (value as Party[]) : []}
+      onChange={(v) => state.setValue(name, v)}
+      disabled={disabled}
+      error={error}
+      sender={ctx.entity.logicalName === 'email' && name === 'from' ? env.senderPolicy : undefined}
+    />
   ) : (
     <FieldEditor
       // A Refresh mounts the editors again: what was typed and not stored (a time without a date) goes with the record.

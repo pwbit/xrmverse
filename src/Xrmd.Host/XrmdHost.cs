@@ -53,6 +53,17 @@ public static class XrmdHost
         // Keeps the instance lock taken by UseXrmdAsync. Registered before every other hosted service of xrmd: hosted services stop
         // in reverse order, so it releases the lock only after the others (the async worker among them) have stopped.
         services.AddSingleton<InstanceLockWatchdog>();
+
+        // Outgoing email (plan 4.1b): the Graph calls use a named HttpClient with a timeout; Mail:GraphBaseUrl overrides the Graph endpoint; Mail:AllowInsecureSmtp (default false) allows plaintext SMTP when a server has no STARTTLS.
+        services.AddHttpClient(Xrmd.Core.Mail.MailProviders.GraphClientName, c => c.Timeout = TimeSpan.FromSeconds(60));
+        services.AddSingleton(sp =>
+        {
+            var factory = sp.GetRequiredService<IHttpClientFactory>();
+            return new Xrmd.Core.Mail.MailProviders(
+                () => factory.CreateClient(Xrmd.Core.Mail.MailProviders.GraphClientName),
+                sp.GetRequiredService<IConfiguration>()["Mail:GraphBaseUrl"],
+                sp.GetRequiredService<IConfiguration>().GetValue<bool>("Mail:AllowInsecureSmtp"));
+        });
         services.AddHostedService(sp => sp.GetRequiredService<InstanceLockWatchdog>());
 
         // Plan 2.7a, ruling P3: the engine of the organizations (Storage:Provider, refused at startup when unknown) and its SQL dialect.
@@ -254,6 +265,10 @@ public static class XrmdHost
         // The rollup calculation jobs (plan 2.12b, R8): Mass Calculate Rollup Field (58) and Calculate Rollup Field (57).
         services.AddScoped<IAsyncOperationHandler, Xrmd.Core.Rollups.MassCalculateRollupJob>();
         services.AddScoped<IAsyncOperationHandler, Xrmd.Core.Rollups.CalculateRollupJob>();
+        // Outgoing email (plan 4.1b): the send jobs SendEmail queues with IssueSend true (operationtype 99011).
+        services.AddScoped<IAsyncOperationHandler, Xrmd.Core.Mail.EmailSendJob>();
+        // ... and the mailbox tests writing testemailconfigurationscheduled true queues (operationtype 99012).
+        services.AddScoped<IAsyncOperationHandler, Xrmd.Core.Mail.MailboxTestJob>();
         services.AddScoped<OrganizationService>();
         services.AddScoped<IOrganizationService>(sp => sp.GetRequiredService<OrganizationService>());
         services.AddSingleton<ODataEdmModelBuilder>();

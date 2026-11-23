@@ -60,6 +60,37 @@ public sealed class CliQueueTests(XrmdFixture fx) : IAsyncLifetime
         names.Should().Contain(pub).And.NotContain(priv);
     }
 
+    /// <summary>Plan 4.1b, task 8: a queue created with its address gets a mailbox; <c>mailbox link</c> points it at a profile.</summary>
+    [Fact]
+    public async Task Create_with_email_then_mailbox_link_makes_the_queue_mailbox_use_the_profile()
+    {
+        var tag = Guid.NewGuid().ToString("N")[..8];
+        var name = "cli-mail-" + tag;
+        var address = $"cli-mail.{tag}@example.com";
+        var admin = SecurityTestHelper.ServiceFor(fx, fx.AdminObjectId);
+        var profile = await admin.CreateAsync(new Microsoft.Xrm.Sdk.Entity("emailserverprofile")
+        {
+            ["name"] = "Relay " + tag, ["servertype"] = new Microsoft.Xrm.Sdk.OptionSetValue(4), ["outgoingserverlocation"] = "smtp.example.com",
+            ["outgoingportnumber"] = 587, ["outgoingusessl"] = false, ["outgoingauthenticationprotocol"] = new Microsoft.Xrm.Sdk.OptionSetValue(3),
+            ["outgoingcredentialretrieval"] = new Microsoft.Xrm.Sdk.OptionSetValue(1), ["outgoingusername"] = "relay@example.com",
+        });
+
+        (await RunAsync("queue", "create", name, "--email", address)).Should().Be(0, _err.ToString());
+        (await RunAsync("mailbox", "link", address, "--profile", "Relay " + tag)).Should().Be(0, _err.ToString());
+
+        await using var conn = await TestProvider.OpenAsync(fx.ConnectionString);
+        await using var cmd = TestSql.Command(conn,
+            "SELECT m.emailserverprofile, m.outgoingemaildeliverymethod, m.enabledforoutgoingemail, q.emailrouteraccessapproval " +
+            "FROM data.queue q JOIN data.mailbox m ON m.mailboxid = q.defaultmailbox WHERE q.emailaddress = @address");
+        cmd.Parameters.AddWithValue("@address", address);
+        await using var rd = await cmd.ExecuteReaderAsync();
+        (await rd.ReadAsync()).Should().BeTrue("the queue has a mailbox with its address");
+        rd.GetGuid(0).Should().Be(profile);
+        Convert.ToInt32(rd.GetValue(1)).Should().Be(2);
+        Convert.ToBoolean(rd.GetValue(2)).Should().BeTrue();
+        Convert.ToInt32(rd.GetValue(3)).Should().Be(2, "a new address waits for approval");
+    }
+
     [Fact]
     public async Task Member_add_adds_a_user_to_the_queue()
     {

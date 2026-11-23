@@ -100,6 +100,19 @@ public static class AppModuleSchema
     /// <summary>The default value of <see cref="AppOnLoad"/>: empty.</summary>
     public const string AppOnLoadDefault = "";
 
+    /// <summary>
+    /// The environment setting that says who may send email (plan 4.1b, an xrmverse extension; Dataverse has no such switch):
+    /// <see cref="EmailSendFromUserOrQueue"/> (the default, as Dataverse) or <see cref="EmailSendFromQueueOnly"/>, where SendEmail with
+    /// <c>IssueSend</c> true sends only from a queue.
+    /// </summary>
+    public const string EmailSendFrom = "xrmverse_EmailSendFrom";
+
+    /// <summary>The id of the <see cref="EmailSendFrom"/> definition (assigned by xrmverse).</summary>
+    public static readonly Guid EmailSendFromId = new("6f1c2a5e-8d4b-4e37-9a61-3b2f7c0d1e21");
+
+    /// <summary>The values of <see cref="EmailSendFrom"/>: a user or a queue sends (the default), or only a queue does.</summary>
+    public const string EmailSendFromUserOrQueue = "userOrQueue", EmailSendFromQueueOnly = "queueOnly";
+
     /// <summary>The default value of <see cref="Renderer"/>.</summary>
     public const string RendererDefault = "classic";
 
