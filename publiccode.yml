@@ -1,0 +1,104 @@
+# Metadata for the public source repository, published by the existing sync job.
+publiccodeYmlVersion: "0"
+name: xrmverse
+url: https://github.com/pwbit/xrmverse
+landingURL: https://xrmverse.com
+softwareVersion: "0.1.10"
+releaseDate: "2026-11-22"
+logo: docs/images/xrmverse-logo-light-transparent-2400.png
+platforms:
+  - web
+  - linux
+  - windows
+  - mac
+categories:
+  - application-development
+  - crm
+  - workflow-management
+developmentStatus: beta
+softwareType: standalone/web
+organisation:
+  uri: https://github.com/pwbit
+  name: Power Builders Italia S.r.l.
+description:
+  it:
+    shortDescription: Server open source auto-ospitato per applicazioni compatibili con Dataverse, con API, plug-in .NET e soluzioni.
+    longDescription: >
+      xrmverse è una piattaforma open source da installare sulla propria
+      infrastruttura per eseguire applicazioni compatibili con le interfacce
+      supportate di Microsoft Dataverse. Può essere valutata da amministrazioni
+      e fornitori che sviluppano applicazioni gestionali e desiderano mantenere
+      il controllo operativo dei dati e dell'ambiente di esecuzione.
+
+      Include API per dati e metadati, una pipeline per plug-in .NET,
+      importazione ed esportazione di soluzioni, interfacce web di
+      amministrazione e applicazioni model-driven, una CLI e un server MCP.
+      Il server usa SQL Server oppure PostgreSQL; installazione, sicurezza,
+      aggiornamenti e backup sono responsabilità di chi lo gestisce.
+
+      La compatibilità ha un perimetro documentato e ogni applicazione va
+      verificata prima della migrazione. Non è un sostituto di tutti i servizi
+      Power Platform e non supporta le soluzioni Microsoft first-party di
+      Dynamics 365. L'SDK Microsoft non è incluso: per le funzionalità che lo
+      richiedono viene installato dall'utilizzatore previa accettazione dei
+      relativi termini. PostgreSQL è alternativo a SQL Server; quest'ultimo
+      richiede l'accettazione della propria licenza. Il sorgente corrente può
+      contenere funzionalità successive alla release binaria indicata.
+    documentation: https://xrmverse.com/docs/
+    apiDocumentation: https://xrmverse.com/docs/admin-api.html
+    features:
+      - Installazione sulla propria infrastruttura con SQL Server o PostgreSQL
+      - API dati e metadati nel perimetro di compatibilità Dataverse documentato
+      - Pipeline per plug-in .NET e importazione ed esportazione di soluzioni
+      - Interfaccia web di amministrazione e applicazioni model-driven
+      - CLI e server MCP con i permessi dell'utente
+  en:
+    shortDescription: Self-hosted open-source server for Dataverse-compatible applications, with APIs, .NET plug-ins and solutions.
+    longDescription: >
+      xrmverse runs on infrastructure controlled by the operator and provides
+      supported Microsoft Dataverse-compatible interfaces for business
+      applications. Public administrations and their suppliers can evaluate
+      it for applications that need operational control over data and hosting.
+
+      It includes data and metadata APIs, a .NET plug-in pipeline, solution
+      import and export, web administration and model-driven app interfaces,
+      a CLI and an MCP server. Operators manage installation, security,
+      updates and backups. SQL Server and PostgreSQL are alternative database
+      engines; SQL Server is subject to its own license terms.
+
+      Compatibility is limited to the documented scope and applications must
+      be validated before migration. Microsoft first-party Dynamics 365
+      solutions are not supported. The Microsoft SDK is not redistributed:
+      users install it separately and accept its terms for features that
+      require it. The current source tree can be ahead of the listed binary
+      release. This is not a replacement for every Power Platform service.
+    documentation: https://xrmverse.com/docs/
+    apiDocumentation: https://xrmverse.com/docs/admin-api.html
+    features:
+      - Self-hosted deployment with SQL Server or PostgreSQL
+      - Data and metadata APIs within the documented Dataverse compatibility scope
+      - .NET plug-in pipeline and solution import and export
+      - Web administration and model-driven applications
+      - CLI and MCP server using the user's permissions
+legal:
+  license: Apache-2.0
+  mainCopyrightOwner: Power Builders Italia S.r.l.
+maintenance:
+  type: internal
+  contacts:
+    - name: Maurizio Ceccacci
+      affiliation: Power Builders Italia S.r.l.
+localisation:
+  localisationReady: true
+  availableLanguages:
+    - en
+    - it
+dependsOn:
+  proprietary:
+    - name: Microsoft.PowerPlatform.Dataverse.Client (bring your own SDK)
+      version: "1.2.27"
+    - name: Microsoft.CrmSdk.Workflow (optional custom workflow activities)
+      version: "9.0.2.60"
+      optional: true
+    - name: Microsoft SQL Server (alternative to PostgreSQL)
+      optional: true
