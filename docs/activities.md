@@ -294,8 +294,10 @@ The default status of each state is the first one listed. A new activity starts 
 status (a task is Not Started). A status must belong to its state (400 otherwise).
 
 - **Closed activities are read-only.** An Update of an activity in state 1 or 2 is a 400 (`InvalidArgument`) unless it only
-  changes `statecode` and `statuscode` (a SetState). Reopen it first (state 0). Party lists and file uploads count as changes.
-  Assign is the exception: a closed activity can be assigned.
+  changes `statecode`, `statuscode` and the regarding (`regardingobjectid`, `regardingobjecttypecode`). Reopen it first
+  (state 0). Party lists and file uploads count as changes. Assign is an exception: a closed activity can be assigned. So
+  is the regarding: it can be set, changed or cleared on a closed activity, such as a Received email (from memory, Dataverse's
+  Set Regarding works on a closed email; the usual Append and Append To checks apply and `activitypointer` follows).
 - Moving an activity to state 1 or 2 sets `actualend` to now when it is empty. An activity created directly in state 1 or 2
   is accepted and gets `actualend` the same way.
 - SetState arrives as an Update, as for every table (see [Plug-ins](plugins.md)).

@@ -18,6 +18,7 @@ using Xrmd.Core.Errors;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Sdk;
 using Xrmd.Pipeline.CustomApis;
+using Xrmd.Pipeline.Workflows;
 using Xrmd.Security;
 using Xrmd.Solution;
 
@@ -107,8 +108,9 @@ public static partial class MetadataController
 
     private static async Task<IResult> GetMetadata(HttpContext context, ODataEdmModelBuilder builder, CustomApiRegistry customApis)
     {
-        // Load the committed custom APIs first: Build reads the loaded snapshot without waiting.
+        // Load the committed custom APIs and activated XAML actions first: Build reads the loaded snapshots without waiting.
         await customApis.AllAsync(context.RequestAborted);
+        if (context.RequestServices.GetService<IActivatedActions>() is { } actions) await actions.GetAsync(context.RequestAborted);
         var model = builder.Build();
         using var stream = new MemoryStream();
         using (var writer = XmlWriter.Create(stream, new XmlWriterSettings { Encoding = new UTF8Encoding(false) }))

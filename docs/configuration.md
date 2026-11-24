@@ -35,7 +35,7 @@ Settings marked "(not in `.env`)" have no `.env` variable of their own.
 | `.env` variable | Configuration key | Notes |
 |---|---|---|
 | `AUTH_MODE` | `Auth:Mode` | `Entra` or `Development` |
-| `AUTH_AUDIENCE` | `Auth:Audience` | server base URL, e.g. `http://localhost:5000/` |
+| `AUTH_AUDIENCE` | `Auth:Audience` | server base URL, e.g. `http://localhost:5000/`. Several values may be given, separated by `;` or `,` (spaces are trimmed): a token for any of them is accepted, each with or without a trailing `/`, and nothing else is (no wildcard). The first value is the primary one: it is the audience of the tokens the server issues (`Local` mode), the resource of the 401 challenge and the audience the web admin shows. With `Auth:Mode=Local` every value must be an `https` URL. See [Several audiences](multiple-organizations.md#several-audiences) |
 | `AUTH_TENANT_ID` | `Auth:TenantId` | required with `Entra`: tenant GUID |
 | `AUTH_DEV_SIGNING_KEY` | `Auth:DevSigningKey` | `Development` only, required, at least 32 characters (`openssl rand -hex 32`) |
 

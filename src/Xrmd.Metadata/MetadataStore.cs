@@ -390,7 +390,8 @@ public sealed partial class MetadataStore(IDbConnectionFactory factory, IEnumera
         }, ct);
 
     /// <summary>
-    /// Upgrade path for the audit settings upgrade only: runs <paramref name="write"/> in a session on a connection and
+    /// Upgrade path for the startup upgrades (audit settings, currency columns, <c>overriddencreatedon</c>): runs
+    /// <paramref name="write"/> in a session on a connection and
     /// transaction of its own (committed when it succeeds, rolled back otherwise).
     /// </summary>
     internal Task InUpgradeSessionAsync(Func<DataSession, Task> write, CancellationToken ct = default) => InOwnSessionAsync(write, ct);
@@ -980,6 +981,32 @@ public sealed partial class MetadataStore(IDbConnectionFactory factory, IEnumera
         pending.Working.Put(updated, previous: entity);
         if (!related) await EnsureCurrencyRelationshipAsync(session, entityLogicalName, ct);
         return added.Count > 0;
+    }
+
+    /// <summary>
+    /// Upgrade path for <c>OverriddenCreatedOnUpgrade</c> only (#343.5): gives the table <paramref name="entityLogicalName"/>, made
+    /// before the column, <c>overriddencreatedon</c> (<see cref="SystemAttributes.OverriddenCreatedOn"/>, a nullable column; its rows
+    /// keep null). Writes nothing for a table that has it or has no <c>createdon</c>, nor for the audit table.
+    /// </summary>
+    /// <returns>True when the column was added.</returns>
+    /// <exception cref="InvalidOperationException">The table holds an attribute named <c>overriddencreatedon</c> that is not a DateTime.</exception>
+    internal async Task<bool> EnsureOverriddenCreatedOnAsync(DataSession session, string entityLogicalName, CancellationToken ct)
+    {
+        var pending = await EnterAsync(session, ct);
+        var entity = pending.Working.ByLogicalName.GetValueOrDefault(entityLogicalName)
+                     ?? throw new XrmdValidationException($"Entity '{entityLogicalName}' does not exist.");
+        if (!SystemAttributes.NeedsOverriddenCreatedOn(entity)) return false;
+
+        var added = SystemAttributes.OverriddenCreatedOn();
+        Prepare(entityLogicalName, added);
+        var stamp = await BumpVersionStampAsync(session, pending, ct);
+        await InsertAttributesAsync(session, entityLogicalName, [added], stamp, ct, pending.Working.ImageOrder);
+        await ExecuteAsync(session, GenerateDdl(() => DdlGenerator.AddColumn(entityLogicalName, added, session.Dialect)), ct);
+
+        var updated = MetadataJson.Clone(entity);
+        updated.SetAttributes((entity.Attributes ?? []).Append(added));
+        pending.Working.Put(updated, previous: entity);
+        return true;
     }
 
     public Task UpdateEntityAsync(DataSession session, TableDefinition changes, CancellationToken ct) =>

@@ -67,7 +67,8 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
     /// </summary>
     /// <remarks>
     /// Create: <c>prvCreate</c> with a depth covering the owner (<c>ownerid</c> or the caller) and its business unit; each
-    /// written lookup: <c>prvAppend</c> on the entity and AppendTo on the referenced record. Update: Write on the record;
+    /// written lookup: <c>prvAppend</c> on the entity and AppendTo on the referenced record; a value for <c>overriddencreatedon</c>:
+    /// <c>prvOverrideCreatedOnCreatedBy</c> (#343.5, 403 PrivilegeDenied naming it). Update: Write on the record;
     /// each changed lookup: Append on the record and AppendTo on the new referenced record; a changed <c>ownerid</c>: the
     /// rules of Assign; <c>systemuser.azureactivedirectoryobjectid</c> (the identity a token maps to): only a System
     /// Administrator (403 PrivilegeDenied otherwise; Create may set it). Delete: Delete. Assign: Assign on the record, and
@@ -756,6 +757,11 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
         DataSession session, CancellationToken ct)
     {
         if (store.GetEntity(target.LogicalName ?? "") is not { } entity) return;
+        // #343.5 (Learn): a record created with its own creation date needs prvOverrideCreatedOnCreatedBy, on every table.
+        if (target.Attributes.TryGetValue(SystemAttributes.OverriddenCreatedOnName, out var original) && original is not null)
+            foreach (var p in principals)
+                if (p.DepthOf(PrivilegeNames.OverrideCreatedOnCreatedBy) == DepthMask.None)
+                    throw XrmdFaultException.PrivilegeDenied(p.UserId, PrivilegeNames.OverrideCreatedOnCreatedBy, entity.LogicalName, entity.ObjectTypeCode ?? 0);
         // Plan 4.1b: an email's attachment follows its email (Write on it), whatever the table's own privileges.
         if (entity.LogicalName == MailSchema.Attachment)
         {

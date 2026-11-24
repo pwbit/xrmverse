@@ -54,7 +54,9 @@ For `systemuser`, `team`, `businessunit` and `role` the depth is evaluated on `o
 `Delete`, `Append`, `AppendTo`, `Assign`, `Share`; generated for every entity, custom ones too (`privilegeid` =
 MD5 of `"xrmd:privilege:" + lowercase name`). Not entity-based: `prvActOnBehalfOfAnotherUser`, the metadata
 privileges (`prvCreateEntity`, `prvCreateAttribute` and the others listed in [Solution](solutions.md)), `prvImportCustomization`,
-`prvExportCustomization`, `prvPublishCustomization`, `prvWorkflowExecution` (run a workflow on demand).
+`prvExportCustomization`, `prvPublishCustomization`, `prvWorkflowExecution` (run a workflow on demand),
+`prvOverrideCreatedOnCreatedBy` (create a record with its own creation date through `overriddencreatedon`; see
+[Record Created On](#record-created-on)).
 
 ### Standard roles
 
@@ -63,7 +65,7 @@ In the root BU, `roleid` = template id:
 | Role | Template id | Content |
 |---|---|---|
 | System Administrator | `627090FF-40A3-4053-8790-584EDC5BE201` | every privilege at Global, also for entities created later (recognized by `roletemplateid`, without `roleprivileges` rows) |
-| System Customizer | `119F245C-3CC8-4B62-B31C-D1A046CED15D` | plugin and role registration, reads of the system tables, metadata privileges, solution tables, every privilege at Global on the custom API tables and on `workflow` and `processtrigger`, `prvWorkflowExecution` Global, import/export/publish of customizations |
+| System Customizer | `119F245C-3CC8-4B62-B31C-D1A046CED15D` | plugin and role registration, reads of the system tables, metadata privileges, solution tables, every privilege at Global on the custom API tables and on `workflow` and `processtrigger`, `prvWorkflowExecution` Global, `prvOverrideCreatedOnCreatedBy` Global (top-up `override-createdon-role-privilege`), import/export/publish of customizations |
 | Basic User | `236750CD-45AE-4939-AB12-B24B920CED93` | Read Global on `organization`, `businessunit`, `systemuser`, `team`, `role` and the custom API tables (`customapi`, `customapirequestparameter`, `customapiresponseproperty`); Read/Delete Basic on `asyncoperation`; `prvWorkflowExecution` Global; Read Global on `systemform` (as Dataverse's Basic User: top-up `system-form-role-privileges`); Read Global on `webresource` (top-up `web-resource-role-privileges`), so that form libraries and web resources load for every user; nothing on custom tables |
 | Delegate (template "Proxy") | `D892CC0B-28C7-4E88-BD92-72F2C366BAED` | only `prvActOnBehalfOfAnotherUser` Global |
 
@@ -204,6 +206,17 @@ assigned by the server (`MetadataId`, `ObjectTypeCode`, `IsIntersect`, `IsManage
 `IsPrivate`, `IntroducedVersion`; on attributes `IsManaged`, `IsCustomAttribute`, `IsLogical`, `AttributeOf`,
 `IntroducedVersion`) are ignored if they come from the client. `SchemaName` (from which the privilege names derive) is unique
 among entities, case-insensitively: a duplicate is 400.
+
+### Record Created On
+
+A Create that gives `overriddencreatedon` a value (a data import keeping the original creation date) needs
+`prvOverrideCreatedOnCreatedBy`, besides Create on the table. Without it the Create is refused with PrivilegeDenied
+(`0x80040220`, HTTP 403), whose message names `prvOverrideCreatedOnCreatedBy`. System Administrator holds it by its
+template; System Customizer gets it at Global, also on an existing organization (top-up
+`override-createdon-role-privilege`, run once at startup); Basic User does not. The check runs on the caller's request,
+before the plug-ins: a value that a plug-in of stage 10 or 20 adds is not checked. The privilege name is the one Learn gives
+for data import ("Override Created on or Created by for Records during Data Import"); its id is derived like every
+xrmverse privilege id. What the column does is in [Migration](migration.md#record-created-on-overriddencreatedon).
 
 ## Error codes
 

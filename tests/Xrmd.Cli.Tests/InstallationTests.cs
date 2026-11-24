@@ -99,6 +99,44 @@ public class InstallationTests : IDisposable
         services["xrmd-zenith"].Environment["Auth__Audience"].Should().Be("api://zenith-api");
     }
 
+    [Theory]
+    [InlineData("http://localhost:5001/;http://xrmd-acme:5000/")]
+    [InlineData("http://xrmd-acme:5000, http://localhost:5001")]
+    public async Task Development_audience_list_with_the_profile_url_is_accepted_and_passed_through(string list)
+    {
+        await InitAsync("--org", "acme");
+        EditEnv(text => text.Replace("ORG_ACME_AUDIENCE=\n", $"ORG_ACME_AUDIENCE={list}\n"));
+
+        Installation.Load(_dir).Orgs.Single().Audience.Should().Be(list);
+        Installation.Load(_dir).Save();
+        ComposeYaml.ReadEnv(_dir)["ORG_ACME_AUDIENCE"].Should().Be(list);
+        ComposeYaml.Resolve(_dir)["xrmd-acme"].Environment["Auth__Audience"].Should().Be(list, "compose passes the value through unchanged");
+    }
+
+    [Theory]
+    [InlineData("http://xrmd-acme:5000/", "http://localhost:5001/")]
+    [InlineData("http://xrmd-acme:5000/;http://other:5000/", "http://localhost:5001/")]
+    [InlineData("http://localhost:5001/;not a uri", "not a uri")]
+    [InlineData("http://localhost:5001/;relative/path", "relative/path")]
+    public async Task Audience_list_without_the_profile_url_or_with_a_bad_value_is_rejected(string list, string expected)
+    {
+        await InitAsync("--org", "acme");
+        EditEnv(text => text.Replace("ORG_ACME_AUDIENCE=\n", $"ORG_ACME_AUDIENCE={list}\n"));
+
+        var error = FluentActions.Invoking(() => Installation.Load(_dir)).Should().Throw<CliException>().Which;
+        error.ExitCode.Should().Be(ExitCodes.Rejected);
+        error.Message.Should().Contain("ORG_ACME_AUDIENCE").And.Contain(expected);
+    }
+
+    [Fact]
+    public async Task Entra_audience_list_is_accepted()
+    {
+        await InitAsync("--org", "acme", "--auth", "entra", "--tenant-id", Guid.NewGuid().ToString(), "--admin-object-id", Guid.NewGuid().ToString());
+        EditEnv(text => text.Replace("ORG_ACME_AUDIENCE=\n", "ORG_ACME_AUDIENCE=api://acme-api;http://xrmd-acme:5000/\n"));
+
+        Installation.Load(_dir).Orgs.Single().Audience.Should().Be("api://acme-api;http://xrmd-acme:5000/");
+    }
+
     public static IEnumerable<object[]> InconsistentHostEdits() =>
     [
         ["XRMD_DOMAIN=xrm.test", "XRMD_DOMAIN=XRM_test", "XRMD_DOMAIN"],

@@ -49,7 +49,7 @@ public static class UiHosting
             // Only public values: never Auth:DevSigningKey.
             return Results.Json(new UiConfig(
                 AuthMode: mode ?? "",
-                Audience: auth["Audience"] ?? "",
+                Audience: JwtSetup.PrimaryAudience(auth) ?? "",
                 Authority: mode == "Entra" && !string.IsNullOrEmpty(tenant) ? $"https://login.microsoftonline.com/{tenant}/v2.0" : null,
                 ClientId: NullIfEmpty(configuration["Ui:Entra:ClientId"]),
                 Scope: NullIfEmpty(configuration["Ui:Entra:Scope"]),

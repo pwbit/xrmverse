@@ -45,6 +45,12 @@ public static class ErrorCodes
     /// <summary>A plug-in failed with an unexpected exception, or timed out in the sandbox.</summary>
     public const int UnexpectedPluginException = unchecked((int)0x80040224);
 
+    /// <summary>A webhook answered with a status other than 2xx; the status is in the message (Learn: web service error codes).</summary>
+    public const int WebhooksNonSuccessHttpResponse = unchecked((int)0x80050201);
+
+    /// <summary>The post to a webhook failed: a timeout or a connection error (Learn: web service error codes).</summary>
+    public const int WebhooksPostRequestFailed = unchecked((int)0x80050205);
+
     /// <summary>A plug-in call chain went deeper than the maximum depth (8): "...included an infinite loop".</summary>
     public const int InfiniteLoopDetected = unchecked((int)0x80044182);
 

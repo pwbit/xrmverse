@@ -26,7 +26,7 @@ stages, rank and `runas` in code, the on-premises developer page
 |---|---|---|
 | Workflows (real-time, background, on demand, child) | run from the solution XAML with an own interpreter | Same behaviour for the supported steps; no Windows Workflow Foundation |
 | Business rules | Entity scope runs on the server | Narrower: Form scope is stored but not run on the server |
-| Actions (XAML) | run as the main operation of their message | Narrower: SDK and SOAP only, no Web API call |
+| Actions (XAML) | run as the main operation of their message, over the SDK, SOAP and the Web API | Same |
 | Dialogs, business process flows, cloud/desktop/AI flows | imported and kept for export | Narrower: never run |
 | Unsupported steps and expressions | process imports, then fails explicitly when it would run | Differs: Dataverse would run them |
 | Custom workflow activities | run through CoreWF on .NET, in the `xrmd` process | Differs: no sandbox isolation; .NET Framework-only APIs fail |
@@ -409,8 +409,36 @@ Calling the message checks the request against the arguments of the XAML (`x:Mem
 the wrong type, an undeclared parameter or a `Target` of another table is 400 `0x80040203`, as for custom APIs. Plug-in steps
 on the message fire at stages 20 and 40 around the XAML, which runs at stage 30 in the caller's transaction, as the caller.
 Output arguments the XAML set are in the response; outputs it did not set are left out. A stop with Canceled fails the
-request with 400 `0x80040265`. Actions are reached through the SDK and SOAP (`OrganizationRequest` by name); on the Web API,
-`POST /<message>` stays 404 for XAML actions. How actions compare with custom APIs: see [Custom APIs](custom-apis.md).
+request with 400 `0x80040265`. How actions compare with custom APIs: see [Custom APIs](custom-apis.md).
+
+### Calling an action
+
+Through the SDK and SOAP, send an `OrganizationRequest` named after the message, with `Target` for a bound action. On the Web
+API, an activated action is an OData action named after its message:
+
+| Action | Request |
+|---|---|
+| Global (`primaryentity` `none`) | `POST /api/data/v9.2/<message>` (also with the `Microsoft.Dynamics.CRM.` prefix) |
+| Bound to a table | `POST /api/data/v9.2/<entityset>(<id>)/Microsoft.Dynamics.CRM.<message>` |
+
+The body is a JSON object with the input arguments; a bound action takes its `Target` from the URL (a `Target` in the body is
+400). The request then runs through the organization service exactly as over SOAP, with the same checks and errors: a missing
+required input is 400 `0x80040203`, the caller's privileges apply to the steps, and plug-in steps on the message fire. The
+response is written as a custom API's: 200 with `@odata.context` `$metadata#Microsoft.Dynamics.CRM.<message>Response` and one
+property per output argument (`null` for one the XAML did not set); the record or the collection itself when the only output is an Entity or an
+EntityCollection; 204 when the action has no output arguments.
+
+A Draft or deactivated action is not a Web API operation: the request is 404 `0x80060888`, as for any unknown segment, where
+the same call over SOAP is 400 "not activated" (the 404 is from memory of Dataverse, not confirmed on Learn). An action is
+always called with `POST`, never as a function, and a bound action only on a record of its table.
+
+`$metadata` declares every activated action, after the custom APIs, as `<Action>` in `Microsoft.Dynamics.CRM`: bound with
+`IsBound="true"` and a first parameter `entity` of its table's type, or global with an `<ActionImport>`; one parameter per input
+argument (nullable when not required) and the complex type `<message>Response` for the outputs, with the type mapping of custom
+APIs. An action that cannot be declared (bound to a table the model does not have, or a name taken by a type or operation of
+the model) is left out of `$metadata` with a warning in the server log, as a custom API is.
+`$metadata` follows activation and deactivation at once: the cache of the activated processes is refreshed after the commit
+that changes them.
 
 ## Custom workflow activities
 
@@ -472,7 +500,6 @@ Each item is refused with an error or stated here; none is a silent difference.
   [that page](workflow-authoring.md#known-limits).
 - **No `workflowlog`, `processsession` or process stage tables.** Reading them is the usual unknown-table error. A
   background job's progress and error are on its `asyncoperation` row (`message`, `friendlymessage`, `errorcode`).
-- **No Web API for XAML actions**: `POST /<message>` is 404; call them through the SDK or SOAP.
 - **No Pause or Resume** of workflow jobs; cancel them instead.
 - **No Assign over the Web API.** `PATCH workflows(<id>)` with `ownerid@odata.bind` is 400; assign a process with
   `AssignRequest` (SDK or SOAP).

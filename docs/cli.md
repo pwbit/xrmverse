@@ -218,6 +218,15 @@ Destructive commands (`solution delete` with and without `--cascade`, `table del
 `--yes` skips the question. Without a terminal on stdin and without `--yes` they exit 2 with "Refusing to run a
 destructive command without --yes when stdin is not a terminal."
 
+## Adding users (`user add`)
+
+`xrmd user add --object-id <guid> --name <full name> [--domain-name <name>] [--business-unit <name>]` creates a user and prints
+`Created user <systemuserid> (object id <azureactivedirectoryobjectid>).` The `systemuserid` is the row's primary key in the
+`systemusers` table; the object id is the Entra identity you passed in. Sign-in matches the token's `oid` claim to the object id,
+so dev sign-in (`auth login --mode dev --object-id`) uses the object id, not the `systemuserid`; `role assign --user` accepts
+the object id or the domain name, not the `systemuserid`.
+`-o json` prints both ids and the business unit.
+
 ## Organizations and backups
 
 - `org create <name> --admin-object-id <guid>` creates a database (the organization name is the database name), runs

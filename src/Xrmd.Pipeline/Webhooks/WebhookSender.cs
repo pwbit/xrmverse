@@ -15,7 +15,8 @@ namespace Xrmd.Pipeline.Webhooks;
 /// Delivers an execution context to a webhook endpoint (plan 3.2): <c>POST {url}</c> with the <see cref="WebhookPayload"/> body,
 /// the <c>x-ms-*</c> headers and the endpoint's authentication; one more attempt at once on 502, 503 or 504; no redirect followed;
 /// <see cref="PipelineOptions.WebhookTimeout"/> per attempt. A failure is a <see cref="PluginExecutionException"/> with the fault
-/// 500 <see cref="ErrorCodes.UnexpectedPluginException"/>, retryable (<c>Unexpected</c> true) for any 5xx (502, 503 and 504
+/// 500 <see cref="ErrorCodes.WebhooksNonSuccessHttpResponse"/> (a non-2xx answer) or <see cref="ErrorCodes.WebhooksPostRequestFailed"/>
+/// (a timeout or a connection error), retryable (<c>Unexpected</c> true) for any 5xx (502, 503 and 504
 /// after the extra attempt), a timeout or a connection error, final otherwise (3xx, 4xx). Faults and log lines name the endpoint and <c>scheme://host/path</c> of its url
 /// only, never its query, headers or auth value.
 /// </summary>
@@ -80,7 +81,9 @@ public sealed class WebhookSender : IDisposable
 
         _logger.LogWarning("Delivery to webhook {Endpoint} ({Url}) failed: {Reason} ({Kind}).", endpoint.Name, where, attempt.Reason,
             attempt.Retryable ? "retryable" : "final");
-        var fault = new XrmdFaultException(ErrorCodes.UnexpectedPluginException,
+        // As in Dataverse: a non-2xx answer and a failed post are told apart by the code; the response body is never read.
+        var code = attempt.Status is null ? ErrorCodes.WebhooksPostRequestFailed : ErrorCodes.WebhooksNonSuccessHttpResponse;
+        var fault = new XrmdFaultException(code,
             $"Endpoint unavailable: webhook '{endpoint.Name}' {attempt.Reason}.", 500);
         throw new PluginExecutionException(fault, attempt.Retryable);
     }

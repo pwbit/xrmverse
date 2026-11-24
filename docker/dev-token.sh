@@ -12,6 +12,7 @@ get() {
 key=$(get AUTH_DEV_SIGNING_KEY); aud=$(get AUTH_AUDIENCE); oid=$(get SEED_ADMIN_OBJECT_ID); name=$(get SEED_ADMIN_NAME)
 [ -n "$key" ] || { echo "AUTH_DEV_SIGNING_KEY is empty in $envfile" >&2; exit 1; }
 [ -n "$oid" ] || { echo "SEED_ADMIN_OBJECT_ID is empty in $envfile" >&2; exit 1; }
+aud=${aud%%[;,]*}; aud=${aud#"${aud%%[![:space:]]*}"}; aud=${aud%"${aud##*[![:space:]]}"}
 aud=${aud:-http://localhost:5000/}
 b64() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
 now=$(date +%s); exp=$((now + 3600))

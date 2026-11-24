@@ -380,6 +380,8 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
         // (organizationsetting). Its own top-up: app-setting-role-privileges already ran on an existing organization.
         yield return ("organization-setting-privileges",
             PrivilegeCatalog.NamesOf(store.GetEntity(AppModuleSchema.OrganizationSetting)!).Select(PrivilegeNames.IdOf).ToHashSet());
+        // #343.5: System Customizer's prvOverrideCreatedOnCreatedBy (System Administrator holds it by its template).
+        yield return ("override-createdon-role-privilege", [PrivilegeNames.IdOf(PrivilegeNames.OverrideCreatedOnCreatedBy)]);
     }
 
     /// <summary>
@@ -616,6 +618,8 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
         // neither (System Administrator holds them by its template).
         yield return (customizer, PrivilegeNames.ActivateSynchronousWorkflow, Global);
         yield return (customizer, PrivilegeNames.ActivateBusinessRule, Global);
+        // #343.5 (Learn: data import with "Override Created on or Created by"): giving a record its creation date on Create.
+        yield return (customizer, PrivilegeNames.OverrideCreatedOnCreatedBy, Global);
 
         // The custom API definitions (Plan 15) are read by every user: they describe messages anyone may call.
         foreach (var entity in new[] { "organization", "businessunit", "systemuser", "team", "role" }.Concat(CustomApiTables.All))

@@ -2,12 +2,14 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.Routing.Patterns;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Xrm.Sdk;
 using Xrmd.Abstractions;
 using Xrmd.Core;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata.Sdk;
 using Xrmd.Pipeline.CustomApis;
+using Xrmd.Pipeline.Workflows;
 
 namespace Xrmd.WebApi;
 
@@ -28,6 +30,9 @@ namespace Xrmd.WebApi;
 /// record (or the reverse), or is an action called with GET or a function with POST, is the 404 of an unknown segment.
 /// The request is the API's <see cref="OrganizationRequest"/> (<see cref="CustomApiJson"/>), executed by
 /// <see cref="OrganizationService.ExecuteAsync"/>: every check and error is the SDK path's.
+/// When no custom API has the name, an activated XAML action whose message has it (<see cref="IActivatedActions"/>, issue #343) is
+/// called the same way, as a global or entity-bound action (<see cref="AsCustomApi"/>); a Draft or deactivated one is the 404. A custom
+/// API and an action cannot have the same name (the activation refuses it), and the custom API is looked up first.
 /// </summary>
 public static class CustomApiEndpoints
 {
@@ -105,7 +110,7 @@ public static class CustomApiEndpoints
             if (FileEndpoints.IsNavigationProperty(store, bound, name)) throw FileEndpoints.NavigationPathSegment(name);
             throw notFound;
         }
-        var api = await registry.FindAsync(name, context.RequestAborted);
+        var api = await registry.FindAsync(name, context.RequestAborted) ?? await FindActionAsync(context, name);
         if (api is null || !string.Equals(api.UniqueName, name, StringComparison.Ordinal)) throw notFound;
 
         EntityReference? target = null;
@@ -133,6 +138,26 @@ public static class CustomApiEndpoints
 
         var response = await service.ExecuteAsync(request, context.RequestAborted);
         return CustomApiJson.WriteResponse(api, response, ODataJson.BaseUrl(context.Request), store);
+    }
+
+    /// <summary>
+    /// An activated XAML action as the custom API it stands for on the Web API: named by its message, a non-private action, global or
+    /// bound to one record of its table (bindingtype 1), with its input arguments (but <c>Target</c>) as request parameters and its
+    /// output arguments as response properties.
+    /// </summary>
+    public static CustomApiDefinition AsCustomApi(ActionDefinition action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        return new CustomApiDefinition(action.ActivationId, action.Message, BindingType: action.BoundEntity is null ? 0 : 1, action.BoundEntity,
+            IsFunction: false, IsPrivate: false, AllowedStepType: 0, ExecutePrivilegeName: null, MainOperation: null, action.Inputs, action.Outputs);
+    }
+
+    /// <summary>The activated XAML action whose message is <paramref name="name"/> (ignoring case, as the pipeline), as a custom API; null when none.</summary>
+    private static async Task<CustomApiDefinition?> FindActionAsync(HttpContext context, string name)
+    {
+        if (context.RequestServices.GetService<IActivatedActions>() is not { } actions) return null;
+        var action = (await actions.GetAsync(context.RequestAborted)).FirstOrDefault(a => string.Equals(a.Message, name, StringComparison.OrdinalIgnoreCase));
+        return action is null ? null : AsCustomApi(action);
     }
 
     /// <summary>The route constraint of the bound routes' <c>{operation}</c>: <see cref="IsOperationSegment"/>.</summary>

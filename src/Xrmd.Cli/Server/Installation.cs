@@ -579,11 +579,17 @@ public sealed partial class Installation
             string? audience = null;
             if (values.TryGetValue(audienceKey, out var audienceText) && audienceText.Length > 0)
             {
-                if (!IsAbsoluteAudience(audienceText))
-                    throw Inconsistent(envPath, audienceKey, $"must be empty or an absolute URI (the API's Application ID URI): '{audienceText}'");
+                var audienceValues = SplitAudiences(audienceText);
+                foreach (var value in audienceValues)
+                    if (!IsAbsoluteAudience(value))
+                        throw Inconsistent(envPath, audienceKey, $"must be empty or a list of absolute URIs (the API's Application ID URI): '{value}'");
                 if (isDev)
-                    throw Inconsistent(envPath, audienceKey,
-                        $"must be empty with {AuthModeKey}={DevAuthMode}: dev tokens carry the profile URL ({new OrgEntry(name, port, "", Host: host).ClientUrl}) as their audience");
+                {
+                    var clientUrl = new OrgEntry(name, port, "", Host: host).ClientUrl;
+                    if (!audienceValues.Any(v => v.TrimEnd('/') == clientUrl.TrimEnd('/')))
+                        throw Inconsistent(envPath, audienceKey,
+                            $"must be empty or include {clientUrl} with {AuthModeKey}={DevAuthMode}: dev tokens carry the profile URL ({clientUrl}) as their audience");
+                }
                 audience = audienceText;
             }
 
@@ -1038,6 +1044,13 @@ public sealed partial class Installation
         (value ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
 
     private string? NonEmpty(string key) => TryGetValue(key) is { Length: > 0 } value ? value : null;
+
+    /// <summary>
+    /// The values of <c>ORG_&lt;ORG&gt;_AUDIENCE</c>: separated by <c>;</c> or <c>,</c>, trimmed, empty entries dropped. The same rule as
+    /// <c>JwtSetup.Audiences</c> in Xrmd.Host (the CLI does not reference the host project, so the rule is duplicated there).
+    /// </summary>
+    internal static IReadOnlyList<string> SplitAudiences(string? value) =>
+        (value ?? "").Split([';', ','], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
 
     private static bool IsAbsoluteAudience(string value) =>
         !value.StartsWith('/') && Uri.TryCreate(value, UriKind.Absolute, out var uri) && !uri.IsFile && !value.Any(char.IsWhiteSpace);

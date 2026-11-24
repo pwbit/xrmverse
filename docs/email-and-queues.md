@@ -319,7 +319,9 @@ in the same transaction. **Send** on an email form does the same (see
   unless the organization's `allowunresolvedpartiesonemailsend` is on.
 - **The job** runs as the caller. It builds the MIME message with the email's subject, its `description` as the HTML body,
   its parties and its attachments, stores the `Message-ID` in `email.messageid` and counts the attempt in
-  `deliveryattempts` before it hands the message to the provider. Then:
+  `deliveryattempts` before it hands the message to the provider. When the email answers another one (its
+  `parentactivityid` is an email with a `messageid`), the message also carries the headers that thread it, see
+  [Reply threading](#reply-threading). Then:
   - **Sent:** state 1, status 3 Sent, `senton` now; the mailbox's `outgoingemailstatus` becomes Success.
   - **Temporary error** (the server is unreachable, an SMTP `4xx` answer, a Graph `429` or `5xx`): the job waits and tries
     again after 1, 5 and 15 minutes; each error goes on the mailbox (`lastsyncerror`, `lastsyncerrorcount`). After the third
@@ -548,6 +550,20 @@ Each address of `From`, `To`, `Cc` and `Bcc` is looked up, ignoring case, in fou
   match, or several, the party has only `addressused`; several matches also set `isduplicatesenderunresolved` true.
 - A matching record that the delivery user cannot read is not linked: its party keeps the address only.
 - `sender` holds the sender's address and `torecipients` the `To` addresses separated by `;`.
+
+### Reply threading
+
+An email whose `parentactivityid` is an email with a `messageid` is sent as a reply: the message carries `In-Reply-To` with the
+parent's `Message-ID`, and `References` with the `Message-ID`s of the conversation, oldest first, ending with the parent's. The
+chain is read by walking `parentactivityid` upward from the parent; it holds at most 20 ids, and it ends at an email without a
+`messageid`, at a record that is not an email, or at a loop. A parent without a `messageid` gives no header at all, and an email
+with no parent is sent as before. The email's own `inreplyto` column is set to the parent's `Message-ID` (with its angle
+brackets) when the job sends it, as `messageid` is. A value set by hand on an email with no parent (or whose parent has no
+`messageid`) is kept, but it is not sent as a header.
+
+The headers are part of the MIME message, so they are the same over SMTP and over Microsoft Graph, which receives the whole
+message. The mail client of the recipient threads the reply, and an answer coming back correlates to it through the same headers
+(see [Correlation](#correlation)).
 
 ### Correlation
 

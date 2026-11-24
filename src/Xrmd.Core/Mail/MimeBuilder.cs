@@ -7,6 +7,8 @@ namespace Xrmd.Core.Mail;
 
 /// <summary>An email ready to be sent: the resolved addresses, the HTML body and the attachment contents.</summary>
 /// <param name="MessageId">The Message-ID, with angle brackets (<see cref="MimeBuilder.NewMessageId"/>).</param>
+/// <param name="InReplyTo">The Message-ID of the email this one answers (with or without angle brackets), or null.</param>
+/// <param name="References">The Message-IDs of the conversation so far, oldest first, ending with <paramref name="InReplyTo"/>; empty (or null) for none.</param>
 public sealed record OutgoingMail(
     string MessageId,
     MailAddress From,
@@ -15,7 +17,9 @@ public sealed record OutgoingMail(
     IReadOnlyList<MailAddress> Bcc,
     string Subject,
     string? HtmlBody,
-    IReadOnlyList<AttachmentContent> Attachments);
+    IReadOnlyList<AttachmentContent> Attachments,
+    string? InReplyTo = null,
+    IReadOnlyList<string>? References = null);
 
 /// <summary>Builds the MIME message of an <see cref="OutgoingMail"/>. Addresses, subject and file names are checked for line breaks (header injection).</summary>
 public static class MimeBuilder
@@ -46,6 +50,11 @@ public static class MimeBuilder
         message.Subject = SafeText(mail.Subject ?? string.Empty, "subject");
         message.MessageId = SafeText(mail.MessageId, "message id").Trim().TrimStart('<').TrimEnd('>');
         message.Date = DateTimeOffset.UtcNow;
+        if (!string.IsNullOrWhiteSpace(mail.InReplyTo)) message.InReplyTo = Bare(SafeText(mail.InReplyTo, "in-reply-to id"));
+        foreach (var reference in mail.References ?? [])
+        {
+            if (!string.IsNullOrWhiteSpace(reference)) message.References.Add(Bare(SafeText(reference, "references id")));
+        }
 
         var body = new BodyBuilder { HtmlBody = mail.HtmlBody ?? string.Empty };
         foreach (var a in mail.Attachments)
@@ -58,6 +67,8 @@ public static class MimeBuilder
         message.Body = body.ToMessageBody();
         return message;
     }
+
+    private static string Bare(string id) => id.Trim().TrimStart('<').TrimEnd('>');
 
     private static MailboxAddress Mailbox(MailAddress a)
     {

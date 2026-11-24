@@ -56,6 +56,7 @@ public sealed class EmailSendJob(IDbConnectionFactory factory, CoreOperations co
 
     private const int MaxErrorLength = 2048;
     private const int MessageIdLength = 320;
+    private const int MaxReferences = 20;
     private const string Email = ActivitySchema.Email;
 
     private readonly ILogger _logger = (ILogger?)logger ?? NullLogger.Instance;
@@ -170,10 +171,11 @@ public sealed class EmailSendJob(IDbConnectionFactory factory, CoreOperations co
         CancellationToken ct)
     {
         string? subject, body, messageId;
+        Guid? parentId;
         int delivered;
         int? state, status;
         await using (var cmd = s.Command(
-                         $"SELECT statecode, statuscode, subject, description, messageid, deliveryattempts FROM {s.DataTable(Email)}" +
+                         $"SELECT statecode, statuscode, subject, description, messageid, deliveryattempts, parentactivityid FROM {s.DataTable(Email)}" +
                          $"{s.Dialect.LockHint(RowLock.UpdateRow)} WHERE activityid = @id{s.Dialect.LockClause(RowLock.UpdateRow)}"))
         {
             cmd.AddParameter("@id", DbType.Guid, emailId);
@@ -185,6 +187,7 @@ public sealed class EmailSendJob(IDbConnectionFactory factory, CoreOperations co
             body = rd.IsDBNull(3) ? null : rd.GetString(3);
             messageId = rd.IsDBNull(4) ? null : rd.GetString(4);
             delivered = rd.IsDBNull(5) ? 0 : rd.GetInt32(5);
+            parentId = rd.IsDBNull(6) ? null : rd.GetGuid(6);
         }
         if (state != 1 || status != MailSchema.EmailPendingSend)
             return new Ended($"The email {emailId} is no longer Pending Send (statecode {state}, statuscode {status}): nothing was sent.");
@@ -197,10 +200,11 @@ public sealed class EmailSendJob(IDbConnectionFactory factory, CoreOperations co
 
         try
         {
-            var ready = await ResolveAsync(s, run, emailId, subject, body, messageId, ct);
-            await using (var cmd = s.Command($"UPDATE {s.DataTable(Email)} SET messageid = @messageid, deliveryattempts = @attempts WHERE activityid = @id"))
+            var ready = await ResolveAsync(s, run, emailId, subject, body, messageId, parentId, ct);
+            await using (var cmd = s.Command($"UPDATE {s.DataTable(Email)} SET messageid = @messageid, inreplyto = COALESCE(@inreplyto, inreplyto), deliveryattempts = @attempts WHERE activityid = @id"))
             {
                 cmd.AddParameter("@messageid", DbType.String, ready.Mail.MessageId, MessageIdLength);
+                cmd.AddParameter("@inreplyto", DbType.String, ready.Mail.InReplyTo, MessageIdLength);
                 cmd.AddParameter("@attempts", DbType.Int32, attempts + 1);
                 cmd.AddParameter("@id", DbType.Guid, emailId);
                 await cmd.ExecuteNonQueryAsync(ct);
@@ -222,7 +226,7 @@ public sealed class EmailSendJob(IDbConnectionFactory factory, CoreOperations co
     /// <summary>The sender, its mailbox, profile and credentials, and the message to send.</summary>
     /// <exception cref="MailSetupException">Any of them does not allow the send.</exception>
     private async Task<Ready> ResolveAsync(DataSession s, AsyncOperationRun run, Guid emailId, string? subject, string? body,
-        string? storedMessageId, CancellationToken ct)
+        string? storedMessageId, Guid? parentId, CancellationToken ct)
     {
         var email = core.Store.GetEntity(Email) ?? throw new InvalidOperationException("The email table is not seeded.");
         var parties = (await core.Parties.ReadAsync(s, email, [emailId], ["from", "to", "cc", "bcc"], ct))[emailId];
@@ -238,9 +242,42 @@ public sealed class EmailSendJob(IDbConnectionFactory factory, CoreOperations co
 
         var messageId = string.IsNullOrWhiteSpace(storedMessageId) ? MimeBuilder.NewMessageId(mailbox.Address) : storedMessageId;
         if (messageId.Length > MessageIdLength) throw new MailSetupException($"The message id of the email is longer than {MessageIdLength} characters.");
+        var references = await ReferencesAsync(s, parentId, ct);
         var mail = new OutgoingMail(messageId, Address(mailbox.Address, $"The mailbox of {sender.LogicalName} {sender.Id}"),
-            Addresses(parties, "to"), Addresses(parties, "cc"), Addresses(parties, "bcc"), subject ?? "", body, []);
+            Addresses(parties, "to"), Addresses(parties, "cc"), Addresses(parties, "bcc"), subject ?? "", body, [],
+            references.Count > 0 ? references[^1] : null, references);
         return new Ready(mail, kind, profile, credentials, mailbox.Id);
+    }
+
+    /// <summary>
+    /// The Message-IDs of the conversation the email answers, oldest first, ending with the one of its parent (<paramref name="parentId"/>):
+    /// the parent's, then those of its ancestors (<c>parentactivityid</c> upward), at most <see cref="MaxReferences"/>. The walk stops at a
+    /// record that is not an email or has no message id, and at a loop. A parent without a message id gives none (no headers).
+    /// </summary>
+    private static async Task<IReadOnlyList<string>> ReferencesAsync(DataSession s, Guid? parentId, CancellationToken ct)
+    {
+        var chain = new List<string>();
+        var seen = new HashSet<Guid>();
+        var current = parentId;
+        while (current is { } id && chain.Count < MaxReferences && seen.Add(id))
+        {
+            string? messageId;
+            Guid? next;
+            await using (var cmd = s.Command($"SELECT messageid, parentactivityid FROM {s.DataTable(Email)} WHERE activityid = @id"))
+            {
+                cmd.AddParameter("@id", DbType.Guid, id);
+                await using var rd = await cmd.ExecuteReaderAsync(ct);
+                if (!await rd.ReadAsync(ct)) break;
+                messageId = rd.IsDBNull(0) ? null : rd.GetString(0);
+                next = rd.IsDBNull(1) ? null : rd.GetGuid(1);
+            }
+            if (string.IsNullOrWhiteSpace(messageId)) break;
+            chain.Add(messageId.Trim());
+            current = next;
+        }
+
+        chain.Reverse();
+        return chain;
     }
 
     /// <summary>

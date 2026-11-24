@@ -91,7 +91,7 @@ message name is taken by a custom API, and a custom API whose name is taken by a
 | Stage 30 | its plug-in type | the XAML, as the caller | nothing |
 | Privilege | `executeprivilegename` | none beyond those of the steps | none |
 | Response | completed to the declared properties | the outputs the XAML set | what the steps set |
-| Web API | an action or function in `$metadata` | not exposed (`POST /<name>` is 404) | not exposed |
+| Web API | an action or function in `$metadata` | an action in `$metadata` while activated (see [Calling an action](workflows.md#calling-an-action)) | not exposed |
 
 See [Classic workflows](workflows.md#actions) for the message name, the state rules and deletion of a XAML action.
 

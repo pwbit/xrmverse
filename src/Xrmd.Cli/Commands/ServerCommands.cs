@@ -826,7 +826,7 @@ public static partial class ServerCommands
     private static void RequireHttpsOrganizations(Installation installation)
     {
         foreach (var org in installation.Orgs)
-            if (!org.EffectiveAudience.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            if (Installation.SplitAudiences(org.EffectiveAudience).Any(a => !a.StartsWith("https://", StringComparison.OrdinalIgnoreCase)))
                 throw new CliException(ExitCodes.Usage,
                     $"--auth local requires an https URL for organization '{org.Name}' (its audience is {org.EffectiveAudience}): " +
                     "give it a public host with --domain or --public-host, behind the generated proxy or your own.");

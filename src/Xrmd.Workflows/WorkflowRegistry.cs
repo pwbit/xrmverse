@@ -3,7 +3,10 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
+using Xrmd.Core.Errors;
 using Xrmd.Metadata;
+using Xrmd.Pipeline.Workflows;
+using Xrmd.Workflows.Actions;
 using Xrmd.Workflows.Xaml;
 using S = Xrmd.Metadata.WorkflowSchema;
 
@@ -13,12 +16,15 @@ namespace Xrmd.Workflows;
 /// The activated processes (plan 2.14), process-wide: for every Activated definition, its activation row and parsed step tree.
 /// Read from the database on first use and again after <see cref="Invalidate"/>, which the pipeline calls after the commit of a
 /// transaction that wrote <c>workflow</c> or <c>processtrigger</c>. An activation whose XAML no longer parses is left out and logged.
+/// It also lists the activated XAML actions for the Web API (<see cref="IActivatedActions"/>, issue #343).
 /// </summary>
 public sealed class WorkflowRegistry(IServiceScopeFactory scopes, IDbConnectionFactory factory, ILogger<WorkflowRegistry>? logger = null)
+    : IActivatedActions
 {
     private readonly ILogger _logger = (ILogger?)logger ?? NullLogger.Instance;
     private readonly object _gate = new();
     private Task<Snapshot>? _loading;
+    private volatile IReadOnlyList<ActionDefinition> _currentActions = [];
 
     /// <summary>
     /// The message of an action definition (category 3, plan 2.14, W14): its name, the definition and its activation when it is
@@ -31,9 +37,13 @@ public sealed class WorkflowRegistry(IServiceScopeFactory scopes, IDbConnectionF
     public sealed record ActionMessage(string Message, Guid DefinitionId, string? Name, Guid? ActivationId);
 
     /// <summary>The activated processes, indexed by primary entity and by activation id, and the messages of the actions.</summary>
-    private sealed class Snapshot(IReadOnlyList<(WorkflowRow Row, WorkflowDefinition Definition)> all, IReadOnlyList<ActionMessage> actions)
+    private sealed class Snapshot(IReadOnlyList<(WorkflowRow Row, WorkflowDefinition Definition)> all, IReadOnlyList<ActionMessage> actions,
+        ILogger logger)
     {
         public IReadOnlyList<(WorkflowRow Row, WorkflowDefinition Definition)> All { get; } = all;
+
+        /// <summary>The activated actions (<see cref="IActivatedActions"/>), ordered by message name.</summary>
+        public IReadOnlyList<ActionDefinition> ActivatedActions { get; } = ActivatedActionsOf(all, actions, logger);
 
         public IReadOnlyDictionary<string, ActionMessage> Actions { get; } = actions
             .GroupBy(a => a.Message, StringComparer.OrdinalIgnoreCase)
@@ -46,6 +56,39 @@ public sealed class WorkflowRegistry(IServiceScopeFactory scopes, IDbConnectionF
 
         public IReadOnlyDictionary<Guid, (WorkflowRow Row, WorkflowDefinition Definition)> ById { get; } = all.ToDictionary(a => a.Row.Id);
     }
+
+    /// <summary>
+    /// The actions whose definition is Activated and whose activation is loaded, as the pipeline runs them
+    /// (<c>WorkflowPipelineHook.FindActionAsync</c>). An action with an argument of a type xrmverse does not support cannot have been
+    /// activated; should one be loaded anyway, it is left out and logged.
+    /// </summary>
+    private static IReadOnlyList<ActionDefinition> ActivatedActionsOf(IReadOnlyList<(WorkflowRow Row, WorkflowDefinition Definition)> all,
+        IReadOnlyList<ActionMessage> actions, ILogger logger)
+    {
+        var byId = all.ToDictionary(a => a.Row.Id);
+        var activated = new List<ActionDefinition>();
+        foreach (var action in actions.OrderBy(a => a.Message, StringComparer.Ordinal))
+        {
+            if (action.ActivationId is not { } id || !byId.TryGetValue(id, out var process)) continue;
+            try
+            {
+                var (inputs, outputs) = ActionMessages.Fields(process.Row, process.Definition);
+                activated.Add(new ActionDefinition(id, process.Row.Name ?? id.ToString(), action.Message, ActionMessages.BoundEntityOf(process.Row),
+                    inputs, outputs));
+            }
+            catch (XrmdFaultException ex)
+            {
+                logger.LogWarning("The action {Message} is left out of the Web API: {Reason}", action.Message, ex.Message);
+            }
+        }
+        return activated;
+    }
+
+    /// <inheritdoc/>
+    public async Task<IReadOnlyList<ActionDefinition>> GetAsync(CancellationToken ct) => (await SnapshotAsync(ct)).ActivatedActions;
+
+    /// <inheritdoc/>
+    public IReadOnlyList<ActionDefinition> Current => _currentActions;
 
     /// <summary>The activated processes (their activation rows), loaded on first use; blocks while they load.</summary>
     public IReadOnlyList<(WorkflowRow Row, WorkflowDefinition Definition)> Activated => GetActivatedAsync(CancellationToken.None).GetAwaiter().GetResult();
@@ -84,7 +127,11 @@ public sealed class WorkflowRegistry(IServiceScopeFactory scopes, IDbConnectionF
         lock (_gate) loading = _loading ??= LoadSnapshotAsync();
         try
         {
-            return await loading.WaitAsync(ct);
+            var snapshot = await loading.WaitAsync(ct);
+            // Current follows the snapshot in use: never one that an invalidation replaced while it loaded.
+            lock (_gate)
+                if (ReferenceEquals(_loading, loading)) _currentActions = snapshot.ActivatedActions;
+            return snapshot;
         }
         catch when (loading.IsFaulted)
         {
@@ -105,7 +152,7 @@ public sealed class WorkflowRegistry(IServiceScopeFactory scopes, IDbConnectionF
     internal static WorkflowDefinition Unparsable(WorkflowRow row, string reason) =>
         new(row.Category, row.PrimaryEntity, [], new SequenceStep("0", null, [new UnsupportedStep("0/0", "XAML", "Activity", $"its XAML does not parse ({reason})")]));
 
-    private async Task<Snapshot> LoadSnapshotAsync() => new(await LoadAsync(), await LoadActionsAsync());
+    private async Task<Snapshot> LoadSnapshotAsync() => new(await LoadAsync(), await LoadActionsAsync(), _logger);
 
     /// <summary>The messages of the action definitions (W14): a definition of category 3 with its <c>sdkmessageid</c> set.</summary>
     private async Task<IReadOnlyList<ActionMessage>> LoadActionsAsync()

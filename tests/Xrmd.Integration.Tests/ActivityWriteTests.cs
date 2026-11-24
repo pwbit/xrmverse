@@ -430,6 +430,36 @@ public sealed class ActivityWriteTests(XrmdFixture fx) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Regarding_of_closed_activity_can_be_set()
+    {
+        var account = await AccountAsync();
+        var ada = await ContactAsync("Ada");
+        var id = await Admin.CreateAsync(new Entity("email") { ["subject"] = "Received " + _run, ["regardingobjectid"] = account });
+        await SetStateAsync("email", id, 1, 4);
+
+        await Admin.UpdateAsync(new Entity("email", id) { ["regardingobjectid"] = ada });
+
+        var email = await Admin.RetrieveAsync("email", id, new ColumnSet("regardingobjectid", "statecode", "statuscode"));
+        email.GetAttributeValue<EntityReference>("regardingobjectid").Id.Should().Be(ada.Id);
+        email.GetAttributeValue<OptionSetValue>("statecode").Value.Should().Be(1);
+        email.GetAttributeValue<OptionSetValue>("statuscode").Value.Should().Be(4);
+        var pointer = await PointerRowAsync(id);
+        pointer!["regardingobjectid"].Should().Be(ada.Id);
+        pointer["regardingobjectidtype"].Should().Be(2);
+        pointer["statecode"].Should().Be(1);
+        pointer["statuscode"].Should().Be(4);
+
+        // Any other column in the same Update keeps the 400.
+        (await BadRequestAsync(() => Admin.UpdateAsync(new Entity("email", id) { ["regardingobjectid"] = account, ["subject"] = "changed" })))
+            .Should().Contain("subject");
+        (await PointerRowAsync(id))!["regardingobjectid"].Should().Be(ada.Id);
+
+        // Clearing the regarding is a change of regarding too.
+        await Admin.UpdateAsync(new Entity("email", id) { ["regardingobjectid"] = null });
+        (await PointerRowAsync(id))!["regardingobjectid"].Should().BeNull();
+    }
+
+    [Fact]
     public async Task Assign_of_closed_activity_is_allowed()
     {
         var user = await CreateUserAsync(fx, await RootBusinessUnitAsync(fx));

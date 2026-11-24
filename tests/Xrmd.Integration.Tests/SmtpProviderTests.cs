@@ -122,6 +122,21 @@ public sealed class SmtpProviderTests(GreenMailFixture mail) : IClassFixture<Gre
     }
 
     [Fact]
+    public async Task Send_Reply_ArrivesWithInReplyTo_AndReferences()
+    {
+        var rcpt = await GreenMail.NewUserAsync();
+        var message = MimeBuilder.Build(new OutgoingMail(
+            MimeBuilder.NewMessageId("sender@example.com"), new MailAddress("sender@example.com"), [new MailAddress(rcpt.Address)], [], [], "Re: thread", "x", [],
+            InReplyTo: "<two@customer.example>", References: ["<one@customer.example>", "<two@customer.example>"]));
+
+        await new SmtpMailProvider(allowInsecure: true).SendAsync(message, Profile(), Creds(), default);
+
+        var received = (await GreenMail.InboxAsync(rcpt)).Should().ContainSingle().Subject;
+        received.InReplyTo.Should().Be("two@customer.example");
+        received.References.Should().Equal("one@customer.example", "two@customer.example");
+    }
+
+    [Fact]
     public async Task ConnectionRefused_IsTransient()
     {
         using var probe = new TcpListener(IPAddress.Loopback, 0);

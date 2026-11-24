@@ -28,7 +28,7 @@ flowchart LR
 | Chosen solutions (unmanaged, and managed from their original file) | Microsoft first-party solutions |
 | Custom schema outside solutions (tables, columns, N:N, option values) | Rollup and formula columns outside the exported solutions, prompt columns, virtual tables, multi-table lookups (reported as `unsupported`) |
 | Business units, teams, users, memberships, roles, shares, field security assignments | Forms, views, charts, roles and processes outside the exported solutions (warning `default-solution-component`) |
-| Records with their ids, `createdon`, `createdby`, `modifiedon`, `modifiedby`, owner and business unit | Standard Dataverse tables xrmverse does not have (warning `table-not-in-xrmverse`) |
+| Records with their ids, `createdon`, `createdby`, `modifiedon`, `modifiedby`, `overriddencreatedon`, owner and business unit | Standard Dataverse tables xrmverse does not have (warning `table-not-in-xrmverse`) |
 | N:N rows, file and image columns, note attachments | Runtime tables (system jobs, logs, audit) |
 
 ### Compared with doing it by hand
@@ -378,9 +378,25 @@ reported as `share-not-shareable` (warning).
 #### What stays off
 
 Inside a run, records keep their exported ids, `createdon`, `createdby`, `modifiedon`, `modifiedby`,
-owner and business unit. No business logic runs: no plug-ins, workflows, business rules, duplicate detection,
+`overriddencreatedon`, owner and business unit. No business logic runs: no plug-ins, workflows, business rules, duplicate detection,
 auditing or webhooks. The plug-in steps, webhook steps and processes the package's solutions bring stay off after the
 run, until `xrmd migrate activate`.
+
+#### Record Created On (`overriddencreatedon`)
+
+Every table with `createdon` has `overriddencreatedon` ("Record Created On": Date only format, User local behaviour, valid
+for Create and read, not for Update), except `audit`. Tables of an organization made before the column get it at the
+next startup, once per table; their existing rows keep it empty.
+
+Outside a migration, a Create that gives it a date T stores T as `createdon` and the time of the Create as
+`overriddencreatedon`, as Learn describes for data import ("Import auditing data"). It needs the privilege
+`prvOverrideCreatedOnCreatedBy` (see [Security](security.md#record-created-on)). An Update, or an Upsert that reaches an
+existing row, ignores the column like every other column not valid for update: the stored value stays, no error is
+returned and no privilege is needed, so a retrieved record can be sent back and an Upsert load can run again.
+
+Inside a run, the exported record already has the right `createdon` (Dataverse applied the override when the record
+was created), so the import writes both columns as exported and checks no privilege. Before this column existed, a
+package value of `overriddencreatedon` was reported as a column the target lacks; it is now written.
 
 ### Verification
 

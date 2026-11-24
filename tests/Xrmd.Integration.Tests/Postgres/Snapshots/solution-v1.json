@@ -38,6 +38,7 @@
       "createdon",
       "modifiedby",
       "modifiedon",
+      "overriddencreatedon",
       "owningbusinessunit",
       "owningteam",
       "owninguser",

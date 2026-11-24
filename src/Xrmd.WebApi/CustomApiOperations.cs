@@ -29,8 +29,10 @@ internal static class CustomApiOperations
     private const string Ns = ODataEdmModelBuilder.Namespace;
 
     /// <param name="types">The entity types of the model by logical name.</param>
+    /// <param name="kind">What the warnings call an operation: <c>Custom API</c>, or <c>Action</c> for the activated XAML actions
+    /// (issue #343), declared the same way (<see cref="CustomApiEndpoints.AsCustomApi"/>).</param>
     public static void AddOperations(EdmModel model, EdmEntityContainer container, IReadOnlyDictionary<string, EdmEntityType> types,
-        IReadOnlyList<CustomApiDefinition> apis, Action<string> warn)
+        IReadOnlyList<CustomApiDefinition> apis, Action<string> warn, string kind = "Custom API")
     {
         var crmBase = (IEdmEntityType)model.FindDeclaredType($"{Ns}.crmbaseentity");
 
@@ -38,7 +40,7 @@ internal static class CustomApiOperations
         {
             if (string.IsNullOrEmpty(field.LogicalEntityName)) return crmBase;
             if (types.TryGetValue(field.LogicalEntityName, out var type)) return type;
-            warn($"Custom API '{api.UniqueName}': '{field.UniqueName}' names table '{field.LogicalEntityName}', which is not in the model; "
+            warn($"{kind} '{api.UniqueName}': '{field.UniqueName}' names table '{field.LogicalEntityName}', which is not in the model; "
                 + "it is typed as crmbaseentity in $metadata.");
             return crmBase;
         }
@@ -66,25 +68,25 @@ internal static class CustomApiOperations
             var bound = api.BindingType is 1 or 2;
             if (bound && (api.BoundEntity is null || !types.ContainsKey(api.BoundEntity)))
             {
-                warn($"Custom API '{api.UniqueName}' is bound to table '{api.BoundEntity}', which is not in the model; it is not in $metadata.");
+                warn($"{kind} '{api.UniqueName}' is bound to table '{api.BoundEntity}', which is not in the model; it is not in $metadata.");
                 continue;
             }
             if (Taken(api.UniqueName))
             {
-                warn($"Custom API '{api.UniqueName}' has the name of a type or operation of the model; it is not in $metadata.");
+                warn($"{kind} '{api.UniqueName}' has the name of a type or operation of the model; it is not in $metadata.");
                 continue;
             }
             // An unbound API adds an import to the container, whose members share one namespace with the entity sets.
             if (!bound && (container.FindEntitySet(api.UniqueName) is not null || container.FindSingleton(api.UniqueName) is not null
                            || container.FindOperationImports(api.UniqueName).Any()))
             {
-                warn($"Custom API '{api.UniqueName}' is global and has the name of an entity set of the model; it is not in $metadata.");
+                warn($"{kind} '{api.UniqueName}' is global and has the name of an entity set of the model; it is not in $metadata.");
                 continue;
             }
             var bindingParameter = api.BindingType == 1 ? "entity" : "entityset";
             if (bound && api.RequestParameters.FirstOrDefault(p => string.Equals(p.UniqueName, bindingParameter, StringComparison.OrdinalIgnoreCase)) is { } clash)
             {
-                warn($"Custom API '{api.UniqueName}' has a request parameter '{clash.UniqueName}', the name of its binding parameter '{bindingParameter}'; "
+                warn($"{kind} '{api.UniqueName}' has a request parameter '{clash.UniqueName}', the name of its binding parameter '{bindingParameter}'; "
                     + "it is not in $metadata.");
                 continue;
             }
@@ -93,7 +95,7 @@ internal static class CustomApiOperations
             var needsResponseType = properties.Count > 0 && properties is not [{ Type: CustomApiType.Entity or CustomApiType.EntityCollection }];
             if (needsResponseType && Taken(responseName))
             {
-                warn($"Custom API '{api.UniqueName}': its response type name '{responseName}' is taken by a type of the model; it is not in $metadata.");
+                warn($"{kind} '{api.UniqueName}': its response type name '{responseName}' is taken by a type of the model; it is not in $metadata.");
                 continue;
             }
 

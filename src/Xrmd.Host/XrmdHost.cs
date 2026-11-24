@@ -219,6 +219,8 @@ public static class XrmdHost
         // operations they write through, and the pipeline's hook. The engine is not registered: each run builds one on the executor
         // that runs it (the hook's, or the job handler's), since the executor depends on the hook.
         services.AddSingleton<Xrmd.Workflows.WorkflowRegistry>();
+        // Issue #343: the activated XAML actions the Web API calls and $metadata declares, read from the same registry.
+        services.AddSingleton<Xrmd.Pipeline.Workflows.IActivatedActions>(sp => sp.GetRequiredService<Xrmd.Workflows.WorkflowRegistry>());
         services.AddScoped<Xrmd.Workflows.WorkflowStore>();
         services.AddScoped<Xrmd.Workflows.Actions.ActionMessages>();
         services.AddScoped<Xrmd.Workflows.WorkflowActivation>();

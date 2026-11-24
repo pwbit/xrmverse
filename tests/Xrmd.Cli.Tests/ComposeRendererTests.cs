@@ -47,9 +47,9 @@ public class ComposeRendererTests : IDisposable
         ["SQL_CONNECTION=", "SQL_CONNECTION=Server=x;Database=xrmverse", "SQL_CONNECTION"],
         ["SQL_CONNECTION=\n", "", "SQL_CONNECTION"],
         ["XRMD_ORGS=acme,zenith", "XRMD_ORGS=acme,zenith\nXRMD_ORGS=acme", "XRMD_ORGS"],
-        // M10: the optional audience key of an org that is not listed, and any audience in dev mode (dev tokens use the profile Url as aud).
+        // M10: the optional audience key of an org that is not listed, and a dev-mode audience list without the profile URL (dev tokens use the profile Url as aud).
         ["XRMD_ORGS=acme,zenith", "XRMD_ORGS=acme,zenith\nORG_ORBIT_AUDIENCE=api://orbit", "ORG_ORBIT_AUDIENCE"],
-        ["ORG_ZENITH_AUDIENCE=", "ORG_ZENITH_AUDIENCE=http://localhost:5002/", "ORG_ZENITH_AUDIENCE"],
+        ["ORG_ZENITH_AUDIENCE=", "ORG_ZENITH_AUDIENCE=http://xrmd-zenith:5000/", "ORG_ZENITH_AUDIENCE"],
         // SQL_CONNECTION is empty or single-quoted, so that $ and # stay literal for Compose.
         ["SQL_CONNECTION=", "SQL_CONNECTION=\"Server=x;Password=a$b\"", "SQL_CONNECTION"],
         ["SQL_CONNECTION=", "SQL_CONNECTION=Server=x", "SQL_CONNECTION"],

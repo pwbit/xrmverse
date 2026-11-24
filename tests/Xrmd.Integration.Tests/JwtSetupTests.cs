@@ -1,6 +1,11 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
 using Microsoft.Extensions.Configuration;
+using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Tokens;
 using Xrmd.Host.Auth;
 
 namespace Xrmd.Integration.Tests;
@@ -69,5 +74,66 @@ public class JwtSetupTests
         var act = () => JwtSetup.Configure(o, cfg);
         act.Should().NotThrow();
         o.Events.OnChallenge.Should().NotBeNull();
+    }
+
+    private const string DevKey = DevTokenFactory.SigningKey; // allow-listed test vector (.gitleaks.toml)
+
+    private static JwtBearerOptions DevOptions(string audience)
+    {
+        var cfg = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Mode"] = "Development",
+            ["DevSigningKey"] = DevKey,
+            ["Audience"] = audience,
+        }).Build();
+        var o = new JwtBearerOptions();
+        JwtSetup.Configure(o, cfg);
+        return o;
+    }
+
+    private static bool Validates(JwtBearerOptions o, string audience)
+    {
+        var token = new JwtSecurityTokenHandler().WriteToken(new JwtSecurityToken(
+            JwtSetup.DevIssuer, audience, [new Claim("sub", "u")], expires: DateTime.UtcNow.AddMinutes(5),
+            signingCredentials: new SigningCredentials(new SymmetricSecurityKey(Encoding.UTF8.GetBytes(DevKey)), SecurityAlgorithms.HmacSha256)));
+        var handler = new JsonWebTokenHandler();
+        return handler.ValidateTokenAsync(token, o.TokenValidationParameters).GetAwaiter().GetResult().IsValid;
+    }
+
+    [Theory]
+    [InlineData("https://xrm.example.com/; http://xrmd:5000/")]
+    [InlineData("https://xrm.example.com , http://xrmd:5000")]
+    public void Several_audiences_each_validate_and_a_third_does_not(string configured)
+    {
+        var o = DevOptions(configured);
+        Validates(o, "https://xrm.example.com/").Should().BeTrue();
+        Validates(o, "https://xrm.example.com").Should().BeTrue();
+        Validates(o, "http://xrmd:5000/").Should().BeTrue();
+        Validates(o, "http://xrmd:5000").Should().BeTrue();
+        Validates(o, "https://other.example.com/").Should().BeFalse();
+        Validates(o, "http://xrmd").Should().BeFalse();
+        Validates(o, "*").Should().BeFalse();
+    }
+
+    [Fact]
+    public void One_audience_and_empty_entries_behave_as_a_single_value()
+    {
+        var o = DevOptions(";https://xrm.example.com/;, ;");
+        o.TokenValidationParameters.ValidAudiences.Should().BeEquivalentTo("https://xrm.example.com", "https://xrm.example.com/");
+    }
+
+    [Fact]
+    public void Local_mode_uses_the_first_audience_and_refuses_an_http_value_in_the_list()
+    {
+        IConfiguration Cfg(string a) => new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Mode"] = "Local",
+            ["Audience"] = a,
+        }).Build();
+
+        JwtSetup.LocalAudience(Cfg("https://a.example.com; https://b/")).Should().Be("https://a.example.com/");
+        var act = () => JwtSetup.LocalAudience(Cfg("https://a.example.com;http://xrmd:5000/"));
+        act.Should().Throw<InvalidOperationException>().WithMessage("*Auth:Audience must be an https URL when Auth:Mode is Local.*");
+        JwtSetup.AuthorizeUri(Cfg("https://a.example.com;https://b/")).Should().Be("https://a.example.com/adfs/oauth2/authorize");
     }
 }

@@ -313,6 +313,14 @@ public sealed class CliOrgUserTests(XrmdFixture fx) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task User_add_table_output_names_the_systemuserid_and_the_object_id()
+    {
+        var oid = Guid.NewGuid();
+        (await RunAsync("user", "add", "--object-id", oid.ToString(), "--name", "Table Mode")).Should().Be(0, _err.ToString());
+        _out.ToString().Should().MatchRegex($@"Created user [0-9a-f-]{{36}} \(object id {oid}\)\.");
+    }
+
+    [Fact]
     public async Task User_add_then_role_assign_gives_access_on_next_request()
     {
         var oid = Guid.NewGuid();

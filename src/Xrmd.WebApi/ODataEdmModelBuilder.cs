@@ -5,6 +5,7 @@ using Xrmd.Abstractions;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Sdk;
 using Xrmd.Pipeline.CustomApis;
+using Xrmd.Pipeline.Workflows;
 
 namespace Xrmd.WebApi;
 
@@ -15,17 +16,20 @@ namespace Xrmd.WebApi;
 /// <c>_{name}_value</c> <c>Edm.Guid</c> property plus a single-valued navigation property (<see cref="NavigationName"/>) to the first
 /// target that exists; a Customer column has one navigation property per target (<see cref="NavigationNames"/>). The metadata entity sets (<c>EntityDefinitions</c>, <c>GlobalOptionSetDefinitions</c>,
 /// <c>RelationshipDefinitions</c>) and the solution actions and function of <see cref="ActionController"/> are declared too.
-/// The custom APIs of <see cref="CustomApiRegistry.Current"/> are declared by <see cref="CustomApiOperations"/>.
+/// The custom APIs of <see cref="CustomApiRegistry.Current"/> are declared by <see cref="CustomApiOperations"/>, then the activated
+/// XAML actions of <see cref="IActivatedActions.Current"/> the same way (issue #343).
 /// The entity sets of the tracked tables (<see cref="EntityMetadata.ChangeTrackingEnabled"/>, plan 2.13) carry the
 /// <c>Org.OData.Capabilities.V1.ChangeTracking</c> annotation with <c>Supported</c> true.
-/// The model is cached and rebuilt when <see cref="IMetadataStore.VersionStamp"/> or the generation of the custom APIs changes.
+/// The model is cached and rebuilt when <see cref="IMetadataStore.VersionStamp"/>, the generation of the custom APIs or the list of
+/// the activated actions changes.
 /// </summary>
-public sealed class ODataEdmModelBuilder(IMetadataStore store, CustomApiRegistry customApis, ILogger<ODataEdmModelBuilder>? logger = null)
+public sealed class ODataEdmModelBuilder(IMetadataStore store, CustomApiRegistry customApis, ILogger<ODataEdmModelBuilder>? logger = null,
+    IActivatedActions? actions = null)
 {
     public const string Namespace = "Microsoft.Dynamics.CRM";
     public const string ContainerName = "System";
 
-    private sealed record Snapshot(long VersionStamp, int ApiGeneration, IEdmModel Model);
+    private sealed record Snapshot(long VersionStamp, int ApiGeneration, IReadOnlyList<ActionDefinition> Actions, IEdmModel Model);
 
     private volatile Snapshot? _snapshot;
 
@@ -33,14 +37,19 @@ public sealed class ODataEdmModelBuilder(IMetadataStore store, CustomApiRegistry
     {
         // Read the stamp before the entities: the store publishes entities before bumping the stamp, so a model built
         // here is never older than the stamp it is cached under.
-        // The custom APIs are read once, with the generation of the snapshot they come from; the pair is the cache key.
+        // The custom APIs are read once, with the generation of the snapshot they come from; the pair is the cache key, with the
+        // list of the activated actions (a new instance at each load of the activated processes).
         var stamp = store.VersionStamp;
         var (generation, apis) = customApis.Current;
+        var xamlActions = actions?.Current ?? [];
         var snapshot = _snapshot;
-        if (snapshot is not null && snapshot.VersionStamp == stamp && snapshot.ApiGeneration == generation) return snapshot.Model;
+        if (snapshot is not null && snapshot.VersionStamp == stamp && snapshot.ApiGeneration == generation
+            && ReferenceEquals(snapshot.Actions, xamlActions))
+            return snapshot.Model;
 
-        var model = Create(store.GetAllEntities(), store.GetOneToManyRelationships(), apis, message => logger?.LogWarning("{Message}", message));
-        _snapshot = new Snapshot(stamp, generation, model);
+        var model = Create(store.GetAllEntities(), store.GetOneToManyRelationships(), apis, xamlActions,
+            message => logger?.LogWarning("{Message}", message));
+        _snapshot = new Snapshot(stamp, generation, xamlActions, model);
         return model;
     }
 
@@ -98,7 +107,7 @@ public sealed class ODataEdmModelBuilder(IMetadataStore store, CustomApiRegistry
     }
 
     private static EdmModel Create(IReadOnlyList<EntityMetadata> entities, IReadOnlyList<OneToManyRelationshipMetadata> relationships,
-        IReadOnlyList<CustomApiDefinition> customApiDefinitions, Action<string> warn)
+        IReadOnlyList<CustomApiDefinition> customApiDefinitions, IReadOnlyList<ActionDefinition> xamlActions, Action<string> warn)
     {
         var model = new EdmModel();
         var container = new EdmEntityContainer(Namespace, ContainerName);
@@ -178,6 +187,8 @@ public sealed class ODataEdmModelBuilder(IMetadataStore store, CustomApiRegistry
         QueueActions.AddOperations(model, container, types); // after ActionController's: it uses crmbaseentity
         FunctionController.AddFormOperations(model, container, types); // after ActionController's: it uses crmbaseentity
         CustomApiOperations.AddOperations(model, container, types, customApiDefinitions, warn); // last: it uses crmbaseentity
+        // The activated XAML actions after the custom APIs: a custom API keeps its name (they cannot share one anyway).
+        CustomApiOperations.AddOperations(model, container, types, xamlActions.Select(CustomApiEndpoints.AsCustomApi).ToList(), warn, "Action");
         return model;
     }
 

@@ -36,6 +36,35 @@ public sealed class MimeBuilderTests
     }
 
     [Fact]
+    public void Build_SetsInReplyTo_AndReferences_WithoutBrackets()
+    {
+        var m = MimeBuilder.Build(Mail() with { InReplyTo = "<p2@example.com>", References = ["<p1@example.com>", "p2@example.com"] });
+
+        m.InReplyTo.Should().Be("p2@example.com");
+        m.Headers["In-Reply-To"].Should().Be("<p2@example.com>");
+        m.References.Should().Equal("p1@example.com", "p2@example.com");
+        m.Headers["References"].Should().Contain("<p1@example.com>").And.Contain("<p2@example.com>");
+    }
+
+    [Fact]
+    public void Build_WithoutReply_SetsNeitherHeader()
+    {
+        var m = MimeBuilder.Build(Mail());
+
+        m.InReplyTo.Should().BeNull();
+        m.References.Should().BeEmpty();
+        m.Headers.Contains("In-Reply-To").Should().BeFalse();
+        m.Headers.Contains("References").Should().BeFalse();
+    }
+
+    [Fact]
+    public void InReplyTo_WithLineBreak_IsRefused()
+    {
+        var act = () => MimeBuilder.Build(Mail() with { InReplyTo = "<a@b>\r\nBcc: x@example.net" });
+        act.Should().Throw<MailSendException>();
+    }
+
+    [Fact]
     public void NewMessageId_UsesSenderDomain()
     {
         var id = MimeBuilder.NewMessageId("sales@contoso.example.com");

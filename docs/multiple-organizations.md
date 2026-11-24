@@ -74,7 +74,7 @@ without that header is never overwritten (exit 5; `server init --force` replaces
 | `XRMD_ORGS` | the organizations, comma-separated, in creation order |
 | `ORG_<ORG>_PORT` | host port of the organization (`<ORG>` is the name in upper case), mapped to container port 5000 |
 | `ORG_<ORG>_ADMIN_OBJECT_ID` | object id (GUID) of the organization's initial System Administrator (`Seed:AdminObjectId`) |
-| `ORG_<ORG>_AUDIENCE` | optional; empty = `http://localhost:<port>/`. With `AUTH_MODE=Entra`, the API's Application ID URI for that organization (`Auth:Audience`). Must be empty with `AUTH_MODE=Development` (dev tokens carry the profile URL as audience) |
+| `ORG_<ORG>_AUDIENCE` | optional; empty = `http://localhost:<port>/`. With `AUTH_MODE=Entra`, the API's Application ID URI for that organization (`Auth:Audience`; several values may be listed, see [Several audiences](#several-audiences)). With `AUTH_MODE=Development` it must be empty or a list that includes the profile URL (dev tokens carry the profile URL as audience) |
 | `ORG_<ORG>_TDS_PORT` | optional; the host port of the organization's read-only SQL endpoint (`--tds-port`), `AUTH_MODE=Local` only. See [SQL endpoint](sql-endpoint.md) |
 | `SQL_CONNECTION` | empty for the bundled `sqlserver` service, or an external SQL Server (see below), single-quoted |
 | `SQL_BACKUP_DIRECTORY` | with an external SQL Server: its backup directory, as a path on the SQL Server host (empty = `/var/opt/mssql/backup`) |
@@ -268,6 +268,29 @@ The whole procedure, certificates, DNS and configurations for nginx, Traefik and
 
 Then create the DNS records `init` printed (or one per host), and with Entra change each API's Application ID URI to
 `https://<host>` (or keep `ORG_<ORG>_AUDIENCE`) and sign in again with `--url https://<host>/`.
+
+### Several audiences
+
+`ORG_<ORG>_AUDIENCE` (`Auth:Audience`) may list several values separated by `;` or `,`; spaces around a value are
+trimmed and empty entries are ignored. A token whose audience is any listed value is accepted, with or without a
+trailing `/`; a token for any other audience is refused (there is no wildcard, also in `Entra` mode). The first value
+is the primary one: it is the audience of the tokens the server issues, the resource named in the 401 challenge and
+the audience the web admin shows. One value behaves as before. Every value must be an absolute URI; with
+`AUTH_MODE=Local` every value must be an `https` URL. The value is passed through to the container unchanged (the
+compose file quotes it, so `;` is safe).
+
+With `AUTH_MODE=Development` the list must include the organization's profile URL (the URL `xrmd` clients use:
+`http://localhost:<port>/`, or `https://<host>/` with a public host), because the CLI's dev tokens carry it as their
+audience. This lets a container on the compose network call the server by its internal name with a dev token whose
+audience is that name:
+
+```
+ORG_ACME_AUDIENCE=http://localhost:5001/;http://xrmd-acme:5000/
+```
+
+With `AUTH_MODE=Entra`, list the API's Application ID URI plus the other values. Entra issues tokens for the
+Application ID URI of the API, so a token is only accepted if it carries one of the listed values as its `aud`; an
+extra internal name only helps when something issues tokens with that audience.
 
 ## Known limits
 

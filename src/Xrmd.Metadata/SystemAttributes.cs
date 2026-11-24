@@ -4,13 +4,19 @@ namespace Xrmd.Metadata;
 
 /// <summary>
 /// Attributes every entity gets besides the caller's ones: primary key <c>{logicalname}id</c>, the system columns
-/// (createdon/by, modifiedon/by, owninguser/team/businessunit, statecode, statuscode, versionnumber; an elastic table
+/// (createdon/by, modifiedon/by, owninguser/team/businessunit, statecode, statuscode, versionnumber, overriddencreatedon; an elastic table
 /// has <c>partitionid</c> and <c>ttlinseconds</c> instead of the state columns),
 /// <c>ownerid</c> for user/team-owned entities and the <c>_base</c> companion of each money attribute.
 /// </summary>
 public static partial class SystemAttributes
 {
     private const int English = 1033;
+
+    /// <summary>
+    /// <c>overriddencreatedon</c> ("Record Created On", #343.5): given on Create, it becomes the record's <c>createdon</c> and the
+    /// column itself holds the time of the Create (Learn: "Import auditing data").
+    /// </summary>
+    public const string OverriddenCreatedOnName = "overriddencreatedon";
 
     public static string PrimaryIdName(TableDefinition e) => e.PrimaryIdAttribute ?? PrimaryIdName(e.LogicalName!);
 
@@ -26,6 +32,7 @@ public static partial class SystemAttributes
     {
         "createdon", "createdby", "modifiedon", "modifiedby", "owninguser", "owningteam", "owningbusinessunit",
         "statecode", "statuscode", TypeMapping.VersionNumber, "ownerid", "ownerid" + TypeMapping.TypeColumnSuffix,
+        OverriddenCreatedOnName,
     };
 
     /// <summary>
@@ -118,6 +125,41 @@ public static partial class SystemAttributes
         IsValidForCreate = true,
         IsValidForUpdate = true,
     };
+
+    /// <summary>
+    /// <c>overriddencreatedon</c> (#343.5): DateTime, format DateOnly, behavior UserLocal, not required, valid for Create and Read
+    /// only (Learn: the column of "Import auditing data"). Every table with <c>createdon</c> has it but the audit table.
+    /// </summary>
+    public static DateTimeColumn OverriddenCreatedOn() => new()
+    {
+        LogicalName = OverriddenCreatedOnName,
+        SchemaName = "OverriddenCreatedOn",
+        DisplayName = EnglishLabel("Record Created On"),
+        Format = DateTimeDisplayFormat.DateOnly,
+        DateTimeBehavior = ModelFactory.Behavior(DateTimeBehaviors.UserLocal),
+        RequiredLevel = ModelFactory.Required(RequirementLevel.None),
+        IsValidForCreate = true,
+        IsValidForUpdate = false,
+    };
+
+    /// <summary>
+    /// True for a table made before <c>overriddencreatedon</c> that should have it: it has <c>createdon</c>, is not the audit table,
+    /// and has no attribute of that name.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The table holds an attribute named <c>overriddencreatedon</c> that is not a DateTime.</exception>
+    public static bool NeedsOverriddenCreatedOn(TableDefinition e)
+    {
+        ArgumentNullException.ThrowIfNull(e);
+        var attributes = e.Attributes ?? [];
+        if (e.LogicalName == AuditTable.Name || attributes.All(a => a.LogicalName != "createdon")) return false;
+        return attributes.FirstOrDefault(a => a.LogicalName == OverriddenCreatedOnName) switch
+        {
+            null => true,
+            DateTimeColumn => false,
+            var clash => throw new InvalidOperationException(
+                $"Entity '{e.LogicalName}' has an attribute '{clash.LogicalName}' that is not the system column Record Created On: it cannot be added."),
+        };
+    }
 
     /// <summary>Primary key attribute <c>{entityLogicalName}id</c>.</summary>
     public static UniqueIdentifierColumn PrimaryIdColumn(string entityLogicalName, string? logicalName = null)
@@ -235,6 +277,7 @@ public static partial class SystemAttributes
         yield return StateCode();
         yield return StatusCode();
         yield return ReadOnly(new BigIntColumn { SchemaName = "VersionNumber", LogicalName = TypeMapping.VersionNumber }, "Version Number");
+        yield return OverriddenCreatedOn();
     }
 
     /// <summary>A single-language label with <c>UserLocalizedLabel</c> set, as the Web API returns it.</summary>

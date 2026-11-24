@@ -294,7 +294,7 @@ public sealed class WebhookDeliveryTests(XrmdFixture fx) : IAsyncLifetime
         var fault = await FaultAsync(() => Admin.CreateAsync(new Entity("account", id) { ["name"] = "Brackwater Mills" }));
 
         fault.HttpStatus.Should().Be(500);
-        fault.ErrorCode.Should().Be(ErrorCodes.UnexpectedPluginException);
+        fault.ErrorCode.Should().Be(ErrorCodes.WebhooksNonSuccessHttpResponse);
         fault.Message.Should().StartWith("Endpoint unavailable: webhook 'delivery hook' returned 400").And.NotContain(Secret);
         receiver.Requests.Should().ContainSingle();
         (await AccountCountAsync(id)).Should().Be(0);

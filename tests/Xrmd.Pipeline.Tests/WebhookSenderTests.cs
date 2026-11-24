@@ -123,9 +123,23 @@ public class WebhookSenderTests
         var failure = (await act.Should().ThrowAsync<PluginExecutionException>()).Which;
         handler.Requests.Should().HaveCount(2);
         failure.Unexpected.Should().BeTrue();
-        failure.Fault.ErrorCode.Should().Be(ErrorCodes.UnexpectedPluginException);
+        failure.Fault.ErrorCode.Should().Be(ErrorCodes.WebhooksNonSuccessHttpResponse);
         failure.Fault.HttpStatus.Should().Be(500);
         failure.Message.Should().Be("Endpoint unavailable: webhook 'Order hook' returned 502 Bad Gateway.");
+    }
+
+    [Fact]
+    public async Task Fails_on_409_with_the_status_in_the_message()
+    {
+        var (sender, handler, _) = Create(Statuses(HttpStatusCode.Conflict));
+
+        var act = () => sender.SendAsync(Endpoint("https://hooks.example.test/in"), Context(), "contoso", CancellationToken.None);
+
+        var failure = (await act.Should().ThrowAsync<PluginExecutionException>()).Which;
+        handler.Requests.Should().ContainSingle();
+        failure.Fault.ErrorCode.Should().Be(unchecked((int)0x80050201));
+        failure.Fault.HttpStatus.Should().Be(500);
+        failure.Message.Should().Contain("409").And.Contain("returned 409 Conflict");
     }
 
     [Fact]
@@ -139,6 +153,7 @@ public class WebhookSenderTests
         handler.Requests.Should().ContainSingle();
         failure.Unexpected.Should().BeFalse();
         failure.Message.Should().Be("Endpoint unavailable: webhook 'Order hook' returned 400 Bad Request.");
+        failure.Fault.ErrorCode.Should().Be(unchecked((int)0x80050201));
     }
 
     [Theory]
@@ -155,6 +170,7 @@ public class WebhookSenderTests
         handler.Requests.Should().ContainSingle();
         failure.Unexpected.Should().BeTrue();
         failure.Message.Should().Be($"Endpoint unavailable: webhook 'Order hook' returned {returned}.");
+        failure.Fault.ErrorCode.Should().Be(unchecked((int)0x80050201));
     }
 
     [Fact]
@@ -277,6 +293,8 @@ public class WebhookSenderTests
         var failure = (await act.Should().ThrowAsync<PluginExecutionException>()).Which;
         failure.Unexpected.Should().BeTrue();
         failure.Message.Should().Be("Endpoint unavailable: webhook 'Order hook' did not answer within 1 s.");
+        failure.Fault.ErrorCode.Should().Be(unchecked((int)0x80050205));
+        failure.Fault.HttpStatus.Should().Be(500);
     }
 
     [Fact]
@@ -306,6 +324,7 @@ public class WebhookSenderTests
         handler.Requests.Should().ContainSingle();
         failure.Unexpected.Should().BeTrue();
         failure.Message.Should().Be("Endpoint unavailable: webhook 'Order hook' could not be reached (ConnectionError).");
+        failure.Fault.ErrorCode.Should().Be(unchecked((int)0x80050205));
     }
 
     [Fact]

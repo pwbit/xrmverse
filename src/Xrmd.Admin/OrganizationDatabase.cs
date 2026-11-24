@@ -188,6 +188,9 @@ public static class OrganizationDatabase
             services.GetService<Microsoft.Extensions.Logging.ILoggerFactory>()?.CreateLogger(nameof(DuplicateDetectionSettingsUpgrade)));
         await CurrencyColumnsUpgrade.EnsureAsync(services.GetRequiredService<IMetadataStore>(), services.GetRequiredService<IDbConnectionFactory>(), ct,
             services.GetService<Microsoft.Extensions.Logging.ILoggerFactory>()?.CreateLogger(nameof(CurrencyColumnsUpgrade)));
+        // #343.5: overriddencreatedon on the tables made before it.
+        await OverriddenCreatedOnUpgrade.EnsureAsync(services.GetRequiredService<IMetadataStore>(), ct,
+            services.GetService<Microsoft.Extensions.Logging.ILoggerFactory>()?.CreateLogger(nameof(OverriddenCreatedOnUpgrade)));
         await ActivitySettingsUpgrade.EnsureAsync(services.GetRequiredService<IMetadataStore>(), services.GetRequiredService<IDbConnectionFactory>(), ct,
             services.GetService<Microsoft.Extensions.Logging.ILoggerFactory>()?.CreateLogger(nameof(ActivitySettingsUpgrade)));
         await QueueSettingsUpgrade.EnsureAsync(services.GetRequiredService<IMetadataStore>(), services.GetRequiredService<IDbConnectionFactory>(), ct,

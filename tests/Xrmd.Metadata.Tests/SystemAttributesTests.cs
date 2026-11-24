@@ -17,13 +17,52 @@ public class SystemAttributesTests
             "pb_xid", "pb_amount", "pb_amount_base", "transactioncurrencyid", "exchangerate",
             "createdon", "createdby", "modifiedon", "modifiedby",
             "owninguser", "owningteam", "owningbusinessunit",
-            "statecode", "statuscode", "versionnumber", "ownerid");
+            "statecode", "statuscode", "versionnumber", "overriddencreatedon", "ownerid");
         attrs[0].IsPrimaryId.Should().BeTrue();
         attrs[0].AttributeType.Should().Be(AttributeTypeCode.Uniqueidentifier);
         attrs.Single(a => a.LogicalName == "ownerid").AttributeType.Should().Be(AttributeTypeCode.Owner);
         attrs.Single(a => a.LogicalName == "pb_amount_base").Should().BeOfType<MoneyAttributeMetadata>()
             .Which.IsBaseCurrency.Should().BeTrue();
         attrs.Should().OnlyContain(a => a.EntityLogicalName == "pb_x" || a.LogicalName == "pb_amount");
+    }
+
+    /// <summary>#343.5: Record Created On, given on Create only (Learn: the column of "Import auditing data").</summary>
+    [Fact]
+    public void Overridden_created_on_is_a_create_only_date()
+    {
+        var a = SystemAttributes.Complete(new EntityMetadata { LogicalName = "pb_x", OwnershipType = OwnershipTypes.OrganizationOwned }, [])
+            .Single(x => x.LogicalName == "overriddencreatedon").Should().BeOfType<DateTimeAttributeMetadata>().Subject;
+
+        (a.SchemaName, a.Format, a.DateTimeBehavior.Value, a.IsValidForCreate, a.IsValidForUpdate, a.RequiredLevel.Value)
+            .Should().Be(("OverriddenCreatedOn", DateTimeFormat.DateOnly, DateTimeBehavior.UserLocal.Value, true, false, AttributeRequiredLevel.None));
+        a.DisplayName.UserLocalizedLabel.Label.Should().Be("Record Created On");
+        SystemAttributes.IsReservedName("pb_x", "overriddencreatedon").Should().BeTrue();
+    }
+
+    [Fact]
+    public void Audit_table_has_no_overridden_created_on() =>
+        SystemAttributes.Complete(new EntityMetadata { LogicalName = AuditTable.Name, OwnershipType = OwnershipTypes.OrganizationOwned }, [])
+            .Select(a => a.LogicalName).Should().NotContain("overriddencreatedon");
+
+    /// <summary>#343.5: the upgrade adds the column to a table with createdon that lacks it, never to audit, and stops on a clash.</summary>
+    [Fact]
+    public void Needs_overridden_created_on_skips_audit_and_refuses_a_clash()
+    {
+        Xrmd.Model.Metadata.TableDefinition Table(string name, params Xrmd.Model.Metadata.ColumnDefinition[] attributes)
+        {
+            var e = new Xrmd.Model.Metadata.TableDefinition { LogicalName = name };
+            e.SetAttributes(attributes);
+            return e;
+        }
+        var createdOn = new Xrmd.Model.Metadata.DateTimeColumn { LogicalName = "createdon" };
+
+        SystemAttributes.NeedsOverriddenCreatedOn(Table("pb_x", createdOn)).Should().BeTrue();
+        SystemAttributes.NeedsOverriddenCreatedOn(Table(AuditTable.Name, createdOn)).Should().BeFalse();
+        SystemAttributes.NeedsOverriddenCreatedOn(Table("pb_x")).Should().BeFalse("a table without createdon gets none");
+        SystemAttributes.NeedsOverriddenCreatedOn(Table("pb_x", createdOn, SystemAttributes.OverriddenCreatedOn())).Should().BeFalse();
+        FluentActions.Invoking(() => SystemAttributes.NeedsOverriddenCreatedOn(
+                Table("pb_x", createdOn, new Xrmd.Model.Metadata.TextColumn { LogicalName = "overriddencreatedon" })))
+            .Should().Throw<InvalidOperationException>();
     }
 
     [Fact]

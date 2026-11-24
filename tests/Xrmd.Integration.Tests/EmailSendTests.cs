@@ -50,7 +50,8 @@ public sealed class EmailSendTests(XrmdFixture fx) : IAsyncLifetime
     // ---- the recording provider ----
 
     private sealed record SentMail(string? From, IReadOnlyList<string> To, string Subject, string MessageId,
-        IReadOnlyList<(string Name, string Content)> Attachments, MailProfile Profile, MailCredentials Credentials);
+        IReadOnlyList<(string Name, string Content)> Attachments, MailProfile Profile, MailCredentials Credentials,
+        string? InReplyTo = null, IReadOnlyList<string>? References = null);
 
     private sealed class FakeProvider : IMailProvider
     {
@@ -69,7 +70,7 @@ public sealed class EmailSendTests(XrmdFixture fx) : IAsyncLifetime
                 attachments.Add((part.FileName ?? "", Encoding.UTF8.GetString(ms.ToArray())));
             }
             Calls.Add(new SentMail(message.From.Mailboxes.FirstOrDefault()?.Address, [.. message.To.Mailboxes.Select(m => m.Address)],
-                message.Subject ?? "", message.MessageId ?? "", attachments, profile, credentials));
+                message.Subject ?? "", message.MessageId ?? "", attachments, profile, credentials, message.InReplyTo, [.. message.References]));
             if (After is { } after) await after(Calls.Count);
         }
 
@@ -425,6 +426,110 @@ public sealed class EmailSendTests(XrmdFixture fx) : IAsyncLifetime
         var pointer = await TestSql.ScalarAsync(fx.ConnectionString, "SELECT statuscode FROM data.activitypointer WHERE activityid = @id", ("@id", email));
         Convert.ToInt32(pointer).Should().Be(3);
         run.CompletionMessage.Should().BeNull();
+    }
+
+    /// <summary>A received email (with <paramref name="messageId"/>, none when null) answering <paramref name="parent"/>, as the importer stores it.</summary>
+    private Sender? _replier;
+
+    /// <summary>The user who answers: ready to send, and the owner of the received emails, so that they can be appended to.</summary>
+    private async Task<Sender> ReplierAsync()
+    {
+        if (_replier is not null) return _replier;
+        var sender = await SenderAsync();
+        await ReadyAsync("systemuser", sender.Id, await ProfileAsync());
+        return _replier = sender;
+    }
+
+    private async Task<Guid> ReceivedAsync(string? messageId, Guid? parent = null)
+    {
+        var owner = await ReplierAsync();
+        var received = new Entity("email") { ["subject"] = "Received " + _tag };
+        if (messageId is not null) received["messageid"] = messageId;
+        if (parent is { } p) received["parentactivityid"] = new EntityReference("email", p);
+        return await owner.Service.CreateAsync(received);
+    }
+
+    private async Task<(FakeProvider Fake, Guid Email)> SendReplyAsync(Guid parent)
+    {
+        var sender = await ReplierAsync();
+        var reply = await sender.Service.CreateAsync(new Entity("email")
+        {
+            ["subject"] = "Re: " + _tag, ["description"] = "<p>Hi</p>", ["to"] = Parties(Party(await ContactAsync("Grace"))),
+            ["parentactivityid"] = new EntityReference("email", parent),
+        });
+        await sender.Service.ExecuteAsync(Send(reply, issueSend: true));
+        var fake = new FakeProvider();
+        await RunAsync(reply, fake);
+        return (fake, reply);
+    }
+
+    [Fact]
+    public async Task Job_Reply_CarriesInReplyTo_AndReferences_AndStoresInReplyTo()
+    {
+        var parent = await ReceivedAsync($"<parent.{_tag}@customer.example>");
+
+        var (fake, reply) = await SendReplyAsync(parent);
+
+        var sent = fake.Calls.Should().ContainSingle().Subject;
+        sent.InReplyTo.Should().Be($"parent.{_tag}@customer.example");
+        sent.References.Should().Equal($"parent.{_tag}@customer.example");
+        (await EmailColumnAsync(reply, "inreplyto")).Should().Be($"<parent.{_tag}@customer.example>");
+    }
+
+    [Fact]
+    public async Task Job_NoParent_KeepsAHandSetInReplyTo()
+    {
+        var sender = await ReplierAsync();
+        var email = await sender.Service.CreateAsync(new Entity("email")
+        {
+            ["subject"] = "Hand " + _tag, ["description"] = "<p>Hi</p>", ["to"] = Parties(Party(await ContactAsync("Grace"))),
+            ["inreplyto"] = $"<hand.{_tag}@customer.example>",
+        });
+        await sender.Service.ExecuteAsync(Send(email, issueSend: true));
+        var fake = new FakeProvider();
+        await RunAsync(email, fake);
+
+        fake.Calls.Should().ContainSingle().Subject.InReplyTo.Should().BeNull();
+        (await EmailColumnAsync(email, "inreplyto")).Should().Be($"<hand.{_tag}@customer.example>");
+    }
+
+    [Fact]
+    public async Task Job_Reply_ParentWithoutMessageId_SendsWithoutHeaders()
+    {
+        var parent = await ReceivedAsync(null);
+
+        var (fake, reply) = await SendReplyAsync(parent);
+
+        var sent = fake.Calls.Should().ContainSingle().Subject;
+        sent.InReplyTo.Should().BeNull();
+        sent.References.Should().BeEmpty();
+        (await EmailColumnAsync(reply, "inreplyto")).Should().BeOneOf(null, DBNull.Value);
+    }
+
+    [Fact]
+    public async Task Job_Reply_ChainOfThree_ReferencesOldestFirst()
+    {
+        var first = await ReceivedAsync($"<m1.{_tag}@customer.example>");
+        var second = await ReceivedAsync($"<m2.{_tag}@customer.example>", first);
+        var third = await ReceivedAsync($"<m3.{_tag}@customer.example>", second);
+
+        var (fake, _) = await SendReplyAsync(third);
+
+        var sent = fake.Calls.Should().ContainSingle().Subject;
+        sent.InReplyTo.Should().Be($"m3.{_tag}@customer.example");
+        sent.References.Should().Equal($"m1.{_tag}@customer.example", $"m2.{_tag}@customer.example", $"m3.{_tag}@customer.example");
+    }
+
+    [Fact]
+    public async Task Job_Reply_ChainLoop_StopsAtTheRepeat()
+    {
+        var a = await ReceivedAsync($"<a.{_tag}@customer.example>");
+        var b = await ReceivedAsync($"<b.{_tag}@customer.example>", a);
+        await TestSql.ExecAsync(fx.ConnectionString, "UPDATE data.email SET parentactivityid = @b WHERE activityid = @a", ("@a", a), ("@b", b));
+
+        var (fake, _) = await SendReplyAsync(b);
+
+        fake.Calls.Should().ContainSingle().Which.References.Should().Equal($"a.{_tag}@customer.example", $"b.{_tag}@customer.example");
     }
 
     [Fact]

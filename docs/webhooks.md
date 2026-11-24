@@ -168,14 +168,17 @@ The query parameters already present in the url are kept.
 
 ### Success and failure
 
-A **2xx** answer is success. Anything else is a delivery failure, reported as 500 `0x80040224` with the message
-`Endpoint unavailable: webhook '{name}' {reason}.`, where the reason is one of:
+A **2xx** answer is success. Anything else is a delivery failure, reported as HTTP 500 with the message
+`Endpoint unavailable: webhook '{name}' {reason}.`. The error code tells the two kinds of failure apart:
 
-- `returned {status} {reason phrase}`
-- `did not answer within {n} s`
-- `could not be reached ({error})`
+| Code | Meaning | Reason in the message |
+|---|---|---|
+| `0x80050201` (`Webhooks_NonSuccessHttpResponse`) | The receiver answered with a status other than 2xx (3xx, 4xx and 5xx alike) | `returned {status} {reason phrase}`, for example `returned 409 Conflict` |
+| `0x80050205` (`Webhooks_PostRequestFailed`) | The post failed: timeout or connection error | `did not answer within {n} s` or `could not be reached ({error})` |
 
-The message never contains the query string, a header or the auth value.
+The HTTP status of the fault is always 500; callers read the receiver's status from the message. The response body is never read
+or passed through, as in Dataverse. The message never contains the query string, a header or the auth value.
+The same codes are recorded as the `errorcode` of the system job of an asynchronous step.
 
 ### Retry rules
 
@@ -228,7 +231,7 @@ They are ASP.NET configuration keys: as environment variables, write them as `Se
 | Organization header | `x-ms-dynamics-organization` carries the organization name, not Dataverse's domain name |
 | Secret stored unencrypted | The `authvalue` is stored unencrypted in `meta.serviceendpoint_secret` of the organization database, outside the table so that no read path returns it. Protect access to the database and its backups. #86 |
 | Async primary-name image | The automatic `AsynchronousStepPrimaryName` image of an asynchronous step is not added. #87 |
-| Not verified against Dataverse | The synchronous failure code `0x80040224` (the documentation names the error dialog, not the code), and the retry of async jobs beyond the one extra attempt |
+| Not verified against Dataverse | The retry of async jobs beyond the one extra attempt |
 | `TriggerServiceEndpointCheck` | Not served |
 | Navigation properties | `serviceendpoint_sdkmessageprocessingstep` is not in `$metadata`; `$expand` and the navigation path return 400. The single-valued `eventhandler_serviceendpoint` of a step works. #88 |
 | Web admin | The Plug-ins page lists plug-in steps only; use `xrmd webhook` and `xrmd plugin list` |

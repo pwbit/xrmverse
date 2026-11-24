@@ -83,7 +83,7 @@ public static class UserCommands
             };
             var response = await client.SendJsonAsync(HttpMethod.Post, "systemusers", body, cancellationToken: ct);
             var id = response.EntityId ?? throw new CliException(ExitCodes.Unexpected, "The server returned no OData-EntityId for the new user.");
-            ctx.WriteResult(new { systemuserid = id, azureactivedirectoryobjectid = oid, businessunitid = bu }, $"Created user {id}.");
+            ctx.WriteResult(new { systemuserid = id, azureactivedirectoryobjectid = oid, businessunitid = bu }, $"Created user {id} (object id {oid}).");
             return ExitCodes.Ok;
         });
         return command;

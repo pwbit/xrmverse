@@ -86,6 +86,13 @@ public static class PrivilegeNames
     public const string ActivateBusinessRule = "prvActivateBusinessRule";
 
     /// <summary>
+    /// Privilege to give a record its creation date on Create through <c>overriddencreatedon</c> (#343.5; Learn: "Override Created on
+    /// or Created by for Records during Data Import"); not tied to an entity. Granted to System Customizer; System Administrator holds
+    /// it by its template. Its id is derived as every xrmverse privilege id (<see cref="IdOf"/>).
+    /// </summary>
+    public const string OverrideCreatedOnCreatedBy = "prvOverrideCreatedOnCreatedBy";
+
+    /// <summary>
     /// The audit privileges (granted to System Administrator only, which holds every privilege by its template; any other role
     /// can be given them through the role privilege messages).
     /// </summary>
@@ -104,7 +111,10 @@ public static class PrivilegeNames
 
     /// <summary>Every privilege that is not tied to an entity.</summary>
     public static readonly IReadOnlyList<string> NonEntity =
-        [ActOnBehalfOfAnotherUser, .. Metadata, .. Solution, .. Audit, WorkflowExecution, ActivateSynchronousWorkflow, ActivateBusinessRule];
+        [
+            ActOnBehalfOfAnotherUser, .. Metadata, .. Solution, .. Audit, WorkflowExecution, ActivateSynchronousWorkflow, ActivateBusinessRule,
+            OverrideCreatedOnCreatedBy,
+        ];
 
     /// <summary>The verbs, in the order privileges are created; each has a single-bit <see cref="AccessRights"/> value.</summary>
     internal static readonly IReadOnlyList<(AccessRights Right, string Verb)> Verbs =

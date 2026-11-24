@@ -33,13 +33,26 @@ public static class JwtSetup
     /// <summary>The issuer of the tokens of the local identity provider (plan 2.8, L2): the audience's <c>/adfs</c> path.</summary>
     public static string LocalIssuer(string audience) => audience.TrimEnd('/') + "/adfs";
 
-    /// <summary>The audience of Local mode (L12): <c>Auth:Audience</c> with exactly one trailing slash; it must be an https URL, the host refuses to start otherwise.</summary>
+    /// <summary>
+    /// The values of <c>Auth:Audience</c>: several may be given, separated by <c>;</c> or <c>,</c> (spaces trimmed, empty entries
+    /// ignored; the CLI's <c>Installation.SplitAudiences</c> repeats this rule). The first is the primary one: whatever issues tokens or names the resource uses it; validation accepts all.
+    /// </summary>
+    public static IReadOnlyList<string> Audiences(string? audience) =>
+        (audience ?? "").Split([';', ','], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+    /// <summary>The primary (first) value of <c>Auth:Audience</c>, or null when none is configured.</summary>
+    public static string? PrimaryAudience(IConfiguration auth) => Audiences(auth["Audience"]).FirstOrDefault();
+
+    /// <summary>
+    /// The audience of Local mode (L12): the first <c>Auth:Audience</c> value with exactly one trailing slash; every value must be an
+    /// https URL, the host refuses to start otherwise.
+    /// </summary>
     public static string LocalAudience(IConfiguration auth)
     {
-        var audience = auth["Audience"];
-        if (!Uri.TryCreate(audience, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
+        var audiences = Audiences(auth["Audience"]);
+        if (audiences.Count == 0 || audiences.Any(a => !Uri.TryCreate(a, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps))
             throw new InvalidOperationException("Auth:Audience must be an https URL when Auth:Mode is Local.");
-        return audience!.TrimEnd('/') + "/";
+        return audiences[0].TrimEnd('/') + "/";
     }
 
     /// <summary>
@@ -47,7 +60,7 @@ public static class JwtSetup
     /// </summary>
     public static string? AuthorizeUri(IConfiguration auth) => auth["Mode"] switch
     {
-        "Local" when !string.IsNullOrWhiteSpace(auth["Audience"]) => auth["Audience"]!.TrimEnd('/') + "/adfs/oauth2/authorize",
+        "Local" when PrimaryAudience(auth) is { } primary => primary.TrimEnd('/') + "/adfs/oauth2/authorize",
         "Entra" when !string.IsNullOrEmpty(auth["TenantId"]) => $"https://login.microsoftonline.com/{auth["TenantId"]}/oauth2/authorize",
         _ => null,
     };
@@ -61,7 +74,8 @@ public static class JwtSetup
         o.RequireHttpsMetadata = true;
 
         var mode = auth["Mode"];
-        var audience = auth["Audience"];
+        var audiences = Audiences(auth["Audience"]);
+        var audience = audiences.FirstOrDefault();
         var tp = o.TokenValidationParameters;
         tp.ValidateIssuer = true;
         tp.ValidateAudience = true;
@@ -69,9 +83,10 @@ public static class JwtSetup
         tp.ValidateIssuerSigningKey = true;
         tp.RequireSignedTokens = true;
         tp.ClockSkew = TimeSpan.FromMinutes(1);
-        tp.ValidAudiences = string.IsNullOrWhiteSpace(audience)
+        // Each configured value is matched exactly (plus its trailing-slash variant); no wildcard.
+        tp.ValidAudiences = audiences.Count == 0
             ? ["<unconfigured>"]
-            : [audience.TrimEnd('/'), audience.TrimEnd('/') + "/"];
+            : audiences.SelectMany(a => new[] { a.TrimEnd('/'), a.TrimEnd('/') + "/" }).Distinct().ToArray();
 
         switch (mode)
         {
@@ -118,7 +133,7 @@ public static class JwtSetup
         if (AuthorizeUri(auth) is { } authorize)
         {
             var header = $"Bearer authorization_uri={authorize}"
-                         + (string.IsNullOrWhiteSpace(audience) ? "" : $", resource_id={audience.TrimEnd('/')}/");
+                         + (audience is null ? "" : $", resource_id={audience.TrimEnd('/')}/");
             o.Events ??= new JwtBearerEvents();
             o.Events.OnChallenge = context =>
             {

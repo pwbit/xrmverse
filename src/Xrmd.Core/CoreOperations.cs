@@ -1295,6 +1295,13 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
         var now = DateTime.UtcNow;
         var callerRef = new EntityReference(SystemUser, caller.UserId);
         SetIfDefined(row, attrs, "createdon", now);
+        // #343.5 (Learn, "Import auditing data"): a given overriddencreatedon becomes createdon; the column keeps the time of the Create.
+        // A migration then puts back the source's createdon and overriddencreatedon (MigrationSystemColumns).
+        if (row.GetAttributeValue<DateTime?>(SystemAttributes.OverriddenCreatedOnName) is { } original && attrs.ContainsKey("createdon"))
+        {
+            row["createdon"] = original;
+            row[SystemAttributes.OverriddenCreatedOnName] = now;
+        }
         SetIfDefined(row, attrs, "modifiedon", now);
         SetIfDefined(row, attrs, "createdby", callerRef);
         SetIfDefined(row, attrs, "modifiedby", callerRef);
@@ -2900,8 +2907,8 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
 
     /// <summary>
     /// Plan 2.11 on the Update of an activity (A11), with the stored state read under an update lock: a closed activity (state 1
-    /// or 2) is read-only, only its state and status change (a SetState), except by Assign (pre-flight C12: Dataverse assigns
-    /// closed activities; checklist 4); moving it to a closed state sets <c>actualend</c> to now when it is null (checklist 3e). A
+    /// or 2) is read-only, only its state, status and regarding change (a SetState, a Set Regarding), except by Assign (pre-flight
+    /// C12: Dataverse assigns closed activities; checklist 4); moving it to a closed state sets <c>actualend</c> to now when it is null (checklist 3e). A
     /// missing record is left to the Update's 404.
     /// </summary>
     /// <exception cref="XrmdFaultException">InvalidArgument (400) for a change of a closed activity.</exception>
@@ -2927,11 +2934,12 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
             // A file commit's column was taken out of the entity before (ruling F4): it is a change all the same.
             // The columns a message's server writes with the state (plan 4.1b: the send job's senton on a Pending Send email) are no change.
             var server = serverColumns?.ToHashSet(StringComparer.Ordinal) ?? [];
-            var changed = row.Attributes.Keys.Where(k => k is not ("statecode" or "statuscode") && !server.Contains(k)).Concat(partyLists.Keys)
+            // The regarding (and its type name) can be set on a closed activity, as Dataverse's Set Regarding does on a closed email (from memory, #339).
+            var changed = row.Attributes.Keys.Where(k => k is not ("statecode" or "statuscode" or "regardingobjectid" or "regardingobjecttypecode") && !server.Contains(k)).Concat(partyLists.Keys)
                 .Concat(committedFile is null ? [] : [committedFile]).Distinct().ToList();
             if (changed.Count > 0)
                 throw XrmdFaultException.InvalidArgument(
-                    $"The {m.LogicalName} record {id} is closed (statecode {state}): only its state and status can change, so " +
+                    $"The {m.LogicalName} record {id} is closed (statecode {state}): only its state, status and regarding can change, so " +
                     $"'{string.Join("', '", changed)}' cannot be written. Reopen it first (statecode 0).");
         }
         if (row.GetAttributeValue<OptionSetValue>("statecode") is { } newState && IsClosedState(newState.Value) && actualEnd is null
@@ -2981,7 +2989,7 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
     /// </summary>
     /// <summary>The system columns a migrated record keeps (migration spec §7.5), as written by the source.</summary>
     private static readonly string[] MigrationSystemColumns =
-        ["createdon", "createdby", "modifiedon", "modifiedby", "owningbusinessunit"];
+        ["createdon", "createdby", "modifiedon", "modifiedby", "owningbusinessunit", SystemAttributes.OverriddenCreatedOnName];
 
     /// <summary>
     /// The values of <see cref="MigrationSystemColumns"/> that <paramref name="entity"/> carries (not null) and its table has: inside

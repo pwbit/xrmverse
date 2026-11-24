@@ -8,6 +8,7 @@ using Microsoft.OData.Edm.Vocabularies;
 using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Metadata;
 using Xrmd.Pipeline.CustomApis;
+using Xrmd.Pipeline.Workflows;
 using Xrmd.WebApi;
 
 namespace Xrmd.WebApi.Tests;
@@ -330,6 +331,56 @@ public class ODataEdmModelBuilderTests
         var second = builder.Build();
         second.Should().NotBeSameAs(first);
         second.FindDeclaredOperations("Microsoft.Dynamics.CRM.pb_Late").Should().ContainSingle();
+    }
+
+    private sealed class Actions(params ActionDefinition[] actions) : IActivatedActions
+    {
+        public IReadOnlyList<ActionDefinition> Current { get; set; } = actions;
+        public Task<IReadOnlyList<ActionDefinition>> GetAsync(CancellationToken ct) => Task.FromResult(Current);
+    }
+
+    private static ActionDefinition XamlAction(string message, string? bound = null, CustomApiField[]? inputs = null, CustomApiField[]? outputs = null) =>
+        new(Guid.NewGuid(), message, message, bound, inputs ?? [], outputs ?? []);
+
+    /// <summary>
+    /// Issue #343: the activated XAML actions are declared as custom APIs are (bound to one record of their table, or global with an
+    /// import), after the custom APIs, which keep a name both would have; one that cannot be declared is left out with a warning
+    /// naming it as an action. The model is rebuilt when the list of activated actions changes.
+    /// </summary>
+    [Fact]
+    public async Task Activated_xaml_actions_are_declared_after_the_custom_apis()
+    {
+        var registry = Registry([Api("pb_Both", responses: [new("FromApi", CustomApiType.String, null, false)])]);
+        await registry.AllAsync(CancellationToken.None);
+        var actions = new Actions(
+            XamlAction("new_Recalc", "pb_project", [new("Increment", CustomApiType.Decimal, null, false)], [new("Total", CustomApiType.Decimal, null, false)]),
+            XamlAction("new_Echo", inputs: [new("InText", CustomApiType.String, null, false), new("Customer", CustomApiType.EntityReference, "systemuser", true)]),
+            XamlAction("pb_Both"),
+            XamlAction("new_Lost", "pb_gone"));
+        var warnings = new Warnings();
+        var builder = new ODataEdmModelBuilder(new FakeStore(Project(), SystemUser()), registry, warnings, actions);
+
+        var model = builder.Build();
+        ShouldValidate(model);
+        var recalc = (IEdmAction)Operation(model, "new_Recalc");
+        recalc.IsBound.Should().BeTrue();
+        recalc.Parameters.Select(p => p.Name).Should().Equal("entity", "Increment");
+        recalc.Parameters.First().Type.Definition.Should().BeSameAs(Type(model, "pb_project"));
+        ((IEdmComplexType)recalc.GetReturn().Type.Definition).StructuralProperties().Select(p => p.Name).Should().Equal("Total");
+        var echo = (IEdmAction)Operation(model, "new_Echo");
+        echo.IsBound.Should().BeFalse();
+        echo.FindParameter("Customer").Type.Definition.Should().BeSameAs(Type(model, "systemuser"));
+        model.EntityContainer.OperationImports().Select(i => i.Name).Should().Contain("new_Echo").And.NotContain("new_Recalc");
+        ((IEdmComplexType)Operation(model, "pb_Both").GetReturn().Type.Definition).StructuralProperties().Select(p => p.Name)
+            .Should().Equal("FromApi");
+        model.FindDeclaredOperations("Microsoft.Dynamics.CRM.new_Lost").Should().BeEmpty();
+        warnings.Messages.Should().Contain(m => m.StartsWith("Action 'pb_Both'")).And.Contain(m => m.StartsWith("Action 'new_Lost'"));
+
+        builder.Build().Should().BeSameAs(model);
+        actions.Current = [XamlAction("new_Echo")];
+        var rebuilt = builder.Build();
+        rebuilt.Should().NotBeSameAs(model);
+        rebuilt.FindDeclaredOperations("Microsoft.Dynamics.CRM.new_Recalc").Should().BeEmpty();
     }
 
     /// <summary>#131: LocalTimeFromUtcTime is an unbound function with Learn's parameters and response.</summary>

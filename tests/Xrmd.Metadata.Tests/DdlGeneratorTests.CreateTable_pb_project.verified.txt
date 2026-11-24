@@ -16,5 +16,6 @@
     [owningbusinessunit] uniqueidentifier NULL,
     [statecode] int NULL,
     [statuscode] int NULL,
-    [versionnumber] rowversion
+    [versionnumber] rowversion,
+    [overriddencreatedon] datetime2 NULL
 );
