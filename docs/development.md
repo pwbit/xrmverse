@@ -158,6 +158,16 @@ model tables and columns, not SDK views. The SDK twins of the public security he
 (`SdkSecurityTwins.cs`, `SdkSecurityTypes.cs`) and convert with `ToModel()` before they delegate. Records and messages
 (`Entity`, `EntityReference`, `OrganizationRequest`) stay SDK types in the rules and the guard until S.2e.
 
+The model types and converters for records and messages exist since S.2e1; the modules start using them in S.2e2 to S.2e4. `Xrmd.Model.Records` holds the record types (`Record`, `RecordReference`,
+`RecordCollection` and their values) and `Xrmd.Model.Messages` holds the request and response types. Primitive values keep their
+CLR types; only SDK classes have model counterparts. The converters `Xrmd.Abstractions.Sdk.SdkRecords` and
+`Xrmd.Abstractions.Sdk.SdkMessages` convert both ways and the round trip is lossless for records and values, nesting and nulls included (a typed request is not, see below). A value of an SDK
+type the converters do not know passes through unchanged, and a typed SDK request (for example `CreateRequest`) becomes the base
+`OrganizationRequest`, so that conversion keeps the name and parameters but not the request's CLR type. The golden files under `tests/fixtures/remote-context-golden` capture the remote execution context as
+today's code writes it; they are the contract that the own writer of S.2e2 must meet byte for byte. The work is split in four:
+S.2e1 is the model and the converters, S.2e2 the pipeline, the SDK plug-in adapter and the own serializer, S.2e3 the Core
+operations, and S.2e4 Mail, Elastic, Duplicates, Solutions and Rollups.
+
 The view is transitional. The other modules move to the model in S.2d to S.2h, and S.2i removes the view, the twins and the bridge.
 
 ## Tests on PostgreSQL

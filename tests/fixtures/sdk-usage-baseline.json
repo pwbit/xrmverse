@@ -1,6 +1,6 @@
 {
   "files": {
-    "Xrmd.Abstractions": 4,
+    "Xrmd.Abstractions": 6,
     "Xrmd.Admin": 20,
     "Xrmd.Audit": 5,
     "Xrmd.Cli": 3,
