@@ -181,7 +181,7 @@ The documentation is in English and lives in [`docs/`](docs/), one page per topi
 | [Skills for coding agents](docs/agent-skills.md) | The seven agent skills that teach Claude to use `xrmd`: installing them as a Claude Code plugin, what each covers, the rules they keep |
 | [Admin API](docs/admin-api.md) | The `/admin` endpoints used by the CLI and the web admin |
 | [Web admin](docs/web-admin.md) | The `/manage` UI: who can use it, sections, sign-in, look and feel, the view and form designers, deleting a solution, development loop |
-| [Model-driven apps](docs/model-driven-apps.md) | The app picker (`/apps`), site map, views, forms, commands, web resources and form scripts, PCF controls, dashboards, timeline, classic and modern looks, known limits |
+| [Model-driven apps](docs/model-driven-apps.md) | The app picker (`/apps`), site map, views, forms, commands, web resources and form scripts, PCF controls, dashboards, timeline, classic and modern looks, xrmverse extensions (app side panes, app OnLoad, subgrids filtered by a form column), known limits |
 | [MCP](docs/mcp.md) | The built-in MCP server for AI agents: connecting a client, the tools, knowledge for agents, workflow and migration tools |
 
 **Project**

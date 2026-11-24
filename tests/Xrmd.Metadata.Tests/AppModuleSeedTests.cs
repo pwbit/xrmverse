@@ -162,6 +162,15 @@ public class AppModuleSeedTests
         AppModuleSchema.AppOnLoadDefault.Should().BeEmpty();
     }
 
+    /// <summary>X.11: the subgrid filters setting definition (the seeded row is checked in Xrmd.Integration.Tests, PresentationSettingsTests).</summary>
+    [Fact]
+    public void SeedsSubgridFiltersDefinition()
+    {
+        AppModuleSchema.SubgridFilters.Should().Be("xrmverse_SubgridFilters");
+        AppModuleSchema.SubgridFiltersId.Should().Be(new Guid("6f1c2a5e-8d4b-4e37-9a61-3b2f7c0d1e31"));
+        AppModuleSchema.SubgridFiltersDefault.Should().BeEmpty();
+    }
+
     /// <summary>UI-2a: the two presentation setting definitions, the <c>organizationsetting</c> table and the <c>usersettings</c> columns.</summary>
     [Fact]
     public void Seeds_presentation_setting_definitions()

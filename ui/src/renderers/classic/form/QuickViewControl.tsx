@@ -120,7 +120,7 @@ function QuickViewForm({ ctx, form, env }: { ctx: RecordContext; form: FormModel
   const styles = useStyles();
   const state = useRecordForm(ctx, form, { lcid: env.lcid });
   // The host form's subgrid modes belong to the host's subgrids (ruling S1): the quick view's subgrids stay grids.
-  const inner: ControlEnv = { ...env, ctx, state, currencySymbol: undefined, subgridModes: undefined };
+  const inner: ControlEnv = { ...env, ctx, state, currencySymbol: undefined, subgridModes: undefined, subgridFilters: undefined, subgridFiltersStatus: undefined };
   return (
     <div className={styles.card} data-testid="quickview">
       {form.tabs

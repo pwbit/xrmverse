@@ -101,6 +101,17 @@ public static class AppModuleSchema
     public const string AppOnLoadDefault = "";
 
     /// <summary>
+    /// The setting that lists the JSON web resources of the subgrid lookup filters (X.11, an xrmverse extension); empty by default.
+    /// </summary>
+    public const string SubgridFilters = "xrmverse_SubgridFilters";
+
+    /// <summary>The id of the <see cref="SubgridFilters"/> definition (assigned by xrmverse).</summary>
+    public static readonly Guid SubgridFiltersId = new("6f1c2a5e-8d4b-4e37-9a61-3b2f7c0d1e31");
+
+    /// <summary>The default value of <see cref="SubgridFilters"/>: empty.</summary>
+    public const string SubgridFiltersDefault = "";
+
+    /// <summary>
     /// The environment setting that says who may send email (plan 4.1b, an xrmverse extension; Dataverse has no such switch):
     /// <see cref="EmailSendFromUserOrQueue"/> (the default, as Dataverse) or <see cref="EmailSendFromQueueOnly"/>, where SendEmail with
     /// <c>IssueSend</c> true sends only from a queue.

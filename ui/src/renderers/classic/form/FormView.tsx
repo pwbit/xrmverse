@@ -15,6 +15,7 @@ import { FormSelector } from './FormSelector';
 import { FormTab } from './FormTab';
 import { RelatedTab } from './RelatedTab';
 import { CollapseItemIcon } from '../../../shell/icons';
+import { useSubgridFilters, useSubgridFiltersStatus } from '../../../apps/record/SubgridFiltersContext';
 import type { SenderPolicy } from './PartyListControl';
 
 /** The header or footer: its visible cells in a strip, label under value. */
@@ -201,7 +202,9 @@ export function FormView({ form, state, ctx, lcid, onSelectForm, forms, notice, 
   // The shared reads start over with a refresh.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const cache = useMemo(() => new Map<string, Promise<unknown>>(), [refreshKey, form]);
-  const env: ControlEnv = { ctx, state, lcid, currencySymbol, formId: form.id, appId, timeline, ...(timelineAppearance ? { timelineAppearance } : {}), ...(backgrounds ? { backgrounds } : {}), ...(subgridModes ? { subgridModes } : {}), refreshKey, cache, overlay: ui, ...(senderPolicy ? { senderPolicy } : {}) };
+  const filterEntries = useSubgridFilters(form.id);
+  const filtersStatus = useSubgridFiltersStatus();
+  const env: ControlEnv = { ctx, state, lcid, currencySymbol, formId: form.id, appId, timeline, ...(timelineAppearance ? { timelineAppearance } : {}), ...(backgrounds ? { backgrounds } : {}), ...(subgridModes ? { subgridModes } : {}), ...(filterEntries ? { subgridFilters: { formId: form.id, entries: filterEntries } } : {}), ...(filtersStatus !== 'ready' ? { subgridFiltersStatus: filtersStatus } : {}), refreshKey, cache, overlay: ui, ...(senderPolicy ? { senderPolicy } : {}) };
   // Tabs keep their FormXml index as their value, so that hiding one does not move the selection.
   const tabs = form.tabs.map((tab, index) => ({ tab, index })).filter(({ tab }) => isShown(env, tab));
   // The tab the user or a script selected while it is shown, else the first one shown.

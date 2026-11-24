@@ -1,11 +1,11 @@
 import {
-  Button, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, makeStyles, Radio,
-  RadioGroup, Select, tokens,
+  Badge, Button, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, makeStyles,
+  MessageBar, MessageBarBody, Radio, RadioGroup, Select, tokens,
 } from '@fluentui/react-components';
 import { useState, type ReactNode } from 'react';
 import { t } from '../../shell/i18n/t';
 import type { AttributeMeta } from '../tables/metadata';
-import { loadEntities, loadRelationships } from '../tables/tableApi';
+import { loadEntities, loadEntity, loadRelationships } from '../tables/tableApi';
 import { useLoad, useLoadFor } from '../tables/useLoad';
 import { addQuickView, addSubgrid, addWebResource, MAX_RECORDS_PER_PAGE, validPerPage } from './formControls';
 import {
@@ -13,11 +13,39 @@ import {
 } from './formControlsApi';
 import type { FormDesign } from './formDesign';
 import { LoadFailed } from './LoadFailed';
+import { filterSources, filterTargets, placedColumns } from './subgridFilterChoices';
 
 const useStyles = makeStyles({
   content: { display: 'flex', flexDirection: 'column', gap: tokens.spacingVerticalS },
   hint: { margin: 0, color: tokens.colorNeutralForeground3 },
+  badge: { marginLeft: tokens.spacingHorizontalS },
+  /** The choices of a Records option, set off under it. */
+  nested: {
+    display: 'flex', flexDirection: 'column', gap: tokens.spacingVerticalS,
+    borderLeft: `${tokens.strokeWidthThickest} solid ${tokens.colorBrandStroke1}`, paddingLeft: tokens.spacingHorizontalL,
+  },
 });
+
+/** `Display name (logical_name)`, or the logical name alone. */
+export const columnOption = (a: AttributeMeta) => (a.displayName ? `${a.displayName} (${a.logicalName})` : a.logicalName);
+
+/** The label of the Records option for a subgrid matching a column of the form, with its xrmverse badge. */
+export function MatchingLabel({ text }: { text: string }) {
+  const styles = useStyles();
+  return (
+    <>
+      {text}
+      <Badge className={styles.badge} appearance="tint" color="warning" size="small">{t('forms.controls.extensionBadge')}</Badge>
+    </>
+  );
+}
+
+/** The note that the filter is an xrmverse extension, which Dataverse does not apply. */
+export const ExtensionNote = () => (
+  <MessageBar intent="warning">
+    <MessageBarBody>{t('forms.controls.filterExtension')}</MessageBarBody>
+  </MessageBar>
+);
 
 export type AddControlKind = 'subgrid' | 'quickview' | 'webresource';
 
@@ -87,12 +115,16 @@ function useLabel(): [string, (typed: string) => void, (suggested: string) => vo
   ];
 }
 
+type RecordsMode = 'related' | 'all' | 'matching';
+
 function SubgridDialog(props: AddControlDialogProps) {
-  const { design, sectionKey } = props;
+  const { design, attributes, sectionKey } = props;
   const styles = useStyles();
-  const [mode, setMode] = useState<'related' | 'all'>('related');
+  const [mode, setMode] = useState<RecordsMode>('related');
   const [relationship, setRelationship] = useState('');
   const [table, setTable] = useState('');
+  const [filterSource, setFilterSource] = useState('');
+  const [filterTarget, setFilterTarget] = useState('');
   const [viewId, setViewId] = useState<string>();
   const [perPage, setPerPage] = useState('4');
   const [label, typeLabel, suggestLabel] = useLabel();
@@ -101,18 +133,27 @@ function SubgridDialog(props: AddControlDialogProps) {
   const sources = rels.data ? subgridSources(rels.data, design.table) : [];
   const source = sources.find((s) => s.relationship === relationship);
   const target = mode === 'related' ? source?.target ?? '' : table;
+  const matching = mode === 'matching';
+  const tableMeta = useLoadFor(matching && table ? table : undefined, (api) => loadEntity(api, table));
+  const sourceChoices = matching ? filterSources({ attributes }, placedColumns(design)) : [];
+  const sourceAttr = sourceChoices.find((a) => a.logicalName === filterSource);
+  const targetChoices = sourceAttr && tableMeta.data ? filterTargets(sourceAttr, tableMeta.data) : [];
+  const filterReady = !matching || (sourceAttr !== undefined && targetChoices.some((a) => a.logicalName === filterTarget));
   const views = useLoadFor(target || undefined, (api) => listPublicViews(api, target));
   const tables = [...(entities.data ?? [])].sort((a, b) => (a.displayName || a.logicalName).localeCompare(b.displayName || b.logicalName));
   const displayOf = (name: string) => entities.data?.find((e) => e.logicalName === name)?.displayName || name;
   const view = viewId ?? (views.data?.find((v) => v.isDefault) ?? views.data?.[0])?.id ?? '';
   const failed = mode === 'related' ? rels.error : entities.error;
-  const ready = !failed && !views.error && !views.loading && target !== '' && view !== '' && validPerPage(perPage) && label.trim() !== '';
+  const ready = !failed && !views.error && !views.loading && target !== '' && view !== '' && validPerPage(perPage)
+    && label.trim() !== '' && filterReady;
   const next = ready
     ? addSubgrid(design, sectionKey, {
       kind: 'subgrid', controlId: '', relationship: mode === 'related' ? relationship : '', targetEntity: target,
       viewId: formXmlId(view), recordsPerPage: Number(perPage), viewPicker: false,
+      ...(matching ? { filter: { source: filterSource, target: filterTarget } } : {}),
     }, label.trim())
     : undefined;
+  const tableName = tableMeta.data?.displayName || displayOf(table);
 
   const chooseTarget = (name: string) => {
     setViewId(undefined);
@@ -123,11 +164,12 @@ function SubgridDialog(props: AddControlDialogProps) {
     <Shell {...props} next={next}>
       <Field label={t('forms.controls.records')}>
         <RadioGroup value={mode} onChange={(_, d) => {
-          setMode(d.value as 'related' | 'all');
+          setMode(d.value as RecordsMode);
           setViewId(undefined);
         }}>
           <Radio value="related" label={t('forms.controls.records.related')} />
           <Radio value="all" label={t('forms.controls.records.all')} />
+          <Radio value="matching" label={<MatchingLabel text={t('forms.controls.records.matching')} />} />
         </RadioGroup>
       </Field>
       <LoadFailed error={failed} />
@@ -146,19 +188,57 @@ function SubgridDialog(props: AddControlDialogProps) {
           </Select>
         </Field>
       ) : (
-        <Field label={t('forms.controls.table')}>
-          <Select value={table} disabled={entities.data === undefined} onChange={(_, d) => {
-            setTable(d.value);
-            chooseTarget(d.value);
-          }}>
-            <option value="">{t('forms.controls.choose')}</option>
-            {tables.map((e) => (
-              <option key={e.logicalName} value={e.logicalName}>
-                {e.displayName || e.logicalName}
-              </option>
-            ))}
-          </Select>
-        </Field>
+        <div className={matching ? styles.nested : undefined}>
+          <Field label={t('forms.controls.table')}>
+            <Select value={table} disabled={entities.data === undefined} onChange={(_, d) => {
+              setTable(d.value);
+              setFilterTarget('');
+              chooseTarget(d.value);
+            }}>
+              <option value="">{t('forms.controls.choose')}</option>
+              {tables.map((e) => (
+                <option key={e.logicalName} value={e.logicalName}>
+                  {e.displayName || e.logicalName}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          {matching && (
+            <>
+              <Field label={t('forms.controls.filterSource')}>
+                <Select value={filterSource} onChange={(_, d) => {
+                  setFilterSource(d.value);
+                  setFilterTarget('');
+                }}>
+                  <option value="">{t('forms.controls.choose')}</option>
+                  {sourceChoices.map((a) => (
+                    <option key={a.logicalName} value={a.logicalName}>
+                      {columnOption(a)}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              {table !== '' && (
+                <>
+                  <LoadFailed error={tableMeta.error} />
+                  <Field
+                    label={t('forms.controls.filterTarget', { table: tableName })}
+                    hint={t('forms.controls.filterTargetHint', { table: tableName })}
+                  >
+                    <Select value={filterTarget} disabled={!sourceAttr || !tableMeta.data} onChange={(_, d) => setFilterTarget(d.value)}>
+                      <option value="">{t('forms.controls.choose')}</option>
+                      {targetChoices.map((a) => (
+                        <option key={a.logicalName} value={a.logicalName}>
+                          {columnOption(a)}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                </>
+              )}
+            </>
+          )}
+        </div>
       )}
       {mode === 'related' && rels.data && sources.length === 0 && <p className={styles.hint}>{t('forms.controls.noRelationships')}</p>}
       {target !== '' && (
@@ -185,6 +265,7 @@ function SubgridDialog(props: AddControlDialogProps) {
       <Field label={t('forms.controls.label')} required>
         <Input value={label} onChange={(_, d) => typeLabel(d.value)} />
       </Field>
+      {matching && <ExtensionNote />}
     </Shell>
   );
 }

@@ -39,4 +39,6 @@ export interface AppModel {
   appOnLoad?: { handlers: AppOnLoadHandler[] } | { error: string };
   /** The email sender policy `xrmverse_EmailSendFrom` (plan 4.1b, environment value, else default): who an email's From offers. */
   emailSendFrom?: 'userOrQueue' | 'queueOnly';
+  /** The web resources of `xrmverse_SubgridFilters` (X.11): the app's names, then the environment's. */
+  subgridFilters?: string[];
 }

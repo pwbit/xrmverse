@@ -34,6 +34,7 @@ import { DashboardPage } from './DashboardPage';
 import { EntityListPage } from './EntityListPage';
 import { knownApps } from './loadApps';
 import { RecordDialog } from './RecordDialog';
+import { SubgridFiltersProvider } from './record/SubgridFiltersContext';
 import { RecordOpenerContext, type RecordOpenerEnv } from './record/recordOpener';
 import { RecordPage } from './RecordPage';
 import { SidePaneArea } from './SidePaneArea';
@@ -85,6 +86,8 @@ async function loadApp(api: XrmApi, appId: string, userId: string): Promise<Load
   const siteMap = row.sitemapxml ? parseSiteMap(row.sitemapxml) : { areas: [] };
   return { app, siteMap: trimSiteMap(siteMap, privileges, tables) };
 }
+
+const NO_NAMES: string[] = [];
 
 const useStyles = makeStyles({
   root: { display: 'flex', flexDirection: 'column', minHeight: '100vh' },
@@ -281,6 +284,7 @@ function AppShellLoader({ appId, state }: { appId: string; state: MainAspxState 
     (n): n is string => !!n,
   );
   const frame = (
+    <SubgridFiltersProvider names={load.app.subgridFilters ?? NO_NAMES}>
     <XrmHostContext.Provider value={xrmHost}>
      <RecordOpenerContext.Provider value={opener}>
       <AppFrame
@@ -335,6 +339,7 @@ function AppShellLoader({ appId, state }: { appId: string; state: MainAspxState 
       </AppFrame>
      </RecordOpenerContext.Provider>
     </XrmHostContext.Provider>
+    </SubgridFiltersProvider>
   );
   const page = (
     <PresentationProvider model={modern ? presentation.model : undefined} modern={modern}>

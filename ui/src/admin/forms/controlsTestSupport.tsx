@@ -188,3 +188,27 @@ export const controlById = (form: Element, id: string) =>
 /** The `<parameters>` children of a control as [name, text] pairs, in order. */
 export const paramsOf = (control: Element | undefined) =>
   Array.from(control?.getElementsByTagName('parameters')[0]?.children ?? []).map((p) => [p.tagName, p.textContent ?? '']);
+
+/**
+ * The form with the lookup `parentid` placed in Main and a subgrid of all accounts (`All accounts`) in Controls, for the
+ * subgrids filtered by a form column (X.11); the subgrid's control id is `controlId`. With `table` `contact`, the subgrid
+ * lists contacts instead, a table with no column that can match a lookup. Call after {@link installControls}.
+ */
+export function installFilterForm(controlId = 'accounts', table: 'account' | 'contact' = 'account') {
+  const parent = cell('c0000000-0000-0000-0000-000000000007', 'Parent', `<control id="parentid" classid="${TEXT}" datafieldname="parentid" />`);
+  const all = cell('c0000000-0000-0000-0000-000000000008', 'All accounts', `<control id="${controlId}" classid="${CLASS_ID.subgrid}" indicationOfSubgrid="true">
+                  <parameters>
+                    <ViewId>{${(table === 'account' ? ACCOUNT_VIEW : CONTACT_VIEW).toUpperCase()}}</ViewId>
+                    <RelationshipName></RelationshipName>
+                    <TargetEntityType>${table}</TargetEntityType>
+                    <RecordsPerPage>4</RecordsPerPage>
+                  </parameters>
+                </control>`);
+  const formxml = FORM
+    .replace('</row>', `</row><row>${parent}</row>`)
+    .replace(/(<section name="controls"[\s\S]*?<rows>)/, `$1<row>${all}</row>`);
+  server.use(onPath('get', `systemforms(${FORM_ID})`, () => HttpResponse.json({
+    systemformid: FORM_ID, name: 'Information', description: '', type: 2, isdefault: true, formactivationstate: 1,
+    ismanaged: false, objecttypecode: 'account', formxml,
+  })));
+}

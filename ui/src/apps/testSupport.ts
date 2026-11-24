@@ -107,6 +107,7 @@ export const SETTING_DEFINITIONS: Record<string, string> = {
   xrmverse_Presentation: '6f1c2a5e-8d4b-4e37-9a61-3b2f7c0d1e11',
   xrmverse_AppOnLoad: '6f1c2a5e-8d4b-4e37-9a61-3b2f7c0d1e20',
   xrmverse_EmailSendFrom: '6f1c2a5e-8d4b-4e37-9a61-3b2f7c0d1e21',
+  xrmverse_SubgridFilters: '6f1c2a5e-8d4b-4e37-9a61-3b2f7c0d1e22',
 };
 
 const DEFAULT_SCHEMA_NAMES: Record<string, string> = {
@@ -212,7 +213,7 @@ export function mockApps({
             .map(([uniquename, settingdefinitionid]) => ({
               settingdefinitionid,
               uniquename,
-              defaultvalue: settingDefaults[uniquename] ?? (uniquename === 'xrmverse_Presentation' || uniquename === 'xrmverse_AppOnLoad' ? '' : uniquename === 'xrmverse_Renderer' ? 'classic' : uniquename === 'xrmverse_EmailSendFrom' ? 'userOrQueue' : 'false'),
+              defaultvalue: settingDefaults[uniquename] ?? (uniquename === 'xrmverse_Presentation' || uniquename === 'xrmverse_AppOnLoad' || uniquename === 'xrmverse_SubgridFilters' ? '' : uniquename === 'xrmverse_Renderer' ? 'classic' : uniquename === 'xrmverse_EmailSendFrom' ? 'userOrQueue' : 'false'),
             })),
         );
       }

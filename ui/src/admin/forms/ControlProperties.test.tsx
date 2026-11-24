@@ -6,7 +6,7 @@ import { server } from '../../test/server';
 import { en } from '../../shell/i18n/en';
 import { onPath } from '../security/testSupport';
 import {
-  ACCOUNT_CARD, canvasReady, CONTACT_CARD, CONTACT_DEFAULT_VIEW, CONTACT_VIEW, controlById, installControls, LOGO_WR, MAP_WR,
+  ACCOUNT_CARD, canvasReady, CONTACT_CARD, CONTACT_DEFAULT_VIEW, CONTACT_VIEW, controlById, installControls, installFilterForm, LOGO_WR, MAP_WR,
   openForm, PAGE_TEST_TIMEOUT, paramsOf, propsCard, saveButton, savedForm, section, type Call,
 } from './controlsTestSupport';
 
@@ -70,6 +70,53 @@ describe('ControlProperties', { timeout: PAGE_TEST_TIMEOUT }, () => {
     expect(cell?.getAttribute('visible')).toBe('false');
     // A records-per-page edit leaves the cell's rows as they are.
     expect(cell?.getAttribute('rowspan')).toBeNull();
+  });
+
+  it('the Records choice switches a subgrid of all records to records matching a column of this form, and back (X.11)', async () => {
+    const user = userEvent.setup();
+    installControls();
+    installFilterForm();
+    openForm();
+    const panel = await select(user, 'All accounts (Subgrid)');
+    const radio = (key: 'forms.controls.records.related' | 'forms.controls.records.all' | 'forms.controls.records.matchingShort') =>
+      within(panel).getByRole('radio', { name: new RegExp(`^${en[key]}`) });
+    expect(radio('forms.controls.records.all')).toBeChecked();
+    // Only related records cannot be chosen for a subgrid without a relationship.
+    expect(radio('forms.controls.records.related')).toBeDisabled();
+    const matching = en['forms.props.subgridMatching'].replace('{table}', 'Account').replace('{target}', 'Parent').replace('{source}', 'Parent');
+    await user.click(radio('forms.controls.records.matchingShort'));
+    // The first placed lookup and the first column of the table that can match it are chosen.
+    await waitFor(() => expect(within(panel).getByText(matching)).toBeInTheDocument());
+    expect(combo(panel, en['forms.controls.filterSource'])).toHaveValue('parentid');
+    expect(combo(panel, en['forms.controls.filterTarget'].replace('{table}', 'Account'))).toHaveValue('parentid');
+    await user.click(radio('forms.controls.records.all'));
+    expect(within(panel).queryByText(matching)).not.toBeInTheDocument();
+    expect(within(panel).getByText(en['forms.props.subgridAll'].replace('{table}', 'account'))).toBeInTheDocument();
+    expect(within(panel).queryByRole('combobox', { name: en['forms.controls.filterSource'] })).not.toBeInTheDocument();
+  });
+
+  it('Matching with no column of the table to match says the subgrid stays All records until one is chosen (X.11)', async () => {
+    const user = userEvent.setup();
+    installControls();
+    installFilterForm('accounts', 'contact');
+    openForm();
+    const panel = await select(user, 'All accounts (Subgrid)');
+    const pendingHint = en['forms.props.subgridMatchingPending'].replace('{table}', 'contact');
+    expect(within(panel).queryByText(pendingHint)).not.toBeInTheDocument();
+    await user.click(within(panel).getByRole('radio', { name: new RegExp(`^${en['forms.controls.records.matchingShort']}`) }));
+    expect(await within(panel).findByText(pendingHint)).toBeInTheDocument();
+    expect(within(panel).queryByText(en['forms.props.subgridAll'].replace('{table}', 'contact'))).not.toBeInTheDocument();
+    await user.click(within(panel).getByRole('radio', { name: new RegExp(`^${en['forms.controls.records.all']}`) }));
+    expect(within(panel).queryByText(pendingHint)).not.toBeInTheDocument();
+  });
+
+  it('a subgrid of related records keeps Only related records, the only Records choice it offers (X.11)', async () => {
+    const user = userEvent.setup();
+    installControls();
+    openForm();
+    const panel = await select(user, 'Contacts (Subgrid)');
+    expect(within(panel).getByRole('radio', { name: en['forms.controls.records.related'] })).toBeChecked();
+    expect(within(panel).getByRole('radio', { name: en['forms.controls.records.related'] })).toBeEnabled();
   });
 
   it('a lookup with two targets offers a form per target (G3)', async () => {

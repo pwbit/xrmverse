@@ -3,13 +3,16 @@ import {
 } from '@fluentui/react-components';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import type { SubgridFilter } from '../../apps/record/subgridFilters';
+import { normaliseId } from '../../parsers/formXml';
+import type { XrmApi } from '../../shell/api/client';
 import { useAuth } from '../../shell/auth/AuthProvider';
 import { t } from '../../shell/i18n/t';
 import { SaveIcon } from '../../shell/icons';
 import { PageHeader } from '../../shell/layout/PageHeader';
 import { useSurfaceStyles } from '../../shell/layout/surface';
 import { ConfirmDialog } from '../common/ConfirmDialog';
-import { DesignerContext, type AfterSave, type DesignerHooks } from '../common/designerHooks';
+import { DesignerContext, useAfterSave, useDesignerHooks, type AfterSave, type DesignerHooks } from '../common/designerHooks';
 import { loadEntity } from '../tables/tableApi';
 import { useLoad } from '../tables/useLoad';
 import { publishTable } from '../views/viewApi';
@@ -24,6 +27,9 @@ import { FormPropertiesPanel } from './FormPropertiesPanel';
 import { FormLookEditor } from './FormLookEditor';
 import { EventsEditor } from './EventsEditor';
 import { HeaderEditor } from './HeaderEditor';
+import {
+  FilterSettingMissing, filtersOf, FilterStoreUnreadable, formFiltersOf, loadFilterStore, saveFilterStore, withFilters, withFormFilters,
+} from './subgridFiltersApi';
 
 /** `systemform.name` takes up to 100 characters. */
 const MAX_NAME = 100;
@@ -55,6 +61,88 @@ function copyName(name: string): string {
 }
 
 const sameId = (a: string, b: string) => a.replace(/[{}]/g, '').toLowerCase() === b.replace(/[{}]/g, '').toLowerCase();
+const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+/** The subgrid filters (X.11) stored for a form when it was opened, or why the store cannot be edited. */
+interface StoredFilters {
+  entries: Record<string, SubgridFilter>;
+  /**
+   * Why the filters cannot be edited ({@link FilterStoreUnreadable}'s message): an unreadable store (the form opens without
+   * filters) or a managed resource (they are shown, but not written).
+   */
+  unreadable?: string;
+  /** The read failed for another reason (network, server): no filter is shown, and none is written. */
+  failed?: string;
+}
+
+/** A form row and its stored subgrid filters, read together so the design is built once from both. */
+interface LoadedForm {
+  row: FormRecord;
+  filters: StoredFilters;
+}
+
+/** The form's entries in the environment's filter store; a store that cannot be read gives none (it is read again on save). */
+async function readStoredFilters(api: XrmApi, formId: string): Promise<StoredFilters> {
+  try {
+    const store = await loadFilterStore(api);
+    const entries = formFiltersOf(store.doc?.json, formId);
+    return store.doc?.managed ? { entries, unreadable: new FilterStoreUnreadable(t('forms.filters.reason.managed')).message } : { entries };
+  } catch (e) {
+    // Without the setting's definition no filter can be stored: there is nothing to show (a write fails on save).
+    if (e instanceof FilterSettingMissing) return { entries: {} };
+    return e instanceof FilterStoreUnreadable ? { entries: {}, unreadable: e.message } : { entries: {}, failed: message(e) };
+  }
+}
+
+/**
+ * Writes the form's subgrid filters (X.11) to the environment's filter store after each save: the store is read again just
+ * before, and written only when the form's entry changes; a save under another id (Save as) copies the entries to it. Nothing
+ * is read when the form has no filter and had none. A failure leaves the page changed and is shown in the page's error bar.
+ */
+function SubgridFiltersSave({ design, formId, stored }: { design: FormDesign; formId: string | undefined; stored: StoredFilters }) {
+  const { api } = useAuth();
+  const { markDirty } = useDesignerHooks();
+  const latestDesign = useRef(design);
+  latestDesign.current = design;
+  /** The form whose entries the store holds, and those entries: they move to a saved id only after a write. */
+  const shownFor = useRef(formId);
+  const written = useRef(stored.entries);
+
+  useAfterSave('subgridFilters', async (id) => {
+    const entries = filtersOf(latestDesign.current);
+    const copy = shownFor.current !== undefined && normaliseId(id) !== normaliseId(shownFor.current);
+    const before = copy ? {} : written.current;
+    if (stored.failed !== undefined && (copy || Object.keys(entries).length > 0)) {
+      // The stored entries were never read: a write would replace them unseen, and a copy would leave them out.
+      markDirty();
+      throw new Error(t('forms.filters.saveFailed', { detail: stored.failed }));
+    }
+    if (!api || (Object.keys(entries).length === 0 && Object.keys(before).length === 0)) {
+      shownFor.current = id;
+      written.current = entries;
+      return;
+    }
+    try {
+      const store = await loadFilterStore(api);
+      const json = store.doc?.json ?? {};
+      const next = withFormFilters(json, id, entries);
+      if (JSON.stringify(next) !== JSON.stringify(json)) await saveFilterStore(api, store, next);
+      shownFor.current = id;
+      written.current = entries;
+    } catch (e) {
+      // The filters are not written: the page stays changed, so Back still asks.
+      markDirty();
+      throw new Error(e instanceof FilterStoreUnreadable ? e.message : t('forms.filters.saveFailed', { detail: message(e) }));
+    }
+  });
+
+  const warning = stored.unreadable ?? (stored.failed !== undefined ? t('forms.filters.loadFailed', { detail: stored.failed }) : undefined);
+  return warning ? (
+    <MessageBar intent="warning">
+      <MessageBarBody>{warning}</MessageBarBody>
+    </MessageBar>
+  ) : null;
+}
 
 const useStyles = makeStyles({
   body: { display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', columnGap: tokens.spacingHorizontalL },
@@ -103,12 +191,17 @@ export function FormDesigner() {
    * changes (the router moves in a transition), so a second Save never creates a second form.
    */
   const target = useRef<string>();
-  const record = useLoad(id !== NEW && id !== heldId && id !== target.current ? id : undefined, (a) => loadForm(a, id));
+  const record = useLoad(id !== NEW && id !== heldId && id !== target.current ? id : undefined, async (a): Promise<LoadedForm> => {
+    const [row, filters] = await Promise.all([loadForm(a, id), readStoredFilters(a, id)]);
+    return { row, filters };
+  });
   /**
    * The row last taken up. `useLoad` keeps the data of a key it is asked for again (Back to a form after a Save as): that
    * row is the one read before the page's saves, so it is never applied twice; the page waits for the fresh read instead.
    */
-  const applied = useRef<FormRecord>();
+  const applied = useRef<LoadedForm>();
+  /** The subgrid filters stored for the form taken up (none for a new form). */
+  const [storedFilters, setStoredFilters] = useState<StoredFilters>({ entries: {} });
   /** A row the designer cannot read (missing or malformed FormXML): shown like a failed load. */
   const [unreadable, setUnreadable] = useState<{ id: string; message: string }>();
   const [dirty, setDirty] = useState(false);
@@ -153,6 +246,7 @@ export function FormDesigner() {
       setFailure(undefined);
       setManaged(false);
       setSelection(undefined);
+      setStoredFilters({ entries: {} });
       setGeneration((g) => g + 1);
       if (!primary) {
         setDesign(undefined);
@@ -168,14 +262,16 @@ export function FormDesigner() {
     } else if (id === target.current) {
       // The page's own create or Save as: the design, the cards and their state stay.
       setHeldId(id);
-    } else if (record.data && record.data !== applied.current && sameId(record.data.systemformid, id)) {
+    } else if (record.data && record.data !== applied.current && sameId(record.data.row.systemformid, id)) {
       applied.current = record.data;
+      const { row, filters } = record.data;
       setDirty(false);
       setFailure(undefined);
       setSelection(undefined);
       let read: FormDesign;
       try {
-        read = readForm(record.data, uiLcid());
+        // The stored subgrid filters go on the design (they are not in the FormXML).
+        read = withFilters(readForm(row, uiLcid()), filters.entries);
       } catch (e) {
         // Nothing of another form stays, and no Save reaches this one: the page shows why it cannot open it.
         setDesign(undefined);
@@ -185,7 +281,8 @@ export function FormDesigner() {
         return;
       }
       setDesign(read);
-      setManaged(record.data.ismanaged === true);
+      setStoredFilters(filters);
+      setManaged(row.ismanaged === true);
       setHeldId(id);
       target.current = id;
       setUnreadable(undefined);
@@ -389,6 +486,10 @@ export function FormDesigner() {
       {design && card && (
         <DesignerContext.Provider value={hooks}>
           <Fragment key={generation}>
+            {/* Saves the subgrid filters (X.11) after the form; shows only why they cannot be edited, when they cannot. */}
+            {editable && (
+              <SubgridFiltersSave design={design} formId={heldId?.startsWith(`${NEW}:`) ? undefined : heldId} stored={storedFilters} />
+            )}
             <Card id="form-properties" title={t('forms.designer.properties')}>
               <Field label={t('forms.designer.name')} required validationMessage={nameMessage && { id: NAME_MESSAGE_ID, children: nameMessage }}>
                 <Input value={design.name} maxLength={MAX_NAME} disabled={readOnly} onChange={(_, d) => change({ ...design, name: d.value })} />

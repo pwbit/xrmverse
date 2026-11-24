@@ -9,7 +9,7 @@ import { API, onPath } from '../security/testSupport';
 import { rawOneToMany } from '../tables/tableTestSupport';
 import { addSubgrid } from './formControls';
 import {
-  ACCOUNT_VIEW, canvasReady, CONTACT_CARD, CONTACT_DEFAULT_VIEW, CONTACT_VIEW, controlById, installControls, LOGO_WR, openForm,
+  ACCOUNT_VIEW, canvasReady, CONTACT_CARD, CONTACT_DEFAULT_VIEW, CONTACT_VIEW, controlById, installControls, installFilterForm, LOGO_WR, openForm,
   PAGE_TEST_TIMEOUT, paramsOf, propsCard, saveButton, savedForm, section, structure, type Call,
 } from './controlsTestSupport';
 
@@ -161,6 +161,40 @@ describe('AddControlDialog', { timeout: PAGE_TEST_TIMEOUT }, () => {
     const form = await saved(user, calls);
     const params = Object.fromEntries(paramsOf(controlById(form, 'account')));
     expect(params).toMatchObject({ RelationshipName: '', TargetEntityType: 'account', ViewId: `{${ACCOUNT_VIEW}}`, RecordsPerPage: '4' });
+  });
+
+  it('a subgrid of records matching a column of this form holds the filter, with an empty relationship (X.11)', async () => {
+    const user = userEvent.setup();
+    const calls = installControls();
+    installFilterForm();
+    openForm();
+    const dialog = await openDialog(user, 'forms.controls.addSubgrid');
+    await user.click(within(dialog).getByRole('radio', { name: new RegExp(`^${en['forms.controls.records.matching']}`) }));
+    expect(within(dialog).getByText(en['forms.controls.filterExtension'])).toBeInTheDocument();
+    const table = within(dialog).getByRole('combobox', { name: en['forms.controls.table'] });
+    await waitFor(() => expect(table).toBeEnabled());
+    await user.selectOptions(table, 'account');
+    await waitFor(() => expect(within(dialog).getByRole('combobox', { name: en['forms.controls.view'] })).toHaveValue(ACCOUNT_VIEW));
+    // The placed lookup parentid only (primarycontactid is not on the form; name is text).
+    const source = within(dialog).getByRole('combobox', { name: en['forms.controls.filterSource'] });
+    expect(within(source).getAllByRole('option').map((o) => o.textContent)).toEqual([en['forms.controls.choose'], 'Parent (parentid)']);
+    expect(confirm(dialog)).toBeDisabled();
+    await user.selectOptions(source, 'parentid');
+    const targetName = en['forms.controls.filterTarget'].replace('{table}', 'Account');
+    const target = await within(dialog).findByRole('combobox', { name: targetName });
+    await waitFor(() => expect(within(target).getAllByRole('option')).toHaveLength(2));
+    // primarycontactid holds contacts only: it cannot hold every record parentid can.
+    expect(within(target).getAllByRole('option').map((o) => o.textContent)).toEqual([en['forms.controls.choose'], 'Parent (parentid)']);
+    expect(within(dialog).getByText(en['forms.controls.filterTargetHint'].replace('{table}', 'Account'))).toBeInTheDocument();
+    expect(confirm(dialog)).toBeDisabled();
+    await user.selectOptions(target, 'parentid');
+    await waitFor(() => expect(confirm(dialog)).toBeEnabled());
+    const spec = vi.mocked(addSubgrid).mock.calls.at(-1)![2];
+    expect(spec).toMatchObject({ relationship: '', targetEntity: 'account', filter: { source: 'parentid', target: 'parentid' } });
+    await user.click(confirm(dialog));
+    const form = await saved(user, calls);
+    const params = Object.fromEntries(paramsOf(controlById(form, 'account')));
+    expect(params).toMatchObject({ RelationshipName: '', TargetEntityType: 'account' });
   });
 
   it('adds a quick view: lookup, then target, then a quick view form (G3)', async () => {

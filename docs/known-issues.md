@@ -2,7 +2,7 @@
 
 [← xrmverse documentation](../README.md#documentation)
 
-**As of November 23, 2026.** This page lists, in one place, the known issues of xrmverse, the limitations of the current
+**As of November 24, 2026.** This page lists, in one place, the known issues of xrmverse, the limitations of the current
 version and the deliberate divergences from Dataverse. The Status column says whether each entry is planned to change or whether it stays.
 The topic pages have the details; [xrmverse compared with Dataverse](dataverse-comparison.md) gives the feature-by-feature
 view.
@@ -177,6 +177,9 @@ still differ. See [PostgreSQL organizations](postgresql.md#known-limits).
 |---|---|---|
 | Rendering | The model-driven UI is xrmverse's own renderer: faithful for the supported Client API, not pixel-identical to Microsoft's Unified Interface. Two looks are available, classic and modern (see [Looks: classic and modern](model-driven-apps.md#looks-classic-and-modern)). | Stays |
 | Solutions using `XrmVerse` or `xrmverse_AppOnLoad` do not import into Dataverse | The `xrmverse_AppOnLoad` setting definition does not exist in Dataverse and scripts that call `XrmVerse` fail there. Keep such apps out of solutions that you also deploy to Dataverse. See [xrmverse extensions](model-driven-apps.md#xrmverse-extensions). | Stays |
+| Subgrid filtered by a form column is xrmverse-only | A subgrid set to list the records matching a lookup of the form keeps a standard FormXml with no relationship; the filter is in the JSON web resources named by the `xrmverse_SubgridFilters` setting, which Dataverse does not have. In Dataverse the same subgrid lists all records of its view. See [Subgrids filtered by a form column](model-driven-apps.md#subgrids-filtered-by-a-form-column). | Stays |
+| One `xrmverse_SubgridFilters` value per app | An app has one `appsetting` row per setting: two solutions that set `xrmverse_SubgridFilters` for the same app overwrite each other's value, and the last import wins. The environment's value is merged with the app's. The form designer stores its entries only in the first resource named by the environment's value. See [Known limits of the subgrids filtered by a form column](model-driven-apps.md#known-limits-of-the-subgrids-filtered-by-a-form-column-x11). | Stays |
+| An unreadable subgrid filter resource hides dataset controls | While a web resource named by `xrmverse_SubgridFilters` cannot be read, every subgrid of the app without a relationship that is replaced by a dataset PCF control shows a notice instead of the control, since xrmverse cannot tell which subgrids the missing resource filters. See [Known limits of the subgrids filtered by a form column](model-driven-apps.md#known-limits-of-the-subgrids-filtered-by-a-form-column-x11). | Stays |
 | Choice text colour | The text colour of a coloured choice value is an xrmverse extension, kept in the `choices` key of the modern look's presentation overlay; Dataverse ignores it. The background colour is the option's own `Color` and round-trips with Dataverse. See [Choice colours](model-driven-apps.md#choice-colours-modern-look). | Stays |
 | Attachment preview | The email form previews PDF files, images and plain text only; HTML, SVG and XML attachments are never rendered and can only be downloaded. See [Email form](model-driven-apps.md#email-form). | Stays |
 | HTML body of a received email (#335) | The email form shows the HTML body of a received email as source text instead of rendering it. | Planned (#335) |

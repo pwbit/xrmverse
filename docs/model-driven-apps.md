@@ -763,6 +763,8 @@ column, is drawn with the standard control).
   [Dataset controls](#dataset-controls)).
 - In the modern look a subgrid can also be shown as a board, a calendar or cards when the presentation overlay says so
   for that form (see [Subgrids](#subgrids)).
+- A subgrid can list the rows that match another lookup of the form instead of related rows, an xrmverse extension (see
+  [Subgrids filtered by a form column](#subgrids-filtered-by-a-form-column)).
 - A **quick view** shows the related record's quick view form (`type` 6, named in `QuickForms` for the lookup's target)
   read-only. An empty lookup, or a target with no quick form in the parameter, shows nothing.
 
@@ -1429,7 +1431,8 @@ delete of one reply (the count goes back from "2 replies" to "1 reply") and the 
 ## xrmverse extensions
 
 xrmverse adds a few things that Dataverse does not have. They are xrmverse's own, with names chosen for xrmverse, and
-they are reachable only inside a model-driven app (not on the [web admin](web-admin.md) pages).
+they take effect only inside a model-driven app (not on the [web admin](web-admin.md) pages), even when the web admin
+configures them.
 
 - **`XrmVerse`**, a client extension on the app shell's window and in every script host, next to `Xrm`. HTML web
   resources reach it as `parent.XrmVerse`. It is defined in every app, whether or not the app has OnLoad handlers.
@@ -1438,6 +1441,7 @@ they are reachable only inside a model-driven app (not on the [web admin](web-ad
 - **App notifications**: messages under the app header that a script raises for the whole app.
 - **The app OnLoad event**, set with the `xrmverse_AppOnLoad` app setting.
 - **A navigation toggle** in the header of both looks.
+- **Subgrids filtered by a form column**, set with the `xrmverse_SubgridFilters` setting and the form designer.
 
 ### Members
 
@@ -1565,6 +1569,118 @@ The header of both looks (classic and modern) has a button that collapses and sh
 remembers the choice (`localStorage`, one value for all apps), and on a narrow screen the navigation starts collapsed.
 A browser that blocks local storage simply does not remember.
 
+### Subgrids filtered by a form column
+
+A subgrid of a main form normally lists the rows related to the form's record (its relationship) or, with no
+relationship, every row of its view. xrmverse adds a third choice: the rows whose lookup column matches **another lookup
+of the form**. For example, on a work item form, a grid of the open cases of the customer chosen in the form's Customer
+lookup, which follows the lookup when the user changes it.
+
+Dataverse has no equivalent, so this is an xrmverse extension. The FormXml is not changed: the subgrid stays a valid
+Dataverse subgrid with an empty `RelationshipName` ("All records"), and the filter is kept outside the form, in a JSON web
+resource that a setting names.
+
+#### Tasks
+
+| Task | How |
+|---|---|
+| Add a filtered subgrid | In the web admin's form designer, **Add subgrid** → Records **Records matching a column of this form** (see below). |
+| Change an existing subgrid | Select it, then in **Properties** choose Records **Matching a column of this form**, or back to **All records**. |
+| Ship the filter in a solution | Add the JSON web resource to the solution and give the app an `appsetting` for `xrmverse_SubgridFilters` that names it. |
+| Remove the filter | Delete the subgrid, or switch it to another Records option, and save the form. |
+
+#### The setting
+
+The setting definition `xrmverse_SubgridFilters` (id `6f1c2a5e-8d4b-4e37-9a61-3b2f7c0d1e31`, default value empty) is
+seeded in every organization. Its value is a JSON array of web resource names:
+
+```json
+["xrmv_/xrmverse/subgridfilters.json"]
+```
+
+An app reads both values: the app's (`appsetting`) and the environment's (`organizationsetting`). Unlike the look
+settings, where the first value found wins, the two are **merged**: the entries of every resource named by either value
+apply, and when the app's resources and the environment's have an entry for the same form and control, the app's entry
+wins. The value is a list of names rather than the entries themselves because a setting value holds at most 2,000
+characters.
+
+#### The resource
+
+Each named resource is a script web resource (type 3) whose name ends in `.json` and whose content is:
+
+```json
+{
+  "forms": {
+    "<form id>": {
+      "<subgrid control id>": { "source": "xrmv_customerid", "target": "xrmv_customerid" }
+    }
+  }
+}
+```
+
+- `<form id>` is the `systemform` id, with or without braces, in any case. `<subgrid control id>` is the `id` of the
+  subgrid's `<control>` in the FormXml, in any case.
+- `source` is a lookup, Customer or Owner column of the form's table, placed on the form: the subgrid follows its current
+  value on the form. A source that is not on the form counts as empty.
+- `target` is a lookup column of the subgrid's table that can hold the records of `source` (for a Customer source, a column
+  that accepts both account and contact).
+- The grid lists the rows of its view where `target` equals the current value of `source`; the view's own filter is kept.
+- Unknown keys and malformed entries are ignored with a console warning that starts with `[xrmverse subgrid filter]`; a
+  resource that cannot be read or parsed is ignored with one such warning, and the others still apply.
+
+#### On the form
+
+The filter works in the classic and the modern look and in every app that reads the setting.
+
+- **The grid follows the source.** When the source lookup changes on the form, by the user or by a script
+  (`setValue`), the grid reloads with the new value.
+- **Empty source.** The grid shows no rows and the notice "Fill {label} to see the records.", where `{label}` is the
+  source's label on the form; **New** is disabled.
+- **Create form.** The grid works before the first save: it follows the source as soon as it is filled. There is no "Save
+  the record to see related records."
+- **New** opens the subgrid table's create form with `target` set to the source's value (`extraqs` `{target}`,
+  `{target}name`, `{target}type`). **Add Existing** is not offered: the rows are not related to the form's record.
+- **Client API.** `getRelationship()` returns `null`, as for an "All records" subgrid; `getFetchXml()` returns the filtered
+  query; `refresh()` and the subgrid's OnLoad event work as for any subgrid. The board, calendar and cards modes of the
+  modern look ([Subgrids](#subgrids)) show the filtered rows.
+- **A broken entry never shows all records.** If `target` is not a lookup of the subgrid's table, or cannot hold the
+  source's record, the subgrid shows "This subgrid's filter cannot be applied: {reason}." instead of rows, and a
+  `[xrmverse subgrid filter]` warning is logged.
+- **A subgrid with a relationship keeps it.** An entry for a subgrid whose FormXml names a `RelationshipName` is ignored
+  with a console warning: the subgrid lists the related records, as Dataverse would.
+- **Dataset controls.** A subgrid replaced by a dataset PCF control shows "This subgrid is filtered by a form column,
+  which its custom control does not support." instead of the control.
+- **While the resources are read.** A subgrid without a `RelationshipName` shows "Loading related records..." until every
+  resource named by `xrmverse_SubgridFilters` is read, so it never shows all records first. If a resource cannot be read,
+  the others still apply, and a subgrid without a `RelationshipName` replaced by a dataset PCF control shows "This
+  subgrid's filters could not be read, so its custom control is not shown." instead of the control.
+
+#### In the form designer
+
+The web admin's form designer (see [Forms](web-admin.md#forms)) offers the filter as a third **Records** option, marked
+*xrmverse*:
+
+- **Add subgrid**: **Records matching a column of this form**, then **Table** (the subgrid's table), **Column of this form**
+  (the lookup, Customer and Owner columns placed on the form) and **Matches column of {table}** (only the lookups of that
+  table that can hold the same records are listed).
+- **Properties** of a subgrid without a relationship: Records **All records** or **Matching a column of this form**, with
+  the same two column lists, and the hint "Lists {table} records whose {target} equals this form's {source}."
+- Both show the warning "xrmverse extension. Exported to Dataverse, this subgrid lists all records of the view."
+
+On **Save**, the designer writes the form's entries to the **first** resource named by the environment's value of
+`xrmverse_SubgridFilters`, keeping every other form's entries. If the environment's value names none, the designer creates
+the script web resource `{prefix}_/xrmverse/subgridfilters.json`, where `{prefix}` is the customization prefix of the
+Default solution's publisher, and sets the environment's value to name it. To ship it, add that web resource to your own
+solution. A resource from a managed solution, or one that cannot be parsed, is not written: the designer shows an error
+and keeps the page's changes. The designer reads and writes only the environment's value, never an app's.
+
+#### In Dataverse
+
+A solution with a filtered subgrid imports into Dataverse, because the FormXml is a standard subgrid, but there the
+subgrid lists **all records** of its view: Dataverse does not read `xrmverse_SubgridFilters` (the setting definition does
+not exist there, so an `appsetting` for it does not import). Keep such forms out of solutions that you also deploy to
+Dataverse, or accept the unfiltered grid there.
+
 ### Not importable into Dataverse
 
 A solution whose app uses `xrmverse_AppOnLoad`, or whose scripts call `XrmVerse`, does not import into Dataverse: the
@@ -1585,6 +1701,21 @@ also deploy to Dataverse. Import and export in xrmverse keep the setting in the 
 - **Handlers run once per app open, with a 10 second wait each.** A handler that needs more time keeps running, but its
   outcome is ignored and a notification says so.
 - **No `XrmVerse` on the web admin pages.**
+
+### Known limits of the subgrids filtered by a form column (X.11)
+
+- **xrmverse only.** In Dataverse the same subgrid lists all records of its view.
+- **One `appsetting` per app.** An app has one value of `xrmverse_SubgridFilters`: two solutions that set it for the same
+  app overwrite each other's value, and only the last imported list of resources applies to that app. The environment's
+  value still applies too.
+- **The designer writes one resource.** It stores entries only in the first resource named by the environment's value; to
+  use another resource, or an app's, edit its JSON.
+- **One lookup column, one condition.** No filter by a text, choice or date column, by several columns, or together with a
+  relationship; no script API to change a subgrid's filter.
+- **Main forms only.** Entries for subgrids inside quick view forms, on dashboards and in the Related tab are ignored.
+- **An unreadable resource hides dataset controls.** While a resource named by `xrmverse_SubgridFilters` cannot be read,
+  every subgrid of the app without a `RelationshipName` that is replaced by a dataset PCF control shows a notice instead
+  of the control, whether or not it has an entry: xrmverse cannot tell which subgrids the missing resource filters.
 
 ## User time zone and date formats
 
@@ -1669,6 +1800,7 @@ UI-1 is complete: every stage above is delivered. Custom rendering (UI-2, item 3
 | UI-2f (done) | Form designer in the web admin (see [Forms](web-admin.md#forms)). |
 | UI-2g (done) | More from the form designer: drag and drop; creating and configuring subgrids, quick views, web resources and custom (PCF) controls; editing events and form libraries (see [Forms](web-admin.md#forms)). |
 | X.10 (in progress) | The xrmverse-only extension `XrmVerse` (app side panes and app notifications), the app OnLoad event and the collapsible navigation in the classic look (see [xrmverse extensions](#xrmverse-extensions)). |
+| X.11 (in progress) | Subgrids filtered by a lookup of the form, set with the `xrmverse_SubgridFilters` setting and the form designer (see [Subgrids filtered by a form column](#subgrids-filtered-by-a-form-column)). |
 
 Out of UI-1 (declared in the spec): business process flows, client-side business rules, editable grids, offline, canvas
 apps and custom pages.

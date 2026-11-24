@@ -663,7 +663,7 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
     /// <see cref="AppModuleSchema.AsyncOnSave"/>, plus the timeline options <see cref="AppModuleSchema.TimelineGroupByDate"/>,
     /// <see cref="AppModuleSchema.TimelineRememberFilters"/> (UI-1g) and <see cref="AppModuleSchema.TimelinePosts"/> (UI-1g, posts),
     /// with their well-known ids and the default <c>false</c>, and the presentation settings <see cref="AppModuleSchema.Renderer"/>
-    /// (default <c>classic</c>) and <see cref="AppModuleSchema.Presentation"/> (default empty; UI-2a) and <see cref="AppModuleSchema.LookupOpenMode"/> (default <c>sidepane</c>) and <see cref="AppModuleSchema.AppOnLoad"/> (default empty; X.10) and <see cref="AppModuleSchema.EmailSendFrom"/> (default <c>userOrQueue</c>; plan 4.1b), each inserted only when its row is missing (an administrator's change
+    /// (default <c>classic</c>) and <see cref="AppModuleSchema.Presentation"/> (default empty; UI-2a) and <see cref="AppModuleSchema.LookupOpenMode"/> (default <c>sidepane</c>) and <see cref="AppModuleSchema.AppOnLoad"/> (default empty; X.10) and <see cref="AppModuleSchema.SubgridFilters"/> (default empty; X.11) and <see cref="AppModuleSchema.EmailSendFrom"/> (default <c>userOrQueue</c>; plan 4.1b), each inserted only when its row is missing (an administrator's change
     /// to a row stays).
     /// </summary>
     private static async Task EnsureSettingDefinitionsAsync(
@@ -679,7 +679,8 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
                 (@remember, @remembername, @false), (@posts, @postsname, @false),
                 (@renderer, @renderername, @rendererdefault), (@presentation, @presentationname, @presentationdefault),
                 (@lookupopen, @lookupopenname, @lookupopendefault),
-                (@apponload, @apponloadname, @apponloaddefault), (@emailsendfrom, @emailsendfromname, @emailsendfromdefault))
+                (@apponload, @apponloadname, @apponloaddefault), (@subgridfilters, @subgridfiltersname, @subgridfiltersdefault),
+                (@emailsendfrom, @emailsendfromname, @emailsendfromdefault))
                 AS j (id, name, defaultvalue)
             WHERE NOT EXISTS (SELECT 1 FROM data.{AppModuleSchema.SettingDefinition} d{dialect.LockHint(RowLock.UpdateRange)}
                 WHERE d.{AppModuleSchema.SettingDefinition}id = j.id OR d.uniquename = j.name);
@@ -697,6 +698,8 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
             ("@lookupopendefault", AppModuleSchema.LookupOpenModeDefault),
             ("@apponload", AppModuleSchema.AppOnLoadId), ("@apponloadname", AppModuleSchema.AppOnLoad),
             ("@apponloaddefault", AppModuleSchema.AppOnLoadDefault),
+            ("@subgridfilters", AppModuleSchema.SubgridFiltersId), ("@subgridfiltersname", AppModuleSchema.SubgridFilters),
+            ("@subgridfiltersdefault", AppModuleSchema.SubgridFiltersDefault),
             ("@emailsendfrom", AppModuleSchema.EmailSendFromId), ("@emailsendfromname", AppModuleSchema.EmailSendFrom),
             ("@emailsendfromdefault", AppModuleSchema.EmailSendFromUserOrQueue),
             // A parameter, not N'false': on PostgreSQL a VALUES column cannot mix a character literal with citext parameters.

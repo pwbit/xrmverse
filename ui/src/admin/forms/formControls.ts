@@ -1,12 +1,13 @@
 import { CLASS_ID, controlKind } from '../../parsers/controlClass';
 import { controlParam, quickForms, scrollingOf } from '../../parsers/formXml';
 import { childElements } from '../../parsers/xml';
+import type { SubgridFilter } from '../../apps/record/subgridFilters';
 import { allCells, bodySections, mapCell } from './formCells';
 import type { DesignCell, DesignSection, FormDesign } from './formDesign';
 import { newGuid } from './formIds';
 import { append } from './xmlIndent';
 
-/** A subgrid control (G2). `relationship` is empty for "All records". */
+/** A subgrid control (G2). `relationship` is empty for "All records" and for records matching a form column. */
 export interface SubgridSpec {
   kind: 'subgrid';
   controlId: string;
@@ -16,6 +17,11 @@ export interface SubgridSpec {
   recordsPerPage: number;
   /** `EnableViewPicker`: "Show view selector". */
   viewPicker: boolean;
+  /**
+   * Records matching a column of the form (X.11): an xrmverse extension held in the design only, never in the FormXML
+   * (the relationship is then empty). {@link readControl} never sets it.
+   */
+  filter?: SubgridFilter;
 }
 
 /** A quick view control (G3). */
@@ -68,8 +74,9 @@ export const validPerPage = (text: string): boolean =>
 function canonical(spec: ControlSpec): ControlSpec {
   switch (spec.kind) {
     case 'subgrid': {
-      const { kind, controlId, relationship, targetEntity, viewId, recordsPerPage, viewPicker } = spec;
-      return { kind, controlId, relationship, targetEntity, viewId, recordsPerPage, viewPicker };
+      const { kind, controlId, relationship, targetEntity, viewId, recordsPerPage, viewPicker, filter } = spec;
+      const base: SubgridSpec = { kind, controlId, relationship, targetEntity, viewId, recordsPerPage, viewPicker };
+      return filter ? { ...base, filter: { source: filter.source, target: filter.target } } : base;
     }
     case 'quickview': {
       const { kind, controlId, lookup, forms } = spec;
@@ -151,7 +158,7 @@ function parameters(spec: ControlSpec): [string, string][] {
       return [
         ['ViewId', spec.viewId],
         ['IsUserView', 'false'],
-        ['RelationshipName', spec.relationship],
+        ['RelationshipName', spec.filter ? '' : spec.relationship],
         ['TargetEntityType', spec.targetEntity],
         ['AutoExpand', 'Fixed'],
         ['EnableQuickFind', 'false'],
@@ -309,7 +316,8 @@ export function addWebResource(d: FormDesign, sectionKey: string, spec: WebResou
 /**
  * Configures the control of a subgrid, quick view or web resource cell (body or header). What the designer does not
  * offer to change is kept from the current spec and a different value is ignored: the control id, a subgrid's
- * relationship and target table (G2: delete and add instead), and a quick view's lookup. The cell's spans are kept.
+ * relationship and target table (G2: delete and add instead), and a quick view's lookup; the `filter` (X.11) of a subgrid
+ * without a relationship may be set or removed, and one with a relationship never gets one. The cell's spans are kept.
  * `recordsPerPage` is clamped to 1–250 (4 when it is not a number).
  * `d` itself for another kind, a cell without a spec (IFRAME, timeline) or no change.
  */
@@ -320,6 +328,8 @@ export function setControl(d: FormDesign, cellKey: string, spec: ControlSpec): F
   const kept: ControlSpec = old.kind === 'subgrid'
     ? {
       ...sub, controlId: old.controlId, relationship: old.relationship, targetEntity: old.targetEntity,
+      // A subgrid with a relationship keeps it (X.11): a filter would empty its RelationshipName.
+      ...(old.relationship ? { filter: undefined } : {}),
       // A value read from the source and left as it is stays, even out of range.
       recordsPerPage: sub.recordsPerPage === old.recordsPerPage ? old.recordsPerPage : clampRecordsPerPage(sub.recordsPerPage),
     }
@@ -336,7 +346,7 @@ export function subgridDataSet(spec: SubgridSpec): Record<string, string> {
   return {
     ViewId: spec.viewId,
     IsUserView: 'false',
-    RelationshipName: spec.relationship,
+    RelationshipName: spec.filter ? '' : spec.relationship,
     TargetEntityType: spec.targetEntity,
     EnableViewPicker: String(spec.viewPicker),
     RecordsPerPage: String(spec.recordsPerPage),

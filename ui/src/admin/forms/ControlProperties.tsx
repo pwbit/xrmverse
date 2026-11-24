@@ -1,8 +1,12 @@
-import { Field, Input, makeStyles, Select, Switch, tokens } from '@fluentui/react-components';
-import { useState } from 'react';
+import {
+  Field, Input, makeStyles, MessageBar, MessageBarBody, Radio, RadioGroup, Select, Switch, tokens,
+} from '@fluentui/react-components';
+import { useEffect, useState } from 'react';
 import { t } from '../../shell/i18n/t';
 import type { AttributeMeta } from '../tables/metadata';
+import { loadEntity } from '../tables/tableApi';
 import { useLoad, useLoadFor } from '../tables/useLoad';
+import { ExtensionNote, MatchingLabel } from './AddControlDialog';
 import {
   MAX_RECORDS_PER_PAGE, setControl, validPerPage, type ControlSpec, type QuickViewSpec, type SubgridSpec, type WebResourceSpec,
 } from './formControls';
@@ -11,9 +15,15 @@ import {
 } from './formControlsApi';
 import type { DesignCell, FormDesign } from './formDesign';
 import { LoadFailed } from './LoadFailed';
+import { filterProblem, filterSources, filterTargets, placedColumns } from './subgridFilterChoices';
 
 const useStyles = makeStyles({
   hint: { margin: 0, color: tokens.colorNeutralForeground3, overflowWrap: 'anywhere' },
+  /** The columns of a subgrid matching a form column, set off under the Records choice. */
+  nested: {
+    display: 'flex', flexDirection: 'column', gap: tokens.spacingVerticalS,
+    borderLeft: `${tokens.strokeWidthThickest} solid ${tokens.colorBrandStroke1}`, paddingLeft: tokens.spacingHorizontalL,
+  },
 });
 
 export interface ControlPropertiesProps {
@@ -38,21 +48,126 @@ export function ControlProperties(props: ControlPropertiesProps) {
 
 type Props<S> = ControlPropertiesProps & { spec: S };
 
-function SubgridProperties({ design, cell, spec, onChange, readOnly }: Props<SubgridSpec>) {
+type RecordsMode = 'related' | 'all' | 'matching';
+
+function SubgridProperties({ design, attributes, cell, spec, onChange, readOnly }: Props<SubgridSpec>) {
   const styles = useStyles();
   const views = useLoadFor(spec.targetEntity || undefined, (api) => listPublicViews(api, spec.targetEntity));
   /** The records per page being typed: applied while it is a whole number in 1–250, shown as typed until the field is left. */
   const [draft, setDraft] = useState<string>();
+  /** "Matching" chosen while no filter is set yet: the source picked so far (no target of the table can match it yet). */
+  const [pending, setPending] = useState<{ source: string }>();
   const set = (patch: Partial<SubgridSpec>) => onChange(setControl(design, cell.key, { ...spec, ...patch }));
   const known = views.data?.some((v) => sameId(v.id, spec.viewId)) ?? false;
   const perPage = draft ?? String(spec.recordsPerPage);
+  const mode: RecordsMode = spec.relationship ? 'related' : spec.filter || pending ? 'matching' : 'all';
+  // Read for a subgrid without a relationship, so the columns are there when Matching is chosen.
+  const table = useLoadFor(spec.relationship ? undefined : spec.targetEntity || undefined, (api) => loadEntity(api, spec.targetEntity));
+  const form = { attributes };
+  const sources = filterSources(form, placedColumns(design));
+  const sourceName = spec.filter?.source ?? pending?.source ?? '';
+  const sourceAttr = sources.find((a) => a.logicalName.toLowerCase() === sourceName.toLowerCase());
+  const targets = sourceAttr && table.data ? filterTargets(sourceAttr, table.data) : [];
+  const problem = filterProblem(design, spec, form, table.data);
+  const nameOf = (list: AttributeMeta[], name: string) =>
+    list.find((a) => a.logicalName.toLowerCase() === name.toLowerCase())?.displayName || name;
+  const tableName = table.data?.displayName || spec.targetEntity;
+
+  /** Filters by `source` and the first column of the table that can match it, or waits for one when none can. */
+  const chooseSource = (source: string) => {
+    const attr = sources.find((a) => a.logicalName === source);
+    const first = attr && table.data ? filterTargets(attr, table.data)[0] : undefined;
+    if (first) {
+      setPending(undefined);
+      set({ filter: { source, target: first.logicalName } });
+    } else {
+      setPending({ source });
+      if (spec.filter) set({ filter: undefined });
+    }
+  };
+  // A source chosen before the table was read gets its first matching column once it is.
+  const firstTarget = pending ? targets[0]?.logicalName : undefined;
+  useEffect(() => {
+    if (pending && firstTarget) chooseSource(pending.source);
+    // chooseSource is recreated on every render; the pending source and its first target are what matter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pending, firstTarget]);
+  const chooseMode = (next: RecordsMode) => {
+    if (next === 'all') {
+      setPending(undefined);
+      if (spec.filter) set({ filter: undefined });
+    } else if (next === 'matching') {
+      chooseSource(sources[0]?.logicalName ?? '');
+    }
+  };
+
   return (
     <>
       <p className={styles.hint}>
         {spec.relationship
           ? t('forms.props.subgridRelated', { table: spec.targetEntity, relationship: spec.relationship })
-          : t('forms.props.subgridAll', { table: spec.targetEntity })}
+          : spec.filter
+            ? t('forms.props.subgridMatching', {
+              table: tableName, target: nameOf(table.data?.attributes ?? [], spec.filter.target), source: nameOf(attributes, spec.filter.source),
+            })
+            : pending
+              // Matching chosen, no column to match yet: nothing is stored, so a save keeps All records.
+              ? t('forms.props.subgridMatchingPending', { table: spec.targetEntity })
+              : t('forms.props.subgridAll', { table: spec.targetEntity })}
       </p>
+      <Field label={t('forms.controls.records')}>
+        <RadioGroup value={mode} disabled={readOnly} onChange={(_, d) => chooseMode(d.value as RecordsMode)}>
+          <Radio value="related" label={t('forms.controls.records.related')} disabled={!spec.relationship} />
+          <Radio value="all" label={t('forms.controls.records.all')} disabled={!!spec.relationship} />
+          <Radio
+            value="matching"
+            label={<MatchingLabel text={t('forms.controls.records.matchingShort')} />}
+            disabled={!!spec.relationship}
+          />
+        </RadioGroup>
+      </Field>
+      {mode === 'matching' && (
+        <div className={styles.nested}>
+          <Field label={t('forms.controls.filterSource')}>
+            <Select value={sourceName} disabled={readOnly} onChange={(_, d) => chooseSource(d.value)}>
+              {!sourceAttr && <option value={sourceName}>{sourceName ? nameOf(attributes, sourceName) : t('forms.controls.choose')}</option>}
+              {sources.map((a) => (
+                <option key={a.logicalName} value={a.logicalName}>
+                  {a.displayName || a.logicalName}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <LoadFailed error={table.error} />
+          <Field
+            label={t('forms.controls.filterTarget', { table: tableName })}
+            hint={t('forms.controls.filterTargetHint', { table: tableName })}
+          >
+            <Select
+              value={spec.filter?.target ?? ''}
+              disabled={readOnly || !sourceAttr || !table.data}
+              onChange={(_, d) => set({ filter: { source: sourceName, target: d.value } })}
+            >
+              {!targets.some((a) => a.logicalName === spec.filter?.target) && (
+                <option value={spec.filter?.target ?? ''}>
+                  {spec.filter ? nameOf(table.data?.attributes ?? [], spec.filter.target) : t('forms.controls.choose')}
+                </option>
+              )}
+              {targets.map((a) => (
+                <option key={a.logicalName} value={a.logicalName}>
+                  {a.displayName || a.logicalName}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          {problem && (
+            <MessageBar intent="warning">
+              <MessageBarBody>{problem}</MessageBarBody>
+            </MessageBar>
+          )}
+          <ExtensionNote />
+        </div>
+      )}
       <LoadFailed error={views.error} />
       <Field label={t('forms.controls.view')}>
         <Select

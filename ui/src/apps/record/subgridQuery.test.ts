@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { LookupRelationship, ManyToManyRelationship } from '../../admin/tables/tableApi';
 import { parseXml } from '../../parsers/xml';
-import { subgridFetchXml } from './subgridQuery';
+import { subgridFetchXml, subgridLookupFetchXml } from './subgridQuery';
 
 const PROJECT = 'cccccccc-0000-0000-0000-000000000003';
 
@@ -118,5 +118,35 @@ describe('subgridFetchXml', () => {
     expect(conditions).toHaveLength(1);
     expect(conditions[0]!.getAttribute('value')).toBe(evil);
     expect(xml).not.toContain('<b>');
+  });
+});
+
+describe('subgridLookupFetchXml', () => {
+  const ID = 'dddddddd-0000-0000-0000-000000000001';
+
+  it('keeps an or filter inside a new and filter with the lookup condition', () => {
+    const view = `<fetch><entity name="x"><attribute name="a" /><filter type="or"><condition attribute="a" operator="eq" value="1" /><condition attribute="b" operator="eq" value="2" /></filter></entity></fetch>`;
+    const entity = entityOf(subgridLookupFetchXml(view, 'xrmv_customerid', ID));
+    const filters = kids(entity, 'filter');
+    expect(filters).toHaveLength(1);
+    expect(filters[0]!.getAttribute('type')).toBe('and');
+    const inner = kids(filters[0]!, 'filter');
+    expect(inner).toHaveLength(1);
+    expect(inner[0]!.getAttribute('type')).toBe('or');
+    const conditions = kids(filters[0]!, 'condition');
+    expect(conditions).toHaveLength(1);
+    expect(conditions[0]!.getAttribute('attribute')).toBe('xrmv_customerid');
+    expect(conditions[0]!.getAttribute('operator')).toBe('eq');
+    expect(conditions[0]!.getAttribute('value')).toBe(ID);
+  });
+
+  it('escapes the value through the serializer', () => {
+    const xml = subgridLookupFetchXml(VIEW, 'xrmv_customerid', 'a"b<c');
+    expect(xml).not.toContain('a"b<c');
+    expect(kids(kids(entityOf(xml), 'filter')[0]!, 'condition')[0]!.getAttribute('value')).toBe('a"b<c');
+  });
+
+  it('throws for a non-FetchXML document', () => {
+    expect(() => subgridLookupFetchXml('<foo/>', 'c', ID)).toThrow('Not a FetchXML document.');
   });
 });

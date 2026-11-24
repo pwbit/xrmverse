@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addExistingFilter, subgridCommandsAllowed, subgridNew } from './subgridCommands';
+import { addExistingFilter, subgridCommandsAllowed, subgridLookupNew, subgridNew } from './subgridCommands';
 
 const parent = { table: 'xv_project', entitySetName: 'xv_projects', id: 'p1', name: 'Alpha' };
 const oneToMany = { schemaName: 'xv_project_task', referencingEntity: 'xv_task', referencingAttribute: 'xv_projectid', referencedEntity: 'xv_project' };
@@ -37,5 +37,15 @@ describe('subgridCommands', () => {
   it('add_existing_filter_only_for_one_to_many', () => {
     expect(addExistingFilter(oneToMany, 'p1')).toBe('_xv_projectid_value eq null or _xv_projectid_value ne p1');
     expect(addExistingFilter(manyToMany, 'p1')).toBeUndefined();
+  });
+
+  it('lookup_new_fills_the_target_column_from_the_source_value', () => {
+    expect(subgridLookupNew('xv_accountid', { id: 'a1', target: 'account', name: 'Contoso' })).toEqual({
+      xv_accountid: 'a1',
+      xv_accountidname: 'Contoso',
+      xv_accountidtype: 'account',
+    });
+    // A value without its name (set by a script) still fills the column.
+    expect(subgridLookupNew('xv_customerid', { id: 'c1', target: 'contact' })).toEqual({ xv_customerid: 'c1', xv_customeridname: '', xv_customeridtype: 'contact' });
   });
 });

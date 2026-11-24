@@ -1,3 +1,4 @@
+import type { LookupValue } from '../../admin/tables/formValues';
 import type { XrmApi } from '../../shell/api/client';
 import { XrmError } from '../../shell/api/errors';
 import type { RelationshipMeta } from './subgridQuery';
@@ -51,6 +52,14 @@ export function subgridNew(relationship: RelationshipMeta, parent: SubgridParent
   const childIsFirst = relationship.entity1 === child.table && relationship.entity1 !== relationship.entity2;
   const nav = (childIsFirst ? relationship.entity1Nav : relationship.entity2Nav) ?? relationship.schemaName;
   return { associate: { nav, target: `${parent.entitySetName}(${parent.id})` } };
+}
+
+/**
+ * What the subgrid's table's create form opens with, from the New of a subgrid filtered by a form lookup (X.11): `extraqs` set
+ * the target lookup column to the source's value (`{target}`, `{target}name`, `{target}type`), as a one-to-many New does.
+ */
+export function subgridLookupNew(target: string, value: LookupValue): Record<string, string> {
+  return { [target]: value.id, [`${target}name`]: value.name ?? '', [`${target}type`]: value.target };
 }
 
 /** Makes the association of a new many-to-many row (after its create). */

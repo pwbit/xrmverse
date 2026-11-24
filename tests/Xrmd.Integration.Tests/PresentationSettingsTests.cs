@@ -68,6 +68,14 @@ public sealed class PresentationSettingsTests(XrmdFixture fx)
         $$"""{ "uniquename": "{{name}}", "displayname": "{{name}}", "value": "{{value}}", "settingdefinitionid@odata.bind": "/settingdefinitions({{definition}})" }""";
 
     [Fact]
+    public async Task Subgrid_filters_setting_seeded()
+    {
+        (await ScalarAsync(fx.ConnectionString, $"SELECT COUNT(*) FROM data.{AppModuleSchema.SettingDefinition} " +
+            $"WHERE settingdefinitionid = '{AppModuleSchema.SubgridFiltersId}' AND uniquename = '{AppModuleSchema.SubgridFilters}' " +
+            $"AND displayname = '{AppModuleSchema.SubgridFilters}' AND COALESCE(defaultvalue, N'') = N''")).Should().Be(1);
+    }
+
+    [Fact]
     public async Task Admin_creates_environment_value_and_basic_user_reads_it()
     {
         var definition = await NewDefinitionAsync();

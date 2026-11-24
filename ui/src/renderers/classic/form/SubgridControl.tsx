@@ -4,7 +4,10 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useRecordOpener } from '../../../apps/record/recordOpener';
 import { mainAspxUrl } from '../../../apps/mainAspx';
 import { heldPrivileges } from '../../../apps/record/privileges';
-import { subgridFetchXml, type RelationshipMeta } from '../../../apps/record/subgridQuery';
+import { subgridFetchXml, subgridLookupFetchXml, type RelationshipMeta } from '../../../apps/record/subgridQuery';
+import type { SubgridFilter } from '../../../apps/record/subgridFilters';
+import type { FieldValue, LookupValue } from '../../../admin/tables/formValues';
+import { loadEntity } from '../../../admin/tables/tableApi';
 import { cellText, runView, type ViewPage } from '../../../apps/runView';
 import { useLoadedUserSettings } from '../../../apps/userSettings';
 import { wallClockOf } from '../../../apps/timeZones';
@@ -27,7 +30,7 @@ import { cachedRead, type ControlEnv } from './controlEnv';
 import { AddExistingDialog } from './AddExistingDialog';
 import { loadSubgridSetup, UnknownViewError, type SubgridSetup } from './subgridSetup';
 import { PcfDatasetControl, type DataSetSubgrid } from '../../../pcf/PcfDatasetControl';
-import { addExisting, addExistingFilter, subgridCommandsAllowed, subgridNew, type SubgridParent } from '../../../apps/record/subgridCommands';
+import { addExisting, addExistingFilter, subgridCommandsAllowed, subgridLookupNew, subgridNew, type SubgridParent } from '../../../apps/record/subgridCommands';
 import { AddExistingIcon, NewIcon, NextPageIcon, PreviousPageIcon } from '../../../shell/icons';
 import { useSurfaceStyles } from '../../../shell/layout/surface';
 
@@ -63,6 +66,8 @@ interface Setup extends SubgridSetup {
   /** The same query without paging: what the board and the calendar read (up to BOARD_LIMIT records). */
   baseFetchXml: string;
   relationship?: RelationshipMeta;
+  /** A subgrid filtered by a form lookup (X.11): the target column and the source's value, absent while the source is empty. */
+  filter?: { target: string; value?: LookupValue };
 }
 
 async function loadSetup(api: XrmApi, control: SubgridModel, recordId: string, env: ControlEnv): Promise<Setup> {
@@ -76,6 +81,34 @@ async function loadSetup(api: XrmApi, control: SubgridModel, recordId: string, e
 async function loadUnparentedSetup(api: XrmApi, control: SubgridModel, env: ControlEnv): Promise<Setup> {
   const setup = await loadSubgridSetup(api, { ...control, relationship: '' }, env, { relationshipOptional: true });
   return { view: setup.view, tables: setup.tables, target: setup.target, fetchXml: withPaging(setup.view.fetchXml, 1, control.recordsPerPage), baseFetchXml: setup.view.fetchXml };
+}
+
+/** A filter that cannot be applied (X.11): the subgrid shows `record.subgrid.filterInvalid` with the reason, never the rows. */
+class FilterInvalidError extends Error {}
+
+/**
+ * The setup of a subgrid filtered by a form lookup (X.11): the whole view ANDed with `{target} eq {value}`. The target must be a
+ * lookup column of the subgrid's table that can hold a record of the value's table; else it throws a `FilterInvalidError`.
+ * Without a value (the source is empty) nothing is queried: the setup carries no FetchXML.
+ */
+async function loadFilteredSetup(api: XrmApi, control: SubgridModel, filter: SubgridFilter, value: LookupValue | undefined, env: ControlEnv): Promise<Setup> {
+  const setup = await loadSubgridSetup(api, { ...control, relationship: '' }, env, { relationshipOptional: true });
+  const entity = await cachedRead(env, `entity|${setup.target}`, () => loadEntity(api, setup.target));
+  const column = entity.attributes.find((a) => a.logicalName === filter.target);
+  if (!column || column.kind !== 'lookup') throw new FilterInvalidError(t('record.subgrid.filterNoLookup', { table: setup.target, column: filter.target }));
+  if (value && !column.targets.includes(value.target)) {
+    throw new FilterInvalidError(t('record.subgrid.filterWrongTable', { column: filter.target, table: setup.target, target: value.target }));
+  }
+  const base = { view: setup.view, tables: setup.tables, target: setup.target, filter: { target: filter.target, ...(value ? { value } : {}) } };
+  if (!value) return { ...base, fetchXml: '', baseFetchXml: '' };
+  const baseFetchXml = subgridLookupFetchXml(setup.view.fetchXml, filter.target, value.id);
+  return { ...base, fetchXml: withPaging(baseFetchXml, 1, control.recordsPerPage), baseFetchXml };
+}
+
+/** The source's value as a lookup (R3: a column not on the form, or empty, has none). */
+function lookupOf(value: FieldValue | undefined): LookupValue | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  return typeof value.id === 'string' && value.id && typeof value.target === 'string' && value.target ? value : undefined;
 }
 
 const hasDataSet = (control: SubgridModel): control is DataSetSubgrid => !!control.customControl?.dataSet;
@@ -92,6 +125,17 @@ function subgridEntry(control: SubgridModel, env: ControlEnv): ViewPresentation 
   if (!modes || control.related || !env.formId || normaliseId(env.formId) !== normaliseId(modes.formId)) return undefined;
   const key = entryKey(control);
   return Object.hasOwn(modes.entries, key) ? modes.entries[key] : undefined;
+}
+
+/**
+ * The form-lookup filter of this subgrid (X.11): only on the form the entries belong to, never for a related-tables item;
+ * undefined, the subgrid is not filtered by a form column.
+ */
+function subgridFilterOf(control: SubgridModel, env: ControlEnv): SubgridFilter | undefined {
+  const filters = env.subgridFilters;
+  if (!filters || control.related || !env.formId || normaliseId(env.formId) !== normaliseId(filters.formId)) return undefined;
+  const key = entryKey(control);
+  return Object.hasOwn(filters.entries, key) ? filters.entries[key] : undefined;
 }
 
 export interface SubgridControlProps {
@@ -116,6 +160,20 @@ export function SubgridControl({ control, env, reload = 0, label, title, parent 
   const styles = useStyles();
   // Without a parent record (a dashboard) the subgrid is a grid.
   const entry = parent === null ? undefined : subgridEntry(control, env);
+  // The form-lookup filter (X.11); a subgrid that names a relationship keeps it, and the entry is ignored.
+  const configured = parent === null ? undefined : subgridFilterOf(control, env);
+  const filterIgnored = !!configured && !!control.relationship;
+  const filter = filterIgnored ? undefined : configured;
+  useEffect(() => {
+    if (filterIgnored) {
+      console.warn(
+        '[xrmverse subgrid filter]',
+        `The filter of the subgrid "${entryKey(control)}" is ignored: the subgrid lists the records related through ${control.relationship}.`,
+      );
+    }
+    // The control's id is fixed for this cell.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterIgnored, control.relationship]);
   const dataSet = hasDataSet(control);
   const ignored = dataSet && !!entry;
   const controlName = control.customControl?.name;
@@ -129,6 +187,33 @@ export function SubgridControl({ control, env, reload = 0, label, title, parent 
     // The control's id is fixed for this cell.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ignored, controlName]);
+  // The app's filters are not all in (X.11): a subgrid without a relationship may be filtered, so it never shows the whole view.
+  const filtersStatus = parent === null || control.related || control.relationship ? undefined : env.subgridFiltersStatus;
+  if (filtersStatus === 'pending') {
+    return (
+      <>
+        <TitleRow title={title} />
+        <Spinner size="tiny" label={t('record.subgrid.loading')} />
+      </>
+    );
+  }
+  if (dataSet && !filter && filtersStatus === 'failed') {
+    return (
+      <>
+        <TitleRow title={title} />
+        <Notice intent="warning" text={t('record.subgrid.filtersUnread')} />
+      </>
+    );
+  }
+  if (dataSet && filter) {
+    // A custom control cannot be limited to the filtered rows: never shown on the whole view.
+    return (
+      <>
+        <TitleRow title={title} />
+        <Notice intent="warning" text={t('record.subgrid.filterPcf')} />
+      </>
+    );
+  }
   if (dataSet) {
     return (
       <>
@@ -148,7 +233,7 @@ export function SubgridControl({ control, env, reload = 0, label, title, parent 
       </>
     );
   }
-  return <ClassicSubgrid control={control} env={env} reload={reload} parent={parent} title={title} entry={entry} />;
+  return <ClassicSubgrid control={control} env={env} reload={reload} parent={parent} title={title} entry={entry} filter={filter} />;
 }
 
 /** The subgrid's title row: the title at the start, the commands (if any) at the end. */
@@ -176,6 +261,7 @@ function ClassicSubgrid({
   parent,
   title,
   entry,
+  filter,
 }: {
   control: SubgridModel;
   env: ControlEnv;
@@ -184,36 +270,54 @@ function ClassicSubgrid({
   title?: string;
   /** The overlay's modes for this subgrid; absent, the grid only. */
   entry?: ViewPresentation;
+  /** The form-lookup filter (X.11): the rows matching the source's value, on a create form too. */
+  filter?: SubgridFilter;
 }) {
   const { api } = useAuth();
   const unparented = parent === null;
   const recordId = parent ? parent.id : env.ctx.fieldContext.record?.id;
+  // R3: the source's current value on the form (user or script); a column not on the form counts as empty.
+  const value = filter ? lookupOf(env.state.values[filter.source]) : undefined;
+  // A filtered grid does not need the form's record: the source may be filled before the first save.
+  const waitsForRecord = !unparented && !filter && !recordId;
   const [state, setState] = useState<{
     key: string;
     setup?: Setup;
     /** The notice in place of the grid. */
     message?: string;
   }>({ key: '' });
-  const key = [unparented ? '(none)' : recordId, control.relationship, control.targetEntity, control.viewId, control.recordsPerPage, env.lcid, env.refreshKey ?? 0, reload].join('|');
+  const filterKey = filter ? `${filter.source}>${filter.target}=${value ? `${value.target}:${value.id}` : ''}` : '';
+  const key = [unparented ? '(none)' : recordId, filterKey, control.relationship, control.targetEntity, control.viewId, control.recordsPerPage, env.lcid, env.refreshKey ?? 0, reload].join('|');
 
   useEffect(() => {
-    if (!api || (!unparented && !recordId)) return;
+    if (!api || waitsForRecord) return;
     let cancelled = false;
-    (unparented ? loadUnparentedSetup(api, control, env) : loadSetup(api, control, recordId!, env)).then(
+    const load = filter
+      ? loadFilteredSetup(api, control, filter, value, env)
+      : unparented
+        ? loadUnparentedSetup(api, control, env)
+        : loadSetup(api, control, recordId!, env);
+    load.then(
       (setup) => !cancelled && setState({ key, setup }),
-      (e: unknown) =>
-        !cancelled &&
+      (e: unknown) => {
+        if (cancelled) return;
+        if (e instanceof FilterInvalidError) {
+          console.warn('[xrmverse subgrid filter]', `The filter of the subgrid "${entryKey(control)}" cannot be applied: ${e.message}.`);
+          setState({ key, message: t('record.subgrid.filterInvalid', { reason: e.message }) });
+          return;
+        }
         setState({
           key,
           // A dashboard names a view that is not imported as not found (Review Focus 3).
           message:
             unparented && e instanceof UnknownViewError ? t('dashboard.viewNotFound', { id: e.viewId }) : t('record.subgrid.cannotShow', { reason: errorText(e) }),
-        }),
+        });
+      },
     );
     return () => {
       cancelled = true;
     };
-    // `key` stands for the record and the control's parameters.
+    // `key` stands for the record, the source's value and the control's parameters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api, key]);
 
@@ -223,12 +327,24 @@ function ClassicSubgrid({
       {body}
     </>
   );
-  if (!unparented && !recordId) return titled(<Notice intent="info" text={t('record.subgrid.saveFirst')} />);
+  if (waitsForRecord) return titled(<Notice intent="info" text={t('record.subgrid.saveFirst')} />);
   const current = state.key === key ? state : undefined;
   if (current?.message !== undefined) return titled(<Notice intent="warning" text={current.message} />);
   if (!current?.setup) return titled(<Spinner size="tiny" label={t('record.subgrid.loading')} />);
   // A dashboard shows one notice for every picker (ruling F4), not one per subgrid.
-  return <SubgridGrid key={key} setup={current.setup} env={env} parent={parent} title={title} viewPickerNote={control.enableViewPicker && !unparented} entry={entry} />;
+  const fillLabel = filter ? (env.ctx.entity.attributes.find((a) => a.logicalName === filter.source)?.displayName || filter.source) : undefined;
+  return (
+    <SubgridGrid
+      key={key}
+      setup={current.setup}
+      env={env}
+      parent={parent}
+      title={title}
+      viewPickerNote={control.enableViewPicker && !unparented}
+      entry={entry}
+      fillLabel={fillLabel}
+    />
+  );
 }
 
 function Notice({ intent, text }: { intent: 'info' | 'warning'; text: string }) {
@@ -253,6 +369,7 @@ function SubgridGrid({
   title,
   viewPickerNote,
   entry,
+  fillLabel,
 }: {
   setup: Setup;
   env: ControlEnv;
@@ -260,6 +377,8 @@ function SubgridGrid({
   title?: string;
   viewPickerNote: boolean;
   entry?: ViewPresentation;
+  /** A filtered grid (X.11): the display name of the source column, named by the notice while it is empty. */
+  fillLabel?: string;
 }) {
   const surface = useSurfaceStyles();
   const styles = useStyles();
@@ -268,7 +387,9 @@ function SubgridGrid({
   const timeZone = useLoadedUserSettings()?.timeZone ?? 'Etc/UTC';
   const navigate = useNavigate();
   const location = useLocation();
-  const { view, tables, target, relationship } = setup;
+  const { view, tables, target, relationship, filter } = setup;
+  // A filtered grid whose source is empty: no rows are read, and New is disabled.
+  const empty = !!filter && !filter.value;
   // The columns that wrap are the view's (the overlay's `views` entry), not the subgrid entry's.
   const wrap = useViewPresentation(view.id)?.wrap;
   const table = tables[target]!;
@@ -292,19 +413,24 @@ function SubgridGrid({
   const [allowed, setAllowed] = useState({ canNew: false, canAddExisting: false });
   const [adding, setAdding] = useState(false);
   const [reload, setReload] = useState(0);
-  // Without a parent record nothing can be related to it: no New or Add existing.
-  const commands = !!relationship && given !== null;
+  // Without a parent record nothing can be related to it: no New or Add existing. A filtered grid offers New only.
+  const commands = (!!relationship || !!filter) && given !== null;
   useEffect(() => {
     if (!api || !commands) return;
     let cancelled = false;
     cachedRead(env, 'privileges', () => heldPrivileges(api)).then(
-      (held) => !cancelled && setAllowed(subgridCommandsAllowed(held, table, env.ctx.entity)),
+      (held) => {
+        if (cancelled) return;
+        const commandsAllowed = subgridCommandsAllowed(held, table, env.ctx.entity);
+        // No relationship to the form's record: nothing to add an existing row to.
+        setAllowed(filter ? { canNew: commandsAllowed.canNew, canAddExisting: false } : commandsAllowed);
+      },
       () => undefined,
     );
     return () => {
       cancelled = true;
     };
-  }, [api, env, table, commands]);
+  }, [api, env, table, commands, filter]);
   const primaryName = env.ctx.entity.primaryNameAttribute;
   const named = primaryName ? (env.state.record ?? env.ctx.record)?.[primaryName] : undefined;
   // No parent record (a dashboard): nothing to relate rows to, and no stand-in record.
@@ -327,6 +453,17 @@ function SubgridGrid({
   const openRecord = given === null ? null : opener;
   const refresh = () => setReload((r) => r + 1);
   const openNew = (event: React.MouseEvent<HTMLElement>) => {
+    if (filter) {
+      if (!filter.value) return;
+      const extraqs = subgridLookupNew(filter.target, filter.value);
+      // After its first save the new row's form comes back here (RecordPage reads `fromSubgrid`), with nothing to associate.
+      if (openRecord) {
+        void openRecord({ etn: target, extraqs, state: { fromSubgrid: {} }, returnTo: here }, { event, anchor: event.currentTarget }).then(refresh);
+        return;
+      }
+      navigate(mainAspxUrl({ appId: env.appId, pageType: 'entityrecord', etn: target, extraqs }), { state: { returnTo: here, fromSubgrid: {} } });
+      return;
+    }
     if (!relationship || !parent) return;
     const { extraqs, associate } = subgridNew(relationship, parent, child);
     // A one-to-many's create form fills the columns the relationship's maps name from this record (#143, InitializeFrom).
@@ -365,7 +502,7 @@ function SubgridGrid({
   }>({ key: '' });
 
   useEffect(() => {
-    if (!api || !paged) return;
+    if (!api || !paged || empty) return;
     let cancelled = false;
     const abort = new AbortController();
     runView(api, table.entitySetName, fetchXml, query.page, cookie, abort.signal).then(
@@ -378,7 +515,7 @@ function SubgridGrid({
     };
     // requestKey stands for the request, its page and its cookie.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [api, table, requestKey, paged]);
+  }, [api, table, requestKey, paged, empty]);
 
   const columns = useMemo(() => view.columns.filter((c) => !c.isHidden), [view]);
   const headers = useMemo(() => {
@@ -406,6 +543,39 @@ function SubgridGrid({
 
   const current = result.key === requestKey ? result : undefined;
   if (!resolved || !mode) return <Spinner size="tiny" label={t('record.subgrid.loading')} />;
+  const commandsMenu = commands && (allowed.canNew || allowed.canAddExisting) && (
+    // One drop-down of the commands, on the title's line, at the end.
+    <Menu>
+      <MenuTrigger disableButtonEnhancement>
+        <MenuButton size="small" className={surface.commandBar} aria-label={t('record.subgrid.commands', { table: tableLabel })}>
+          {t('record.subgrid.commandsMenu')}
+        </MenuButton>
+      </MenuTrigger>
+      <MenuPopover>
+        <MenuList>
+          {allowed.canNew && (
+            <MenuItem icon={<NewIcon />} onClick={openNew} disabled={empty}>
+              {t('record.subgrid.new', { table: tableLabel })}
+            </MenuItem>
+          )}
+          {allowed.canAddExisting && table.primaryName && (
+            <MenuItem icon={<AddExistingIcon />} onClick={() => setAdding(true)}>
+              {t('record.subgrid.addExisting', { table: tableLabel })}
+            </MenuItem>
+          )}
+        </MenuList>
+      </MenuPopover>
+    </Menu>
+  );
+  if (empty) {
+    // The source is empty: no rows, the notice in their place (R3).
+    return (
+      <div data-testid="subgrid">
+        <TitleRow title={title}>{commandsMenu && <div className={styles.commands}>{commandsMenu}</div>}</TitleRow>
+        <Notice intent="info" text={t('record.subgrid.fillSource', { label: fillLabel ?? '' })} />
+      </div>
+    );
+  }
   if (paged && current?.error !== undefined) return <Notice intent="warning" text={t('record.subgrid.cannotShow', { reason: current.error })} />;
   if (paged && !current?.page) return <Spinner size="tiny" label={t('record.subgrid.loading')} />;
   const page = current?.page;
@@ -429,33 +599,10 @@ function SubgridGrid({
   return (
     <div data-testid="subgrid">
       <TitleRow title={title}>
-        {(switcher || (commands && (allowed.canNew || allowed.canAddExisting))) && (
+        {(switcher || commandsMenu) && (
           <div className={styles.commands}>
             <ViewModeSwitcher modes={resolved.modes} mode={mode} onChange={setPicked} />
-            {commands && (allowed.canNew || allowed.canAddExisting) && (
-              // One drop-down of the commands, on the title's line, at the end.
-              <Menu>
-                <MenuTrigger disableButtonEnhancement>
-                  <MenuButton size="small" className={surface.commandBar} aria-label={t('record.subgrid.commands', { table: tableLabel })}>
-                    {t('record.subgrid.commandsMenu')}
-                  </MenuButton>
-                </MenuTrigger>
-                <MenuPopover>
-                  <MenuList>
-                    {allowed.canNew && (
-                      <MenuItem icon={<NewIcon />} onClick={openNew}>
-                        {t('record.subgrid.new', { table: tableLabel })}
-                      </MenuItem>
-                    )}
-                    {allowed.canAddExisting && table.primaryName && (
-                      <MenuItem icon={<AddExistingIcon />} onClick={() => setAdding(true)}>
-                        {t('record.subgrid.addExisting', { table: tableLabel })}
-                      </MenuItem>
-                    )}
-                  </MenuList>
-                </MenuPopover>
-              </Menu>
-            )}
+            {commandsMenu}
           </div>
         )}
       </TitleRow>

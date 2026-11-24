@@ -478,6 +478,26 @@ describe('setControl', () => {
     expect(setControl(d, cellById(d, qv).key, { ...spec<QuickViewSpec>(d, qv), lookup: 'ownerid' })).toBe(d);
   });
 
+  it('keeps a filter (X.11) only on a subgrid without a relationship', () => {
+    const d = read();
+    const id = '{a0000000-0000-0000-0000-000000000004}';
+    const sub = spec<SubgridSpec>(d, id);
+    expect(sub.relationship).not.toBe('');
+    const filter = { source: 'parentcustomerid', target: 'parentcustomerid' };
+    // A subgrid with a relationship keeps it: the filter is ignored, and RelationshipName is not emptied.
+    expect(setControl(d, subgridKey(d), { ...sub, filter })).toBe(d);
+    const paged = setControl(d, subgridKey(d), { ...sub, filter, recordsPerPage: 9 });
+    expect(cellById(paged, id).control).toEqual({ ...sub, recordsPerPage: 9 });
+    expect(writeForm(paged)).toContain(`<RelationshipName>${sub.relationship}</RelationshipName>`);
+    // An "All records" subgrid takes the filter, and gives it back up.
+    const a = read(FORM.replace('<RelationshipName>contact_customer_accounts</RelationshipName>', '<RelationshipName></RelationshipName>'));
+    const plain = spec<SubgridSpec>(a, id);
+    expect(plain.relationship).toBe('');
+    const filtered = setControl(a, subgridKey(a), { ...plain, filter });
+    expect(cellById(filtered, id).control).toEqual({ ...plain, filter });
+    expect(cellById(setControl(filtered, subgridKey(filtered), plain), id).control).toEqual(plain);
+  });
+
   it('keeps the cell layout, and is a no-op for another kind, an IFRAME or an unknown cell', () => {
     const d = read();
     const edited = setControl(d, subgridKey(d), { ...spec<SubgridSpec>(d, '{a0000000-0000-0000-0000-000000000004}'), recordsPerPage: 20 });
@@ -548,6 +568,17 @@ describe('writeControl', () => {
     expect(same).toBe(el);
     expect(childElements(params, 'RecordsPerPage')[0].textContent).toBe('5');
     expect(Array.from(params.children).map((c) => c.tagName).slice(-2)).toEqual(['RecordsPerPage', 'Unknown']);
+  });
+
+  it('a subgrid filtered by a form column writes an empty RelationshipName and nothing of the filter', () => {
+    const doc = parseXml('<form/>');
+    const plain = writeControl(doc, undefined, { ...SUBGRID, relationship: '', controlId: 'orders' });
+    const filtered = writeControl(doc, undefined, {
+      ...SUBGRID, controlId: 'orders', filter: { source: 'customerid', target: 'customerid' },
+    });
+    expect(childElements(childElements(filtered, 'parameters')[0], 'RelationshipName')[0].textContent).toBe('');
+    expect(serialize(filtered)).toBe(serialize(plain));
+    expect(readControl(filtered)).not.toHaveProperty('filter');
   });
 
   it('a new subgrid in an indented form writes <parameters> one level under <control>', () => {

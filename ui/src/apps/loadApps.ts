@@ -2,6 +2,7 @@ import type { AppModel, TimelineOptions } from '../model/app';
 import { parseAppModule, type AppModuleComponentRow, type AppModuleRow } from '../parsers/appModule';
 import { parseAppOnLoad } from '../client-api/xrmverse/appOnLoadSetting';
 import { PRESENTATION, RENDERER } from '../renderers/lookSettings';
+import { mergeSubgridFilterNames, parseSubgridFilterNames } from './record/subgridFilters';
 import { parseRecordOpenMode, type RecordOpenMode } from './record/recordOpener';
 import type { XrmApi } from '../shell/api/client';
 import { collect, collectByIds, SYSTEM_ADMINISTRATOR_TEMPLATE, userRoleIds } from '../shell/auth/roles';
@@ -103,6 +104,7 @@ async function readApps(client: XrmApi): Promise<AppModel[]> {
       recordOpenMode: settings.recordOpenMode(row.appmoduleid),
       appOnLoad: settings.appOnLoad(row.appmoduleid),
       emailSendFrom: settings.emailSendFrom(row.appmoduleid),
+      subgridFilters: settings.subgridFilters(row.appmoduleid),
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -116,7 +118,9 @@ const LOOKUP_OPEN_MODE = 'xrmverse_LookupOpenMode';
 const APP_ON_LOAD = 'xrmverse_AppOnLoad';
 /** The sender policy of email (plan 4.1b, an xrmverse extension), set at environment level. */
 const EMAIL_SEND_FROM = 'xrmverse_EmailSendFrom';
-const SETTING_NAMES = [ASYNC_ON_LOAD, ASYNC_ON_SAVE, TIMELINE_GROUP_BY_DATE, TIMELINE_REMEMBER_FILTERS, TIMELINE_POSTS, RENDERER, PRESENTATION, APP_ON_LOAD, LOOKUP_OPEN_MODE, EMAIL_SEND_FROM];
+/** The web resources that configure subgrids filtered by a lookup of the form (X.11): a JSON array of names, at app and environment level. */
+const SUBGRID_FILTERS = 'xrmverse_SubgridFilters';
+const SETTING_NAMES = [ASYNC_ON_LOAD, ASYNC_ON_SAVE, TIMELINE_GROUP_BY_DATE, TIMELINE_REMEMBER_FILTERS, TIMELINE_POSTS, RENDERER, PRESENTATION, APP_ON_LOAD, LOOKUP_OPEN_MODE, EMAIL_SEND_FROM, SUBGRID_FILTERS];
 
 /**
  * The app settings of `appIds` the forms read: AsyncOnLoad and AsyncOnSave (#129), and the timeline options (UI-1g). A setting is
@@ -127,7 +131,7 @@ const SETTING_NAMES = [ASYNC_ON_LOAD, ASYNC_ON_SAVE, TIMELINE_GROUP_BY_DATE, TIM
 async function readAppSettings(
   client: XrmApi,
   appIds: string[],
-): Promise<{ asyncHandlers: (appId: string) => { onLoad: boolean; onSave: boolean }; timeline: (appId: string) => TimelineOptions; presentation: (appId: string) => NonNullable<AppModel['presentation']>; appOnLoad: (appId: string) => AppModel['appOnLoad']; recordOpenMode: (appId: string) => RecordOpenMode; emailSendFrom: (appId: string) => NonNullable<AppModel['emailSendFrom']> }> {
+): Promise<{ asyncHandlers: (appId: string) => { onLoad: boolean; onSave: boolean }; timeline: (appId: string) => TimelineOptions; presentation: (appId: string) => NonNullable<AppModel['presentation']>; appOnLoad: (appId: string) => AppModel['appOnLoad']; recordOpenMode: (appId: string) => RecordOpenMode; emailSendFrom: (appId: string) => NonNullable<AppModel['emailSendFrom']>; subgridFilters: (appId: string) => string[] }> {
   const filter = SETTING_NAMES.map((n) => `uniquename eq '${n}'`).join(' or ');
   const definitions = await collect<SettingDefinitionRow>(
     client,
@@ -141,7 +145,7 @@ async function readAppSettings(
   );
   // The environment values (`organizationsetting`, at most one per definition), read for the look definitions, the record open
   // mode and the email sender policy only.
-  const lookIds = [RENDERER, PRESENTATION, LOOKUP_OPEN_MODE, EMAIL_SEND_FROM].map((n) => definitions.find((d) => d.uniquename.toLowerCase() === n.toLowerCase())?.settingdefinitionid).filter((id): id is string => !!id);
+  const lookIds = [RENDERER, PRESENTATION, LOOKUP_OPEN_MODE, EMAIL_SEND_FROM, SUBGRID_FILTERS].map((n) => definitions.find((d) => d.uniquename.toLowerCase() === n.toLowerCase())?.settingdefinitionid).filter((id): id is string => !!id);
   const environment = lookIds.length
     ? await collectByIds<EnvironmentSettingRow>(client, 'organizationsettings?$select=_settingdefinitionid_value,value', '_settingdefinitionid_value', lookIds)
     : [];
@@ -170,7 +174,17 @@ async function readAppSettings(
     const env = environment.find((r) => lower(r._settingdefinitionid_value) === lower(d.settingdefinitionid))?.value;
     return [env, d.defaultvalue].find((v) => !!v?.trim())?.trim() || undefined;
   };
+  /** The subgrid filter resource names: unlike {@link text}, the app's list and the environment's both apply (app first). */
+  const subgridFilters = (appId: string): string[] => {
+    const d = definition(SUBGRID_FILTERS);
+    if (!d) return [];
+    const id = lower(d.settingdefinitionid);
+    const app = rows.find((r) => lower(r._parentappmoduleid_value) === lower(appId) && lower(r._settingdefinitionid_value) === id)?.value;
+    const env = environment.find((r) => lower(r._settingdefinitionid_value) === id)?.value;
+    return mergeSubgridFilterNames(parseSubgridFilterNames(app ?? undefined), parseSubgridFilterNames(env ?? undefined));
+  };
   return {
+    subgridFilters,
     presentation: (appId) => ({ renderer: text(appId, RENDERER), overlay: text(appId, PRESENTATION) }),
     recordOpenMode: (appId) => parseRecordOpenMode(text(appId, LOOKUP_OPEN_MODE)),
     // Environment-only, as the server applies it (an app value is ignored); any value but queueOnly (the definition missing too) is the default.

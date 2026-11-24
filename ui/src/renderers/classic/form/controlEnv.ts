@@ -18,6 +18,8 @@ export interface FormBackgrounds {
   field(attribute: string): string | undefined;
 }
 
+import type { SubgridFilter } from '../../../apps/record/subgridFilters';
+
 /** The overlay's subgrid entries of one form. */
 export interface SubgridModes {
   formId: string;
@@ -47,6 +49,14 @@ export interface ControlEnv {
    * they belong to (`formId`), not on a quick view form or a dashboard rendered with another id. Absent, every subgrid is a grid.
    */
   subgridModes?: SubgridModes;
+  /** The subgrid filters (X.11) configured for the form they belong to (`formId`); cleared on a quick view form like `subgridModes`. */
+  subgridFilters?: { formId: string; entries: Record<string, SubgridFilter> };
+  /**
+   * The app's subgrid filters (X.11) are still being read (`pending`), or one of them could not be read (`failed`); absent,
+   * they are ready. A subgrid without a relationship waits while pending, and a dataset one is not shown when failed, so a
+   * subgrid that may be filtered never shows the whole view. Cleared on a quick view form like `subgridFilters`.
+   */
+  subgridFiltersStatus?: 'pending' | 'failed';
   /** Bumped to reload what a form reads on its own (subgrids); Task 7's Refresh bumps it. */
   refreshKey?: number;
   /** Metadata reads shared by the controls of one form (and dropped when `refreshKey` changes). */

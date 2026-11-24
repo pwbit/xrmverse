@@ -49,7 +49,7 @@ describe('loadApps app settings (#129)', () => {
     const requests = mockApps({ apps: [app(1, { AsyncOnSave: 'true' })], userRoles: [ROLE_SALES] });
     await loadApps(api());
     expect(requests).toContainEqual(
-      "settingdefinitions?$select=settingdefinitionid,uniquename,defaultvalue&$filter=uniquename eq 'AsyncOnLoad' or uniquename eq 'AsyncOnSave' or uniquename eq 'xrmverse_TimelineGroupByDate' or uniquename eq 'xrmverse_TimelineRememberFilters' or uniquename eq 'xrmverse_TimelinePosts' or uniquename eq 'xrmverse_Renderer' or uniquename eq 'xrmverse_Presentation' or uniquename eq 'xrmverse_AppOnLoad' or uniquename eq 'xrmverse_LookupOpenMode' or uniquename eq 'xrmverse_EmailSendFrom'",
+      "settingdefinitions?$select=settingdefinitionid,uniquename,defaultvalue&$filter=uniquename eq 'AsyncOnLoad' or uniquename eq 'AsyncOnSave' or uniquename eq 'xrmverse_TimelineGroupByDate' or uniquename eq 'xrmverse_TimelineRememberFilters' or uniquename eq 'xrmverse_TimelinePosts' or uniquename eq 'xrmverse_Renderer' or uniquename eq 'xrmverse_Presentation' or uniquename eq 'xrmverse_AppOnLoad' or uniquename eq 'xrmverse_LookupOpenMode' or uniquename eq 'xrmverse_EmailSendFrom' or uniquename eq 'xrmverse_SubgridFilters'",
     );
     expect(requests).toContainEqual(
       'appsettings?$select=_parentappmoduleid_value,_settingdefinitionid_value,value&$filter=_parentappmoduleid_value eq 11111111-0000-0000-0000-000000000001',
@@ -81,7 +81,7 @@ describe('loadApps app settings (#129)', () => {
     await loadApps(api());
     const calls = requests.filter((r) => r.startsWith('organizationsettings'));
     expect(calls).toEqual([
-      'organizationsettings?$select=_settingdefinitionid_value,value&$filter=_settingdefinitionid_value eq 6f1c2a5e-8d4b-4e37-9a61-3b2f7c0d1e10 or _settingdefinitionid_value eq 6f1c2a5e-8d4b-4e37-9a61-3b2f7c0d1e11 or _settingdefinitionid_value eq 6f1c2a5e-8d4b-4e37-9a61-3b2f7c0d1e21',
+      'organizationsettings?$select=_settingdefinitionid_value,value&$filter=_settingdefinitionid_value eq 6f1c2a5e-8d4b-4e37-9a61-3b2f7c0d1e10 or _settingdefinitionid_value eq 6f1c2a5e-8d4b-4e37-9a61-3b2f7c0d1e11 or _settingdefinitionid_value eq 6f1c2a5e-8d4b-4e37-9a61-3b2f7c0d1e21 or _settingdefinitionid_value eq 6f1c2a5e-8d4b-4e37-9a61-3b2f7c0d1e22',
     ]);
   });
 });
@@ -136,9 +136,26 @@ describe('loadApps presentation (UI-2a)', () => {
     const requests = mockApps({
       apps: [app(1)],
       userRoles: [ROLE_SALES],
-      missingDefinitions: ['xrmverse_Renderer', 'xrmverse_Presentation', 'xrmverse_EmailSendFrom'],
+      missingDefinitions: ['xrmverse_Renderer', 'xrmverse_Presentation', 'xrmverse_EmailSendFrom', 'xrmverse_SubgridFilters'],
     });
     expect((await loadApps(api()))[0].presentation).toEqual({ renderer: undefined, overlay: undefined });
     expect(requests.some((r) => r.startsWith('organizationsettings'))).toBe(false);
+  });
+});
+
+describe('loadApps subgrid filter resources (X.11)', () => {
+  it('merges the app names and the environment names, app first', async () => {
+    mockApps({ apps: [app(1, { xrmverse_SubgridFilters: '["a.json"]' })], userRoles: [ROLE_SALES], environmentSettings: { xrmverse_SubgridFilters: '["b.json"]' } });
+    expect((await loadApps(api()))[0].subgridFilters).toEqual(['a.json', 'b.json']);
+  });
+
+  it('is empty without rows', async () => {
+    mockApps({ apps: [app(1)], userRoles: [ROLE_SALES] });
+    expect((await loadApps(api()))[0].subgridFilters).toEqual([]);
+  });
+
+  it('reads the environment value alone', async () => {
+    mockApps({ apps: [app(1)], userRoles: [ROLE_SALES], environmentSettings: { xrmverse_SubgridFilters: '["b.json"]' } });
+    expect((await loadApps(api()))[0].subgridFilters).toEqual(['b.json']);
   });
 });

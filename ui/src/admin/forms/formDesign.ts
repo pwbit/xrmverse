@@ -347,7 +347,11 @@ export function readForm(row: FormRow, lcid: number): FormDesign {
 // ---------------------------------------------------------------------------------------------------------------------
 // Writing
 
-const bodyJson = (d: Pick<FormDesign, 'tabs' | 'header'>) => JSON.stringify([d.tabs, d.header]);
+/** The body as compared for changes; a subgrid's `filter` (X.11) is never written to the FormXML, so it is left out. */
+const bodyJson = (d: Pick<FormDesign, 'tabs' | 'header'>) =>
+  JSON.stringify([d.tabs, d.header], function (this: { kind?: unknown }, key, value: unknown) {
+    return key === 'filter' && this.kind === 'subgrid' ? undefined : value;
+  });
 
 /** Sets `name` only when the value it reads as differs, so an untouched element serializes as it was. */
 function setFlag(el: Element, name: string, value: boolean, fallback: boolean) {
