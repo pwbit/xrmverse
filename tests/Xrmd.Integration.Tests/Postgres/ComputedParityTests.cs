@@ -10,6 +10,7 @@ using Xrmd.Abstractions;
 using Xrmd.Core;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Computed;
+using Xrmd.Metadata.Sdk;
 using static Xrmd.Integration.Tests.CalculatedParityExport;
 
 namespace Xrmd.Integration.Tests.Postgres;

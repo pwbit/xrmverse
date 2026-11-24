@@ -4,6 +4,7 @@ using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Query.Model;
 
 namespace Xrmd.Core.Elastic;

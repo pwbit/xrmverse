@@ -1,5 +1,5 @@
 using Microsoft.Extensions.Logging;
-using Microsoft.Xrm.Sdk.Metadata;
+using Xrmd.Model.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata.Computed;
@@ -29,13 +29,13 @@ public sealed partial class MetadataStore
     /// The one-to-many relationships of <paramref name="cache"/> by SchemaName (ignoring case), with <paramref name="extra"/> (a table
     /// being created) among the tables; built on first use.
     /// </summary>
-    private static Func<string, OneToManyRelationshipMetadata?> RelationshipsOf(CacheState cache, EntityMetadata? extra = null)
+    private static Func<string, OneToManyRelationship?> RelationshipsOf(CacheState cache, TableDefinition? extra = null)
     {
-        var lazy = new Lazy<Dictionary<string, OneToManyRelationshipMetadata>>(() =>
+        var lazy = new Lazy<Dictionary<string, OneToManyRelationship>>(() =>
         {
             var tables = cache.ByLogicalName.Values.Where(e => e.LogicalName != extra?.LogicalName).ToList();
             if (extra is not null) tables.Add(extra);
-            var map = new Dictionary<string, OneToManyRelationshipMetadata>(StringComparer.OrdinalIgnoreCase);
+            var map = new Dictionary<string, OneToManyRelationship>(StringComparer.OrdinalIgnoreCase);
             foreach (var r in EntityMetadataExtensions.OneToManyRelationships(tables, cache.SavedOneToMany.Values))
                 if (r.SchemaName is not null) map.TryAdd(r.SchemaName, r);
             return map;
@@ -47,8 +47,8 @@ public sealed partial class MetadataStore
     /// Checks the definition of <paramref name="a"/> of <paramref name="entity"/> (<see cref="ComputedColumnRules.ValidateDefinition"/>),
     /// a rollup with the counts of the other rollups of the table and of the organization.
     /// </summary>
-    private void ValidateComputed(CacheState cache, EntityMetadata entity, AttributeMetadata a, AttributeMetadata? current,
-        Func<string, EntityMetadata?> entities, bool creatingEntity = false)
+    private void ValidateComputed(CacheState cache, TableDefinition entity, ColumnDefinition a, ColumnDefinition? current,
+        Func<string, TableDefinition?> entities, bool creatingEntity = false)
     {
         int onTable = 0, inOrg = 0;
         if (RollupColumns.IsRollup(a))
@@ -66,11 +66,11 @@ public sealed partial class MetadataStore
     /// another column of <paramref name="existing"/> or <paramref name="added"/> (ruling R2).
     /// </summary>
     /// <exception cref="XrmdFaultException">400 <c>0x80060556</c> naming the companion and its rollup.</exception>
-    private static List<AttributeMetadata> RollupCompanions(string entityLogicalName, IEnumerable<AttributeMetadata> existing,
-        IReadOnlyCollection<AttributeMetadata> added)
+    private static List<ColumnDefinition> RollupCompanions(string entityLogicalName, IEnumerable<ColumnDefinition> existing,
+        IReadOnlyCollection<ColumnDefinition> added)
     {
         var taken = existing.Concat(added).Select(x => x.LogicalName).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        List<AttributeMetadata> companions = [];
+        List<ColumnDefinition> companions = [];
         foreach (var rollup in added.Where(RollupColumns.IsRollup).ToList())
         {
             rollup.MetadataId ??= Guid.NewGuid();
@@ -88,7 +88,7 @@ public sealed partial class MetadataStore
 
     /// <summary>A companion of a rollup is the server's: it is neither updated nor deleted on its own (ruling R11).</summary>
     /// <exception cref="XrmdFaultException">400 <c>0x80060555</c>.</exception>
-    private static void DemandNotRollupCompanion(EntityMetadata entity, AttributeMetadata attribute)
+    private static void DemandNotRollupCompanion(TableDefinition entity, ColumnDefinition attribute)
     {
         if (!RollupColumns.IsCompanion(attribute)
             || !(entity.Attributes ?? []).Any(x => x.LogicalName == attribute.AttributeOf && RollupColumns.IsRollup(x))) return;
@@ -152,24 +152,24 @@ public sealed partial class MetadataStore
     /// rollup aggregates must stay basic, ruling R5).
     /// </summary>
     /// <exception cref="XrmdFaultException">400 <c>0x80097214</c>, or the rule a dependent rollup would break, naming it.</exception>
-    private void DemandRollupDependentsStayValid(CacheState cache, EntityMetadata entity, AttributeMetadata current, AttributeMetadata updated,
-        AttributeMetadata changes)
+    private void DemandRollupDependentsStayValid(CacheState cache, TableDefinition entity, ColumnDefinition current, ColumnDefinition updated,
+        ColumnDefinition changes)
     {
         if (_rollups is null) return;
-        var behaviorChanges = changes is DateTimeAttributeMetadata { DateTimeBehavior: { } behavior } && current is DateTimeAttributeMetadata stored
+        var behaviorChanges = changes is DateTimeColumn { DateTimeBehavior: { } behavior } && current is DateTimeColumn stored
                               && behavior.Value != RollupColumnRules.BehaviorOf(stored);
         if (!behaviorChanges && !MayAffectDependents(changes)) return;
         var relationships = RelationshipsOf(cache);
-        var dependents = RollupColumnRules.Dependents(entity.LogicalName, current.LogicalName, cache.ByLogicalName.Values, _rollups, relationships);
+        var dependents = RollupColumnRules.Dependents(entity.LogicalName!, current.LogicalName!, cache.ByLogicalName.Values, _rollups, relationships);
         if (dependents.Count == 0) return;
         if (behaviorChanges)
             throw new XrmdFaultException(ErrorCodes.AttributeBehaviorCanNotBeUpdatedForRollupField,
                 $"The behavior of '{entity.LogicalName}.{current.LogicalName}' cannot change: the rollup column '{string.Join("', '", dependents)}' reads it.",
                 400);
 
-        var after = MetadataSerializer.Clone(entity);
+        var after = MetadataJson.Clone(entity);
         after.SetAttributes((entity.Attributes ?? []).Select(a => a.LogicalName == updated.LogicalName ? updated : a));
-        EntityMetadata? Find(string name) => name == after.LogicalName ? after : cache.ByLogicalName.GetValueOrDefault(name);
+        TableDefinition? Find(string name) => name == after.LogicalName ? after : cache.ByLogicalName.GetValueOrDefault(name);
         foreach (var dependent in dependents)
         {
             var dot = dependent.IndexOf('.', StringComparison.Ordinal);
@@ -177,7 +177,7 @@ public sealed partial class MetadataStore
                 continue;
             try
             {
-                RollupColumnRules.ValidateDefinition(owner, MetadataSerializer.Clone(rollup), rollup, Find, relationships, _rollups, 0, 0,
+                RollupColumnRules.ValidateDefinition(owner, MetadataJson.Clone(rollup), rollup, Find, relationships, _rollups, 0, 0,
                     _computed);
             }
             catch (XrmdFaultException ex)
@@ -198,15 +198,15 @@ public sealed partial class MetadataStore
     /// (NotCalculated), <c>_date</c> now and <see cref="RollupColumns.InitialValue"/>, in the metadata transaction, after its columns were
     /// added (a separate statement: the batch that adds a column cannot name it).
     /// </summary>
-    private async Task InitializeRollupRowsAsync(DataSession session, CacheState cache, EntityMetadata entity, AttributeMetadata rollup,
+    private async Task InitializeRollupRowsAsync(DataSession session, CacheState cache, TableDefinition entity, ColumnDefinition rollup,
         CancellationToken ct)
     {
         if (_rollups is null) return;
         var definition = _rollups.Translate(entity, rollup, n => cache.ByLogicalName.GetValueOrDefault(n), RelationshipsOf(cache));
         var value = RollupColumns.InitialValue(rollup, definition);
         var name = rollup.LogicalName;
-        var sql = $"UPDATE {session.DataTable(entity.LogicalName)} SET {session.Quote(name + RollupColumns.StateSuffix)} = {(int)RollupState.NotCalculated}, " +
-                  $"{session.Quote(name + RollupColumns.DateSuffix)} = @now" + (value is null ? "" : $", {session.Quote(name)} = @value");
+        var sql = $"UPDATE {session.DataTable(entity.LogicalName!)} SET {session.Quote(name + RollupColumns.StateSuffix)} = {(int)RollupState.NotCalculated}, " +
+                  $"{session.Quote(name + RollupColumns.DateSuffix)} = @now" + (value is null ? "" : $", {session.Quote(name!)} = @value");
         (string, object)[] parameters = value is null ? [("@now", DateTime.UtcNow)] : [("@now", DateTime.UtcNow), ("@value", value)];
         await ExecuteAsync(session, sql, ct, parameters);
     }

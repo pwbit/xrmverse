@@ -3,6 +3,7 @@ using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Security;
 using Xrmd.Tds.Translation;
 

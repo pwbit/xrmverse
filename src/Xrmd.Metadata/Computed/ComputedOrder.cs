@@ -1,4 +1,4 @@
-using Microsoft.Xrm.Sdk.Metadata;
+using Xrmd.Model.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Core.Errors;
 
@@ -16,10 +16,10 @@ namespace Xrmd.Metadata.Computed;
 /// constraint: whoever writes the column next gets the store's own answer for it, naming the column. A cycle, which the definition
 /// rules refuse, falls back to the order given.
 /// </remarks>
-public static class ComputedOrder
+public static partial class ComputedOrder
 {
     /// <summary>True for a calculated, formula or rollup column (not a rollup's <c>_base</c>).</summary>
-    public static bool IsComputed(AttributeMetadata a) =>
+    public static bool IsComputed(ColumnDefinition a) =>
         a is not null && (ComputedColumnRules.IsComputed(a) || RollupColumns.IsRollup(a));
 
     /// <summary>
@@ -29,7 +29,7 @@ public static class ComputedOrder
     /// one-to-many relationship by SchemaName.
     /// </summary>
     public static IReadOnlyList<(string Entity, string Attribute)> Order(IReadOnlyList<(string Entity, string Attribute)> columns,
-        Func<string, EntityMetadata?> entities, Func<string, OneToManyRelationshipMetadata?> relationships, IComputedColumns? computed,
+        Func<string, TableDefinition?> entities, Func<string, OneToManyRelationship?> relationships, IComputedColumns? computed,
         IRollupColumns? rollups, bool readersLast)
     {
         ArgumentNullException.ThrowIfNull(columns);
@@ -60,8 +60,8 @@ public static class ComputedOrder
     /// under the name of the column it belongs to (see <see cref="Add"/>); empty for a column that is not computed or whose definition
     /// cannot be translated.
     /// </summary>
-    private static HashSet<string> Reads(string entity, string attribute, Func<string, EntityMetadata?> entities,
-        Func<string, OneToManyRelationshipMetadata?> relationships, IComputedColumns? computed, IRollupColumns? rollups)
+    private static HashSet<string> Reads(string entity, string attribute, Func<string, TableDefinition?> entities,
+        Func<string, OneToManyRelationship?> relationships, IComputedColumns? computed, IRollupColumns? rollups)
     {
         var reads = new HashSet<string>(StringComparer.Ordinal);
         var table = entities(entity);
@@ -74,7 +74,7 @@ public static class ComputedOrder
                 foreach (var source in computed.Translate(table, column, entities).Sources)
                 {
                     var owner = source.Lookup is null ? entity
-                        : table.Attributes?.OfType<LookupAttributeMetadata>().FirstOrDefault(l => l.LogicalName == source.Lookup)?.Targets is [var target]
+                        : table.Attributes?.OfType<LookupColumn>().FirstOrDefault(l => l.LogicalName == source.Lookup)?.Targets is [var target]
                             ? target : null;
                     if (owner is not null) Add(reads, owner, source.Attribute, entities);
                 }
@@ -98,22 +98,22 @@ public static class ComputedOrder
     /// name (a simple <c>xv_start_date</c>) is not one. A companion not generated yet (its rollup or Currency column is being created)
     /// is known by its main column.
     /// </summary>
-    private static void Add(HashSet<string> reads, string entity, string attribute, Func<string, EntityMetadata?> entities)
+    private static void Add(HashSet<string> reads, string entity, string attribute, Func<string, TableDefinition?> entities)
     {
         reads.Add(Key(entity, attribute));
         var columns = entities(entity)?.Attributes ?? [];
-        AttributeMetadata? Find(string name) => columns.FirstOrDefault(a => a.LogicalName == name);
+        ColumnDefinition? Find(string name) => columns.FirstOrDefault(a => a.LogicalName == name);
         string? Main(string suffix) => attribute.EndsWith(suffix, StringComparison.Ordinal) && attribute.Length > suffix.Length
             ? attribute[..^suffix.Length] : null;
 
         var main = Find(attribute) switch
         {
             { } companion when RollupColumns.IsCompanion(companion) => companion.AttributeOf,
-            MoneyAttributeMetadata { IsBaseCurrency: true } => Main(TypeMapping.BaseColumnSuffix) is { } money && Find(money) is { } m && IsComputed(m)
+            MoneyColumn { IsBaseCurrency: true } => Main(TypeMapping.BaseColumnSuffix) is { } money && Find(money) is { } m && IsComputed(m)
                 ? money : null,
             null => (Main(RollupColumns.DateSuffix) ?? Main(RollupColumns.StateSuffix)) is { } rollup && Find(rollup) is { } r && RollupColumns.IsRollup(r)
                 ? rollup
-                : Main(TypeMapping.BaseColumnSuffix) is { } money && Find(money) is MoneyAttributeMetadata m && IsComputed(m) ? money : null,
+                : Main(TypeMapping.BaseColumnSuffix) is { } money && Find(money) is MoneyColumn m && IsComputed(m) ? money : null,
             _ => null,
         };
         if (main is not null) reads.Add(Key(entity, main));

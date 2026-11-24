@@ -9,6 +9,7 @@ using FluentAssertions;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.DependencyInjection;
 using Xrmd.Abstractions;
+using Xrmd.Metadata.Sdk;
 
 namespace Xrmd.Integration.Tests;
 

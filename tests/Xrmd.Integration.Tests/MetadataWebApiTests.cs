@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.OData.Edm;
 using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Security;
 using static Xrmd.Integration.Tests.SecurityTestHelper;
 

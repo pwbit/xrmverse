@@ -9,6 +9,7 @@ using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Metadata;
 using Xrmd.Cli;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Schema;
 using static Xrmd.Integration.Tests.SecurityTestHelper;
 

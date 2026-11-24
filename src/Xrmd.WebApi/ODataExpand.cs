@@ -1,5 +1,6 @@
 using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Query.Model;
 
 namespace Xrmd.WebApi;

@@ -24,6 +24,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The own metadata model (S.2b2): IMetadataStore reads return it. -->
+    <ProjectReference Include="..\Xrmd.Model\Xrmd.Model.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Test-only seam: SdkFreeResolver.OnResolving (plan S.2a). -->
     <InternalsVisibleTo Include="Xrmd.Core.Tests" />
   </ItemGroup>

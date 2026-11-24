@@ -8,6 +8,7 @@ using Xrmd.Core.Errors;
 using Xrmd.Core;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Computed;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Solution;
 using Xrmd.Tests.Shared;
 

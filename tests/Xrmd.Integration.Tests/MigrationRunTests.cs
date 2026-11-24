@@ -9,6 +9,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Xrmd.Abstractions;
 using Xrmd.Admin.Migration;
+using Xrmd.Metadata.Sdk;
 
 namespace Xrmd.Integration.Tests;
 

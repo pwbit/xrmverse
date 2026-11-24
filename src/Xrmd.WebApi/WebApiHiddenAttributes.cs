@@ -1,5 +1,6 @@
 using Xrmd.Abstractions;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Query.Model;
 
 namespace Xrmd.WebApi;

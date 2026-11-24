@@ -1,4 +1,4 @@
-using Microsoft.Xrm.Sdk.Metadata;
+using Xrmd.Model.Metadata;
 
 namespace Xrmd.Metadata;
 
@@ -6,7 +6,7 @@ namespace Xrmd.Metadata;
 /// File and image columns (ruling F1): the companion attributes a column brings, the <c>MaxSizeInKB</c> limits and the names of
 /// the <c>fileattachment</c> table and of its relationship to the table that holds the column.
 /// </summary>
-public static class FileColumns
+public static partial class FileColumns
 {
     /// <summary>The system table that holds the files and full-size images of every file or image column.</summary>
     public const string AttachmentEntity = "fileattachment";
@@ -45,14 +45,14 @@ public static class FileColumns
     public static string RelationshipName(string entityLogicalName) => entityLogicalName + "_FileAttachments";
 
     /// <summary>True for <c>fileattachment.objectid</c>, the one lookup whose targets the server maintains.</summary>
-    public static bool IsAttachmentObjectId(AttributeMetadata a) =>
-        a is LookupAttributeMetadata && a.LogicalName == AttachmentLookup && a.EntityLogicalName == AttachmentEntity;
+    public static bool IsAttachmentObjectId(ColumnDefinition a) =>
+        a is LookupColumn && a.LogicalName == AttachmentLookup && a.EntityLogicalName == AttachmentEntity;
 
     /// <summary>The message of the 400 InvalidArgument (0x80040203) for a public write of the server-maintained objectid and its relationships.</summary>
     public static string ManagedMessage(string what) =>
         $"{what} is managed by the file and image columns of its table: create or delete those columns instead.";
 
-    public static bool IsFileOrImage(AttributeMetadata a) => a is FileAttributeMetadata or ImageAttributeMetadata;
+    public static bool IsFileOrImage(ColumnDefinition a) => a is FileColumn or ImageColumn;
 
     /// <summary>
     /// True for a companion attribute that has a column of its own (the file name, the image id and timestamp): one the server
@@ -61,11 +61,11 @@ public static class FileColumns
     /// main column is a file or image column": callers cannot set AttributeOf or LinkedAttributeId (both are refused on
     /// every public write), so only <see cref="Companions"/> makes one. The url companion is computed on read and has no column.
     /// </summary>
-    public static bool IsStoredCompanion(AttributeMetadata a) =>
+    public static bool IsStoredCompanion(ColumnDefinition a) =>
         a.AttributeOf is { } main && a.LinkedAttributeId is not null
-        && ((a is StringAttributeMetadata && a.LogicalName == main + "_name")
-            || (a is UniqueIdentifierAttributeMetadata && a.LogicalName == main + "id")
-            || (a is BigIntAttributeMetadata && a.LogicalName == main + "_timestamp"));
+        && ((a is TextColumn && a.LogicalName == main + "_name")
+            || (a is UniqueIdentifierColumn && a.LogicalName == main + "id")
+            || (a is BigIntColumn && a.LogicalName == main + "_timestamp"));
 
     /// <summary>
     /// True for the url companion of an image column (<c>&lt;image&gt;_url</c>), made by <see cref="Companions"/> like the stored
@@ -73,8 +73,8 @@ public static class FileColumns
     /// <c>/Image/download.aspx?Entity=&lt;entity&gt;&amp;Attribute=&lt;image&gt;&amp;Id=&lt;image id&gt;&amp;Timestamp=&lt;timestamp&gt;</c>
     /// (Learn, image column data, "Download URL"), null when the image id is.
     /// </summary>
-    public static bool IsUrlCompanion(AttributeMetadata a) =>
-        a is StringAttributeMetadata && a.AttributeOf is { } main && a.LinkedAttributeId is not null && a.LogicalName == main + UrlSuffix;
+    public static bool IsUrlCompanion(ColumnDefinition a) =>
+        a is TextColumn && a.AttributeOf is { } main && a.LinkedAttributeId is not null && a.LogicalName == main + UrlSuffix;
 
     /// <summary>The suffixes of the companions of an image column: the image id, the timestamp and the url.</summary>
     public const string ImageIdSuffix = "id", TimestampSuffix = "_timestamp", UrlSuffix = "_url";
@@ -83,10 +83,10 @@ public static class FileColumns
     public const string DownloadPath = "/Image/download.aspx";
 
     /// <summary>
-    /// <see cref="IsStoredCompanion(AttributeMetadata)"/> checked against the attributes of its table: the main column exists, is
+    /// <see cref="IsStoredCompanion(ColumnDefinition)"/> checked against the attributes of its table: the main column exists, is
     /// a file or image column and is the one the companion is linked to.
     /// </summary>
-    public static bool IsStoredCompanion(AttributeMetadata a, IEnumerable<AttributeMetadata> siblings) =>
+    public static bool IsStoredCompanion(ColumnDefinition a, IEnumerable<ColumnDefinition> siblings) =>
         IsStoredCompanion(a)
         && siblings.FirstOrDefault(x => x.LogicalName == a.AttributeOf) is { } main
         && IsFileOrImage(main) && main.MetadataId == a.LinkedAttributeId;
@@ -95,28 +95,28 @@ public static class FileColumns
     /// The companions of the file or image column <paramref name="main"/> (its MetadataId set), all read-only with
     /// <c>AttributeOf</c> and <c>LinkedAttributeId</c> set.
     /// </summary>
-    public static IReadOnlyList<AttributeMetadata> Companions(AttributeMetadata main)
+    public static IReadOnlyList<ColumnDefinition> Companions(ColumnDefinition main)
     {
         var schema = main.SchemaName ?? main.LogicalName;
-        AttributeMetadata Companion(AttributeMetadata a, string logicalName, string schemaName)
+        ColumnDefinition Companion(ColumnDefinition a, string logicalName, string schemaName)
         {
             a.LogicalName = logicalName;
             a.SchemaName = schemaName;
             a.IsValidForCreate = false;
             a.IsValidForUpdate = false;
-            SdkProperty.Set(a, nameof(AttributeMetadata.AttributeOf), main.LogicalName);
-            SdkProperty.Set(a, nameof(AttributeMetadata.LinkedAttributeId), main.MetadataId);
+            a.AttributeOf = main.LogicalName;
+            a.LinkedAttributeId = main.MetadataId;
             return a;
         }
 
         return main switch
         {
-            FileAttributeMetadata => [Companion(new StringAttributeMetadata { MaxLength = FileNameLength }, main.LogicalName + "_name", schema + "_Name")],
-            ImageAttributeMetadata =>
+            FileColumn => [Companion(new TextColumn { MaxLength = FileNameLength }, main.LogicalName + "_name", schema + "_Name")],
+            ImageColumn =>
             [
-                Companion(new UniqueIdentifierAttributeMetadata(), main.LogicalName + "id", schema + "Id"),
-                Companion(new BigIntAttributeMetadata(), main.LogicalName + "_timestamp", schema + "_Timestamp"),
-                Companion(new StringAttributeMetadata { MaxLength = UrlLength }, main.LogicalName + "_url", schema + "_URL"),
+                Companion(new UniqueIdentifierColumn(), main.LogicalName + "id", schema + "Id"),
+                Companion(new BigIntColumn(), main.LogicalName + "_timestamp", schema + "_Timestamp"),
+                Companion(new TextColumn { MaxLength = UrlLength }, main.LogicalName + "_url", schema + "_URL"),
             ],
             _ => [],
         };

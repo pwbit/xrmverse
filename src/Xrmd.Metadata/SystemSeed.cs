@@ -6,9 +6,9 @@ using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Logging;
-using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
+using Xrmd.Model.Metadata;
 
 namespace Xrmd.Metadata;
 
@@ -608,7 +608,7 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
         foreach (var view in QueueSchema.SystemViews.Concat(PlatformLayouts.Views))
         {
             if (!await MissingAsync(conn, tx, "savedquery", "savedqueryid", view.Id, ct)) continue;
-            var code = store.GetEntity(view.Table)?.ObjectTypeCode ?? 0;
+            var code = store.GetTable(view.Table)?.ObjectTypeCode ?? 0;
             // One default public view per table: a view seeded where the table already has one is not the default.
             var isDefault = view.IsDefault && await DefaultSlotFreeAsync(conn, tx, "savedquery", "savedqueryid", "returnedtypecode", "querytype = 0", view.Table, ct);
             await ExecuteAsync(conn, tx, $"""
@@ -723,7 +723,7 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
     private void DemandNoCustomBusinessTables(string orgName)
     {
         foreach (var name in BusinessTables)
-            if (store.GetEntity(name) is { } existing && !MetadataStore.IsSystemEntity(existing))
+            if (store.GetTable(name) is { } existing && !MetadataStore.IsSystemEntity(existing))
                 throw new InvalidOperationException(
                     $"Organization '{orgName}' already has a custom table named '{name}' (object type code {existing.ObjectTypeCode}), " +
                     $"but xrmverse seeds its own '{name}' table. Rename or delete the custom table, then restart the server.");
@@ -735,16 +735,18 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
         // A seed definition may declare saved relationships (a Customer lookup has one per target); they are not part of the
         // stored table definition.
         var relationships = (entity.ManyToOneRelationships ?? []).ToList();
-        entity.SetRelationships([], []);
+        entity.ManyToOneRelationships = [];
+        entity.OneToManyRelationships = [];
+        entity.ManyToManyRelationships = [];
         await EnsureGlobalOptionSetsAsync(entity, ct);
-        var existing = store.GetEntity(logicalName);
+        var existing = store.GetTable(logicalName);
         if (existing is null)
         {
             // Intersect (and other) seed entities may have no primary name.
             var primaryName = entity.PrimaryNameAttribute is null
                 ? null
                 : (entity.Attributes ?? []).Single(a => a.LogicalName == entity.PrimaryNameAttribute);
-            entity.SetAttributes((entity.Attributes ?? []).Where(a => !ReferenceEquals(a, primaryName)));
+            entity.Attributes = (entity.Attributes ?? []).Where(a => !ReferenceEquals(a, primaryName)).ToList();
             // Seeded entities may define their own statecode/statuscode, which the public API rejects as reserved names.
             if (store is MetadataStore concrete) await concrete.CreateSeedEntityAsync(entity, primaryName, ct);
             else await store.CreateEntityAsync(entity, primaryName!, ct);
@@ -756,7 +758,7 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
         if (entity.EntitySetName is { } wanted && existing.EntitySetName != wanted && store is MetadataStore seedStore)
         {
             await seedStore.RenameSeedEntitySetAsync(logicalName, wanted, ct);
-            existing = store.GetEntity(logicalName)!;
+            existing = store.GetTable(logicalName)!;
         }
 
         // An earlier seed gave appmoduleroles a type code and a key name Dataverse does not have (#105).
@@ -764,7 +766,7 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
             && (existing.ObjectTypeCode != code || (entity.PrimaryIdAttribute is { } key && SystemAttributes.PrimaryIdName(existing) != key)))
         {
             await correctStore.CorrectSeedEntityAsync(logicalName, code, entity.PrimaryIdAttribute ?? SystemAttributes.PrimaryIdName(existing), ct);
-            existing = store.GetEntity(logicalName)!;
+            existing = store.GetTable(logicalName)!;
         }
 
         // Entities created by an earlier version miss the attributes added since.
@@ -773,8 +775,8 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
         foreach (var attribute in entity.Attributes ?? [])
             if (!present.Contains(attribute.LogicalName) && !SystemAttributes.IsReservedName(logicalName, attribute.LogicalName))
             {
-                if (deferred is not null && attribute is LookupAttributeMetadata { Targets: { } targets }
-                    && targets.Any(t => store.GetEntity(t) is null))
+                if (deferred is not null && attribute is LookupColumn { Targets: { } targets }
+                    && targets.Any(t => store.GetTable(t) is null))
                 {
                     deferred.Add(logicalName);
                     waits = true;
@@ -787,23 +789,23 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
             }
         // Options added to a seeded local choice since (asyncoperation.operationtype 7 and 8, plan 2.15).
         if (store is MetadataStore optionStore)
-            foreach (var picklist in (entity.Attributes ?? []).OfType<PicklistAttributeMetadata>().Where(a => a.OptionSet is { IsGlobal: not true }))
+            foreach (var picklist in (entity.Attributes ?? []).OfType<ChoiceColumn>().Where(a => a.OptionSet is { IsGlobal: not true }))
                 await optionStore.EnsureSeedOptionsAsync(logicalName, picklist, ct);
         // A lookup that gained targets since (sdkmessageprocessingstep.eventhandler: serviceendpoint, plan 3.2; activityparty.partyid
         // and the email party lists: queue, plan 4.1b). A new target created later in the order waits for the second pass, with the
         // table's relationships.
         if (store is MetadataStore targetStore)
-            foreach (var lookup in (entity.Attributes ?? []).OfType<LookupAttributeMetadata>())
-                if (existing.Attributes?.FirstOrDefault(a => a.LogicalName == lookup.LogicalName) is LookupAttributeMetadata stored
+            foreach (var lookup in (entity.Attributes ?? []).OfType<LookupColumn>())
+                if (existing.Attributes?.FirstOrDefault(a => a.LogicalName == lookup.LogicalName) is LookupColumn stored
                     && (lookup.Targets ?? []).Except(stored.Targets ?? []).Any())
                 {
-                    if (deferred is not null && (lookup.Targets ?? []).Any(t => store.GetEntity(t) is null))
+                    if (deferred is not null && (lookup.Targets ?? []).Any(t => store.GetTable(t) is null))
                     {
                         deferred.Add(logicalName);
                         waits = true;
                         continue;
                     }
-                    await targetStore.SetSeedLookupTargetsAsync(logicalName, lookup.LogicalName, lookup.Targets!, ct);
+                    await targetStore.SetSeedLookupTargetsAsync(logicalName, lookup.LogicalName!, [.. lookup.Targets!], ct);
                 }
         // The relationships of a table with a column that waits (queue_system_user names systemuser.queueid) wait with it.
         if (!waits) await EnsureRelationshipsAsync(relationships, ct);
@@ -813,19 +815,19 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
     /// A seed column bound to a global choice (<c>OptionSet.IsGlobal</c> with a name) carries the choice's options in the seed
     /// file; the choice is created first, once (a choice that exists is left as it is, so an administrator's labels stay).
     /// </summary>
-    private async Task EnsureGlobalOptionSetsAsync(EntityMetadata entity, CancellationToken ct)
+    private async Task EnsureGlobalOptionSetsAsync(TableDefinition entity, CancellationToken ct)
     {
-        var choices = (entity.Attributes ?? []).OfType<EnumAttributeMetadata>()
+        var choices = (entity.Attributes ?? []).OfType<ChoiceColumnBase>()
             .Select(a => a.OptionSet)
-            .Where(o => o is { IsGlobal: true, Name.Length: > 0 } && o.Options.Count > 0)
-            .Cast<OptionSetMetadata>().DistinctBy(o => o.Name).ToList();
+            .Where(o => o is { IsGlobal: true, Name.Length: > 0 } && o.Options is { Count: > 0 })
+            .Cast<ChoiceSet>().DistinctBy(o => o.Name).ToList();
         if (choices.Count == 0) return;
         if (store is not MetadataStore concrete)
             throw new InvalidOperationException("Seed global choices need the metadata store of the server.");
         await concrete.EnsureSeedOptionSetsAsync(choices, ct);
     }
 
-    private async Task EnsureRelationshipsAsync(List<Microsoft.Xrm.Sdk.Metadata.OneToManyRelationshipMetadata> relationships, CancellationToken ct)
+    private async Task EnsureRelationshipsAsync(List<OneToManyRelationship> relationships, CancellationToken ct)
     {
         if (relationships.Count == 0) return;
         if (store is not MetadataStore concrete)
@@ -836,20 +838,20 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
     /// <summary>The attribute names of every seed definition, by entity.</summary>
     private static readonly Lazy<Dictionary<string, HashSet<string>>> SeedAttributes = new(() =>
         EntityOrder.ToDictionary(name => name,
-            name => (LoadDefinition(name).Attributes ?? []).Select(a => a.LogicalName).ToHashSet(StringComparer.Ordinal),
+            name => (LoadDefinition(name).Attributes ?? []).Select(a => a.LogicalName!).ToHashSet(StringComparer.Ordinal),
             StringComparer.Ordinal));
 
     /// <summary>True when the seed definition of the system entity <paramref name="entityLogicalName"/> has the attribute.</summary>
     internal static bool Defines(string entityLogicalName, string attributeLogicalName) =>
         SeedAttributes.Value.TryGetValue(entityLogicalName, out var names) && names.Contains(attributeLogicalName);
 
-    private static EntityMetadata LoadDefinition(string logicalName)
+    private static TableDefinition LoadDefinition(string logicalName)
     {
         var resource = ResourcePrefix + logicalName + ".json";
         using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resource)
                            ?? throw new InvalidOperationException($"Missing seed resource {resource}");
         using var reader = new StreamReader(stream);
-        return MetadataSerializer.Deserialize(reader.ReadToEnd());
+        return MetadataJson.DeserializeTable(reader.ReadToEnd());
     }
 
     /// <summary>

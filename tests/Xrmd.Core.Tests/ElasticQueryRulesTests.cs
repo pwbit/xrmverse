@@ -6,6 +6,8 @@ using Xrmd.Abstractions;
 using Xrmd.Core.Elastic;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Metadata;
 using Xrmd.Query.Model;
 
 namespace Xrmd.Core.Tests;
@@ -15,13 +17,16 @@ public sealed class ElasticQueryRulesTests
 {
     private const int LinkCode = unchecked((int)0x80048d0b);
 
-    /// <summary>A metadata store that answers <c>GetEntity</c> only.</summary>
+    /// <summary>
+    /// A metadata store that answers <c>GetTable</c> only. Each SDK fixture is converted to the model when the store is made
+    /// (<c>SdkMetadataView.ModelOf</c>): a fixture mutated after that is not seen.
+    /// </summary>
     private class StoreProxy : DispatchProxy
     {
-        public Dictionary<string, EntityMetadata> Entities { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, TableDefinition> Entities { get; } = new(StringComparer.OrdinalIgnoreCase);
 
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) =>
-            targetMethod!.Name == nameof(IMetadataStore.GetEntity) && args is [string name]
+            targetMethod!.Name == nameof(IMetadataStore.GetTable) && args is [string name]
                 ? Entities.GetValueOrDefault(name)
                 : throw new NotSupportedException(targetMethod.Name);
     }
@@ -41,7 +46,7 @@ public sealed class ElasticQueryRulesTests
     private static IMetadataStore Store(params EntityMetadata[] entities)
     {
         var store = DispatchProxy.Create<IMetadataStore, StoreProxy>();
-        foreach (var e in entities) ((StoreProxy)(object)store).Entities[e.LogicalName] = e;
+        foreach (var e in entities) ((StoreProxy)(object)store).Entities[e.LogicalName] = SdkMetadataView.ModelOf(e);
         return store;
     }
 

@@ -1,5 +1,4 @@
-using Microsoft.Xrm.Sdk;
-using Microsoft.Xrm.Sdk.Metadata;
+using Xrmd.Model.Metadata;
 
 namespace Xrmd.Metadata;
 
@@ -12,7 +11,7 @@ namespace Xrmd.Metadata;
 /// <c>objectidtypecode</c> (an EntityName, as on Learn, which also lists a read-only choice <c>objecttypecode</c> that xrmverse
 /// does not seed).
 /// </remarks>
-public static class QueueSchema
+public static partial class QueueSchema
 {
     /// <summary>The tables.</summary>
     public const string Queue = "queue", QueueItem = "queueitem", QueueMembership = "queuemembership";
@@ -25,7 +24,7 @@ public static class QueueSchema
     public const string MembershipRelationshipName = "queuemembership_association";
 
     /// <summary>The seeded many-to-many relationship <see cref="MembershipRelationshipName"/> through <see cref="QueueMembership"/>.</summary>
-    public static ManyToManyRelationshipMetadata MembershipRelationship() => new()
+    public static ManyToManyRelationship MembershipRelationship() => new()
     {
         SchemaName = MembershipRelationshipName,
         IntersectEntityName = QueueMembership,
@@ -54,12 +53,8 @@ public static class QueueSchema
     public const string SettingManagedProperty = "canmodifyqueuesettings";
 
     /// <summary>The stored shape of the table setting <c>IsValidForQueue</c>: the value, changeable, with its managed property name.</summary>
-    public static BooleanManagedProperty SettingFlag(bool value)
-    {
-        var property = new BooleanManagedProperty(value) { CanBeChanged = true };
-        SdkProperty.Set(property, nameof(ManagedProperty<bool>.ManagedPropertyLogicalName), SettingManagedProperty);
-        return property;
-    }
+    public static ManagedFlag SettingManagedFlag(bool value) =>
+        new() { Value = value, CanBeChanged = true, ManagedPropertyLogicalName = SettingManagedProperty };
 
     /// <summary>The values of a default queue: Private (<c>queueviewtype</c> 1) and the one <c>queuetypecode</c> (1).</summary>
     public const int PrivateViewType = 1, TypeCode = 1;
@@ -92,14 +87,14 @@ public static class QueueSchema
     /// (<c>knowledgearticle_QueueItems</c>, a custom activity: from memory, checklist 2); navigation <c>objectid_{target}</c>;
     /// Delete Cascade, everything else NoCascade.
     /// </summary>
-    public static OneToManyRelationshipMetadata ItemRelationship(EntityMetadata target)
+    public static OneToManyRelationship ItemRelationship(TableDefinition target)
     {
         ArgumentNullException.ThrowIfNull(target);
         var seededActivity = MetadataStore.IsSystemEntity(target)
             && (target.LogicalName == ActivitySchema.Pointer || ActivitySchema.StandardActivities.Contains(target.LogicalName));
         var name = seededActivity ? $"{ActivitySchema.RelationshipStem(target)}_QueueItem" : $"{target.LogicalName}_QueueItems";
-        return ActivitySchema.Relationship(name, target.LogicalName, QueueItem, ObjectId, $"{ObjectId}_{target.LogicalName}",
-            ActivitySchema.Cascade(delete: CascadeType.Cascade));
+        return ActivitySchema.RelationshipDefinition(name, target.LogicalName!, QueueItem, ObjectId, $"{ObjectId}_{target.LogicalName}",
+            ActivitySchema.CascadeSettings(delete: CascadeAction.Cascade));
     }
 
     /// <summary>

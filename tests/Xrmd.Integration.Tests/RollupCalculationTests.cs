@@ -10,6 +10,7 @@ using Xrmd.Core.Errors;
 using Xrmd.Core.Rollups;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Computed;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Query.Sql;
 using Xrmd.Workflows.Calculated;
 using Xrmd.Workflows.Rollup;

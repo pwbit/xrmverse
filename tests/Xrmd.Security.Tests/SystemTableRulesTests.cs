@@ -5,6 +5,7 @@ using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
+using Xrmd.Model.Metadata;
 
 namespace Xrmd.Security.Tests;
 
@@ -23,47 +24,50 @@ public sealed class SystemTableRulesTests
         public Task<DbConnection> OpenAsync(CancellationToken ct = default) => throw new InvalidOperationException("No database here.");
     }
 
-    /// <summary>A store with no entity (an Update reads none).</summary>
+    /// <summary>
+    /// A store with no entity (an Update reads none). Like the other test stores it would not see a fixture mutated after its
+    /// first read (the store hands out model instances converted once).
+    /// </summary>
     internal sealed class NoMetadata : IMetadataStore
     {
         public long VersionStamp => 1;
-        public EntityMetadata? GetEntity(string logicalName) => null;
-        public EntityMetadata? GetEntityBySetName(string entitySetName) => null;
-        public EntityMetadata? GetEntityByObjectTypeCode(int objectTypeCode) => null;
-        public IReadOnlyList<EntityMetadata> GetAllEntities() => [];
+        public TableDefinition? GetTable(string logicalName) => null;
+        public TableDefinition? GetTableBySetName(string entitySetName) => null;
+        public TableDefinition? GetTableByObjectTypeCode(int objectTypeCode) => null;
+        public IReadOnlyList<TableDefinition> GetAllTables() => [];
         public Task LoadAsync(CancellationToken ct = default) => throw new NotSupportedException();
-        public Task CreateEntityAsync(EntityMetadata entity, AttributeMetadata primaryName, CancellationToken ct = default) =>
+        public Task CreateEntityAsync(TableDefinition entity, ColumnDefinition primaryName, CancellationToken ct = default) =>
             throw new NotSupportedException();
-        public Task AddAttributeAsync(string entityLogicalName, AttributeMetadata attribute, CancellationToken ct = default) =>
+        public Task AddAttributeAsync(string entityLogicalName, ColumnDefinition attribute, CancellationToken ct = default) =>
             throw new NotSupportedException();
-        public Task CreateEntityAsync(DataSession session, EntityMetadata entity, AttributeMetadata primaryName, CancellationToken ct) =>
+        public Task CreateEntityAsync(DataSession session, TableDefinition entity, ColumnDefinition primaryName, CancellationToken ct) =>
             throw new NotSupportedException();
-        public Task AddAttributeAsync(DataSession session, string entityLogicalName, AttributeMetadata attribute, CancellationToken ct) =>
+        public Task AddAttributeAsync(DataSession session, string entityLogicalName, ColumnDefinition attribute, CancellationToken ct) =>
             throw new NotSupportedException();
-        public Task UpdateEntityAsync(DataSession session, EntityMetadata changes, CancellationToken ct) =>
+        public Task UpdateEntityAsync(DataSession session, TableDefinition changes, CancellationToken ct) =>
             throw new NotSupportedException();
-        public Task UpdateAttributeAsync(DataSession session, string entityLogicalName, AttributeMetadata changes, CancellationToken ct) =>
+        public Task UpdateAttributeAsync(DataSession session, string entityLogicalName, ColumnDefinition changes, CancellationToken ct) =>
             throw new NotSupportedException();
         public Task DeleteAttributeAsync(DataSession session, string entityLogicalName, string attributeLogicalName, CancellationToken ct) =>
             throw new NotSupportedException();
         public Task DeleteEntityAsync(DataSession session, string entityLogicalName, CancellationToken ct) =>
             throw new NotSupportedException();
-        public OptionSetMetadataBase? GetOptionSet(string name) => null;
-        public IReadOnlyList<OptionSetMetadataBase> GetAllOptionSets() => [];
-        public Task CreateOptionSetAsync(DataSession session, OptionSetMetadataBase optionSet, CancellationToken ct) =>
+        public ChoiceSetBase? GetChoiceSet(string name) => null;
+        public IReadOnlyList<ChoiceSetBase> GetAllChoiceSets() => [];
+        public Task CreateOptionSetAsync(DataSession session, ChoiceSetBase optionSet, CancellationToken ct) =>
             throw new NotSupportedException();
-        public Task UpdateOptionSetAsync(DataSession session, OptionSetMetadataBase changes, CancellationToken ct) =>
+        public Task UpdateOptionSetAsync(DataSession session, ChoiceSetBase changes, CancellationToken ct) =>
             throw new NotSupportedException();
         public Task DeleteOptionSetAsync(DataSession session, string name, CancellationToken ct) =>
             throw new NotSupportedException();
-        public RelationshipMetadataBase? GetRelationship(string schemaName) => null;
-        public IReadOnlyList<ManyToManyRelationshipMetadata> GetManyToManyRelationships() => [];
-        public IReadOnlyList<OneToManyRelationshipMetadata> GetOneToManyRelationships() => [];
-        public Task CreateOneToManyAsync(DataSession session, OneToManyRelationshipMetadata relationship, LookupAttributeMetadata lookup,
+        public RelationshipDefinition? GetRelationshipDefinition(string schemaName) => null;
+        public IReadOnlyList<ManyToManyRelationship> GetManyToManyDefinitions() => [];
+        public IReadOnlyList<OneToManyRelationship> GetOneToManyDefinitions() => [];
+        public Task CreateOneToManyAsync(DataSession session, OneToManyRelationship relationship, LookupColumn lookup,
             CancellationToken ct) => throw new NotSupportedException();
-        public Task CreateCustomerRelationshipsAsync(DataSession session, LookupAttributeMetadata lookup,
-            IReadOnlyList<OneToManyRelationshipMetadata> relationships, CancellationToken ct) => throw new NotSupportedException();
-        public Task CreateManyToManyAsync(DataSession session, ManyToManyRelationshipMetadata relationship, CancellationToken ct) =>
+        public Task CreateCustomerRelationshipsAsync(DataSession session, LookupColumn lookup,
+            IReadOnlyList<OneToManyRelationship> relationships, CancellationToken ct) => throw new NotSupportedException();
+        public Task CreateManyToManyAsync(DataSession session, ManyToManyRelationship relationship, CancellationToken ct) =>
             throw new NotSupportedException();
         public Task DeleteRelationshipAsync(DataSession session, string schemaName, CancellationToken ct) =>
             throw new NotSupportedException();

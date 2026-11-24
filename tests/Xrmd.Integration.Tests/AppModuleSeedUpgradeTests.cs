@@ -7,6 +7,7 @@ using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Metadata;
 using Xrmd.Core;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Security;
 using Xrmd.Solution;
 

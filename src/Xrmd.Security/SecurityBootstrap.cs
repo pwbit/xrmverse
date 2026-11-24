@@ -6,6 +6,7 @@ using Microsoft.Crm.Sdk.Messages;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
 
 namespace Xrmd.Security;
 

@@ -7,6 +7,7 @@ using ModelContextProtocol.Server;
 using Xrmd.Abstractions;
 using Xrmd.Core;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
 
 namespace Xrmd.Mcp.Tools;
 

@@ -1,4 +1,4 @@
-using Microsoft.Xrm.Sdk.Metadata;
+using Xrmd.Model.Metadata;
 
 namespace Xrmd.Metadata;
 
@@ -11,7 +11,7 @@ namespace Xrmd.Metadata;
 /// The object type code and the cascade of <see cref="TeamsRelationship"/> are from memory, not from Learn: the plan 2.16
 /// checklist verifies them on a real environment and records the observed value when it differs.
 /// </remarks>
-public static class AccessTeamSchema
+public static partial class AccessTeamSchema
 {
     /// <summary>The logical name of the template table.</summary>
     public const string TeamTemplate = "teamtemplate";
@@ -48,10 +48,10 @@ public static class AccessTeamSchema
     /// the metadata store (each table with <c>AutoCreateAccessTeams</c> adds itself), so it starts without any and keeps a type
     /// column whatever their number, as <c>fileattachment.objectid</c> does.
     /// </summary>
-    public static bool IsRegardingLookup(AttributeMetadata a) =>
-        a is LookupAttributeMetadata && a.EntityLogicalName == Team && a.LogicalName == RegardingObjectId;
+    public static bool IsRegardingLookup(ColumnDefinition a) =>
+        a is LookupColumn && a.EntityLogicalName == Team && a.LogicalName == RegardingObjectId;
 
     /// <summary>The ownership a table needs for <c>AutoCreateAccessTeams</c>: owned by a user or a team.</summary>
-    public static bool AllowsAccessTeams(OwnershipTypes? ownership) =>
-        ownership is OwnershipTypes.UserOwned or OwnershipTypes.TeamOwned;
+    public static bool AllowsAccessTeams(TableOwnership? ownership) =>
+        ownership is TableOwnership.UserOwned or TableOwnership.TeamOwned;
 }

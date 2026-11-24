@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using FluentAssertions;
 using Xrmd.Metadata.Computed;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Query;
 using Xrmd.Query.Model;
 using Xrmd.Query.Sql;

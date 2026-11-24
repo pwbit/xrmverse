@@ -1,5 +1,5 @@
 using System.Text;
-using Microsoft.Xrm.Sdk.Metadata;
+using Xrmd.Model.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 
@@ -9,7 +9,7 @@ namespace Xrmd.Metadata;
 /// Generates DDL for the <c>data</c> schema in the SQL of a dialect (plan 2.7a, Task 2). Every identifier is validated with
 /// <see cref="LogicalNameValidator"/> before being quoted, so no caller-controlled text reaches the SQL unchecked.
 /// </summary>
-public static class DdlGenerator
+public static partial class DdlGenerator
 {
     public const string DataSchema = "data";
 
@@ -19,12 +19,12 @@ public static class DdlGenerator
     /// statement is followed by the <c>versionnumber</c> trigger (<see cref="ISqlDialect.RowVersionTrigger"/>, plan 2.7a, ruling P4),
     /// and the constraint name is cut to the identifier length (<see cref="ISqlDialect.ObjectName"/>).
     /// </summary>
-    public static string CreateTable(EntityMetadata e, IEnumerable<AttributeMetadata> attrs, ISqlDialect d)
+    public static string CreateTable(TableDefinition e, IEnumerable<ColumnDefinition> attrs, ISqlDialect d)
     {
         ArgumentNullException.ThrowIfNull(d);
         LogicalNameValidator.EnsureValid(e.LogicalName, "entity");
         // Fix round 1 (review I1): a name the engine would cut (PostgreSQL: 63 bytes) is refused before any DDL runs.
-        d.EnsureIdentifier(e.LogicalName, "table");
+        d.EnsureIdentifier(e.LogicalName!, "table");
         var primaryId = SystemAttributes.PrimaryIdName(e);
         var seen = new HashSet<string>(StringComparer.Ordinal);
         var lines = new List<string>();
@@ -41,16 +41,16 @@ public static class DdlGenerator
                 rowVersion |= column.IsRowVersion;
                 lines.Add(column.Name == primaryId
                     ? $"{d.Quote(column.Name)} {column.SqlType(d)} NOT NULL CONSTRAINT {d.Quote(d.ObjectName("PK_" + e.LogicalName))} PRIMARY KEY"
-                    : ColumnDefinition(column, d));
+                    : ColumnSql(column, d));
             }
         }
 
         var sql = new StringBuilder()
-            .Append("CREATE TABLE ").Append(Table(e.LogicalName, d)).Append(" (\n    ")
+            .Append("CREATE TABLE ").Append(Table(e.LogicalName!, d)).Append(" (\n    ")
             .AppendJoin(",\n    ", lines)
             .Append("\n);");
         // Plan 2.7a, ruling P4: on PostgreSQL a trigger sets versionnumber (nothing on SQL Server, where it is a rowversion).
-        if (rowVersion && d.RowVersionTrigger(DataSchema, e.LogicalName) is { Length: > 0 } trigger) sql.Append('\n').Append(trigger);
+        if (rowVersion && d.RowVersionTrigger(DataSchema, e.LogicalName!) is { Length: > 0 } trigger) sql.Append('\n').Append(trigger);
         return sql.ToString();
     }
 
@@ -58,16 +58,16 @@ public static class DdlGenerator
     /// The table of a many-to-many intersect entity: <see cref="CreateTable"/>, then a unique index on the pair of columns
     /// <paramref name="first"/>, <paramref name="second"/> (one row per associated pair).
     /// </summary>
-    public static string CreateIntersectTable(EntityMetadata e, IEnumerable<AttributeMetadata> attrs, string first, string second, ISqlDialect d)
+    public static string CreateIntersectTable(TableDefinition e, IEnumerable<ColumnDefinition> attrs, string first, string second, ISqlDialect d)
     {
         LogicalNameValidator.EnsureValid(first, "attribute");
         LogicalNameValidator.EnsureValid(second, "attribute");
         return CreateTable(e, attrs, d)
-               + $"\nCREATE UNIQUE INDEX {d.Quote(d.ObjectName($"UQ_{e.LogicalName}_pair"))} ON {Table(e.LogicalName, d)} ({d.Quote(first)}, {d.Quote(second)});";
+               + $"\nCREATE UNIQUE INDEX {d.Quote(d.ObjectName($"UQ_{e.LogicalName}_pair"))} ON {Table(e.LogicalName!, d)} ({d.Quote(first)}, {d.Quote(second)});";
     }
 
     /// <summary><c>ALTER TABLE [data].[entity] ADD ...</c> with all the attribute's columns.</summary>
-    public static string AddColumn(string entityLogicalName, AttributeMetadata a, ISqlDialect d)
+    public static string AddColumn(string entityLogicalName, ColumnDefinition a, ISqlDialect d)
     {
         ArgumentNullException.ThrowIfNull(d);
         LogicalNameValidator.EnsureValid(entityLogicalName, "entity");
@@ -79,14 +79,14 @@ public static class DdlGenerator
 
         // Fix round 1 (review I1): every column, the derived ones (<attr>_base, <attr>type) included.
         foreach (var c in columns) d.EnsureIdentifier(c.Name, "column");
-        return d.AddColumns(Table(entityLogicalName, d), columns.Select(c => ColumnDefinition(c, d)).ToList());
+        return d.AddColumns(Table(entityLogicalName, d), columns.Select(c => ColumnSql(c, d)).ToList());
     }
 
     /// <summary>
     /// <c>ALTER TABLE [data].[entity] DROP COLUMN ...</c> with all the attribute's columns (money <c>_base</c>,
     /// polymorphic lookup <c>type</c> included).
     /// </summary>
-    public static string DropColumn(string entityLogicalName, AttributeMetadata a, ISqlDialect d)
+    public static string DropColumn(string entityLogicalName, ColumnDefinition a, ISqlDialect d)
     {
         ArgumentNullException.ThrowIfNull(d);
         LogicalNameValidator.EnsureValid(entityLogicalName, "entity");
@@ -103,12 +103,12 @@ public static class DdlGenerator
     /// <c>ALTER TABLE [data].[entity] ALTER COLUMN ...</c> giving the attribute's own column the type
     /// <see cref="TypeMapping.ToSql"/> maps it to now (e.g. a String whose MaxLength grew).
     /// </summary>
-    public static string AlterColumn(string entityLogicalName, AttributeMetadata a, ISqlDialect d)
+    public static string AlterColumn(string entityLogicalName, ColumnDefinition a, ISqlDialect d)
     {
         ArgumentNullException.ThrowIfNull(d);
         LogicalNameValidator.EnsureValid(entityLogicalName, "entity");
         LogicalNameValidator.EnsureValid(a.LogicalName, "attribute");
-        return d.AlterColumnType(Table(entityLogicalName, d), d.Quote(a.LogicalName), TypeMapping.ToSql(a, d));
+        return d.AlterColumnType(Table(entityLogicalName, d), d.Quote(a.LogicalName!), TypeMapping.ToSql(a, d));
     }
 
     /// <summary>
@@ -156,6 +156,6 @@ public static class DdlGenerator
         return $"{d.Quote(DataSchema)}.{d.Quote(entityLogicalName)}";
     }
 
-    private static string ColumnDefinition(SqlColumn c, ISqlDialect d) =>
+    private static string ColumnSql(SqlColumn c, ISqlDialect d) =>
         c.IsRowVersion ? d.RowVersionColumn(c.Name) : $"{d.Quote(c.Name)} {c.SqlType(d)} NULL";
 }

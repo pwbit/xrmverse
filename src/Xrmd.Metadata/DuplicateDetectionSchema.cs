@@ -1,6 +1,6 @@
 using System.Data;
 using System.Data.Common;
-using Microsoft.Xrm.Sdk.Metadata;
+using Xrmd.Model.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 
@@ -16,7 +16,7 @@ namespace Xrmd.Metadata;
 /// environment. The match codes of a published rule live in <c>meta.matchcode_{ruleid:N}</c>, registered in
 /// <c>meta.matchcode_table</c> (migration 0009).
 /// </remarks>
-public static class DuplicateDetectionSchema
+public static partial class DuplicateDetectionSchema
 {
     /// <summary>The logical names of the three tables.</summary>
     public const string Rule = "duplicaterule", Condition = "duplicaterulecondition", Record = "duplicaterecord";
@@ -174,7 +174,7 @@ public static class DuplicateDetectionSchema
     /// True when <paramref name="entity"/> can have <c>IsDuplicateDetectionEnabled</c>: not an intersect table, and not a
     /// seeded system table other than <see cref="EligibleSystemTables"/>.
     /// </summary>
-    public static bool CanBeEnabled(EntityMetadata entity)
+    public static bool CanBeEnabled(TableDefinition entity)
     {
         ArgumentNullException.ThrowIfNull(entity);
         if (entity.IsIntersect == true || entity.LogicalName is not { } name) return false;
@@ -185,6 +185,6 @@ public static class DuplicateDetectionSchema
     /// True for <c>duplicaterecord.baserecordid</c> and <c>duplicaterecord.duplicaterecordid</c>: their targets are the tables
     /// with <c>IsDuplicateDetectionEnabled</c>, maintained by the metadata store, so they start without any and keep a type column.
     /// </summary>
-    public static bool IsRecordLookup(AttributeMetadata a) =>
-        a is LookupAttributeMetadata && a.EntityLogicalName == Record && a.LogicalName is BaseRecordId or DuplicateRecordId;
+    public static bool IsRecordLookup(ColumnDefinition a) =>
+        a is LookupColumn && a.EntityLogicalName == Record && a.LogicalName is BaseRecordId or DuplicateRecordId;
 }

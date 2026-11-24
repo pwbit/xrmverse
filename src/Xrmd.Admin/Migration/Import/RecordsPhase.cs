@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Core;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Migration.Packaging;
 using Xrmd.Migration.Records;
 

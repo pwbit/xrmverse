@@ -2,11 +2,12 @@ using System.Data.Common;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
-using Microsoft.Xrm.Sdk.Metadata;
+using Xrmd.Model.Metadata;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Metadata.Computed;
 using Xrmd.Abstractions;
 using Xrmd.Core.Errors;
+using Xrmd.Metadata.Sdk;
 
 namespace Xrmd.Metadata;
 
@@ -19,24 +20,28 @@ namespace Xrmd.Metadata;
 /// </summary>
 public sealed partial class MetadataStore
 {
-    public OptionSetMetadataBase? GetOptionSet(string name) =>
+    public ChoiceSetBase? GetChoiceSet(string name) =>
         name is not null && _cache.OptionSets.TryGetValue(name, out var optionSet) ? optionSet : null;
 
-    public IReadOnlyList<OptionSetMetadataBase> GetAllOptionSets() => _cache.AllOptionSets;
+    public IReadOnlyList<ChoiceSetBase> GetAllChoiceSets() =>
+        _cache.AllOptionSets;
 
     /// <summary>Stable id of a global option set: MD5 of <c>xrmd:optionset:</c> + the lower-cased name.</summary>
     public static Guid OptionSetId(string name) =>
         new(MD5.HashData(Encoding.UTF8.GetBytes("xrmd:optionset:" + name.ToLowerInvariant())));
 
-    public async Task CreateOptionSetAsync(DataSession session, OptionSetMetadataBase optionSet, CancellationToken ct)
+    public Task CreateOptionSetAsync(DataSession session, ChoiceSetBase optionSet, CancellationToken ct) =>
+        CreateOptionSetCoreAsync(session, CopyOf(optionSet), ct);
+
+    private async Task CreateOptionSetCoreAsync(DataSession session, ChoiceSetBase optionSet, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(optionSet);
-        var os = MetadataSerializer.Clone(AsPicklistOptionSet(optionSet));
+        var os = MetadataJson.Clone(AsPicklistOptionSet(optionSet));
         if (os.Name is null || !OptionSetNamePattern().IsMatch(os.Name))
             throw new XrmdValidationException(
                 $"Invalid global option set name '{os.Name}': it must match ^[A-Za-z][A-Za-z0-9_]{{0,127}}$.");
         os.IsGlobal = true;
-        os.OptionSetType ??= OptionSetType.Picklist;
+        os.OptionSetType ??= ChoiceSetKind.Picklist;
         os.MetadataId = OptionSetId(os.Name);
         var options = os.Options ?? [];
         if (options.FirstOrDefault(o => o.Value is null) is not null)
@@ -55,7 +60,7 @@ public sealed partial class MetadataStore
             throw new MetadataComponentExistsException($"Global option set '{os.Name}' already exists.");
         await ExecuteAsync(session,
             "INSERT INTO meta.optionset (metadata_id, name, definition, version_stamp) VALUES (@id, @name, @definition, @stamp)", ct,
-            ("@id", os.MetadataId.Value), ("@name", os.Name), ("@definition", MetadataSerializer.SerializeOptionSet(os)), ("@stamp", stamp));
+            ("@id", os.MetadataId.Value), ("@name", os.Name), ("@definition", MetadataJson.SerializeChoiceSet(os)), ("@stamp", stamp));
 
         pending.Working.OptionSets[os.Name] = os;
     }
@@ -63,45 +68,48 @@ public sealed partial class MetadataStore
     /// <summary>
     /// Seed-only path: creates each global option set that does not exist yet, in one session. An existing one is left alone.
     /// </summary>
-    internal Task EnsureSeedOptionSetsAsync(IReadOnlyList<OptionSetMetadata> optionSets, CancellationToken ct = default) =>
+    internal Task EnsureSeedOptionSetsAsync(IReadOnlyList<ChoiceSet> optionSets, CancellationToken ct = default) =>
         InOwnSessionAsync(async session =>
         {
             foreach (var optionSet in optionSets)
             {
                 // Ignoring case, as the uniqueness of names: a custom choice named Audit_Action must not stop the startup.
                 if (_cache.OptionSets.Keys.Any(n => string.Equals(n, optionSet.Name, StringComparison.OrdinalIgnoreCase))) continue;
-                var seeded = MetadataSerializer.Clone(optionSet);
+                var seeded = MetadataJson.Clone(optionSet);
                 seeded.IsGlobal = true;
-                await CreateOptionSetAsync(session, seeded, ct);
+                await CreateOptionSetCoreAsync(session, seeded, ct);
             }
         }, ct);
 
-    public Task UpdateOptionSetAsync(DataSession session, OptionSetMetadataBase changes, CancellationToken ct) =>
+    public Task UpdateOptionSetAsync(DataSession session, ChoiceSetBase changes, CancellationToken ct) =>
         UpdateOptionSetAsync(session, changes, replaceLabels: false, ct);
 
-    public async Task UpdateOptionSetAsync(DataSession session, OptionSetMetadataBase changes, bool replaceLabels, CancellationToken ct)
+    public Task UpdateOptionSetAsync(DataSession session, ChoiceSetBase changes, bool replaceLabels, CancellationToken ct) =>
+        UpdateOptionSetCoreAsync(session, CopyOf(changes), replaceLabels, ct);
+
+    private async Task UpdateOptionSetCoreAsync(DataSession session, ChoiceSetBase changes, bool replaceLabels, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(changes);
         var given = AsPicklistOptionSet(changes);
 
         var pending = await EnterAsync(session, ct);
         var current = FindOptionSet(pending.Working, given.Name);
-        var updated = MetadataSerializer.Clone(current);
+        var updated = MetadataJson.Clone(current);
         if (Applies(given.DisplayName, replaceLabels)) updated.DisplayName = UpdatedLabel(given.DisplayName!);
         if (Applies(given.Description, replaceLabels)) updated.Description = UpdatedLabel(given.Description!);
         MergeOptions($"Global option set '{current.Name}'", updated, given.Options ?? [], replaceLabels);
 
         var stamp = await BumpVersionStampAsync(session, pending, ct);
         await ExecuteAsync(session, "UPDATE meta.optionset SET definition = @definition, version_stamp = @stamp WHERE metadata_id = @id", ct,
-            ("@definition", MetadataSerializer.SerializeOptionSet(updated)), ("@stamp", stamp), ("@id", updated.MetadataId!.Value));
+            ("@definition", MetadataJson.SerializeChoiceSet(updated)), ("@stamp", stamp), ("@id", updated.MetadataId!.Value));
 
         var cache = pending.Working;
-        cache.OptionSets[updated.Name] = updated;
+        cache.OptionSets[updated.Name!] = updated;
         // Copy-on-write of every entity with an attribute bound to the set: the published cache keeps its instances.
-        foreach (var entity in cache.ByLogicalName.Values.Where(e => BoundAttributes(e, updated.Name).Any()).ToList())
+        foreach (var entity in cache.ByLogicalName.Values.Where(e => BoundAttributes(e, updated.Name!).Any()).ToList())
         {
-            var copy = MetadataSerializer.Clone(entity);
-            foreach (var attribute in BoundAttributes(copy, updated.Name)) attribute.OptionSet = MetadataSerializer.Clone(updated);
+            var copy = MetadataJson.Clone(entity);
+            foreach (var attribute in BoundAttributes(copy, updated.Name!)) attribute.OptionSet = MetadataJson.Clone(updated);
             cache.Put(copy, previous: entity);
         }
     }
@@ -111,19 +119,19 @@ public sealed partial class MetadataStore
         var pending = await EnterAsync(session, ct);
         var current = FindOptionSet(pending.Working, name);
         if (current.IsManaged == isManaged) return;
-        var updated = MetadataSerializer.Clone(current);
-        SdkProperty.Set(updated, nameof(OptionSetMetadataBase.IsManaged), isManaged);
+        var updated = MetadataJson.Clone(current);
+        updated.IsManaged = isManaged;
         var stamp = await BumpVersionStampAsync(session, pending, ct);
         await ExecuteAsync(session, "UPDATE meta.optionset SET definition = @definition, version_stamp = @stamp WHERE metadata_id = @id", ct,
-            ("@definition", MetadataSerializer.SerializeOptionSet(updated)), ("@stamp", stamp), ("@id", updated.MetadataId!.Value));
+            ("@definition", MetadataJson.SerializeChoiceSet(updated)), ("@stamp", stamp), ("@id", updated.MetadataId!.Value));
 
         var cache = pending.Working;
-        cache.OptionSets[updated.Name] = updated;
+        cache.OptionSets[updated.Name!] = updated;
         // Copy-on-write of every entity with an attribute bound to the set, as an update of the set does.
-        foreach (var entity in cache.ByLogicalName.Values.Where(e => BoundAttributes(e, updated.Name).Any()).ToList())
+        foreach (var entity in cache.ByLogicalName.Values.Where(e => BoundAttributes(e, updated.Name!).Any()).ToList())
         {
-            var copy = MetadataSerializer.Clone(entity);
-            foreach (var attribute in BoundAttributes(copy, updated.Name)) attribute.OptionSet = MetadataSerializer.Clone(updated);
+            var copy = MetadataJson.Clone(entity);
+            foreach (var attribute in BoundAttributes(copy, updated.Name!)) attribute.OptionSet = MetadataJson.Clone(updated);
             cache.Put(copy, previous: entity);
         }
     }
@@ -133,7 +141,7 @@ public sealed partial class MetadataStore
         var pending = await EnterAsync(session, ct);
         var current = FindOptionSet(pending.Working, name);
         var referencing = pending.Working.ByLogicalName.Values
-            .SelectMany(e => BoundAttributes(e, current.Name).Select(a => $"{e.LogicalName}.{a.LogicalName}"))
+            .SelectMany(e => BoundAttributes(e, current.Name!).Select(a => $"{e.LogicalName}.{a.LogicalName}"))
             .Order(StringComparer.Ordinal)
             .FirstOrDefault();
         if (referencing is not null)
@@ -142,8 +150,8 @@ public sealed partial class MetadataStore
 
         await BumpVersionStampAsync(session, pending, ct);
         await ExecuteAsync(session, "DELETE FROM meta.optionset WHERE metadata_id = @id", ct, ("@id", current.MetadataId!.Value));
-        pending.Working.OptionSets.Remove(current.Name);
-        ForgetOptionSet(pending.Working, current.Name);
+        pending.Working.OptionSets.Remove(current.Name!);
+        ForgetOptionSet(pending.Working, current.Name!);
     }
 
     /// <summary>Reads <c>meta.optionset</c> into <paramref name="state"/>.</summary>
@@ -153,9 +161,9 @@ public sealed partial class MetadataStore
         await using var rd = await cmd.ExecuteReaderAsync(ct);
         while (await rd.ReadAsync(ct))
         {
-            if (MetadataSerializer.DeserializeOptionSet(rd.GetString(0)) is not OptionSetMetadata { Name: not null } os) continue;
-            state.OptionSets[os.Name] = os;
-            if (!rd.IsDBNull(1)) state.Unmodelled[UnmodelledKey(OptionSetComponent, os.Name)] = rd.GetString(1);
+            if (MetadataJson.DeserializeChoiceSet(rd.GetString(0)) is not ChoiceSet { Name: not null } os) continue;
+            state.OptionSets[os.Name!] = os;
+            if (!rd.IsDBNull(1)) state.Unmodelled[UnmodelledKey(OptionSetComponent, os.Name!)] = rd.GetString(1);
         }
     }
 
@@ -165,10 +173,10 @@ public sealed partial class MetadataStore
     /// </summary>
     /// <param name="required">Throw when the set does not exist (writes); loading leaves such a binding as it is.</param>
     /// <exception cref="XrmdValidationException">A binding without name, or to an unknown set when required.</exception>
-    private static void ResolveGlobalOptionSet(CacheState cache, AttributeMetadata attribute, bool required)
+    private static void ResolveGlobalOptionSet(CacheState cache, ColumnDefinition attribute, bool required)
     {
-        if (attribute is not (PicklistAttributeMetadata or MultiSelectPicklistAttributeMetadata)
-            || attribute is not EnumAttributeMetadata { OptionSet: { IsGlobal: true } binding } bound)
+        if (attribute is not (ChoiceColumn or MultiChoiceColumn)
+            || attribute is not ChoiceColumnBase { OptionSet: { IsGlobal: true } binding } bound)
             return;
         if (string.IsNullOrEmpty(binding.Name))
         {
@@ -177,19 +185,19 @@ public sealed partial class MetadataStore
                 $"Attribute '{attribute.LogicalName}': a global option set (IsGlobal = true) is named by OptionSet.Name.");
         }
         if (cache.OptionSets.TryGetValue(binding.Name, out var global))
-            bound.OptionSet = MetadataSerializer.Clone(global);
+            bound.OptionSet = MetadataJson.Clone(global);
         else if (required)
             throw new XrmdValidationException(
                 $"Attribute '{attribute.LogicalName}' uses global option set '{binding.Name}', which does not exist.");
     }
 
     /// <summary>The <c>meta.attribute</c> JSON: an attribute bound to a global option set keeps only the set's name.</summary>
-    private static string StoredAttributeJson(AttributeMetadata attribute, int? imageOrdinal = null)
+    private static string StoredAttributeJson(ColumnDefinition attribute, int? imageOrdinal = null)
     {
         attribute = ComputedColumnRules.WithoutMask(attribute); // SourceTypeMask is computed on read (ruling K12), never stored
         var json = BoundOptionSetName(attribute) is not { } name
-            ? MetadataSerializer.SerializeAttribute(attribute)
-            : MetadataSerializer.SerializeAttribute(WithGlobalBinding((EnumAttributeMetadata)MetadataSerializer.Clone(attribute), name));
+            ? MetadataJson.SerializeColumn(attribute)
+            : MetadataJson.SerializeColumn(WithGlobalBinding((ChoiceColumnBase)MetadataJson.Clone(attribute), name));
         if (imageOrdinal is not { } ordinal) return json;
         // xrmverse-only key: the creation order of image columns, read back on load; never part of the SDK/Web API metadata.
         var node = System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
@@ -197,9 +205,9 @@ public sealed partial class MetadataStore
         return node.ToJsonString();
     }
 
-    private static EnumAttributeMetadata WithGlobalBinding(EnumAttributeMetadata stored, string name)
+    private static ChoiceColumnBase WithGlobalBinding(ChoiceColumnBase stored, string name)
     {
-        stored.OptionSet = new OptionSetMetadata { IsGlobal = true, Name = name };
+        stored.OptionSet = new ChoiceSet { IsGlobal = true, Name = name };
         return stored;
     }
 
@@ -211,27 +219,27 @@ public sealed partial class MetadataStore
         && System.Text.Json.Nodes.JsonNode.Parse(json)![ImageOrdinalKey] is { } value ? (int)value : null;
 
     /// <summary>The name of the global option set a Picklist or MultiSelect attribute is bound to; null otherwise.</summary>
-    private static string? BoundOptionSetName(AttributeMetadata attribute) =>
-        attribute is PicklistAttributeMetadata or MultiSelectPicklistAttributeMetadata
-        && attribute is EnumAttributeMetadata { OptionSet: { IsGlobal: true, Name: { Length: > 0 } name } }
+    private static string? BoundOptionSetName(ColumnDefinition attribute) =>
+        attribute is ChoiceColumn or MultiChoiceColumn
+        && attribute is ChoiceColumnBase { OptionSet: { IsGlobal: true, Name: { Length: > 0 } name } }
             ? name
             : null;
 
-    private static IEnumerable<EnumAttributeMetadata> BoundAttributes(EntityMetadata entity, string optionSetName) =>
-        (entity.Attributes ?? []).OfType<EnumAttributeMetadata>()
+    private static IEnumerable<ChoiceColumnBase> BoundAttributes(TableDefinition entity, string optionSetName) =>
+        (entity.Attributes ?? []).OfType<ChoiceColumnBase>()
         .Where(a => string.Equals(BoundOptionSetName(a), optionSetName, StringComparison.OrdinalIgnoreCase));
 
     /// <exception cref="XrmdValidationException">No global option set has this name.</exception>
-    private static OptionSetMetadata FindOptionSet(CacheState cache, string? name) =>
+    private static ChoiceSet FindOptionSet(CacheState cache, string? name) =>
         name is not null && cache.OptionSets.TryGetValue(name, out var optionSet)
             ? optionSet
             : throw new XrmdValidationException($"Global option set '{name}' does not exist.");
 
     /// <exception cref="XrmdValidationException">Another kind of option set (only Picklist global option sets are kept).</exception>
-    private static OptionSetMetadata AsPicklistOptionSet(OptionSetMetadataBase optionSet) =>
-        optionSet as OptionSetMetadata
+    private static ChoiceSet AsPicklistOptionSet(ChoiceSetBase optionSet) =>
+        optionSet as ChoiceSet
         ?? throw new XrmdValidationException(
-            $"Global option set '{optionSet.Name}' is a {optionSet.GetType().Name}: only OptionSetMetadata global option sets are supported.");
+            $"Global option set '{optionSet.Name}' is a {SdkTwin.Sdk(optionSet).GetType().Name}: only OptionSetMetadata global option sets are supported.");
 
     [GeneratedRegex(@"\A[A-Za-z][A-Za-z0-9_]{0,127}\z", RegexOptions.CultureInvariant)]
     private static partial Regex OptionSetNamePattern();

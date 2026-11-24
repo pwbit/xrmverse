@@ -1,5 +1,4 @@
-using Microsoft.Xrm.Sdk;
-using Microsoft.Xrm.Sdk.Metadata;
+using Xrmd.Model.Metadata;
 
 namespace Xrmd.Metadata;
 
@@ -9,11 +8,11 @@ namespace Xrmd.Metadata;
 /// has <c>partitionid</c> and <c>ttlinseconds</c> instead of the state columns),
 /// <c>ownerid</c> for user/team-owned entities and the <c>_base</c> companion of each money attribute.
 /// </summary>
-public static class SystemAttributes
+public static partial class SystemAttributes
 {
     private const int English = 1033;
 
-    public static string PrimaryIdName(EntityMetadata e) => e.PrimaryIdAttribute ?? PrimaryIdName(e.LogicalName);
+    public static string PrimaryIdName(TableDefinition e) => e.PrimaryIdAttribute ?? PrimaryIdName(e.LogicalName!);
 
     /// <summary>
     /// The primary key name the server gives an entity: <c>{entityLogicalName}id</c>, except for the seeded tables whose
@@ -43,35 +42,35 @@ public static class SystemAttributes
     /// <see cref="ExchangeRate"/>), then the missing system attributes. Attributes the caller already supplied (matched
     /// by logical name) are kept and never duplicated; the inputs are not modified. Idempotent.
     /// </summary>
-    public static IReadOnlyList<AttributeMetadata> Complete(EntityMetadata e, IEnumerable<AttributeMetadata> attrs)
+    public static IReadOnlyList<ColumnDefinition> Complete(TableDefinition e, IEnumerable<ColumnDefinition> attrs)
     {
         var given = attrs.ToList();
         var names = given.Select(a => a.LogicalName).ToHashSet(StringComparer.Ordinal);
         var primaryIdName = PrimaryIdName(e);
-        var result = new List<AttributeMetadata>(given.Count + 16);
+        var result = new List<ColumnDefinition>(given.Count + 16);
 
-        void AddGenerated(AttributeMetadata a)
+        void AddGenerated(ColumnDefinition a)
         {
             if (!names.Add(a.LogicalName)) return;
-            SdkProperty.Set(a, nameof(AttributeMetadata.EntityLogicalName), e.LogicalName);
+            a.EntityLogicalName = e.LogicalName;
             result.Add(a);
         }
 
         var primaryId = given.FirstOrDefault(a => a.LogicalName == primaryIdName);
-        if (primaryId is null) AddGenerated(PrimaryId(e.LogicalName, primaryIdName));
+        if (primaryId is null) AddGenerated(PrimaryIdColumn(e.LogicalName!, primaryIdName));
         else result.Add(primaryId);
 
         foreach (var a in given)
         {
             if (ReferenceEquals(a, primaryId)) continue;
             result.Add(a);
-            if (a is MoneyAttributeMetadata { IsBaseCurrency: not true } money) AddGenerated(MoneyBase(money));
+            if (a is MoneyColumn { IsBaseCurrency: not true } money) AddGenerated(MoneyBase(money));
         }
         // A table with money has the currency pair, once (ruling X4); a definition that already holds it keeps it (pre-flight C6).
-        if (given.Any(a => a is MoneyAttributeMetadata { IsBaseCurrency: not true }))
+        if (given.Any(a => a is MoneyColumn { IsBaseCurrency: not true }))
         {
-            AddGenerated(CurrencyLookup());
-            AddGenerated(ExchangeRate());
+            AddGenerated(CurrencyLookupColumn());
+            AddGenerated(ExchangeRateColumn());
         }
 
         // The audit table has only auditid and createdon of the generic columns (Dataverse's audit table has no owner, state,
@@ -87,7 +86,7 @@ public static class SystemAttributes
             AddGenerated(PartitionId());
             AddGenerated(TtlInSeconds());
         }
-        if (e.OwnershipType is OwnershipTypes.UserOwned or OwnershipTypes.TeamOwned) AddGenerated(Owner());
+        if (e.OwnershipType is TableOwnership.UserOwned or TableOwnership.TeamOwned) AddGenerated(OwnerColumn());
 
         return result;
     }
@@ -95,59 +94,60 @@ public static class SystemAttributes
     /// <summary>
     /// <c>partitionid</c> of an elastic table: String, 100 characters, not required; given on create, never changed.
     /// </summary>
-    public static StringAttributeMetadata PartitionId() => new()
+    public static TextColumn PartitionId() => new()
     {
         LogicalName = ElasticTables.PartitionId,
         SchemaName = "PartitionId",
         DisplayName = EnglishLabel("Partition Id"),
         MaxLength = ElasticTables.PartitionIdMaxLength,
-        RequiredLevel = new AttributeRequiredLevelManagedProperty(AttributeRequiredLevel.None),
+        RequiredLevel = ModelFactory.Required(RequirementLevel.None),
         IsValidForCreate = true,
         IsValidForUpdate = false,
     };
 
     /// <summary><c>ttlinseconds</c> of an elastic table: the seconds a row lives after its last change, 1 to 2147483647, not required.</summary>
-    public static IntegerAttributeMetadata TtlInSeconds() => new()
+    public static IntegerColumn TtlInSeconds() => new()
     {
         LogicalName = ElasticTables.TtlInSeconds,
         SchemaName = "TTLInSeconds",
         DisplayName = EnglishLabel("Time To Live (seconds)"),
         MinValue = 1,
         MaxValue = int.MaxValue,
-        Format = IntegerFormat.None,
-        RequiredLevel = new AttributeRequiredLevelManagedProperty(AttributeRequiredLevel.None),
+        Format = IntegerDisplayFormat.None,
+        RequiredLevel = ModelFactory.Required(RequirementLevel.None),
         IsValidForCreate = true,
         IsValidForUpdate = true,
     };
 
     /// <summary>Primary key attribute <c>{entityLogicalName}id</c>.</summary>
-    public static UniqueIdentifierAttributeMetadata PrimaryId(string entityLogicalName, string? logicalName = null)
+    public static UniqueIdentifierColumn PrimaryIdColumn(string entityLogicalName, string? logicalName = null)
     {
-        var a = new UniqueIdentifierAttributeMetadata(logicalName ?? entityLogicalName + "id")
+        var a = new UniqueIdentifierColumn
         {
+            SchemaName = logicalName ?? entityLogicalName + "id",
             LogicalName = logicalName ?? entityLogicalName + "id",
-            RequiredLevel = new AttributeRequiredLevelManagedProperty(AttributeRequiredLevel.SystemRequired),
+            RequiredLevel = ModelFactory.Required(RequirementLevel.SystemRequired),
             IsValidForCreate = true,
             IsValidForUpdate = false,
         };
-        SdkProperty.Set(a, nameof(AttributeMetadata.IsPrimaryId), true);
-        SdkProperty.Set(a, nameof(AttributeMetadata.EntityLogicalName), entityLogicalName);
+        a.IsPrimaryId = true;
+        a.EntityLogicalName = entityLogicalName;
         return a;
     }
 
     /// <summary><c>ownerid</c>: polymorphic lookup (AttributeType Owner) to systemuser/team.</summary>
-    public static LookupAttributeMetadata Owner()
+    public static LookupColumn OwnerColumn()
     {
-        var a = new LookupAttributeMetadata
+        var a = new LookupColumn
         {
             LogicalName = "ownerid",
             SchemaName = "OwnerId",
             DisplayName = EnglishLabel("Owner"),
             Targets = ["systemuser", "team"],
-            RequiredLevel = new AttributeRequiredLevelManagedProperty(AttributeRequiredLevel.SystemRequired),
+            RequiredLevel = ModelFactory.Required(RequirementLevel.SystemRequired),
         };
-        SdkProperty.Set(a, nameof(AttributeMetadata.AttributeType), AttributeTypeCode.Owner);
-        SdkProperty.Set(a, nameof(AttributeMetadata.AttributeTypeName), AttributeTypeDisplayName.OwnerType);
+        a.AttributeType = ColumnTypeCode.Owner;
+        a.AttributeTypeName = new ColumnTypeName { Value = "OwnerType" };
         return a;
     }
 
@@ -155,19 +155,20 @@ public static class SystemAttributes
     /// The <c>{name}_base</c> money attribute holding the value in base currency, with the Dataverse metadata of one (plan 2.10,
     /// observed): Precision 4, ±922337203685477, PrecisionSource 2, not valid for create or update, <c>IsBaseCurrency</c> true.
     /// </summary>
-    public static MoneyAttributeMetadata MoneyBase(MoneyAttributeMetadata money)
+    public static MoneyColumn MoneyBase(MoneyColumn money)
     {
-        var a = new MoneyAttributeMetadata(money.SchemaName is null ? null : money.SchemaName + "_Base")
+        var a = new MoneyColumn
         {
+            SchemaName = money.SchemaName is null ? null : money.SchemaName + "_Base",
             LogicalName = money.LogicalName + TypeMapping.BaseColumnSuffix,
             DisplayName = money.DisplayName?.UserLocalizedLabel is { } label
-                ? CreateLabel(label.Label + " (Base)", label.LanguageCode)
+                ? CreateLabelSet(label.Label + " (Base)", label.LanguageCode)
                 : null,
             IsValidForCreate = false,
             IsValidForUpdate = false,
         };
         SetBaseMoneyMetadata(a);
-        SdkProperty.Set(a, nameof(MoneyAttributeMetadata.IsBaseCurrency), true);
+        a.IsBaseCurrency = true;
         return a;
     }
 
@@ -175,7 +176,7 @@ public static class SystemAttributes
     /// Gives <paramref name="baseMoney"/> the fixed metadata of a <c>{money}_base</c> attribute (Precision, PrecisionSource, range);
     /// returns true when one of them changed. Used by <see cref="MoneyBase"/> and by the upgrade of a <c>_base</c> made before plan 2.10.
     /// </summary>
-    public static bool SetBaseMoneyMetadata(MoneyAttributeMetadata baseMoney)
+    public static bool SetBaseMoneyMetadata(MoneyColumn baseMoney)
     {
         ArgumentNullException.ThrowIfNull(baseMoney);
         var changed = baseMoney.Precision != CurrencySchema.BaseMoneyPrecision
@@ -194,13 +195,13 @@ public static class SystemAttributes
     /// <see cref="ExchangeRate"/> it is the currency pair of a table with money columns; account and contact have it in their seed
     /// files (decision D1), which hold this same definition (pre-flight C6, checked by a test).
     /// </summary>
-    public static LookupAttributeMetadata CurrencyLookup() => new()
+    public static LookupColumn CurrencyLookupColumn() => new()
     {
         LogicalName = CurrencySchema.CurrencyId,
         SchemaName = "TransactionCurrencyId",
         DisplayName = EnglishLabel("Currency"),
         Targets = [CurrencySchema.Table],
-        RequiredLevel = new AttributeRequiredLevelManagedProperty(AttributeRequiredLevel.None),
+        RequiredLevel = ModelFactory.Required(RequirementLevel.None),
         IsValidForCreate = true,
         IsValidForUpdate = true,
     };
@@ -209,7 +210,7 @@ public static class SystemAttributes
     /// <c>exchangerate</c>: the rate of the record's currency when the record was written, computed by the server (Precision 10,
     /// 1E-10 to 1E11, not valid for create or update). The other half of the currency pair (<see cref="CurrencyLookup"/>).
     /// </summary>
-    public static DecimalAttributeMetadata ExchangeRate() => new()
+    public static DecimalColumn ExchangeRateColumn() => new()
     {
         LogicalName = CurrencySchema.ExchangeRate,
         SchemaName = "ExchangeRate",
@@ -217,35 +218,35 @@ public static class SystemAttributes
         Precision = CurrencySchema.RecordRateDecimals,
         MinValue = CurrencySchema.MinRate,
         MaxValue = CurrencySchema.MaxRate,
-        RequiredLevel = new AttributeRequiredLevelManagedProperty(AttributeRequiredLevel.None),
+        RequiredLevel = ModelFactory.Required(RequirementLevel.None),
         IsValidForCreate = false,
         IsValidForUpdate = false,
     };
 
-    private static IEnumerable<AttributeMetadata> Standard()
+    private static IEnumerable<ColumnDefinition> Standard()
     {
-        yield return ReadOnly(new DateTimeAttributeMetadata(DateTimeFormat.DateAndTime, "CreatedOn") { LogicalName = "createdon" }, "Created On");
+        yield return ReadOnly(new DateTimeColumn { Format = DateTimeDisplayFormat.DateAndTime, SchemaName = "CreatedOn", LogicalName = "createdon" }, "Created On");
         yield return ReadOnly(Lookup("createdby", "CreatedBy", "systemuser"), "Created By");
-        yield return ReadOnly(new DateTimeAttributeMetadata(DateTimeFormat.DateAndTime, "ModifiedOn") { LogicalName = "modifiedon" }, "Modified On");
+        yield return ReadOnly(new DateTimeColumn { Format = DateTimeDisplayFormat.DateAndTime, SchemaName = "ModifiedOn", LogicalName = "modifiedon" }, "Modified On");
         yield return ReadOnly(Lookup("modifiedby", "ModifiedBy", "systemuser"), "Modified By");
         yield return ReadOnly(Lookup("owninguser", "OwningUser", "systemuser"), "Owning User");
         yield return ReadOnly(Lookup("owningteam", "OwningTeam", "team"), "Owning Team");
         yield return ReadOnly(Lookup("owningbusinessunit", "OwningBusinessUnit", "businessunit"), "Owning Business Unit");
         yield return StateCode();
         yield return StatusCode();
-        yield return ReadOnly(new BigIntAttributeMetadata("VersionNumber") { LogicalName = TypeMapping.VersionNumber }, "Version Number");
+        yield return ReadOnly(new BigIntColumn { SchemaName = "VersionNumber", LogicalName = TypeMapping.VersionNumber }, "Version Number");
     }
 
     /// <summary>A single-language label with <c>UserLocalizedLabel</c> set, as the Web API returns it.</summary>
-    public static Label CreateLabel(string text, int languageCode) =>
-        new(new LocalizedLabel(text, languageCode), new[] { new LocalizedLabel(text, languageCode) });
+    public static LabelSet CreateLabelSet(string text, int languageCode) =>
+        new() { LocalizedLabels = [new LocalizedText { Label = text, LanguageCode = languageCode }], UserLocalizedLabel = new LocalizedText { Label = text, LanguageCode = languageCode } };
 
-    private static Label EnglishLabel(string text) => CreateLabel(text, English);
+    private static LabelSet EnglishLabel(string text) => CreateLabelSet(text, English);
 
-    private static LookupAttributeMetadata Lookup(string logicalName, string schemaName, string target) =>
+    private static LookupColumn Lookup(string logicalName, string schemaName, string target) =>
         new() { LogicalName = logicalName, SchemaName = schemaName, Targets = [target] };
 
-    private static AttributeMetadata ReadOnly(AttributeMetadata a, string displayName)
+    private static ColumnDefinition ReadOnly(ColumnDefinition a, string displayName)
     {
         a.DisplayName = EnglishLabel(displayName);
         a.IsValidForCreate = false;
@@ -253,31 +254,39 @@ public static class SystemAttributes
         return a;
     }
 
-    private static StateAttributeMetadata StateCode()
+    private static StateColumn StateCode()
     {
-        var options = new OptionSetMetadata(new OptionMetadataCollection
+        var options = new ChoiceSet
         {
-            new StateOptionMetadata { Value = 0, Label = EnglishLabel("Active"), DefaultStatus = 1 },
-            new StateOptionMetadata { Value = 1, Label = EnglishLabel("Inactive"), DefaultStatus = 2 },
-        }) { IsGlobal = false, OptionSetType = OptionSetType.State };
-        return new StateAttributeMetadata
+            Options =
+            [
+                new StateOption { Value = 0, Label = EnglishLabel("Active"), DefaultStatus = 1 },
+                new StateOption { Value = 1, Label = EnglishLabel("Inactive"), DefaultStatus = 2 },
+            ],
+            IsGlobal = false, OptionSetType = ChoiceSetKind.State,
+        };
+        return new StateColumn
         {
             LogicalName = "statecode",
             SchemaName = "StateCode",
             DisplayName = EnglishLabel("Status"),
             OptionSet = options,
-            RequiredLevel = new AttributeRequiredLevelManagedProperty(AttributeRequiredLevel.SystemRequired),
+            RequiredLevel = ModelFactory.Required(RequirementLevel.SystemRequired),
         };
     }
 
-    private static StatusAttributeMetadata StatusCode()
+    private static StatusColumn StatusCode()
     {
-        var options = new OptionSetMetadata(new OptionMetadataCollection
+        var options = new ChoiceSet
         {
-            new StatusOptionMetadata(1, 0) { Label = EnglishLabel("Active") },
-            new StatusOptionMetadata(2, 1) { Label = EnglishLabel("Inactive") },
-        }) { IsGlobal = false, OptionSetType = OptionSetType.Status };
-        return new StatusAttributeMetadata
+            Options =
+            [
+                new StatusOption { Value = 1, State = 0, Label = EnglishLabel("Active") },
+                new StatusOption { Value = 2, State = 1, Label = EnglishLabel("Inactive") },
+            ],
+            IsGlobal = false, OptionSetType = ChoiceSetKind.Status,
+        };
+        return new StatusColumn
         {
             LogicalName = "statuscode",
             SchemaName = "StatusCode",

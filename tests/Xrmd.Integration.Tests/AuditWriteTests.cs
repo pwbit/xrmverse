@@ -13,6 +13,7 @@ using Xrmd.Abstractions.Storage;
 using Xrmd.Audit;
 using Xrmd.Core;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Pipeline;
 using Xrmd.Security;
 using static Xrmd.Integration.Tests.SecurityTestHelper;

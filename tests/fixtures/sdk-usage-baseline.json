@@ -1,6 +1,6 @@
 {
   "files": {
-    "Xrmd.Abstractions": 5,
+    "Xrmd.Abstractions": 4,
     "Xrmd.Admin": 20,
     "Xrmd.Audit": 5,
     "Xrmd.Cli": 3,
@@ -8,7 +8,7 @@
     "Xrmd.Files": 3,
     "Xrmd.Host": 5,
     "Xrmd.Mcp": 8,
-    "Xrmd.Metadata": 48,
+    "Xrmd.Metadata": 26,
     "Xrmd.Pipeline": 33,
     "Xrmd.Query": 13,
     "Xrmd.Schema": 5,

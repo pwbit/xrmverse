@@ -14,6 +14,7 @@ using Xrmd.Abstractions;
 using Xrmd.Admin;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Security;
 using Xrmd.Mcp;
 using static Xrmd.Integration.Tests.SecurityTestHelper;

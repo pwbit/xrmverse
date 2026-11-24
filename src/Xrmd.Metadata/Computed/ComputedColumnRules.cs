@@ -1,11 +1,11 @@
-using Microsoft.Xrm.Sdk.Metadata;
+using Xrmd.Model.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Core.Errors;
 
 namespace Xrmd.Metadata.Computed;
 
 /// <summary>The metadata rules of calculated columns (plan 2.12a, Global Constraints and rulings K4, K12).</summary>
-public static class ComputedColumnRules
+public static partial class ComputedColumnRules
 {
     /// <summary><c>SourceType</c> of a calculated column.</summary>
     public const int Calculated = 1;
@@ -22,7 +22,7 @@ public static class ComputedColumnRules
     /// True for a column the server computes on read, with no SQL column of its own and never written: a calculated
     /// (<c>SourceType</c> 1) or formula (3) column. A rollup (2) is stored by its jobs and is not one.
     /// </summary>
-    public static bool IsComputed(AttributeMetadata? a) => a?.SourceType is Calculated or Formula;
+    public static bool IsComputed(ColumnDefinition? a) => a?.SourceType is Calculated or Formula;
 
     /// <summary>
     /// Checks the definition of <paramref name="a"/> (which is changed in place: read-only flags, <c>SourceTypeMask</c>). With
@@ -32,9 +32,9 @@ public static class ComputedColumnRules
     /// </summary>
     /// <exception cref="XrmdValidationException">The definition is refused.</exception>
     /// <exception cref="XrmdFaultException">400: a rollup definition is refused (its rollup error code).</exception>
-    public static void ValidateDefinition(EntityMetadata entity, AttributeMetadata a, AttributeMetadata? current,
-        Func<string, EntityMetadata?> entities, IComputedColumns? computed, IRollupColumns? rollups = null,
-        Func<string, OneToManyRelationshipMetadata?>? relationships = null, int otherRollupsOnTable = 0, int otherRollupsInOrg = 0)
+    public static void ValidateDefinition(TableDefinition entity, ColumnDefinition a, ColumnDefinition? current,
+        Func<string, TableDefinition?> entities, IComputedColumns? computed, IRollupColumns? rollups = null,
+        Func<string, OneToManyRelationship?>? relationships = null, int otherRollupsOnTable = 0, int otherRollupsInOrg = 0)
     {
         ArgumentNullException.ThrowIfNull(entity);
         ArgumentNullException.ThrowIfNull(a);
@@ -76,7 +76,7 @@ public static class ComputedColumnRules
         // A calculated column is computed by the server: it is never written, and it cannot be required.
         a.IsValidForCreate = false;
         a.IsValidForUpdate = false;
-        a.RequiredLevel = new AttributeRequiredLevelManagedProperty(AttributeRequiredLevel.None);
+        a.RequiredLevel = ModelFactory.Required(RequirementLevel.None);
 
         var definition = computed.Translate(entity, a, entities);
         SetMask(a, definition.SourceTypeMask);
@@ -88,7 +88,7 @@ public static class ComputedColumnRules
     /// translated (or there is no translator). Types without the property are left alone. The value lives in the cache only: stores
     /// clear it (<see cref="WithoutMask"/>).
     /// </summary>
-    public static void ApplyMask(EntityMetadata entity, AttributeMetadata a, Func<string, EntityMetadata?> entities, IComputedColumns? computed)
+    public static void ApplyMask(TableDefinition entity, ColumnDefinition a, Func<string, TableDefinition?> entities, IComputedColumns? computed)
     {
         if (a.GetType().GetProperty("SourceTypeMask") is null) return;
         if (!IsComputed(a)) { SetMask(a, 0); return; }
@@ -103,22 +103,22 @@ public static class ComputedColumnRules
     }
 
     /// <summary><paramref name="a"/> without its <c>SourceTypeMask</c> (a copy when it has one): what a store writes.</summary>
-    public static AttributeMetadata WithoutMask(AttributeMetadata a)
+    public static ColumnDefinition WithoutMask(ColumnDefinition a)
     {
         if (MaskOf(a) is null) return a;
-        var copy = MetadataSerializer.Clone(a);
+        var copy = MetadataJson.Clone(a);
         SetMask(copy, null);
         return copy;
     }
 
-    private static void SetMask(AttributeMetadata a, int? mask) => SdkProperty.Set(a, "SourceTypeMask", mask);
+    private static void SetMask(ColumnDefinition a, int? mask) => a.GetType().GetProperty("SourceTypeMask")!.SetValue(a, mask);
 
     /// <summary>
     /// The <c>SourceTypeMask</c> of a calculated column: 1 when it reads a simple column of its own record, 2 a simple column of the
     /// parent record, 8 another calculated column (of either record), 16 a rollup column or one of its companions (plan 2.12b,
     /// ruling R13); the bits are combined.
     /// </summary>
-    public static int SourceTypeMask(EntityMetadata entity, ComputedDefinition definition, Func<string, EntityMetadata?> entities)
+    public static int SourceTypeMask(TableDefinition entity, ComputedDefinition definition, Func<string, TableDefinition?> entities)
     {
         ArgumentNullException.ThrowIfNull(entity);
         ArgumentNullException.ThrowIfNull(definition);
@@ -141,7 +141,7 @@ public static class ComputedColumnRules
     /// <paramref name="replaced"/> (<c>table.column</c>), a column whose definition an update is replacing.
     /// </summary>
     /// <exception cref="XrmdFaultException">400 <c>0x80040203</c>: another calculated column's definition cannot be read.</exception>
-    public static IReadOnlyList<string> Dependents(string entity, string attribute, IEnumerable<EntityMetadata> all, IComputedColumns computed,
+    public static IReadOnlyList<string> Dependents(string entity, string attribute, IEnumerable<TableDefinition> all, IComputedColumns computed,
         string? replaced = null) =>
         DependentsCore(entity, new HashSet<string>(StringComparer.Ordinal) { attribute }, all, computed,
             (table, column) => (table == entity && column == attribute) || (replaced is not null && replaced == $"{table}.{column}"));
@@ -151,12 +151,12 @@ public static class ComputedColumnRules
     /// <see cref="Dependents"/> or <see cref="DependentsOfTable"/>) read, or null when there are none. Calculated dependents keep the
     /// text of plan 2.12a (ruling K4); formula dependents are named as formula columns (plan 2.12c).
     /// </summary>
-    public static string? DeleteRefusal(IReadOnlyList<string> dependents, IEnumerable<EntityMetadata> all)
+    public static string? DeleteRefusal(IReadOnlyList<string> dependents, IEnumerable<TableDefinition> all)
     {
         ArgumentNullException.ThrowIfNull(dependents);
         ArgumentNullException.ThrowIfNull(all);
         if (dependents.Count == 0) return null;
-        var tables = all.GroupBy(e => e.LogicalName, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+        var tables = all.GroupBy(e => e.LogicalName!, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         bool IsFormula(string name)
         {
             var dot = name.IndexOf('.', StringComparison.Ordinal);
@@ -177,11 +177,11 @@ public static class ComputedColumnRules
     /// would break). The table's own computed columns go with it and are not translated.
     /// </summary>
     /// <exception cref="XrmdFaultException">400 <c>0x80040203</c>: another table's calculated column's definition cannot be read.</exception>
-    public static IReadOnlyList<string> DependentsOfTable(EntityMetadata entity, IEnumerable<EntityMetadata> all, IComputedColumns computed)
+    public static IReadOnlyList<string> DependentsOfTable(TableDefinition entity, IEnumerable<TableDefinition> all, IComputedColumns computed)
     {
         ArgumentNullException.ThrowIfNull(entity);
         var prefix = entity.LogicalName + ".";
-        return DependentsCore(entity.LogicalName, (entity.Attributes ?? []).Select(x => x.LogicalName).ToHashSet(StringComparer.Ordinal), all,
+        return DependentsCore(entity.LogicalName!, (entity.Attributes ?? []).Select(x => x.LogicalName!).ToHashSet(StringComparer.Ordinal), all,
                 computed, (table, _) => table == entity.LogicalName)
             .Where(d => !d.StartsWith(prefix, StringComparison.Ordinal))
             .ToList();
@@ -191,22 +191,22 @@ public static class ComputedColumnRules
     /// The calculated and formula columns that read one of <paramref name="attributes"/> of <paramref name="entity"/> (or follow it as
     /// their lookup), the ones <paramref name="skip"/> names left out untranslated.
     /// </summary>
-    private static IReadOnlyList<string> DependentsCore(string entity, IReadOnlySet<string> attributes, IEnumerable<EntityMetadata> all,
+    private static IReadOnlyList<string> DependentsCore(string entity, IReadOnlySet<string> attributes, IEnumerable<TableDefinition> all,
         IComputedColumns computed, Func<string, string, bool> skip)
     {
         ArgumentNullException.ThrowIfNull(all);
         ArgumentNullException.ThrowIfNull(computed);
         var tables = all.ToList();
-        var byName = tables.Where(t => t.LogicalName is not null).ToDictionary(t => t.LogicalName, StringComparer.Ordinal);
-        EntityMetadata? Find(string name) => byName.GetValueOrDefault(name);
+        var byName = tables.Where(t => t.LogicalName is not null).ToDictionary(t => t.LogicalName!, StringComparer.Ordinal);
+        TableDefinition? Find(string name) => byName.GetValueOrDefault(name);
         List<string> found = [];
         foreach (var table in tables)
-            foreach (var column in (table.Attributes ?? []).Where(x => IsComputed(x) && !skip(table.LogicalName, x.LogicalName)))
+            foreach (var column in (table.Attributes ?? []).Where(x => IsComputed(x) && !skip(table.LogicalName!, x.LogicalName!)))
             {
                 IReadOnlyList<ComputedExpr.Column> sources;
                 try
                 {
-                    sources = computed.Translate(table, column, Find).Sources;
+                    sources = computed.TranslatePublished(table, column, Find).Sources;
                 }
                 catch (XrmdValidationException ex)
                 {
@@ -225,38 +225,40 @@ public static class ComputedColumnRules
 
     /// <summary>
     /// The <c>FormulaDefinition</c> of <paramref name="a"/>; null when the type has none. The SDK declares the property on each
-    /// column type that can be calculated, not on <see cref="AttributeMetadata"/>.
+    /// column type that can be calculated, not on <see cref="ColumnDefinition"/>.
     /// </summary>
-    public static string? FormulaOf(AttributeMetadata a) =>
+    public static string? FormulaOf(ColumnDefinition a) =>
         a.GetType().GetProperty("FormulaDefinition")?.GetValue(a) as string;
 
     /// <summary>Sets the <c>FormulaDefinition</c> of <paramref name="a"/> (a type that can be calculated).</summary>
-    public static void SetFormula(AttributeMetadata a, string? formula) => SdkProperty.Set(a, "FormulaDefinition", formula);
+    public static void SetFormula(ColumnDefinition a, string? formula) =>
+        (a.GetType().GetProperty("FormulaDefinition") ?? throw new InvalidOperationException($"{a.GetType().Name} has no property FormulaDefinition."))
+        .SetValue(a, formula);
 
     /// <summary>The <c>SourceTypeMask</c> of <paramref name="a"/>; null when the type has none or it is not set.</summary>
-    public static int? MaskOf(AttributeMetadata a) => a.GetType().GetProperty("SourceTypeMask")?.GetValue(a) as int?;
+    public static int? MaskOf(ColumnDefinition a) => a.GetType().GetProperty("SourceTypeMask")?.GetValue(a) as int?;
 
     /// <summary>True when <paramref name="entity"/> has a calculated column.</summary>
-    public static bool HasCalculated(EntityMetadata entity) => (entity.Attributes ?? []).Any(x => x.SourceType == Calculated);
+    public static bool HasCalculated(TableDefinition entity) => (entity.Attributes ?? []).Any(x => x.SourceType == Calculated);
 
-    private static EntityMetadata? ParentOf(EntityMetadata entity, string lookup, Func<string, EntityMetadata?> entities) =>
-        entity.Attributes?.FirstOrDefault(x => x.LogicalName == lookup) is LookupAttributeMetadata { Targets: [var target] }
+    private static TableDefinition? ParentOf(TableDefinition entity, string lookup, Func<string, TableDefinition?> entities) =>
+        entity.Attributes?.FirstOrDefault(x => x.LogicalName == lookup) is LookupColumn { Targets: [var target] }
             ? entities(target)
             : null;
 
-    private static bool IsAllowedType(AttributeMetadata a) => a is StringAttributeMetadata or PicklistAttributeMetadata
-        or BooleanAttributeMetadata or IntegerAttributeMetadata or DecimalAttributeMetadata or MoneyAttributeMetadata
-        or DateTimeAttributeMetadata;
+    private static bool IsAllowedType(ColumnDefinition a) => a is TextColumn or ChoiceColumn
+        or BooleanColumn or IntegerColumn or DecimalColumn or MoneyColumn
+        or DateTimeColumn;
 
     /// <summary>
     /// A range narrower than the type's widest one. The widest range is no limit: the 2.12a parity export writes it on every calculated
     /// Whole number (-2147483648 to 2147483647), Decimal (±100000000000) and Currency (±922337203685477) column.
     /// </summary>
-    internal static bool HasLimits(AttributeMetadata a) => a switch
+    internal static bool HasLimits(ColumnDefinition a) => a switch
     {
-        IntegerAttributeMetadata i => i.MinValue is not (null or int.MinValue) || i.MaxValue is not (null or int.MaxValue),
-        DecimalAttributeMetadata d => d.MinValue is not null && d.MinValue != -WidestDecimal || d.MaxValue is not null && d.MaxValue != WidestDecimal,
-        MoneyAttributeMetadata m => m.MinValue is not null && m.MinValue != -WidestMoney || m.MaxValue is not null && m.MaxValue != WidestMoney,
+        IntegerColumn i => i.MinValue is not (null or int.MinValue) || i.MaxValue is not (null or int.MaxValue),
+        DecimalColumn d => d.MinValue is not null && d.MinValue != -WidestDecimal || d.MaxValue is not null && d.MaxValue != WidestDecimal,
+        MoneyColumn m => m.MinValue is not null && m.MinValue != -WidestMoney || m.MaxValue is not null && m.MaxValue != WidestMoney,
         _ => false,
     };
 

@@ -17,6 +17,7 @@ using Xrmd.Core;
 using Xrmd.Files;
 using Xrmd.Host;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Security;
 using static Xrmd.Integration.Tests.SecurityTestHelper;
 

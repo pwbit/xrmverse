@@ -4,6 +4,7 @@ using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Query.Sql;
 using Xrmd.Security;
 

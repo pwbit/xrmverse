@@ -5,6 +5,7 @@ using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
 
 namespace Xrmd.Integration.Tests;
 

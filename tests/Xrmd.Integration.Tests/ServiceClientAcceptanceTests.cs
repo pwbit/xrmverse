@@ -14,6 +14,7 @@ using Xrmd.Abstractions;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
 using Xunit.Abstractions;
+using Xrmd.Metadata.Sdk;
 
 namespace Xrmd.Integration.Tests;
 

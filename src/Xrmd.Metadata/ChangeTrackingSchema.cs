@@ -1,4 +1,4 @@
-using Microsoft.Xrm.Sdk.Metadata;
+using Xrmd.Model.Metadata;
 using Xrmd.Abstractions.Storage;
 
 namespace Xrmd.Metadata;
@@ -12,7 +12,7 @@ namespace Xrmd.Metadata;
 /// the version at which tracking started), <c>meta.deleted_record</c> (the deletion log) and <c>meta.change_tracking_state</c>
 /// (one row: the version up to which the log was purged, and the time of the last restore from a backup).
 /// </remarks>
-public static class ChangeTrackingSchema
+public static partial class ChangeTrackingSchema
 {
     /// <summary>The default of <c>organization.expirechangetrackingindays</c> (Learn: 7 days).</summary>
     public const int DefaultExpireDays = 7;
@@ -53,7 +53,7 @@ public static class ChangeTrackingSchema
     /// True when <paramref name="entity"/> can have <c>ChangeTrackingEnabled</c>: neither an intersect table nor one of
     /// <see cref="IneligibleTables"/>. The source of <c>CanChangeTrackingBeEnabled</c>, which is computed, never stored.
     /// </summary>
-    public static bool CanBeEnabled(EntityMetadata entity)
+    public static bool CanBeEnabled(TableDefinition entity)
     {
         ArgumentNullException.ThrowIfNull(entity);
         return entity.IsIntersect != true && entity.LogicalName is { } name && !IneligibleTables.Contains(name);

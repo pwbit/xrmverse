@@ -1,10 +1,11 @@
 using System.Data.Common;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Microsoft.Xrm.Sdk.Metadata;
+using Xrmd.Model.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
+using Xrmd.Metadata.Sdk;
 
 namespace Xrmd.Metadata;
 
@@ -23,16 +24,18 @@ public sealed partial class MetadataStore
 {
     private const string IdOne = "idone", IdTwo = "idtwo";
 
-    public RelationshipMetadataBase? GetRelationship(string schemaName)
+    public RelationshipDefinition? GetRelationshipDefinition(string schemaName)
     {
         if (string.IsNullOrEmpty(schemaName)) return null;
         var cache = _cache;
-        return cache.ManyToMany.TryGetValue(schemaName, out var manyToMany)
+        RelationshipDefinition? found = cache.ManyToMany.TryGetValue(schemaName, out var manyToMany)
             ? manyToMany
             : cache.AllOneToMany.FirstOrDefault(r => string.Equals(r.SchemaName, schemaName, StringComparison.OrdinalIgnoreCase));
+        return found is null ? null : found;
     }
 
-    public IReadOnlyList<ManyToManyRelationshipMetadata> GetManyToManyRelationships() => _cache.AllManyToMany;
+    public IReadOnlyList<ManyToManyRelationship> GetManyToManyDefinitions() =>
+        _cache.AllManyToMany;
 
     public string? GetRelationshipMenuXml(string schemaName) =>
         !string.IsNullOrEmpty(schemaName) && _cache.RelationshipMenus.TryGetValue(schemaName, out var xml) ? xml : null;
@@ -53,53 +56,59 @@ public sealed partial class MetadataStore
         await ExecuteAsync(session, "UPDATE meta.relationship SET associated_menu_xml = @xml, version_stamp = @stamp WHERE metadata_id = @id", ct,
             ("@xml", (object?)xml ?? DBNull.Value), ("@stamp", stamp), ("@id", id.Value));
         var name = manyToMany?.SchemaName ?? cache.SavedOneToMany[schemaName].SchemaName;
-        if (xml is null) cache.RelationshipMenus.Remove(name);
-        else cache.RelationshipMenus[name] = xml;
+        if (xml is null) cache.RelationshipMenus.Remove(name!);
+        else cache.RelationshipMenus[name!] = xml;
     }
 
-    public IReadOnlyList<OneToManyRelationshipMetadata> GetOneToManyRelationships() => _cache.AllOneToMany;
+    public IReadOnlyList<OneToManyRelationship> GetOneToManyDefinitions() =>
+        _cache.AllOneToMany;
 
     public async Task<bool> SetRelationshipIsManagedAsync(DataSession session, string schemaName, bool? isManaged, CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrEmpty(schemaName);
         var pending = await EnterAsync(session, ct);
         var cache = pending.Working;
-        RelationshipMetadataBase? current = cache.ManyToMany.TryGetValue(schemaName, out var manyToMany) ? manyToMany
+        RelationshipDefinition? current = cache.ManyToMany.TryGetValue(schemaName, out var manyToMany) ? manyToMany
             : cache.SavedOneToMany.TryGetValue(schemaName, out var oneToMany) ? oneToMany
             : null;
         if (current is null) return false;
         if (current.IsManaged == isManaged) return true;
-        var updated = MetadataSerializer.Clone(current);
-        SdkProperty.Set(updated, nameof(RelationshipMetadataBase.IsManaged), isManaged);
+        var updated = MetadataJson.Clone(current);
+        updated.IsManaged = isManaged;
         var stamp = await BumpVersionStampAsync(session, pending, ct);
         await ExecuteAsync(session, "UPDATE meta.relationship SET definition = @definition, version_stamp = @stamp WHERE metadata_id = @id", ct,
-            ("@definition", MetadataSerializer.SerializeRelationship(updated)), ("@stamp", stamp), ("@id", updated.MetadataId!.Value));
+            ("@definition", MetadataJson.SerializeRelationship(updated)), ("@stamp", stamp), ("@id", updated.MetadataId!.Value));
         switch (updated)
         {
-            case ManyToManyRelationshipMetadata m:
-                cache.ManyToMany[m.SchemaName] = m;
+            case ManyToManyRelationship m:
+                cache.ManyToMany[m.SchemaName!] = m;
                 break;
-            case OneToManyRelationshipMetadata o:
-                cache.SavedOneToMany[o.SchemaName] = o;
+            case OneToManyRelationship o:
+                cache.SavedOneToMany[o.SchemaName!] = o;
                 break;
         }
         return true;
     }
 
-    public OneToManyRelationshipMetadata? GetHierarchicalRelationship(string entityLogicalName) =>
-        entityLogicalName is not null && _cache.Hierarchical.TryGetValue(entityLogicalName, out var r) ? r : null;
+    public OneToManyRelationship? GetHierarchicalDefinition(string entityLogicalName) =>
+        entityLogicalName is not null && _cache.Hierarchical.TryGetValue(entityLogicalName, out var r)
+            ? r
+            : null;
 
     /// <summary>A self-referencing one-to-many relationship marked <c>IsHierarchical</c>.</summary>
-    private static bool IsHierarchicalRelationship(OneToManyRelationshipMetadata r) =>
+    private static bool IsHierarchicalRelationship(OneToManyRelationship r) =>
         r.IsHierarchical == true && r.ReferencingEntity is not null && r.ReferencingEntity == r.ReferencedEntity;
 
-    public async Task CreateOneToManyAsync(DataSession session, OneToManyRelationshipMetadata relationship, LookupAttributeMetadata lookup,
+    public Task CreateOneToManyAsync(DataSession session, OneToManyRelationship relationship, LookupColumn lookup, CancellationToken ct) =>
+        CreateOneToManyCoreAsync(session, CopyOf(relationship), CopyOf(lookup), ct);
+
+    private async Task CreateOneToManyCoreAsync(DataSession session, OneToManyRelationship relationship, LookupColumn lookup,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(relationship);
         ArgumentNullException.ThrowIfNull(lookup);
-        var r = MetadataSerializer.Clone(relationship);
-        var l = MetadataSerializer.Clone(lookup);
+        var r = MetadataJson.Clone(relationship);
+        var l = MetadataJson.Clone(lookup);
         if (r.SchemaName is null || !RelationshipNamePattern().IsMatch(r.SchemaName))
             throw new XrmdValidationException(
                 $"Invalid relationship name '{r.SchemaName}': it must match ^[A-Za-z][A-Za-z0-9_]{{0,99}}$.");
@@ -108,8 +117,8 @@ public sealed partial class MetadataStore
         LogicalNameValidator.EnsureValid(l.LogicalName, "attribute");
         if (r.ReferencingEntity == FileColumns.AttachmentEntity && l.LogicalName == FileColumns.AttachmentLookup)
             throw AttachmentLookupIsManaged($"Lookup '{r.ReferencingEntity}.{l.LogicalName}'");
-        EnsureNotCustomer(r.ReferencingEntity, l);
-        l.Targets = [r.ReferencedEntity];
+        EnsureNotCustomer(r.ReferencingEntity!, l);
+        l.Targets = [r.ReferencedEntity!];
         l.MetadataId ??= Guid.NewGuid();
         r.ReferencingAttribute = l.LogicalName;
         r.MetadataId ??= Guid.NewGuid();
@@ -117,15 +126,15 @@ public sealed partial class MetadataStore
 
         var pending = await EnterAsync(session, ct);
         var cache = pending.Working;
-        foreach (var side in (string[])[r.ReferencedEntity, r.ReferencingEntity])
+        foreach (var side in (string[])[r.ReferencedEntity!, r.ReferencingEntity!])
         {
             var entity = cache.ByLogicalName.GetValueOrDefault(side)
                          ?? throw new XrmdValidationException($"Entity '{side}' does not exist.");
             if (entity.IsIntersect == true)
                 throw new XrmdValidationException($"Entity '{side}' is an intersect entity and cannot take part in a relationship.");
         }
-        var referencedEntity = cache.ByLogicalName[r.ReferencedEntity];
-        ElasticTables.DemandValidRelationship(r, referencedEntity, cache.ByLogicalName[r.ReferencingEntity]);
+        var referencedEntity = cache.ByLogicalName[r.ReferencedEntity!];
+        ElasticTables.DemandValidRelationship(r, referencedEntity, cache.ByLogicalName[r.ReferencingEntity!]);
         if (cache.ManyToMany.ContainsKey(r.SchemaName) || cache.SavedOneToMany.ContainsKey(r.SchemaName)
             || EntityMetadataExtensions.FindLookupRelationship(cache.ByLogicalName.Values, r.SchemaName, cache.SavedOneToMany.Values) is not null)
             throw new MetadataComponentExistsException($"Relationship '{r.SchemaName}' already exists.");
@@ -138,7 +147,7 @@ public sealed partial class MetadataStore
                 throw new XrmdValidationException(
                     $"Invalid ReferencingEntityNavigationPropertyName '{navigation}': it must match ^[A-Za-z_][A-Za-z0-9_]{{0,99}}$.");
             // $metadata declares it next to the table's columns and the other lookups' navigation properties.
-            var referencingEntity = cache.ByLogicalName[r.ReferencingEntity];
+            var referencingEntity = cache.ByLogicalName[r.ReferencingEntity!];
             var taken = (referencingEntity.Attributes ?? []).SelectMany(a => new[] { a.LogicalName, $"_{a.LogicalName}_value" })
                 .Concat(EntityMetadataExtensions.OneToManyRelationships(cache.ByLogicalName.Values, cache.SavedOneToMany.Values)
                     .Where(x => x.ReferencingEntity == r.ReferencingEntity).Select(x => x.ReferencingEntityNavigationPropertyName!));
@@ -147,20 +156,20 @@ public sealed partial class MetadataStore
                     $"ReferencingEntityNavigationPropertyName '{navigation}' is already a property of entity '{r.ReferencingEntity}'.");
         }
 
-        await AddAttributeAsync(session, r.ReferencingEntity, l, ct);
+        await AddAttributeCoreAsync(session, r.ReferencingEntity!, l, customerAllowed: false, ct);
         // A lookup to an elastic table also holds the partition of the row it points to, in the same transaction (plan 3.4).
         if (ElasticTables.IsElastic(referencedEntity))
-            await AddAttributeAsync(session, r.ReferencingEntity, new StringAttributeMetadata
+            await AddAttributeCoreAsync(session, r.ReferencingEntity!, new TextColumn
             {
-                LogicalName = ElasticTables.PartitionColumnOf(l.LogicalName),
+                LogicalName = ElasticTables.PartitionColumnOf(l.LogicalName!),
                 SchemaName = (l.SchemaName ?? l.LogicalName) + "Pid",
                 DisplayName = l.DisplayName?.UserLocalizedLabel is { } label
-                    ? SystemAttributes.CreateLabel(label.Label + " Partition Id", label.LanguageCode)
+                    ? SystemAttributes.CreateLabelSet(label.Label + " Partition Id", label.LanguageCode)
                     : null,
                 MaxLength = ElasticTables.PartitionIdMaxLength,
-                RequiredLevel = new AttributeRequiredLevelManagedProperty(AttributeRequiredLevel.None),
+                RequiredLevel = ModelFactory.Required(RequirementLevel.None),
                 MetadataId = Guid.NewGuid(),
-            }, ct);
+            }, customerAllowed: false, ct);
         await SaveOneToManyAsync(session, pending, r, ct);
     }
 
@@ -171,18 +180,18 @@ public sealed partial class MetadataStore
     /// </summary>
     /// <param name="stamp">The version stamp the session already took for the same write (the currency relationship is written with its
     /// columns); null bumps a new one.</param>
-    private async Task SaveOneToManyAsync(DataSession session, PendingChanges pending, OneToManyRelationshipMetadata r, CancellationToken ct,
+    private async Task SaveOneToManyAsync(DataSession session, PendingChanges pending, OneToManyRelationship r, CancellationToken ct,
         long? stamp = null)
     {
         stamp ??= await BumpVersionStampAsync(session, pending, ct);
         if (await ScalarAsync<int>(session, "SELECT COUNT(*) FROM meta.relationship WHERE LOWER(schema_name) = LOWER(@name)", ct,
-                ("@name", r.SchemaName)) > 0)
+                ("@name", r.SchemaName!)) > 0)
             throw new MetadataComponentExistsException($"Relationship '{r.SchemaName}' already exists.");
         await ExecuteAsync(session,
             "INSERT INTO meta.relationship (metadata_id, schema_name, definition, version_stamp) VALUES (@id, @name, @definition, @stamp)", ct,
-            ("@id", r.MetadataId!.Value), ("@name", r.SchemaName), ("@definition", MetadataSerializer.SerializeRelationship(r)),
+            ("@id", r.MetadataId!.Value), ("@name", r.SchemaName!), ("@definition", MetadataJson.SerializeRelationship(r)),
             ("@stamp", stamp.Value));
-        pending.Working.SavedOneToMany[r.SchemaName] = r;
+        pending.Working.SavedOneToMany[r.SchemaName!] = r;
     }
 
     /// <summary>
@@ -207,7 +216,7 @@ public sealed partial class MetadataStore
             return;
         var name = CurrencySchema.RelationshipName(entityLogicalName);
         EnsureCurrencyRelationshipNameFree(cache, entityLogicalName);
-        var r = new OneToManyRelationshipMetadata
+        var r = new OneToManyRelationship
         {
             SchemaName = name,
             MetadataId = Guid.NewGuid(),
@@ -219,10 +228,10 @@ public sealed partial class MetadataStore
             ReferencedEntityNavigationPropertyName = name,
             IsCustomRelationship = false,
             IsHierarchical = false,
-            CascadeConfiguration = new CascadeConfiguration
+            CascadeConfiguration = new CascadeSettings
             {
-                Assign = CascadeType.NoCascade, Delete = CascadeType.Restrict, Merge = CascadeType.NoCascade, Reparent = CascadeType.NoCascade,
-                Share = CascadeType.NoCascade, Unshare = CascadeType.NoCascade, Archive = CascadeType.NoCascade, RollupView = CascadeType.NoCascade,
+                Assign = CascadeAction.NoCascade, Delete = CascadeAction.Restrict, Merge = CascadeAction.NoCascade, Reparent = CascadeAction.NoCascade,
+                Share = CascadeAction.NoCascade, Unshare = CascadeAction.NoCascade, Archive = CascadeAction.NoCascade, RollupView = CascadeAction.NoCascade,
             },
         };
         await SaveOneToManyAsync(session, pending, r, ct, pending.Stamp);
@@ -236,14 +245,14 @@ public sealed partial class MetadataStore
     /// </summary>
     /// <exception cref="InvalidOperationException">The lookup does not exist or does not target the referenced entity.</exception>
     /// <exception cref="MetadataComponentExistsException">Another relationship already has the name.</exception>
-    internal async Task EnsureNamedRelationshipAsync(DataSession session, OneToManyRelationshipMetadata relationship, CancellationToken ct)
+    internal async Task EnsureNamedRelationshipAsync(DataSession session, OneToManyRelationship relationship, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(relationship);
         var pending = await EnterAsync(session, ct);
         var cache = pending.Working;
-        var r = MetadataSerializer.Clone(relationship);
+        var r = MetadataJson.Clone(relationship);
         var referencing = cache.ByLogicalName.GetValueOrDefault(r.ReferencingEntity ?? "");
-        var lookup = (referencing?.Attributes ?? []).OfType<LookupAttributeMetadata>().FirstOrDefault(a => a.LogicalName == r.ReferencingAttribute);
+        var lookup = (referencing?.Attributes ?? []).OfType<LookupColumn>().FirstOrDefault(a => a.LogicalName == r.ReferencingAttribute);
         if (lookup is null || !(lookup.Targets ?? []).Contains(r.ReferencedEntity, StringComparer.Ordinal)
                            || cache.ByLogicalName.GetValueOrDefault(r.ReferencedEntity ?? "") is not { } referenced)
             throw new InvalidOperationException(
@@ -281,13 +290,13 @@ public sealed partial class MetadataStore
         var stamp = await BumpVersionStampAsync(session, pending, ct);
         foreach (var saved in legacy)
         {
-            var upgraded = MetadataSerializer.Clone(saved);
+            var upgraded = MetadataJson.Clone(saved);
             upgraded.ReferencingEntityNavigationPropertyName = CurrencySchema.CurrencyId;
             await ExecuteAsync(session, "UPDATE meta.relationship SET definition = @definition, version_stamp = @stamp WHERE metadata_id = @id", ct,
-                ("@definition", MetadataSerializer.SerializeRelationship(upgraded)), ("@stamp", stamp), ("@id", saved.MetadataId!.Value));
-            cache.SavedOneToMany[saved.SchemaName] = upgraded;
+                ("@definition", MetadataJson.SerializeRelationship(upgraded)), ("@stamp", stamp), ("@id", saved.MetadataId!.Value));
+            cache.SavedOneToMany[saved.SchemaName!] = upgraded;
         }
-        return legacy.Select(r => r.SchemaName).ToList();
+        return legacy.Select(r => r.SchemaName!).ToList();
     }
 
     /// <summary>The referencing navigation property the currency relationships of custom tables had before #183.</summary>
@@ -324,7 +333,7 @@ public sealed partial class MetadataStore
     /// most one (the walk of the hierarchical operators and of hierarchy security follows it).
     /// </summary>
     /// <exception cref="XrmdValidationException">Either rule is broken.</exception>
-    private static void DemandHierarchicalAllowed(CacheState cache, OneToManyRelationshipMetadata r)
+    private static void DemandHierarchicalAllowed(CacheState cache, OneToManyRelationship r)
     {
         if (r.ReferencedEntity != r.ReferencingEntity)
             throw new XrmdValidationException(
@@ -342,46 +351,46 @@ public sealed partial class MetadataStore
     /// definition) under their own names, each for a lookup of the table that already exists and one of its targets. A
     /// Customer lookup (<c>contact.parentcustomerid</c>) has one relationship per target, so one attribute can carry several.
     /// Idempotent: a relationship already saved under the name keeps its row and MetadataId; when it is a seeded one (not
-    /// custom) whose CascadeConfiguration or IsHierarchical differs from the seed's (an earlier seed stored Delete RemoveLink
+    /// custom) whose CascadeSettings or IsHierarchical differs from the seed's (an earlier seed stored Delete RemoveLink
     /// only on the relationships of <c>contact.parentcustomerid</c>, and <c>account_parent_account</c> was not hierarchical
     /// before plan 2.5), the seed's values replace them. The public
     /// <see cref="CreateOneToManyAsync"/> keeps creating a lookup together with its single relationship.
     /// </summary>
-    internal Task EnsureSeedRelationshipsAsync(IReadOnlyList<OneToManyRelationshipMetadata> relationships, CancellationToken ct = default) =>
+    internal Task EnsureSeedRelationshipsAsync(IReadOnlyList<OneToManyRelationship> relationships, CancellationToken ct = default) =>
         InOwnSessionAsync(async session =>
         {
             var pending = await EnterAsync(session, ct);
             var cache = pending.Working;
             foreach (var relationship in relationships)
             {
-                var r = MetadataSerializer.Clone(relationship);
+                var r = MetadataJson.Clone(relationship);
                 if (r.SchemaName is null) continue;
                 if (cache.SavedOneToMany.TryGetValue(r.SchemaName, out var saved))
                 {
                     if (saved.IsCustomRelationship == true) continue;
                     var cascadeChanged = r.CascadeConfiguration is { } seeded
-                        && JsonSerializer.Serialize(seeded, MetadataSerializer.Options) != JsonSerializer.Serialize(saved.CascadeConfiguration ?? new CascadeConfiguration(), MetadataSerializer.Options);
+                        && JsonSerializer.Serialize(seeded, MetadataJson.Options) != JsonSerializer.Serialize(saved.CascadeConfiguration ?? new CascadeSettings(), MetadataJson.Options);
                     var hierarchyChanged = (r.IsHierarchical ?? false) != (saved.IsHierarchical ?? false);
                     if (cascadeChanged || hierarchyChanged)
                     {
-                        var upgraded = MetadataSerializer.Clone(saved);
-                        if (cascadeChanged) upgraded.CascadeConfiguration = MetadataSerializer.Clone(r.CascadeConfiguration!);
+                        var upgraded = MetadataJson.Clone(saved);
+                        if (cascadeChanged) upgraded.CascadeConfiguration = MetadataJson.Clone(r.CascadeConfiguration!);
                         upgraded.IsHierarchical = r.IsHierarchical ?? false;
                         var stamp = await BumpVersionStampAsync(session, pending, ct);
                         await ExecuteAsync(session,
                             "UPDATE meta.relationship SET definition = @definition, version_stamp = @stamp WHERE metadata_id = @id", ct,
-                            ("@definition", MetadataSerializer.SerializeRelationship(upgraded)), ("@stamp", stamp), ("@id", saved.MetadataId!.Value));
-                        cache.SavedOneToMany[saved.SchemaName] = upgraded;
+                            ("@definition", MetadataJson.SerializeRelationship(upgraded)), ("@stamp", stamp), ("@id", saved.MetadataId!.Value));
+                        cache.SavedOneToMany[saved.SchemaName!] = upgraded;
                     }
                     continue;
                 }
                 var referencing = cache.ByLogicalName.GetValueOrDefault(r.ReferencingEntity ?? "")
                                   ?? throw new InvalidOperationException(
                                       $"Seed relationship '{r.SchemaName}': entity '{r.ReferencingEntity}' does not exist.");
-                var lookup = (referencing.Attributes ?? []).OfType<LookupAttributeMetadata>().SingleOrDefault(a => a.LogicalName == r.ReferencingAttribute)
+                var lookup = (referencing.Attributes ?? []).OfType<LookupColumn>().SingleOrDefault(a => a.LogicalName == r.ReferencingAttribute)
                              ?? throw new InvalidOperationException(
                                  $"Seed relationship '{r.SchemaName}': '{r.ReferencingEntity}.{r.ReferencingAttribute}' is not a lookup.");
-                if (!(lookup.Targets ?? []).Contains(r.ReferencedEntity))
+                if (!(lookup.Targets ?? []).Contains(r.ReferencedEntity!))
                     throw new InvalidOperationException(
                         $"Seed relationship '{r.SchemaName}': lookup '{r.ReferencingEntity}.{r.ReferencingAttribute}' does not target '{r.ReferencedEntity}'.");
                 r.MetadataId ??= Guid.NewGuid();
@@ -395,25 +404,25 @@ public sealed partial class MetadataStore
     /// <c>queuemembership_association</c>) once; an existing one is left as it is. Unlike <see cref="CreateManyToManyAsync"/> the
     /// intersect entity already exists (it is seeded), so only the relationship row is written.
     /// </summary>
-    internal Task EnsureSeedManyToManyAsync(ManyToManyRelationshipMetadata relationship, CancellationToken ct = default) =>
+    internal Task EnsureSeedManyToManyAsync(ManyToManyRelationship relationship, CancellationToken ct = default) =>
         InOwnSessionAsync(async session =>
         {
             var pending = await EnterAsync(session, ct);
             var cache = pending.Working;
-            var r = MetadataSerializer.Clone(relationship);
+            var r = MetadataJson.Clone(relationship);
             if (r.SchemaName is null || cache.ManyToMany.ContainsKey(r.SchemaName)) return;
-            foreach (var name in (string[])[r.Entity1LogicalName, r.Entity2LogicalName, r.IntersectEntityName])
+            foreach (var name in (string[])[r.Entity1LogicalName!, r.Entity2LogicalName!, r.IntersectEntityName!])
                 if (!cache.ByLogicalName.ContainsKey(name))
                     throw new InvalidOperationException($"Seed relationship '{r.SchemaName}': entity '{name}' does not exist.");
             r.MetadataId ??= Guid.NewGuid();
             r.IsCustomRelationship ??= false;
             r.Entity1NavigationPropertyName ??= r.SchemaName;
             r.Entity2NavigationPropertyName ??= r.SchemaName;
-            SdkProperty.Set(r, nameof(RelationshipMetadataBase.RelationshipType), RelationshipType.ManyToManyRelationship);
+            r.RelationshipType = RelationshipKind.ManyToManyRelationship;
             var stamp = await BumpVersionStampAsync(session, pending, ct);
             await ExecuteAsync(session,
                 "INSERT INTO meta.relationship (metadata_id, schema_name, definition, version_stamp) VALUES (@id, @name, @definition, @stamp)", ct,
-                ("@id", r.MetadataId.Value), ("@name", r.SchemaName), ("@definition", MetadataSerializer.SerializeRelationship(r)), ("@stamp", stamp));
+                ("@id", r.MetadataId.Value), ("@name", r.SchemaName), ("@definition", MetadataJson.SerializeRelationship(r)), ("@stamp", stamp));
             cache.ManyToMany[r.SchemaName] = r;
         }, ct);
 
@@ -430,15 +439,20 @@ public sealed partial class MetadataStore
     /// cascade; nothing is written.</exception>
     /// <exception cref="MetadataComponentExistsException">A relationship with the same SchemaName (ignoring case) or the
     /// attribute exists.</exception>
-    public async Task CreateCustomerRelationshipsAsync(DataSession session, LookupAttributeMetadata lookup,
-        IReadOnlyList<OneToManyRelationshipMetadata> relationships, CancellationToken ct)
+    public Task CreateCustomerRelationshipsAsync(DataSession session, LookupColumn lookup, IReadOnlyList<OneToManyRelationship> relationships,
+        CancellationToken ct) =>
+        CreateCustomerRelationshipsCoreAsync(session, CopyOf(lookup),
+            relationships?.Select(r => CopyOf(r)).ToList()!, ct);
+
+    private async Task CreateCustomerRelationshipsCoreAsync(DataSession session, LookupColumn lookup,
+        IReadOnlyList<OneToManyRelationship> relationships, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(lookup);
         ArgumentNullException.ThrowIfNull(relationships);
-        var l = MetadataSerializer.Clone(lookup);
-        var rs = relationships.Select(MetadataSerializer.Clone).ToList();
+        var l = MetadataJson.Clone(lookup);
+        var rs = relationships.Select(MetadataJson.Clone).ToList();
         LogicalNameValidator.EnsureValid(l.LogicalName, "attribute");
-        if (l.AttributeType is not (null or AttributeTypeCode.Lookup or AttributeTypeCode.Customer))
+        if (l.AttributeType is not (null or ColumnTypeCode.Lookup or ColumnTypeCode.Customer))
             throw new XrmdValidationException(
                 $"Lookup '{l.LogicalName}' has the type {l.AttributeType}: {CustomerColumns.CreateMessage} creates a Customer column.");
         var where = $"{CustomerColumns.CreateMessage} for column '{l.LogicalName}'";
@@ -447,7 +461,7 @@ public sealed partial class MetadataStore
         if (!CustomerColumns.AreCustomerTargets(rs.Select(r => r.ReferencedEntity)))
             throw new XrmdValidationException(CustomerColumns.TargetsMessage(
                 $"{where} (relationships to {string.Join(", ", rs.Select(r => $"'{r.ReferencedEntity}'"))})"));
-        if (l.Targets is { Length: > 0 } && !CustomerColumns.AreCustomerTargets(l.Targets))
+        if (l.Targets is { Count: > 0 } && !CustomerColumns.AreCustomerTargets(l.Targets))
             throw new XrmdValidationException(CustomerColumns.TargetsMessage($"{where} (lookup targets {string.Join(", ", l.Targets.Select(t => $"'{t}'"))})"));
         var referencingEntity = rs[0].ReferencingEntity;
         if (rs.Any(r => r.ReferencingEntity != referencingEntity))
@@ -468,7 +482,7 @@ public sealed partial class MetadataStore
             r.MetadataId ??= Guid.NewGuid();
             r.IsCustomRelationship = true;
             if (string.IsNullOrEmpty(r.ReferencingEntityNavigationPropertyName))
-                r.ReferencingEntityNavigationPropertyName = CustomerColumns.DefaultNavigation(l.LogicalName, r.ReferencedEntity);
+                r.ReferencingEntityNavigationPropertyName = CustomerColumns.DefaultNavigation(l.LogicalName!, r.ReferencedEntity!);
             else if (!NavigationNamePattern().IsMatch(r.ReferencingEntityNavigationPropertyName))
                 throw new XrmdValidationException(
                     $"Invalid ReferencingEntityNavigationPropertyName '{r.ReferencingEntityNavigationPropertyName}': it must match ^[A-Za-z_][A-Za-z0-9_]{{0,99}}$.");
@@ -479,18 +493,18 @@ public sealed partial class MetadataStore
         if (rs[0].ReferencingEntityNavigationPropertyName == rs[1].ReferencingEntityNavigationPropertyName)
             throw new XrmdValidationException($"{where}: the two relationships need different ReferencingEntityNavigationPropertyNames.");
         l.Targets = [.. CustomerColumns.Targets];
-        SdkProperty.Set(l, nameof(AttributeMetadata.AttributeType), AttributeTypeCode.Customer);
+        l.AttributeType = ColumnTypeCode.Customer;
         l.MetadataId ??= Guid.NewGuid();
 
         var pending = await EnterAsync(session, ct);
         var cache = pending.Working;
-        var referencing = cache.ByLogicalName.GetValueOrDefault(referencingEntity)
+        var referencing = cache.ByLogicalName.GetValueOrDefault(referencingEntity!)
                           ?? throw new XrmdValidationException($"Entity '{referencingEntity}' does not exist.");
         if (referencing.IsIntersect == true)
             throw new XrmdValidationException($"Entity '{referencingEntity}' is an intersect entity and cannot take part in a relationship.");
         ElasticTables.DemandNotElastic(referencing, "Customer lookups");
         foreach (var r in rs)
-            if (cache.ManyToMany.ContainsKey(r.SchemaName) || cache.SavedOneToMany.ContainsKey(r.SchemaName)
+            if (cache.ManyToMany.ContainsKey(r.SchemaName!) || cache.SavedOneToMany.ContainsKey(r.SchemaName!)
                 || EntityMetadataExtensions.FindLookupRelationship(cache.ByLogicalName.Values, r.SchemaName, cache.SavedOneToMany.Values) is not null)
                 throw new MetadataComponentExistsException($"Relationship '{r.SchemaName}' already exists.");
 
@@ -504,7 +518,7 @@ public sealed partial class MetadataStore
                 throw new XrmdValidationException(
                     $"ReferencingEntityNavigationPropertyName '{r.ReferencingEntityNavigationPropertyName}' is already a property of entity '{referencingEntity}'.");
 
-        await AddAttributeCoreAsync(session, referencingEntity, l, customerAllowed: true, ct);
+        await AddAttributeCoreAsync(session, referencingEntity!, l, customerAllowed: true, ct);
         foreach (var r in rs) await SaveOneToManyAsync(session, pending, r, ct);
     }
 
@@ -516,25 +530,28 @@ public sealed partial class MetadataStore
     /// cascade Assign, Share, Unshare and Reparent); xrmverse does not enforce them (a documented gap). Any other Delete or Merge
     /// value is refused rather than stored.
     /// </summary>
-    private static CascadeConfiguration SupportedCascade(OneToManyRelationshipMetadata r)
+    private static CascadeSettings SupportedCascade(OneToManyRelationship r)
     {
-        var cascade = r.CascadeConfiguration is { } given ? MetadataSerializer.Clone(given) : new CascadeConfiguration();
-        if (cascade.Delete is not (null or CascadeType.Cascade or CascadeType.RemoveLink or CascadeType.Restrict))
+        var cascade = r.CascadeConfiguration is { } given ? MetadataJson.Clone(given) : new CascadeSettings();
+        if (cascade.Delete is not (null or CascadeAction.Cascade or CascadeAction.RemoveLink or CascadeAction.Restrict))
             throw new XrmdValidationException(
                 $"Relationship '{r.SchemaName}': CascadeConfiguration.Delete {cascade.Delete} is not valid on a Customer relationship; " +
                 "use Cascade, RemoveLink or Restrict.");
-        if (cascade.Merge is not (null or CascadeType.Cascade or CascadeType.NoCascade))
+        if (cascade.Merge is not (null or CascadeAction.Cascade or CascadeAction.NoCascade))
             throw new XrmdValidationException(
                 $"Relationship '{r.SchemaName}': CascadeConfiguration.Merge {cascade.Merge} is not valid on a Customer relationship; use Cascade.");
-        cascade.Delete ??= CascadeType.RemoveLink;
-        cascade.Merge ??= CascadeType.Cascade;
+        cascade.Delete ??= CascadeAction.RemoveLink;
+        cascade.Merge ??= CascadeAction.Cascade;
         return cascade;
     }
 
-    public async Task CreateManyToManyAsync(DataSession session, ManyToManyRelationshipMetadata relationship, CancellationToken ct)
+    public Task CreateManyToManyAsync(DataSession session, ManyToManyRelationship relationship, CancellationToken ct) =>
+        CreateManyToManyCoreAsync(session, CopyOf(relationship), ct);
+
+    private async Task CreateManyToManyCoreAsync(DataSession session, ManyToManyRelationship relationship, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(relationship);
-        var r = MetadataSerializer.Clone(relationship);
+        var r = MetadataJson.Clone(relationship);
         if (r.SchemaName is null || !RelationshipNamePattern().IsMatch(r.SchemaName))
             throw new XrmdValidationException(
                 $"Invalid relationship name '{r.SchemaName}': it must match ^[A-Za-z][A-Za-z0-9_]{{0,99}}$.");
@@ -547,17 +564,17 @@ public sealed partial class MetadataStore
 
         // The intersect columns are the server's, whatever the caller sent (as Dataverse).
         var selfReferential = r.Entity1LogicalName == r.Entity2LogicalName;
-        r.Entity1IntersectAttribute = selfReferential ? r.Entity1LogicalName + IdOne : SystemAttributes.PrimaryIdName(r.Entity1LogicalName);
-        r.Entity2IntersectAttribute = selfReferential ? r.Entity2LogicalName + IdTwo : SystemAttributes.PrimaryIdName(r.Entity2LogicalName);
+        r.Entity1IntersectAttribute = selfReferential ? r.Entity1LogicalName + IdOne : SystemAttributes.PrimaryIdName(r.Entity1LogicalName!);
+        r.Entity2IntersectAttribute = selfReferential ? r.Entity2LogicalName + IdTwo : SystemAttributes.PrimaryIdName(r.Entity2LogicalName!);
         r.Entity1NavigationPropertyName ??= r.SchemaName;
         r.Entity2NavigationPropertyName ??= r.SchemaName;
         r.MetadataId ??= Guid.NewGuid();
         r.IsCustomRelationship ??= true;
-        SdkProperty.Set(r, nameof(RelationshipMetadataBase.RelationshipType), RelationshipType.ManyToManyRelationship);
+        r.RelationshipType = RelationshipKind.ManyToManyRelationship;
 
         var pending = await EnterAsync(session, ct);
         var cache = pending.Working;
-        foreach (var side in (string[])[r.Entity1LogicalName, r.Entity2LogicalName])
+        foreach (var side in (string[])[r.Entity1LogicalName!, r.Entity2LogicalName!])
         {
             var entity = cache.ByLogicalName.GetValueOrDefault(side)
                          ?? throw new XrmdValidationException($"Entity '{side}' does not exist.");
@@ -579,7 +596,7 @@ public sealed partial class MetadataStore
             throw new MetadataComponentExistsException($"Relationship '{r.SchemaName}' already exists.");
         await ExecuteAsync(session,
             "INSERT INTO meta.relationship (metadata_id, schema_name, definition, version_stamp) VALUES (@id, @name, @definition, @stamp)", ct,
-            ("@id", r.MetadataId.Value), ("@name", r.SchemaName), ("@definition", MetadataSerializer.SerializeRelationship(r)),
+            ("@id", r.MetadataId.Value), ("@name", r.SchemaName), ("@definition", MetadataJson.SerializeRelationship(r)),
             ("@stamp", stamp));
 
         await CreateEntityCoreAsync(session, IntersectEntity(r), primaryName: null, seed: false, ct,
@@ -595,49 +612,49 @@ public sealed partial class MetadataStore
         {
             await BumpVersionStampAsync(session, pending, ct);
             await ExecuteAsync(session, "DELETE FROM meta.relationship WHERE metadata_id = @id", ct, ("@id", manyToMany.MetadataId!.Value));
-            cache.ManyToMany.Remove(manyToMany.SchemaName);
-            cache.RelationshipMenus.Remove(manyToMany.SchemaName);
-            ForgetRelationship(cache, manyToMany.SchemaName);
-            if (cache.ByLogicalName.GetValueOrDefault(manyToMany.IntersectEntityName) is { } intersect)
+            cache.ManyToMany.Remove(manyToMany.SchemaName!);
+            cache.RelationshipMenus.Remove(manyToMany.SchemaName!);
+            ForgetRelationship(cache, manyToMany.SchemaName!);
+            if (cache.ByLogicalName.GetValueOrDefault(manyToMany.IntersectEntityName!) is { } intersect)
                 await DeleteEntityCoreAsync(session, pending, intersect, ct);
             return;
         }
 
         var oneToMany = EntityMetadataExtensions.FindLookupRelationship(cache.ByLogicalName.Values, schemaName, cache.SavedOneToMany.Values)
                         ?? throw new XrmdValidationException($"Relationship '{schemaName}' does not exist.");
-        var lookup = cache.ByLogicalName[oneToMany.ReferencingEntity].Attributes!
-            .OfType<LookupAttributeMetadata>().Single(a => a.LogicalName == oneToMany.ReferencingAttribute);
+        var lookup = cache.ByLogicalName[oneToMany.ReferencingEntity!].Attributes!
+            .OfType<LookupColumn>().Single(a => a.LogicalName == oneToMany.ReferencingAttribute);
         if (oneToMany.ReferencingEntity == FileColumns.AttachmentEntity && lookup.LogicalName == FileColumns.AttachmentLookup)
             throw AttachmentLookupIsManaged($"Relationship '{oneToMany.SchemaName}'");
         if (ActivitySchema.IsManagedLookup(oneToMany.ReferencingEntity, lookup.LogicalName))
             throw ActivityLookupIsManaged($"Relationship '{oneToMany.SchemaName}'");
-        if (lookup.Targets is { Length: > 1 })
+        if (lookup.Targets is { Count: > 1 })
             throw new XrmdValidationException(
                 $"Relationship '{oneToMany.SchemaName}' is one target of the polymorphic lookup '{oneToMany.ReferencingEntity}.{lookup.LogicalName}': " +
                 "delete the lookup attribute instead.");
         // A relationship a rollup column aggregates over, or names as its hierarchy, stays (plan 2.12b, ruling R13).
-        DemandNoRollupDependentsOfRelationship(cache, oneToMany.SchemaName);
+        DemandNoRollupDependentsOfRelationship(cache, oneToMany.SchemaName!);
         // A one-to-many relationship is its lookup: deleting it deletes the lookup (403 for a system one) and its saved row.
-        await DeleteAttributeAsync(session, oneToMany.ReferencingEntity, lookup.LogicalName, ct);
+        await DeleteAttributeAsync(session, oneToMany.ReferencingEntity!, lookup.LogicalName!, ct);
     }
 
     /// <summary>Deletes the saved one-to-many relationships of <paramref name="cache"/> that <paramref name="match"/> (their
     /// lookup or entity is being deleted); the caller has bumped the version stamp.</summary>
     private static async Task DeleteSavedOneToManyAsync(DataSession session, CacheState cache,
-        Func<OneToManyRelationshipMetadata, bool> match, CancellationToken ct)
+        Func<OneToManyRelationship, bool> match, CancellationToken ct)
     {
         foreach (var r in cache.SavedOneToMany.Values.Where(match).ToList())
         {
             await ExecuteAsync(session, "DELETE FROM meta.relationship WHERE metadata_id = @id", ct, ("@id", r.MetadataId!.Value));
-            cache.SavedOneToMany.Remove(r.SchemaName);
-            cache.RelationshipMenus.Remove(r.SchemaName);
-            ForgetRelationship(cache, r.SchemaName);
+            cache.SavedOneToMany.Remove(r.SchemaName!);
+            cache.RelationshipMenus.Remove(r.SchemaName!);
+            ForgetRelationship(cache, r.SchemaName!);
         }
     }
 
     /// <summary>The many-to-many relationship of <paramref name="cache"/> that <paramref name="entityLogicalName"/> is a side
     /// or the intersect of; null when there is none.</summary>
-    private static ManyToManyRelationshipMetadata? ManyToManyOf(CacheState cache, string entityLogicalName) =>
+    private static ManyToManyRelationship? ManyToManyOf(CacheState cache, string entityLogicalName) =>
         cache.ManyToMany.Values
             .Where(r => r.Entity1LogicalName == entityLogicalName || r.Entity2LogicalName == entityLogicalName
                         || r.IntersectEntityName == entityLogicalName)
@@ -645,28 +662,28 @@ public sealed partial class MetadataStore
             .FirstOrDefault();
 
     /// <summary>The intersect entity of <paramref name="r"/>: organization owned, its two columns, no primary name.</summary>
-    private static EntityMetadata IntersectEntity(ManyToManyRelationshipMetadata r)
+    private static TableDefinition IntersectEntity(ManyToManyRelationship r)
     {
-        var entity = new EntityMetadata
+        var entity = new TableDefinition
         {
             LogicalName = r.IntersectEntityName,
             SchemaName = r.IntersectEntityName,
-            OwnershipType = OwnershipTypes.OrganizationOwned,
+            OwnershipType = TableOwnership.OrganizationOwned,
         };
-        SdkProperty.Set(entity, nameof(EntityMetadata.IsIntersect), true);
+        entity.IsIntersect = true;
         entity.SetAttributes(
         [
-            IntersectAttribute(r.Entity1IntersectAttribute),
-            IntersectAttribute(r.Entity2IntersectAttribute),
+            IntersectAttribute(r.Entity1IntersectAttribute!),
+            IntersectAttribute(r.Entity2IntersectAttribute!),
         ]);
         return entity;
     }
 
-    private static UniqueIdentifierAttributeMetadata IntersectAttribute(string logicalName) => new()
+    private static UniqueIdentifierColumn IntersectAttribute(string logicalName) => new()
     {
         LogicalName = logicalName,
         SchemaName = logicalName,
-        RequiredLevel = new AttributeRequiredLevelManagedProperty(AttributeRequiredLevel.SystemRequired),
+        RequiredLevel = ModelFactory.Required(RequirementLevel.SystemRequired),
         IsValidForCreate = false,
         IsValidForUpdate = false,
     };
@@ -678,14 +695,14 @@ public sealed partial class MetadataStore
         await using var rd = await cmd.ExecuteReaderAsync(ct);
         while (await rd.ReadAsync(ct))
         {
-            var relationship = MetadataSerializer.DeserializeRelationship(rd.GetString(0));
+            var relationship = MetadataJson.DeserializeRelationship(rd.GetString(0));
             switch (relationship)
             {
-                case ManyToManyRelationshipMetadata { SchemaName: not null } manyToMany:
-                    state.ManyToMany[manyToMany.SchemaName] = manyToMany;
+                case ManyToManyRelationship { SchemaName: not null } manyToMany:
+                    state.ManyToMany[manyToMany.SchemaName!] = manyToMany;
                     break;
-                case OneToManyRelationshipMetadata { SchemaName: not null } oneToMany:
-                    state.SavedOneToMany[oneToMany.SchemaName] = oneToMany;
+                case OneToManyRelationship { SchemaName: not null } oneToMany:
+                    state.SavedOneToMany[oneToMany.SchemaName!] = oneToMany;
                     break;
             }
             if (relationship.SchemaName is { } name && !rd.IsDBNull(1)) state.RelationshipMenus[name] = rd.GetString(1);

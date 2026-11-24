@@ -1,4 +1,4 @@
-using Microsoft.Xrm.Sdk.Metadata;
+using Xrmd.Model.Metadata;
 
 namespace Xrmd.Metadata;
 
@@ -7,7 +7,7 @@ namespace Xrmd.Metadata;
 /// stored as the polymorphic lookups are (the id and a <c>&lt;name&gt;type</c> column) and implying one one-to-many
 /// relationship per target. The only way to create one is the <c>CreateCustomerRelationships</c> message, as in Dataverse.
 /// </summary>
-public static class CustomerColumns
+public static partial class CustomerColumns
 {
     /// <summary>The message that creates a Customer column with its two relationships.</summary>
     public const string CreateMessage = "CreateCustomerRelationships";
@@ -17,8 +17,8 @@ public static class CustomerColumns
     /// <summary>The targets of every Customer column, in the order the relationships and navigation properties are listed.</summary>
     public static readonly IReadOnlyList<string> Targets = [Account, Contact];
 
-    public static bool IsCustomer(AttributeMetadata? attribute) =>
-        attribute is LookupAttributeMetadata { AttributeType: AttributeTypeCode.Customer };
+    public static bool IsCustomer(ColumnDefinition? attribute) =>
+        attribute is LookupColumn { AttributeType: ColumnTypeCode.Customer };
 
     /// <summary>True when <paramref name="targets"/> holds exactly <c>account</c> and <c>contact</c> (any order, no repeat).</summary>
     public static bool AreCustomerTargets(IEnumerable<string?>? targets)

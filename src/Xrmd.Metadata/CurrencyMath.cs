@@ -1,4 +1,4 @@
-using Microsoft.Xrm.Sdk.Metadata;
+using Xrmd.Model.Metadata;
 
 namespace Xrmd.Metadata;
 
@@ -7,7 +7,7 @@ namespace Xrmd.Metadata;
 /// rounding, the exchange rate stored on a record and the conversion to and from the base currency. Pure functions, shared by the
 /// write path and the rollups (plan 2.12).
 /// </summary>
-public static class CurrencyMath
+public static partial class CurrencyMath
 {
     /// <summary>The bound of a <c>{money}_base</c> value (±922337203685477, observed).</summary>
     public const decimal BaseLimit = 922337203685477m;
@@ -21,7 +21,7 @@ public static class CurrencyMath
     /// 2 or not set → <paramref name="currencyPrecision"/> (the record currency's <c>currencyprecision</c>). Never more than the
     /// money column scale (<see cref="CurrencySchema.MaxPrecision"/>, decision D2) nor less than 0.
     /// </summary>
-    public static int EffectivePrecision(MoneyAttributeMetadata a, int currencyPrecision, int pricingPrecision)
+    public static int EffectivePrecision(MoneyColumn a, int currencyPrecision, int pricingPrecision)
     {
         ArgumentNullException.ThrowIfNull(a);
         var precision = a.PrecisionSource switch

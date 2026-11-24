@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Xrmd.Abstractions;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata.Computed;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Pipeline.Async;
 using Xrmd.Query.Sql;
 

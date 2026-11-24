@@ -11,6 +11,7 @@ using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
 using Xrmd.Admin.Migration;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Pipeline.Async;
 
 namespace Xrmd.Integration.Tests;

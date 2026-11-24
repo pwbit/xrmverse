@@ -1,4 +1,4 @@
-using Microsoft.Xrm.Sdk.Metadata;
+using Xrmd.Model.Metadata;
 
 namespace Xrmd.Metadata;
 
@@ -49,6 +49,6 @@ public static class AuditTable
     /// audited record, whichever table it is in, so they have no fixed targets and keep a type column
     /// (<c>&lt;name&gt;type</c>, the object type code of the record's table) as <c>fileattachment.objectid</c> does.
     /// </summary>
-    public static bool IsTargetlessLookup(AttributeMetadata a) =>
-        a is LookupAttributeMetadata && a.EntityLogicalName == Name && a.LogicalName is ObjectId or RegardingObjectId;
+    public static bool IsTargetlessLookup(ColumnDefinition a) =>
+        a is LookupColumn && a.EntityLogicalName == Name && a.LogicalName is ObjectId or RegardingObjectId;
 }

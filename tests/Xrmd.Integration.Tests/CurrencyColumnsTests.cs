@@ -7,6 +7,7 @@ using Xrmd.Abstractions.Storage;
 using Xrmd.Core;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Solution;
 
 namespace Xrmd.Integration.Tests;

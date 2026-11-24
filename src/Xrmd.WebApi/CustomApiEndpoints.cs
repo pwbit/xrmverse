@@ -6,6 +6,7 @@ using Microsoft.Xrm.Sdk;
 using Xrmd.Abstractions;
 using Xrmd.Core;
 using Xrmd.Core.Errors;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Pipeline.CustomApis;
 
 namespace Xrmd.WebApi;

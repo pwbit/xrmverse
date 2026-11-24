@@ -1,4 +1,4 @@
-using Microsoft.Xrm.Sdk.Metadata;
+using Xrmd.Model.Metadata;
 
 namespace Xrmd.Metadata;
 
@@ -30,7 +30,7 @@ public static class ServiceEndpointSchema
     /// True for <c>serviceendpoint.authvalue</c>, which gets no data column (<see cref="TypeMapping.ToColumns"/>), so that no
     /// query, image or export can read it (<see cref="TypeMapping.IsReadable"/> is false).
     /// </summary>
-    public static bool IsAuthValue(AttributeMetadata a) => a.EntityLogicalName == Table && a.LogicalName == AuthValue;
+    public static bool IsAuthValue(ColumnDefinition a) => a.EntityLogicalName == Table && a.LogicalName == AuthValue;
 
     /// <summary>
     /// The refusal (400) of a webhook, a step on one or an image of such a step in a solution, and of an export that meets one.

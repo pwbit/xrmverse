@@ -10,6 +10,7 @@ using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core;
 using Xrmd.Core.Errors;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Query.Sql;
 
 namespace Xrmd.Integration.Tests;

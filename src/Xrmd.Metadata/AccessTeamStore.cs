@@ -1,4 +1,4 @@
-using Microsoft.Xrm.Sdk.Metadata;
+using Xrmd.Model.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 
@@ -23,7 +23,7 @@ public sealed partial class MetadataStore
     /// <see cref="AccessTeamSchema.MaxTables"/> other tables of <paramref name="cache"/> are enabled.
     /// </summary>
     /// <exception cref="XrmdValidationException">400 naming <c>AutoCreateAccessTeams</c>.</exception>
-    private static void DemandAccessTeamsAllowed(CacheState cache, EntityMetadata entity)
+    private static void DemandAccessTeamsAllowed(CacheState cache, TableDefinition entity)
     {
         if (!AccessTeamSchema.AllowsAccessTeams(entity.OwnershipType) || entity.IsIntersect == true)
             throw new XrmdValidationException(
@@ -43,7 +43,7 @@ public sealed partial class MetadataStore
     /// </summary>
     /// <param name="what">What is refused, for the error ("AutoCreateAccessTeams cannot be disabled on entity 'x'").</param>
     /// <exception cref="XrmdValidationException">400 naming the number of templates.</exception>
-    private static async Task DemandNoTemplatesAsync(DataSession session, CacheState cache, EntityMetadata entity, string what, CancellationToken ct)
+    private static async Task DemandNoTemplatesAsync(DataSession session, CacheState cache, TableDefinition entity, string what, CancellationToken ct)
     {
         if (!cache.ByLogicalName.ContainsKey(AccessTeamSchema.TeamTemplate) || entity.ObjectTypeCode is not { } code) return;
         await session.KeyLockAsync(AccessTeamSchema.TeamTemplate, code, ct);
@@ -57,7 +57,7 @@ public sealed partial class MetadataStore
 
     /// <summary>No team refers to a record of <paramref name="entity"/> (<c>team.regardingobjectid</c>).</summary>
     /// <exception cref="XrmdValidationException">400 naming the number of teams.</exception>
-    private static async Task DemandNoRegardingTeamsAsync(DataSession session, EntityMetadata entity, CancellationToken ct)
+    private static async Task DemandNoRegardingTeamsAsync(DataSession session, TableDefinition entity, CancellationToken ct)
     {
         if (entity.ObjectTypeCode is not { } code) return;
         await session.KeyLockAsync(AccessTeamSchema.Team, code, ct);
@@ -73,7 +73,7 @@ public sealed partial class MetadataStore
     /// Checks what deleting <paramref name="entity"/> needs of its access teams: when it is a target of
     /// <c>team.regardingobjectid</c>, no template and no team may refer to it. Returns whether the target is to be removed.
     /// </summary>
-    private static async Task<bool> PrepareRegardingUnlinkAsync(DataSession session, CacheState cache, EntityMetadata entity, CancellationToken ct)
+    private static async Task<bool> PrepareRegardingUnlinkAsync(DataSession session, CacheState cache, TableDefinition entity, CancellationToken ct)
     {
         if (RegardingLookup(cache) is not { } lookup || !(lookup.Targets ?? []).Contains(entity.LogicalName, StringComparer.Ordinal)) return false;
         await DemandNoTemplatesAsync(session, cache, entity, $"Entity '{entity.LogicalName}' cannot be deleted", ct);
@@ -89,21 +89,21 @@ public sealed partial class MetadataStore
     private static Task RemoveRegardingTargetAsync(DataSession session, CacheState cache, string entityLogicalName, long stamp, CancellationToken ct) =>
         SetRegardingTargetsAsync(session, cache, targets => targets.Where(t => t != entityLogicalName).ToArray(), stamp, ct);
 
-    private static LookupAttributeMetadata? RegardingLookup(CacheState cache) =>
+    private static LookupColumn? RegardingLookup(CacheState cache) =>
         cache.ByLogicalName.GetValueOrDefault(AccessTeamSchema.Team)?.Attributes?
-            .OfType<LookupAttributeMetadata>().FirstOrDefault(a => a.LogicalName == AccessTeamSchema.RegardingObjectId);
+            .OfType<LookupColumn>().FirstOrDefault(a => a.LogicalName == AccessTeamSchema.RegardingObjectId);
 
     private static async Task SetRegardingTargetsAsync(DataSession session, CacheState cache, Func<string[], string[]> change, long stamp, CancellationToken ct)
     {
         if (RegardingLookup(cache) is not { } current) return;
-        var targets = change(current.Targets ?? []);
+        var targets = change([.. current.Targets ?? []]);
         if (targets.SequenceEqual(current.Targets ?? [])) return;
 
         var team = cache.ByLogicalName[AccessTeamSchema.Team];
-        var updated = MetadataSerializer.Clone(current);
-        updated.Targets = targets;
-        await StoreAttributeAsync(session, team.LogicalName, updated, stamp, ct);
-        var copy = MetadataSerializer.Clone(team);
+        var updated = MetadataJson.Clone(current);
+        updated.Targets = [.. targets];
+        await StoreAttributeAsync(session, team.LogicalName!, updated, stamp, ct);
+        var copy = MetadataJson.Clone(team);
         copy.SetAttributes((team.Attributes ?? []).Select(a => a.LogicalName == updated.LogicalName ? updated : a));
         cache.Put(copy, previous: team);
     }

@@ -1,5 +1,5 @@
 using System.Data;
-using Microsoft.Xrm.Sdk.Metadata;
+using Xrmd.Model.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 
@@ -22,7 +22,7 @@ namespace Xrmd.Metadata;
 /// <c>publisher</c> row), and a name refused against the cache is checked once more against the table before it is refused, so
 /// a publisher created by a path that did not invalidate is usable at once all the same.
 /// </summary>
-public sealed class PublisherPrefixRule(IDbConnectionFactory factory)
+public sealed partial class PublisherPrefixRule(IDbConnectionFactory factory)
 {
     private const string Table = "publisher";
 
@@ -76,7 +76,7 @@ public sealed class PublisherPrefixRule(IDbConnectionFactory factory)
     /// stored-by-other-column companions such as a money column's <c>_base</c>) and, for a custom activity, <c>subject</c> and the
     /// names of the columns every activity has.
     /// </summary>
-    public void DemandEntity(EntityMetadata entity, AttributeMetadata? primaryName, IEnumerable<string>? extraPrefixes = null)
+    public void DemandEntity(TableDefinition entity, ColumnDefinition? primaryName, IEnumerable<string>? extraPrefixes = null)
     {
         ArgumentNullException.ThrowIfNull(entity);
         var extra = extraPrefixes?.ToList();
@@ -87,11 +87,11 @@ public sealed class PublisherPrefixRule(IDbConnectionFactory factory)
         Demand(entity.LogicalName, "table", extra);
         if (primaryName is not null && !Exempt(primaryName.LogicalName)) Demand(primaryName.LogicalName, "column", extra);
         foreach (var attribute in entity.Attributes ?? [])
-            if (IsSupplied(entity.LogicalName, attribute) && !Exempt(attribute.LogicalName)) Demand(attribute.LogicalName, "column", extra);
+            if (IsSupplied(entity.LogicalName!, attribute) && !Exempt(attribute.LogicalName)) Demand(attribute.LogicalName, "column", extra);
     }
 
     /// <summary>True for a column a caller defines (not the primary key, a system column or a generated companion).</summary>
-    public static bool IsSupplied(string entityLogicalName, AttributeMetadata attribute) =>
+    public static bool IsSupplied(string entityLogicalName, ColumnDefinition attribute) =>
         !SystemAttributes.IsReservedName(entityLogicalName, attribute.LogicalName) && !TypeMapping.IsStoredByOtherAttribute(attribute);
 
     private static string Refusal(string? name, string componentKind, IEnumerable<string> prefixes)

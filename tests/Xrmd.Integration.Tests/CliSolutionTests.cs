@@ -7,6 +7,7 @@ using Microsoft.Extensions.Options;
 using Xrmd.Abstractions;
 using Xrmd.Cli;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Pipeline;
 using Xrmd.Pipeline.Async;
 using Xrmd.TestSupport;

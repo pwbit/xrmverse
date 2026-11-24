@@ -1,4 +1,4 @@
-using Microsoft.Xrm.Sdk.Metadata;
+using Xrmd.Model.Metadata;
 using Xrmd.Abstractions;
 
 namespace Xrmd.Metadata;
@@ -17,12 +17,12 @@ public sealed partial class MetadataStore
     /// column exists, and the column is made primary afterwards with an update (UpdateAttribute moves the flag). Sets
     /// <c>IsPrimaryImage</c> of <paramref name="image"/> and records its creation ordinal.
     /// </summary>
-    private static void ClaimPrimaryImage(string entityLogicalName, ImageAttributeMetadata image,
-        IEnumerable<AttributeMetadata> existing, Dictionary<(string, string), int> imageOrder)
+    private static void ClaimPrimaryImage(string entityLogicalName, ImageColumn image,
+        IEnumerable<ColumnDefinition> existing, Dictionary<(string, string), int> imageOrder)
     {
-        var others = existing.OfType<ImageAttributeMetadata>().ToList();
+        var others = existing.OfType<ImageColumn>().ToList();
         // The creation order of the image columns, persisted with the stored definition (not in the metadata): the oldest remaining one becomes primary when the primary is deleted.
-        imageOrder[(entityLogicalName, image.LogicalName)] =
+        imageOrder[(entityLogicalName, image.LogicalName!)] =
             others.Select(o => OrdinalOf(imageOrder, entityLogicalName, o) ?? 0).DefaultIfEmpty(0).Max() + 1;
         if (others.Count == 0)
         {
@@ -35,9 +35,9 @@ public sealed partial class MetadataStore
         image.IsPrimaryImage = false; // true is ignored on create when another image column exists (Learn)
     }
 
-    private static AttributeMetadata Demote(ImageAttributeMetadata image)
+    private static ColumnDefinition Demote(ImageColumn image)
     {
-        var copy = MetadataSerializer.Clone(image);
+        var copy = MetadataJson.Clone(image);
         copy.IsPrimaryImage = false;
         return copy;
     }
@@ -46,15 +46,15 @@ public sealed partial class MetadataStore
     public int? GetImageOrdinal(string entityLogicalName, string attributeLogicalName) =>
         _cache.ImageOrder.TryGetValue((entityLogicalName, attributeLogicalName), out var ordinal) ? ordinal : null;
 
-    private static int? OrdinalOf(IReadOnlyDictionary<(string, string), int> imageOrder, string entityLogicalName, AttributeMetadata a) =>
-        a is ImageAttributeMetadata && imageOrder.TryGetValue((entityLogicalName, a.LogicalName), out var ordinal) ? ordinal : null;
+    private static int? OrdinalOf(IReadOnlyDictionary<(string, string), int> imageOrder, string entityLogicalName, ColumnDefinition a) =>
+        a is ImageColumn && imageOrder.TryGetValue((entityLogicalName, a.LogicalName!), out var ordinal) ? ordinal : null;
 
-    private static Task StoreAttributeAsync(DataSession session, string entityLogicalName, AttributeMetadata a, long stamp, CancellationToken ct,
+    private static Task StoreAttributeAsync(DataSession session, string entityLogicalName, ColumnDefinition a, long stamp, CancellationToken ct,
         IReadOnlyDictionary<(string, string), int>? imageOrder = null) =>
         ExecuteAsync(session,
             "UPDATE meta.attribute SET definition = @definition, version_stamp = @stamp WHERE entity_logical_name = @entity AND logical_name = @name", ct,
             ("@definition", StoredAttributeJson(a, imageOrder is null ? null : OrdinalOf(imageOrder, entityLogicalName, a))), ("@stamp", stamp),
-            ("@entity", entityLogicalName), ("@name", a.LogicalName));
+            ("@entity", entityLogicalName), ("@name", a.LogicalName!));
 
     /// <summary>The fileattachment table exists and no relationship already has the name the link would give.</summary>
     private static void EnsureAttachmentLinkable(CacheState cache, string entityLogicalName)
@@ -75,7 +75,7 @@ public sealed partial class MetadataStore
         var cache = pending.Working;
         await SetAttachmentTargetsAsync(session, cache, targets => targets.Contains(entityLogicalName) ? targets : [.. targets, entityLogicalName], stamp, ct);
 
-        var r = new OneToManyRelationshipMetadata
+        var r = new OneToManyRelationship
         {
             SchemaName = FileColumns.RelationshipName(entityLogicalName),
             MetadataId = Guid.NewGuid(),
@@ -89,7 +89,7 @@ public sealed partial class MetadataStore
         };
         await ExecuteAsync(session,
             "INSERT INTO meta.relationship (metadata_id, schema_name, definition, version_stamp) VALUES (@id, @name, @definition, @stamp)", ct,
-            ("@id", r.MetadataId.Value), ("@name", r.SchemaName), ("@definition", MetadataSerializer.SerializeRelationship(r)), ("@stamp", stamp));
+            ("@id", r.MetadataId.Value), ("@name", r.SchemaName), ("@definition", MetadataJson.SerializeRelationship(r)), ("@stamp", stamp));
         cache.SavedOneToMany[r.SchemaName] = r;
     }
 
@@ -114,7 +114,7 @@ public sealed partial class MetadataStore
     {
         var cache = pending.Working;
         if (cache.ByLogicalName.GetValueOrDefault(FileColumns.AttachmentEntity) is not { } attachment) return;
-        var lookup = (attachment.Attributes ?? []).OfType<LookupAttributeMetadata>().FirstOrDefault(FileColumns.IsAttachmentObjectId);
+        var lookup = (attachment.Attributes ?? []).OfType<LookupColumn>().FirstOrDefault(FileColumns.IsAttachmentObjectId);
         if (lookup is null) return;
         foreach (var name in FileColumns.PermanentTargets.Order(StringComparer.Ordinal))
         {
@@ -132,14 +132,14 @@ public sealed partial class MetadataStore
     private static async Task SetAttachmentTargetsAsync(DataSession session, CacheState cache, Func<string[], string[]> change, long stamp, CancellationToken ct)
     {
         var attachment = cache.ByLogicalName[FileColumns.AttachmentEntity];
-        var current = (LookupAttributeMetadata)(attachment.Attributes ?? []).Single(a => a.LogicalName == FileColumns.AttachmentLookup);
-        var targets = change(current.Targets ?? []);
+        var current = (LookupColumn)(attachment.Attributes ?? []).Single(a => a.LogicalName == FileColumns.AttachmentLookup);
+        var targets = change([.. current.Targets ?? []]);
         if (targets.SequenceEqual(current.Targets ?? [])) return;
 
-        var updated = MetadataSerializer.Clone(current);
-        updated.Targets = targets;
-        await StoreAttributeAsync(session, attachment.LogicalName, updated, stamp, ct);
-        var copy = MetadataSerializer.Clone(attachment);
+        var updated = MetadataJson.Clone(current);
+        updated.Targets = [.. targets];
+        await StoreAttributeAsync(session, attachment.LogicalName!, updated, stamp, ct);
+        var copy = MetadataJson.Clone(attachment);
         copy.SetAttributes((attachment.Attributes ?? []).Select(a => a.LogicalName == updated.LogicalName ? updated : a));
         cache.Put(copy, previous: attachment);
     }

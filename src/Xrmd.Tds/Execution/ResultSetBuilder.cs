@@ -2,6 +2,7 @@ using Meziantou.Framework.Tds.Handler;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Query.Model;
 using Xrmd.Tds.Translation;
 

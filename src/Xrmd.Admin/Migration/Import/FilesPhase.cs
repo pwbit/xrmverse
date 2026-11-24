@@ -3,6 +3,7 @@ using Microsoft.Xrm.Sdk;
 using Xrmd.Abstractions;
 using Xrmd.Core;
 using Xrmd.Files;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Migration.Records;
 
 namespace Xrmd.Admin.Migration.Import;

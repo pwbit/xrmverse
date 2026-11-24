@@ -8,6 +8,7 @@ using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Extensions.DependencyInjection;
 using Xrmd.Abstractions;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Security;
 using static Xrmd.Integration.Tests.SecurityTestHelper;
 using static Xrmd.Integration.Tests.TestHelpers;

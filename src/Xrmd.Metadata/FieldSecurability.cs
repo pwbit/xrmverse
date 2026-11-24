@@ -1,4 +1,4 @@
-using Microsoft.Xrm.Sdk.Metadata;
+using Xrmd.Model.Metadata;
 
 namespace Xrmd.Metadata;
 
@@ -19,7 +19,7 @@ namespace Xrmd.Metadata;
 /// (<c>SourceType</c> 3, plan 2.12c: Learn lists formula columns among the columns that cannot be secured). Lookup, Customer and
 /// Owner columns are not of the listed types.
 /// </remarks>
-public static class FieldSecurability
+public static partial class FieldSecurability
 {
     /// <summary>
     /// The tables security profiles and the business unit tree are read from, the five field security tables among them. A
@@ -41,7 +41,7 @@ public static class FieldSecurability
     };
 
     /// <summary>True when <paramref name="attribute"/> of <paramref name="entity"/> can be secured.</summary>
-    public static bool IsSecurable(EntityMetadata entity, AttributeMetadata attribute)
+    public static bool IsSecurable(TableDefinition entity, ColumnDefinition attribute)
     {
         ArgumentNullException.ThrowIfNull(entity);
         ArgumentNullException.ThrowIfNull(attribute);
@@ -63,7 +63,7 @@ public static class FieldSecurability
     }
 
     private static readonly HashSet<string> CommonActivityColumns =
-        new(ActivitySchema.CommonAttributes().Select(a => a.LogicalName), StringComparer.Ordinal);
+        new(ActivitySchema.CommonColumns().Select(a => a.LogicalName!), StringComparer.Ordinal);
 
     /// <summary>
     /// Plan 2.11, controller ruling Y3: the common activity columns (A2) of an activity table, and every column of
@@ -71,27 +71,27 @@ public static class FieldSecurability
     /// secure per activity table, so a secured value could be read there. Known limit, from memory: checklist (whether Dataverse
     /// lets field security apply to these columns and how the pointer honours it).
     /// </summary>
-    private static bool IsCommonActivityColumn(EntityMetadata entity, string name) =>
+    private static bool IsCommonActivityColumn(TableDefinition entity, string name) =>
         entity.LogicalName == ActivitySchema.Pointer || (entity.IsActivity == true && CommonActivityColumns.Contains(name));
 
     /// <summary>
     /// Sets <c>CanBeSecuredForCreate</c>, <c>CanBeSecuredForRead</c> and <c>CanBeSecuredForUpdate</c> of
     /// <paramref name="attribute"/> (a copy a read hands out) from <see cref="IsSecurable"/>.
     /// </summary>
-    public static void Apply(EntityMetadata entity, AttributeMetadata attribute)
+    public static void Apply(TableDefinition entity, ColumnDefinition attribute)
     {
         var securable = IsSecurable(entity, attribute);
-        SdkProperty.Set(attribute, nameof(AttributeMetadata.CanBeSecuredForCreate), securable);
-        SdkProperty.Set(attribute, nameof(AttributeMetadata.CanBeSecuredForRead), securable);
-        SdkProperty.Set(attribute, nameof(AttributeMetadata.CanBeSecuredForUpdate), securable);
+        attribute.CanBeSecuredForCreate = securable;
+        attribute.CanBeSecuredForRead = securable;
+        attribute.CanBeSecuredForUpdate = securable;
     }
 
-    private static bool IsSecurableType(AttributeMetadata attribute) => attribute switch
+    private static bool IsSecurableType(ColumnDefinition attribute) => attribute switch
     {
-        MoneyAttributeMetadata money => money.IsBaseCurrency != true,
-        StringAttributeMetadata or MemoAttributeMetadata or IntegerAttributeMetadata or BigIntAttributeMetadata
-            or DecimalAttributeMetadata or DoubleAttributeMetadata or BooleanAttributeMetadata or PicklistAttributeMetadata
-            or MultiSelectPicklistAttributeMetadata or DateTimeAttributeMetadata or FileAttributeMetadata or ImageAttributeMetadata => true,
+        MoneyColumn money => money.IsBaseCurrency != true,
+        TextColumn or MemoColumn or IntegerColumn or BigIntColumn
+            or DecimalColumn or DoubleColumn or BooleanColumn or ChoiceColumn
+            or MultiChoiceColumn or DateTimeColumn or FileColumn or ImageColumn => true,
         _ => false,
     };
 
@@ -101,13 +101,13 @@ public static class FieldSecurability
     /// file name, the image id, timestamp and url, a name column) or, for a money <c>_base</c>, the money column whose name it
     /// extends. Field security secures a companion with the rights of its main column (plan 14, final review C1).
     /// </summary>
-    public static string? MainColumnOf(EntityMetadata entity, AttributeMetadata attribute)
+    public static string? MainColumnOf(TableDefinition entity, ColumnDefinition attribute)
     {
         ArgumentNullException.ThrowIfNull(entity);
         ArgumentNullException.ThrowIfNull(attribute);
         if (!IsCompanion(attribute) || attribute.LogicalName is not { } name) return null;
         string? main = attribute.AttributeOf;
-        if (main is null && attribute is MoneyAttributeMetadata { IsBaseCurrency: true }
+        if (main is null && attribute is MoneyColumn { IsBaseCurrency: true }
             && name.EndsWith(TypeMapping.BaseColumnSuffix, StringComparison.Ordinal))
             main = name[..^TypeMapping.BaseColumnSuffix.Length];
         if (main is null || string.Equals(main, name, StringComparison.OrdinalIgnoreCase)) return null;
@@ -119,7 +119,7 @@ public static class FieldSecurability
     /// companions of a file or image column, a name column a solution file gives) or is stored by another column (a money
     /// <c>_base</c>). The name alone never decides: <c>new_codename</c> next to <c>new_code</c> is an ordinary column.
     /// </summary>
-    private static bool IsCompanion(AttributeMetadata attribute) =>
+    private static bool IsCompanion(ColumnDefinition attribute) =>
         attribute.AttributeOf is not null || TypeMapping.IsStoredByOtherAttribute(attribute)
         || FileColumns.IsStoredCompanion(attribute) || FileColumns.IsUrlCompanion(attribute);
 }

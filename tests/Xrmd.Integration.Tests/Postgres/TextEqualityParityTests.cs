@@ -9,6 +9,7 @@ using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core;
+using Xrmd.Metadata.Sdk;
 using static Xrmd.Integration.Tests.SecurityTestHelper;
 
 namespace Xrmd.Integration.Tests.Postgres;

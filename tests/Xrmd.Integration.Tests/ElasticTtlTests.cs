@@ -12,6 +12,7 @@ using Xrmd.Core;
 using Xrmd.Core.Elastic;
 using Xrmd.Host;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
 using static Xrmd.Integration.Tests.TestHelpers;
 
 namespace Xrmd.Integration.Tests;

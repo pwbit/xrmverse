@@ -13,6 +13,7 @@ using Xrmd.Core;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Computed;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Solution;
 using static Xrmd.Integration.Tests.CalculatedParityExport;
 using static Xrmd.Integration.Tests.SecurityTestHelper;

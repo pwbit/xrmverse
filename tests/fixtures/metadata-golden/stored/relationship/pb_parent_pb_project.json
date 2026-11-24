@@ -1,0 +1,1 @@
+{"@odata.type":"Microsoft.Dynamics.CRM.OneToManyRelationshipMetadata","ReferencedEntity":"pb_parent","ReferencingAttribute":"pb_parentid","ReferencingEntity":"pb_project","IsCustomRelationship":true,"SchemaName":"pb_parent_pb_project","RelationshipType":"OneToManyRelationship","MetadataId":"5b2b2003-0000-4000-8000-000000000001"}

@@ -10,6 +10,7 @@ using Microsoft.Xrm.Sdk.Query;
 using SkiaSharp;
 using Xrmd.Abstractions;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
 using Xunit.Abstractions;
 
 namespace Xrmd.Integration.Tests;

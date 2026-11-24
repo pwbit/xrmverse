@@ -10,6 +10,7 @@ using Xrmd.Abstractions;
 using Xrmd.Admin;
 using Xrmd.Core;
 using Xrmd.Core.Errors;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Security;
 using Xrmd.WebApi;
 

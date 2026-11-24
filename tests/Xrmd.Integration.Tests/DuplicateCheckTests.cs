@@ -6,6 +6,7 @@ using Xrmd.Abstractions;
 using Xrmd.Core;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
 using static Xrmd.Integration.Tests.TestHelpers;
 
 namespace Xrmd.Integration.Tests;
@@ -188,16 +189,15 @@ public sealed class DuplicateCheckTests(XrmdFixture fx) : IAsyncLifetime
         await ContactAsync("Anna", Mail("anna"));
         await PublishedRuleAsync();
         // Turning the flag off through metadata also unpublishes the rule (D11); flip the definition alone to test the flag itself.
-        var contact = _kit.Store.GetEntity(Contact)!;
-        var flag = contact.IsDuplicateDetectionEnabled;
-        contact.IsDuplicateDetectionEnabled = new BooleanManagedProperty(false);
+        var flag = _kit.Store.GetTable(Contact)!.IsDuplicateDetectionEnabled;
+        InMemoryMetadata.Change(_kit.Store, Contact, t => t.IsDuplicateDetectionEnabled = new Xrmd.Model.Metadata.ManagedFlag { Value = false, CanBeChanged = true });
         try
         {
             await CreateAsync(NewContact("Second", Mail("anna")), false);
         }
         finally
         {
-            contact.IsDuplicateDetectionEnabled = flag;
+            InMemoryMetadata.Change(_kit.Store, Contact, t => t.IsDuplicateDetectionEnabled = flag);
         }
 
         (await ContactsWithAsync(Mail("anna"))).Should().Be(2);

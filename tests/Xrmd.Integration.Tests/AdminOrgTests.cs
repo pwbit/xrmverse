@@ -23,6 +23,7 @@ using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Core;
 using static Xrmd.Integration.Tests.SecurityTestHelper;
 

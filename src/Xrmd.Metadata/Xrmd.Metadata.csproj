@@ -12,6 +12,16 @@
   <ItemGroup>
     <!-- SdkProperty: the solution reader sets the server-owned metadata properties of the SDK types it builds. -->
     <InternalsVisibleTo Include="Xrmd.Solution" />
+    <InternalsVisibleTo Include="Xrmd.Metadata.Tests" />
+    <!-- MetadataStore.ReplaceInMemory: tests that give a seeded definition a setting the API refuses (S.2b2 Task 4). -->
+    <InternalsVisibleTo Include="Xrmd.Integration.Tests" />
+    <!-- SdkMetadataView.ModelOf: the test fakes of IMetadataStore that keep SDK fixtures (S.2b2 Task 4). -->
+    <InternalsVisibleTo Include="Xrmd.Core.Tests" />
+    <InternalsVisibleTo Include="Xrmd.Query.Tests" />
+    <InternalsVisibleTo Include="Xrmd.Security.Tests" />
+    <InternalsVisibleTo Include="Xrmd.Tds.Tests" />
+    <InternalsVisibleTo Include="Xrmd.WebApi.Tests" />
+    <InternalsVisibleTo Include="Xrmd.Workflows.Tests" /><!-- links Xrmd.Query.Tests/TestMetadata.cs -->
   </ItemGroup>
 
   <ItemGroup>

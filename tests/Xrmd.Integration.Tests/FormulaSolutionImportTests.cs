@@ -9,6 +9,7 @@ using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
 using Xrmd.Core;
 using Xrmd.Metadata.Computed;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Pipeline.Registration;
 using Xrmd.Metadata;
 using Xrmd.Solution;

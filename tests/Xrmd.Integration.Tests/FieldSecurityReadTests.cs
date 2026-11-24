@@ -17,6 +17,7 @@ using Xrmd.Abstractions;
 using Xrmd.Core.Errors;
 using Xrmd.Host;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Security;
 using static Xrmd.Integration.Tests.SecurityTestHelper;
 
@@ -548,7 +549,7 @@ public sealed class FieldSecurityReadTests(XrmdFixture fx) : IAsyncLifetime
         var account = await Admin.CreateAsync(new Entity("account") { ["name"] = accountName });
         var shared = await Admin.CreateAsync(new Entity("contact") { ["lastname"] = "shared", ["parentcustomerid"] = new EntityReference("account", account) });
         var other = await Admin.CreateAsync(new Entity("contact") { ["lastname"] = "other", ["parentcustomerid"] = new EntityReference("account", account) });
-        column.IsSecured = true;
+        InMemoryMetadata.ChangeColumn(Store, "contact", "parentcustomerid", c => c.IsSecured = true);
         Cache(fx).Invalidate();
         try
         {
@@ -578,7 +579,7 @@ public sealed class FieldSecurityReadTests(XrmdFixture fx) : IAsyncLifetime
         }
         finally
         {
-            column.IsSecured = false;
+            InMemoryMetadata.ChangeColumn(Store, "contact", "parentcustomerid", c => c.IsSecured = false);
             Cache(fx).Invalidate();
         }
     }

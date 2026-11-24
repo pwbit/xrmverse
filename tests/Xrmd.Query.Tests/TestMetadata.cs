@@ -3,12 +3,15 @@ using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Metadata;
 
 namespace Xrmd.Query.Tests;
 
 /// <summary>
 /// In-memory <see cref="IMetadataStore"/> with <c>pb_project</c> (as <c>TestEntities</c> of the integration tests) and
-/// <c>systemuser</c> (as the seed), both completed with <see cref="SystemAttributes.Complete"/>.
+/// <c>systemuser</c> (as the seed), both completed with <see cref="SystemAttributes.Complete"/>. Each SDK fixture is converted to
+/// the model once, on its first read (<c>SdkMetadataView.ModelOf</c>): a fixture mutated after its first read is not seen.
 /// </summary>
 internal sealed class TestMetadata : IMetadataStore
 {
@@ -242,38 +245,42 @@ internal sealed class TestMetadata : IMetadataStore
     }
 
     public long VersionStamp => 1;
-    public EntityMetadata? GetEntity(string logicalName) => _entities.FirstOrDefault(e => e.LogicalName == logicalName);
-    public EntityMetadata? GetEntityBySetName(string entitySetName) => _entities.FirstOrDefault(e => e.EntitySetName == entitySetName);
-    public EntityMetadata? GetEntityByObjectTypeCode(int objectTypeCode) => _entities.FirstOrDefault(e => e.ObjectTypeCode == objectTypeCode);
-    public IReadOnlyList<EntityMetadata> GetAllEntities() => _entities;
+    // The model of each SDK fixture (converted once per instance); the SDK view of it is the fixture itself.
+    private static TableDefinition? Model(EntityMetadata? e) => e is null ? null : SdkMetadataView.ModelOf(e);
+    public TableDefinition? GetTable(string logicalName) => Model(_entities.FirstOrDefault(e => e.LogicalName == logicalName));
+    public TableDefinition? GetTableBySetName(string entitySetName) => Model(_entities.FirstOrDefault(e => e.EntitySetName == entitySetName));
+    public TableDefinition? GetTableByObjectTypeCode(int objectTypeCode) => Model(_entities.FirstOrDefault(e => e.ObjectTypeCode == objectTypeCode));
+    public IReadOnlyList<TableDefinition> GetAllTables() => _entities.Select(e => Model(e)!).ToList();
     public Task LoadAsync(CancellationToken ct = default) => throw new NotSupportedException();
-    public Task CreateEntityAsync(EntityMetadata entity, AttributeMetadata primaryName, CancellationToken ct = default) =>
+    public Task CreateEntityAsync(TableDefinition entity, ColumnDefinition primaryName, CancellationToken ct = default) =>
         throw new NotSupportedException();
-    public Task AddAttributeAsync(string entityLogicalName, AttributeMetadata attribute, CancellationToken ct = default) =>
+    public Task AddAttributeAsync(string entityLogicalName, ColumnDefinition attribute, CancellationToken ct = default) =>
         throw new NotSupportedException();
-    public Task CreateEntityAsync(DataSession session, EntityMetadata entity, AttributeMetadata primaryName, CancellationToken ct) =>
+    public Task CreateEntityAsync(DataSession session, TableDefinition entity, ColumnDefinition primaryName, CancellationToken ct) =>
         throw new NotSupportedException();
-    public Task AddAttributeAsync(DataSession session, string entityLogicalName, AttributeMetadata attribute, CancellationToken ct) =>
+    public Task AddAttributeAsync(DataSession session, string entityLogicalName, ColumnDefinition attribute, CancellationToken ct) =>
         throw new NotSupportedException();
-    public Task UpdateEntityAsync(DataSession session, EntityMetadata changes, CancellationToken ct) =>
+    public Task UpdateEntityAsync(DataSession session, TableDefinition changes, CancellationToken ct) =>
         throw new NotSupportedException();
-    public Task UpdateAttributeAsync(DataSession session, string entityLogicalName, AttributeMetadata changes, CancellationToken ct) =>
+    public Task UpdateAttributeAsync(DataSession session, string entityLogicalName, ColumnDefinition changes, CancellationToken ct) =>
         throw new NotSupportedException();
     public Task DeleteAttributeAsync(DataSession session, string entityLogicalName, string attributeLogicalName, CancellationToken ct) =>
         throw new NotSupportedException();
     public Task DeleteEntityAsync(DataSession session, string entityLogicalName, CancellationToken ct) =>
         throw new NotSupportedException();
-    public OptionSetMetadataBase? GetOptionSet(string name) => null;
-    public IReadOnlyList<OptionSetMetadataBase> GetAllOptionSets() => [];
-    public Task CreateOptionSetAsync(DataSession session, OptionSetMetadataBase optionSet, CancellationToken ct) =>
+    public ChoiceSetBase? GetChoiceSet(string name) => null;
+    public IReadOnlyList<ChoiceSetBase> GetAllChoiceSets() => [];
+    public Task CreateOptionSetAsync(DataSession session, ChoiceSetBase optionSet, CancellationToken ct) =>
         throw new NotSupportedException();
-    public Task UpdateOptionSetAsync(DataSession session, OptionSetMetadataBase changes, CancellationToken ct) =>
+    public Task UpdateOptionSetAsync(DataSession session, ChoiceSetBase changes, CancellationToken ct) =>
         throw new NotSupportedException();
     public Task DeleteOptionSetAsync(DataSession session, string name, CancellationToken ct) =>
         throw new NotSupportedException();
-    public RelationshipMetadataBase? GetRelationship(string schemaName) => null;
-    public IReadOnlyList<ManyToManyRelationshipMetadata> GetManyToManyRelationships() => [];
-    public IReadOnlyList<OneToManyRelationshipMetadata> GetOneToManyRelationships() =>
+    public RelationshipDefinition? GetRelationshipDefinition(string schemaName) => null;
+    public IReadOnlyList<ManyToManyRelationship> GetManyToManyDefinitions() => [];
+    public IReadOnlyList<OneToManyRelationship> GetOneToManyDefinitions() => OneToManyFixtures().Select(r => (OneToManyRelationship)SdkMetadataView.ModelOf(r)).ToList();
+
+    private static IReadOnlyList<OneToManyRelationshipMetadata> OneToManyFixtures() =>
     [
         new OneToManyRelationshipMetadata
         {
@@ -291,11 +298,11 @@ internal sealed class TestMetadata : IMetadataStore
             ReferencingAttribute = "xrmv_acctid", ReferencedAttribute = "xrmv_rollacctid",
         },
     ];
-    public Task CreateOneToManyAsync(DataSession session, OneToManyRelationshipMetadata relationship, LookupAttributeMetadata lookup,
+    public Task CreateOneToManyAsync(DataSession session, OneToManyRelationship relationship, LookupColumn lookup,
         CancellationToken ct) => throw new NotSupportedException();
-    public Task CreateCustomerRelationshipsAsync(DataSession session, LookupAttributeMetadata lookup,
-        IReadOnlyList<OneToManyRelationshipMetadata> relationships, CancellationToken ct) => throw new NotSupportedException();
-    public Task CreateManyToManyAsync(DataSession session, ManyToManyRelationshipMetadata relationship, CancellationToken ct) =>
+    public Task CreateCustomerRelationshipsAsync(DataSession session, LookupColumn lookup,
+        IReadOnlyList<OneToManyRelationship> relationships, CancellationToken ct) => throw new NotSupportedException();
+    public Task CreateManyToManyAsync(DataSession session, ManyToManyRelationship relationship, CancellationToken ct) =>
         throw new NotSupportedException();
     public Task DeleteRelationshipAsync(DataSession session, string schemaName, CancellationToken ct) =>
         throw new NotSupportedException();

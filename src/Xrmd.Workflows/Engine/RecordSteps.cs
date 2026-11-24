@@ -2,6 +2,7 @@ using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Xrmd.Core.Errors;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Workflows.Xaml;
 
 namespace Xrmd.Workflows.Engine;

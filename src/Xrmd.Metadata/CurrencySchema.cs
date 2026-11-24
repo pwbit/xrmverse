@@ -1,4 +1,4 @@
-using Microsoft.Xrm.Sdk.Metadata;
+using Xrmd.Model.Metadata;
 
 namespace Xrmd.Metadata;
 
@@ -7,7 +7,7 @@ namespace Xrmd.Metadata;
 /// <c>usersettings</c> table, the currency columns of <c>organization</c> and the pair <c>transactioncurrencyid</c> +
 /// <c>exchangerate</c> of a table with money columns.
 /// </summary>
-public static class CurrencySchema
+public static partial class CurrencySchema
 {
     /// <summary>The table of currencies.</summary>
     public const string Table = "transactioncurrency";
@@ -101,26 +101,26 @@ public static class CurrencySchema
     /// decimal <see cref="ExchangeRate"/>. A table gets it with its first money column (ruling X4); account and contact have it from
     /// their seed definitions. <see cref="Table"/> itself (whose own key and rate have these names) has no pair.
     /// </summary>
-    public static bool HasCurrencyColumns(EntityMetadata entity)
+    public static bool HasCurrencyColumns(TableDefinition entity)
     {
         ArgumentNullException.ThrowIfNull(entity);
         if (entity.LogicalName == Table) return false;
         var attributes = entity.Attributes ?? [];
-        return attributes.Any(a => a is LookupAttributeMetadata { LogicalName: CurrencyId } lookup && (lookup.Targets ?? []).Contains(Table))
-               && attributes.Any(a => a is DecimalAttributeMetadata { LogicalName: ExchangeRate });
+        return attributes.Any(a => a is LookupColumn { LogicalName: CurrencyId } lookup && (lookup.Targets ?? []).Contains(Table))
+               && attributes.Any(a => a is DecimalColumn { LogicalName: ExchangeRate });
     }
 
     /// <summary>True when <paramref name="attribute"/> is one of the currency pair of <paramref name="entity"/> (a generated system attribute).</summary>
-    public static bool IsPairAttribute(EntityMetadata entity, AttributeMetadata attribute)
+    public static bool IsPairAttribute(TableDefinition entity, ColumnDefinition attribute)
     {
         ArgumentNullException.ThrowIfNull(attribute);
         return IsPairName(attribute.LogicalName) && HasCurrencyColumns(entity);
     }
 
     /// <summary>The money attributes of <paramref name="entity"/> that hold a value in the record's currency (not the <c>_base</c> ones).</summary>
-    public static IReadOnlyList<MoneyAttributeMetadata> MoneyAttributes(EntityMetadata entity)
+    public static IReadOnlyList<MoneyColumn> MoneyAttributes(TableDefinition entity)
     {
         ArgumentNullException.ThrowIfNull(entity);
-        return (entity.Attributes ?? []).OfType<MoneyAttributeMetadata>().Where(m => m.IsBaseCurrency != true).ToList();
+        return (entity.Attributes ?? []).OfType<MoneyColumn>().Where(m => m.IsBaseCurrency != true).ToList();
     }
 }

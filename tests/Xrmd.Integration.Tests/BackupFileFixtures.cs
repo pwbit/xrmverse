@@ -8,6 +8,7 @@ using Xrmd.Abstractions;
 using Xrmd.Admin;
 using Xrmd.Files;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
 using static Xrmd.Integration.Tests.SecurityTestHelper;
 
 namespace Xrmd.Integration.Tests;

@@ -14,6 +14,7 @@ using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Computed;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Pipeline;
 using Xrmd.Pipeline.Async;
 using Xrmd.Pipeline.CustomApis;

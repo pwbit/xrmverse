@@ -5,6 +5,7 @@ using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Core;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Security;
 using static Xrmd.Integration.Tests.SecurityTestHelper;
 using static Xrmd.Integration.Tests.TestHelpers;
@@ -176,8 +177,7 @@ public sealed class RetrieveDuplicatesTests(XrmdFixture fx) : IAsyncLifetime
         var user = await CreateUserAsync(fx, await RootBusinessUnitAsync(fx), objectId);
         await GrantAsync(fx, user, false, ("prvReadContact", DepthMask.Global));
         // telephone1 is not secured in the seed: the in-memory definition is, for this test only.
-        var phone = _kit.Store.GetEntity(Contact)!.Attributes.Single(a => a.LogicalName == "telephone1");
-        phone.IsSecured = true;
+        InMemoryMetadata.ChangeColumn(_kit.Store, Contact, "telephone1", c => c.IsSecured = true);
         Cache(fx).Invalidate();
         try
         {
@@ -190,7 +190,7 @@ public sealed class RetrieveDuplicatesTests(XrmdFixture fx) : IAsyncLifetime
         }
         finally
         {
-            phone.IsSecured = false;
+            InMemoryMetadata.ChangeColumn(_kit.Store, Contact, "telephone1", c => c.IsSecured = false);
             Cache(fx).Invalidate();
         }
     }
@@ -211,8 +211,7 @@ public sealed class RetrieveDuplicatesTests(XrmdFixture fx) : IAsyncLifetime
         var reader = await CreateUserAsync(fx, root, readerId);
         await GrantAsync(fx, reader, false, ("prvReadContact", DepthMask.Global));
         // telephone1 is not secured in the seed: the in-memory definition is, for this test only.
-        var column = _kit.Store.GetEntity(Contact)!.Attributes.Single(a => a.LogicalName == Phone);
-        column.IsSecured = true;
+        InMemoryMetadata.ChangeColumn(_kit.Store, Contact, Phone, c => c.IsSecured = true);
         Cache(fx).Invalidate();
         try
         {
@@ -241,7 +240,7 @@ public sealed class RetrieveDuplicatesTests(XrmdFixture fx) : IAsyncLifetime
         }
         finally
         {
-            column.IsSecured = false;
+            InMemoryMetadata.ChangeColumn(_kit.Store, Contact, Phone, c => c.IsSecured = false);
             Cache(fx).Invalidate();
         }
     }

@@ -1,8 +1,7 @@
 using System.Data;
 using System.Text.Json;
 using Xrmd.Abstractions.Storage;
-using Microsoft.Xrm.Sdk;
-using Microsoft.Xrm.Sdk.Metadata;
+using Xrmd.Model.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Core.Errors;
 
@@ -22,10 +21,11 @@ public sealed partial class MetadataStore
     public IReadOnlySet<string> DuplicateDetectionTables => _cache.DuplicateDetectionTables;
 
     /// <summary>The stored form of the flag: the value, changeable, under the managed property Dataverse names.</summary>
-    private static BooleanManagedProperty DuplicateDetectionFlag(bool value)
+    private static ManagedFlag DuplicateDetectionFlag(bool value)
     {
-        var property = new BooleanManagedProperty(value) { CanBeChanged = true };
-        SdkProperty.Set(property, nameof(ManagedProperty<bool>.ManagedPropertyLogicalName), "canmodifyduplicatedetectionsettings");
+        var property = ModelFactory.Flag(value);
+        property.CanBeChanged = true;
+        property.ManagedPropertyLogicalName = "canmodifyduplicatedetectionsettings";
         return property;
     }
 
@@ -50,17 +50,17 @@ public sealed partial class MetadataStore
         var changed = false;
         for (var i = 0; i < attributes.Count; i++)
         {
-            if (attributes[i] is not LookupAttributeMetadata lookup || !DuplicateDetectionSchema.IsRecordLookup(lookup)) continue;
-            var targets = change(lookup.Targets ?? []);
+            if (attributes[i] is not LookupColumn lookup || !DuplicateDetectionSchema.IsRecordLookup(lookup)) continue;
+            var targets = change([.. lookup.Targets ?? []]);
             if (targets.SequenceEqual(lookup.Targets ?? [])) continue;
-            var updated = MetadataSerializer.Clone(lookup);
-            updated.Targets = targets;
-            await StoreAttributeAsync(session, record.LogicalName, updated, stamp, ct);
+            var updated = MetadataJson.Clone(lookup);
+            updated.Targets = [.. targets];
+            await StoreAttributeAsync(session, record.LogicalName!, updated, stamp, ct);
             attributes[i] = updated;
             changed = true;
         }
         if (!changed) return;
-        var copy = MetadataSerializer.Clone(record);
+        var copy = MetadataJson.Clone(record);
         copy.SetAttributes(attributes);
         cache.Put(copy, previous: record);
     }
@@ -98,11 +98,11 @@ public sealed partial class MetadataStore
     /// (with their conditions, shares and match code tables; a duplicate record keeps its row, its rule link cleared) and the
     /// duplicate records of its rows.
     /// </summary>
-    private static async Task DeleteDuplicateDetectionRowsAsync(DataSession session, CacheState cache, EntityMetadata entity, CancellationToken ct)
+    private static async Task DeleteDuplicateDetectionRowsAsync(DataSession session, CacheState cache, TableDefinition entity, CancellationToken ct)
     {
         var hasRecords = cache.ByLogicalName.ContainsKey(DuplicateDetectionSchema.Record);
         if (cache.ByLogicalName.ContainsKey(DuplicateDetectionSchema.Rule) && cache.ByLogicalName.ContainsKey(DuplicateDetectionSchema.Condition))
-            await DeleteRulesOfAsync(session, entity.LogicalName, cache.ByLogicalName[DuplicateDetectionSchema.Rule].ObjectTypeCode ?? 0, hasRecords, ct);
+            await DeleteRulesOfAsync(session, entity.LogicalName!, cache.ByLogicalName[DuplicateDetectionSchema.Rule].ObjectTypeCode ?? 0, hasRecords, ct);
         if (hasRecords && entity.ObjectTypeCode is { } code)
             await ExecuteAsync(session, $"""
                 DELETE FROM {session.DataTable(DuplicateDetectionSchema.Record)}

@@ -11,6 +11,7 @@ using Xrmd.Abstractions;
 using Xrmd.Core;
 using Xrmd.Mcp;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Security;
 using static Xrmd.Integration.Tests.SecurityTestHelper;
 using static Xrmd.Integration.Tests.TestHelpers;
@@ -218,8 +219,7 @@ public sealed class McpKnowledgeTests(XrmdFixture fx) : IAsyncLifetime
         var oid = await RestrictedUserAsync(("prvReadDVTableSearch", DepthMask.Global), ("prvReadDVTableSearchEntity", DepthMask.Global),
             ("prvReadCopilotSynonyms", DepthMask.Global), ("prvReadCopilotGlossaryTerm", DepthMask.Global));
         // Securing through metadata is not offered on a seeded table: the in-memory definition is marked for this test.
-        var column = Store.GetEntity(KnowledgeSchema.SourceEntity)!.Attributes.Single(a => a.LogicalName == KnowledgeSchema.EntityLogicalName);
-        column.IsSecured = true;
+        InMemoryMetadata.ChangeColumn(Store, KnowledgeSchema.SourceEntity, KnowledgeSchema.EntityLogicalName, c => c.IsSecured = true);
         Cache(fx).Invalidate();
         try
         {
@@ -231,7 +231,7 @@ public sealed class McpKnowledgeTests(XrmdFixture fx) : IAsyncLifetime
         }
         finally
         {
-            column.IsSecured = false;
+            InMemoryMetadata.ChangeColumn(Store, KnowledgeSchema.SourceEntity, KnowledgeSchema.EntityLogicalName, c => c.IsSecured = false);
             Cache(fx).Invalidate();
         }
     }

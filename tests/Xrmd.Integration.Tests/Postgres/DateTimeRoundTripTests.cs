@@ -4,6 +4,7 @@ using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
+using Xrmd.Metadata.Sdk;
 using static Xrmd.Integration.Tests.SecurityTestHelper;
 
 namespace Xrmd.Integration.Tests.Postgres;

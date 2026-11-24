@@ -2,6 +2,7 @@ using System.Data;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
 using static Xrmd.Metadata.DuplicateDetectionSchema;
 
 namespace Xrmd.Core.Duplicates;

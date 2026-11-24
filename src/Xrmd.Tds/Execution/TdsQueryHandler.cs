@@ -11,6 +11,7 @@ using Xrmd.Core;
 using Xrmd.Core.Errors;
 using Xrmd.Core.Query;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Query.Model;
 using Xrmd.Query.Sql;
 using Xrmd.Security;

@@ -7,6 +7,7 @@ using ModelContextProtocol.Protocol;
 using Xrmd.Abstractions;
 using Xrmd.Cli;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
 
 namespace Xrmd.Integration.Tests;
 

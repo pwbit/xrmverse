@@ -13,6 +13,7 @@ using Xrmd.Abstractions.Storage;
 using Xrmd.Core;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Security;
 using static Xrmd.Integration.Tests.SecurityTestHelper;
 

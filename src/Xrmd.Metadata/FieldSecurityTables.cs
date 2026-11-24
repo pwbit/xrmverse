@@ -1,4 +1,4 @@
-using Microsoft.Xrm.Sdk.Metadata;
+using Xrmd.Model.Metadata;
 
 namespace Xrmd.Metadata;
 
@@ -70,6 +70,6 @@ public static class FieldSecurityTables
     /// True for <c>principalobjectattributeaccess.objectid</c>: it names a record of any table, so it has no fixed targets and
     /// keeps a type column, as <c>audit.objectid</c> does.
     /// </summary>
-    public static bool IsTargetlessLookup(AttributeMetadata a) =>
-        a is LookupAttributeMetadata && a.EntityLogicalName == Share && a.LogicalName == ShareObjectId;
+    public static bool IsTargetlessLookup(ColumnDefinition a) =>
+        a is LookupColumn && a.EntityLogicalName == Share && a.LogicalName == ShareObjectId;
 }

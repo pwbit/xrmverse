@@ -13,6 +13,7 @@ using Xrmd.Core.Query;
 using Xrmd.Core.Solutions;
 using Xrmd.Core.Validation;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Pipeline;
 using Xrmd.Pipeline.Bulk;
 using Xrmd.Pipeline.Merge;

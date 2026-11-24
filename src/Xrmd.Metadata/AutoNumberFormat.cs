@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
-using Microsoft.Xrm.Sdk.Metadata;
+using Xrmd.Model.Metadata;
 using Xrmd.Abstractions;
 
 namespace Xrmd.Metadata;
@@ -12,7 +12,7 @@ namespace Xrmd.Metadata;
 /// letters and digits, n from 1 to 6) and <c>{DATETIMEUTC:format}</c> (the UTC time in a .NET date and time format).
 /// The column accepts any format; <see cref="Parse"/> checks it when a record is created, as Dataverse does.
 /// </summary>
-public sealed class AutoNumberFormat
+public sealed partial class AutoNumberFormat
 {
     /// <summary>The first value of a new sequence (Learn: sequences start at 1000).</summary>
     public const long DefaultSeed = 1000;
@@ -99,18 +99,18 @@ public sealed class AutoNumberFormat
     /// whose format is Text takes one; an empty format is none.
     /// </summary>
     /// <exception cref="XrmdValidationException">A format on another column.</exception>
-    public static string? OfColumn(string entityLogicalName, AttributeMetadata attribute)
+    public static string? OfColumn(string entityLogicalName, ColumnDefinition attribute)
     {
         ArgumentNullException.ThrowIfNull(attribute);
         var format = attribute.AutoNumberFormat;
         if (string.IsNullOrEmpty(format)) return null;
         var where = $"Attribute '{entityLogicalName}.{attribute.LogicalName}'";
-        if (attribute is not StringAttributeMetadata s)
+        if (attribute is not TextColumn s)
             throw new XrmdValidationException($"{where}: an AutoNumberFormat is allowed only on a string column.");
         if (Computed.ComputedColumnRules.IsComputed(attribute))
             throw new XrmdValidationException(
                 $"{where}: an AutoNumberFormat cannot be set on a {(attribute.SourceType == Computed.ComputedColumnRules.Formula ? "formula" : "calculated")} column.");
-        if (s.Format is { } f && f != StringFormat.Text || s.FormatName is { Value: { } name } && name != StringFormatName.Text.Value)
+        if (s.Format is { } f && f != TextDisplayFormat.Text || s.FormatName is { Value: { } name } && name != "Text")
             throw new XrmdValidationException($"{where}: an AutoNumberFormat is allowed only on a string column whose format is Text.");
         return format;
     }

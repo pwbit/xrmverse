@@ -7,6 +7,7 @@ using Xrmd.Abstractions.Storage;
 using Xrmd.Admin;
 using Xrmd.Core.Mail;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Solution;
 using static Xrmd.Integration.Tests.SecurityTestHelper;
 

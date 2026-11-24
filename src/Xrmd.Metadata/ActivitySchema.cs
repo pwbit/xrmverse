@@ -1,5 +1,4 @@
-using Microsoft.Xrm.Sdk;
-using Microsoft.Xrm.Sdk.Metadata;
+using Xrmd.Model.Metadata;
 
 namespace Xrmd.Metadata;
 
@@ -32,7 +31,7 @@ public enum ParticipationType
 /// The object type codes, the party list columns of task and of custom activities, the states of custom activities and of the
 /// pointer and the privilege depths are from memory, not from Learn: the plan 2.11 checklist verifies them on a real environment.
 /// </remarks>
-public static class ActivitySchema
+public static partial class ActivitySchema
 {
     /// <summary>The tables.</summary>
     public const string Pointer = "activitypointer", Party = "activityparty", Annotation = "annotation",
@@ -135,7 +134,7 @@ public static class ActivitySchema
         $"The message '{name}' is not supported by xrmverse: {RefusedMessageReasons[name]}.";
 
     /// <summary>A table made as an activity (<c>IsActivity</c> true): the four standard ones and the custom ones, not the pointer.</summary>
-    public static bool IsActivityTable(EntityMetadata e)
+    public static bool IsActivityTable(TableDefinition e)
     {
         ArgumentNullException.ThrowIfNull(e);
         return e.IsActivity == true && e.LogicalName != Pointer;
@@ -146,7 +145,7 @@ public static class ActivitySchema
     /// <see cref="NoteStem"/> for <see cref="Annotation"/>, <see cref="PostSchema.PrivilegeStem"/> for <c>post</c>,
     /// <c>postcomment</c> and <c>postregarding</c> (plan 3.5 UI-1g), null for any other table (its own SchemaName).
     /// </summary>
-    public static string? PrivilegeStem(EntityMetadata e)
+    public static string? PrivilegeStem(TableDefinition e)
     {
         ArgumentNullException.ThrowIfNull(e);
         if (e.LogicalName == Pointer || IsActivityTable(e)) return ActivityStem;
@@ -175,26 +174,26 @@ public static class ActivitySchema
         };
 
     /// <summary><see cref="IsManagedLookup(string?, string?)"/> of a lookup attribute (its <c>EntityLogicalName</c> set).</summary>
-    public static bool IsManagedLookup(AttributeMetadata a) =>
-        a is LookupAttributeMetadata && IsManagedLookup(a.EntityLogicalName, a.LogicalName);
+    public static bool IsManagedLookup(ColumnDefinition a) =>
+        a is LookupColumn && IsManagedLookup(a.EntityLogicalName, a.LogicalName);
 
     /// <summary>True for <c>annotation.documentbody</c>, which has no SQL column: the body lives in the file store (A16).</summary>
-    public static bool IsDocumentBody(AttributeMetadata a) => a.EntityLogicalName == Annotation && a.LogicalName == DocumentBody;
+    public static bool IsDocumentBody(ColumnDefinition a) => a.EntityLogicalName == Annotation && a.LogicalName == DocumentBody;
 
     /// <summary>
     /// True for <c>activitymimeattachment.body</c> (plan 4.1b), which has no SQL column either: the body lives in the file store, as
     /// a note's does.
     /// </summary>
-    public static bool IsAttachmentBody(AttributeMetadata a) => a.EntityLogicalName == MailSchema.Attachment && a.LogicalName == MailSchema.AttachmentBody;
+    public static bool IsAttachmentBody(ColumnDefinition a) => a.EntityLogicalName == MailSchema.Attachment && a.LogicalName == MailSchema.AttachmentBody;
 
     /// <summary>True for a party list column (AttributeType PartyList): it has no SQL column, its rows live in <see cref="Party"/>.</summary>
-    public static bool IsPartyList(AttributeMetadata? a) => a is LookupAttributeMetadata { AttributeType: AttributeTypeCode.PartyList };
+    public static bool IsPartyList(ColumnDefinition? a) => a is LookupColumn { AttributeType: ColumnTypeCode.PartyList };
 
     /// <summary>
     /// The party list columns of <paramref name="activity"/> with their participation type and whether they take one party only
     /// (Global Constraints): the four standard tables by name, a custom activity the nine custom ones, any other table none.
     /// </summary>
-    public static IReadOnlyList<(string Attribute, ParticipationType Type, bool Single)> PartyLists(EntityMetadata activity)
+    public static IReadOnlyList<(string Attribute, ParticipationType Type, bool Single)> PartyLists(TableDefinition activity)
     {
         ArgumentNullException.ThrowIfNull(activity);
         return activity.LogicalName switch
@@ -235,46 +234,39 @@ public static class ActivitySchema
     /// the owner and system columns, as new instances: the seed files of the pointer and of the four standard tables carry the
     /// same definitions, and a custom activity gets them at creation.
     /// </summary>
-    public static IReadOnlyList<AttributeMetadata> CommonAttributes()
+    public static IReadOnlyList<ColumnDefinition> CommonColumns()
     {
-        var typeCode = new EntityNameAttributeMetadata("ActivityTypeCode")
-        {
-            LogicalName = ActivityTypeCode, DisplayName = Label("Activity Type"), IsValidForCreate = false, IsValidForUpdate = false,
-            RequiredLevel = new AttributeRequiredLevelManagedProperty(AttributeRequiredLevel.SystemRequired),
+        var typeCode = new EntityNameColumn { SchemaName = "ActivityTypeCode", LogicalName = ActivityTypeCode, DisplayName = Label("Activity Type"), IsValidForCreate = false, IsValidForUpdate = false,
+            RequiredLevel = ModelFactory.Required(RequirementLevel.SystemRequired),
         };
-        var regarding = new LookupAttributeMetadata
+        var regarding = new LookupColumn
         {
             LogicalName = RegardingObjectId, SchemaName = "RegardingObjectId", DisplayName = Label("Regarding"), Targets = [],
         };
-        var regardingType = new EntityNameAttributeMetadata("RegardingObjectTypeCode") { LogicalName = RegardingTypeCode };
-        SdkProperty.Set(regardingType, nameof(AttributeMetadata.AttributeOf), RegardingObjectId);
-        var currency = SystemAttributes.CurrencyLookup();
-        var rate = SystemAttributes.ExchangeRate();
+        var regardingType = new EntityNameColumn { SchemaName = "RegardingObjectTypeCode", LogicalName = RegardingTypeCode };
+        regardingType.AttributeOf = RegardingObjectId;
+        var currency = SystemAttributes.CurrencyLookupColumn();
+        var rate = SystemAttributes.ExchangeRateColumn();
         return
         [
             typeCode,
-            new MemoAttributeMetadata("Description") { LogicalName = "description", DisplayName = Label("Description"), MaxLength = 2000 },
+            new MemoColumn { SchemaName = "Description", LogicalName = "description", DisplayName = Label("Description"), MaxLength = 2000 },
             regarding,
             regardingType,
             Date("scheduledstart", "ScheduledStart", "Start Date"),
             Date("scheduledend", "ScheduledEnd", "Due Date"),
             Date("actualstart", "ActualStart", "Actual Start"),
             Date("actualend", "ActualEnd", "Actual End"),
-            new IntegerAttributeMetadata("ScheduledDurationMinutes")
-            {
-                LogicalName = "scheduleddurationminutes", DisplayName = Label("Scheduled Duration"), MinValue = 0, MaxValue = int.MaxValue,
+            new IntegerColumn { SchemaName = "ScheduledDurationMinutes", LogicalName = "scheduleddurationminutes", DisplayName = Label("Scheduled Duration"), MinValue = 0, MaxValue = int.MaxValue,
             },
-            new IntegerAttributeMetadata("ActualDurationMinutes")
-            {
-                LogicalName = "actualdurationminutes", DisplayName = Label("Actual Duration"), MinValue = 0, MaxValue = int.MaxValue,
+            new IntegerColumn { SchemaName = "ActualDurationMinutes", LogicalName = "actualdurationminutes", DisplayName = Label("Actual Duration"), MinValue = 0, MaxValue = int.MaxValue,
             },
-            new PicklistAttributeMetadata("PriorityCode")
-            {
-                LogicalName = "prioritycode", DisplayName = Label("Priority"), DefaultFormValue = 1,
-                OptionSet = new OptionSetMetadata(new OptionMetadataCollection
+            new ChoiceColumn { SchemaName = "PriorityCode", LogicalName = "prioritycode", DisplayName = Label("Priority"), DefaultFormValue = 1,
+                OptionSet = new ChoiceSet
                 {
-                    new OptionMetadata(Label("Low"), 0), new OptionMetadata(Label("Normal"), 1), new OptionMetadata(Label("High"), 2),
-                }) { IsGlobal = false, OptionSetType = OptionSetType.Picklist },
+                    Options = [ModelFactory.Option(Label("Low"), 0), ModelFactory.Option(Label("Normal"), 1), ModelFactory.Option(Label("High"), 2)],
+                    IsGlobal = false, OptionSetType = ChoiceSetKind.Picklist,
+                },
             },
             Flag("isbilled", "IsBilled", "Billed", validForWrite: true),
             Flag("isworkflowcreated", "IsWorkflowCreated", "Created by Workflow", validForWrite: true),
@@ -310,39 +302,39 @@ public static class ActivitySchema
     /// nine party lists of a custom activity and its own <c>statecode</c>/<c>statuscode</c> (Open, Completed, Canceled), as new
     /// instances. The metadata store adds them on its own path: callers cannot create EntityName or PartyList columns.
     /// </summary>
-    public static IReadOnlyList<AttributeMetadata> CustomActivityAttributes()
+    public static IReadOnlyList<ColumnDefinition> CustomActivityColumns()
     {
-        var list = new List<AttributeMetadata>(CommonAttributes());
+        var list = new List<ColumnDefinition>(CommonColumns());
         foreach (var (logicalName, (schemaName, label)) in CustomPartyLists)
         {
-            var party = new LookupAttributeMetadata { LogicalName = logicalName, SchemaName = schemaName, DisplayName = Label(label), Targets = [.. PartyTargets] };
-            SdkProperty.Set(party, nameof(AttributeMetadata.AttributeType), AttributeTypeCode.PartyList);
+            var party = new LookupColumn { LogicalName = logicalName, SchemaName = schemaName, DisplayName = Label(label), Targets = [.. PartyTargets] };
+            party.AttributeType = ColumnTypeCode.PartyList;
             list.Add(party);
         }
         var stateLabels = new[] { "Open", "Completed", "Canceled" };
-        var states = new OptionMetadataCollection();
-        var statuses = new OptionMetadataCollection();
+        var states = new List<ChoiceOption>();
+        var statuses = new List<ChoiceOption>();
         foreach (var (state, defaultStatus, codes) in States(""))
         {
-            states.Add(new StateOptionMetadata { Value = state, Label = Label(stateLabels[state]), DefaultStatus = defaultStatus });
-            foreach (var code in codes) statuses.Add(new StatusOptionMetadata(code, state) { Label = Label(stateLabels[state]) });
+            states.Add(new StateOption { Value = state, Label = Label(stateLabels[state]), DefaultStatus = defaultStatus });
+            foreach (var code in codes) statuses.Add(new StatusOption { Value = code, State = state, Label = Label(stateLabels[state]) });
         }
-        list.Add(new StateAttributeMetadata
+        list.Add(new StateColumn
         {
             LogicalName = "statecode", SchemaName = "StateCode", DisplayName = Label("Status"),
-            RequiredLevel = new AttributeRequiredLevelManagedProperty(AttributeRequiredLevel.SystemRequired),
-            OptionSet = new OptionSetMetadata(states) { IsGlobal = false, OptionSetType = OptionSetType.State },
+            RequiredLevel = ModelFactory.Required(RequirementLevel.SystemRequired),
+            OptionSet = new ChoiceSet { Options = states, IsGlobal = false, OptionSetType = ChoiceSetKind.State },
         });
-        list.Add(new StatusAttributeMetadata
+        list.Add(new StatusColumn
         {
             LogicalName = "statuscode", SchemaName = "StatusCode", DisplayName = Label("Status Reason"),
-            OptionSet = new OptionSetMetadata(statuses) { IsGlobal = false, OptionSetType = OptionSetType.Status },
+            OptionSet = new ChoiceSet { Options = statuses, IsGlobal = false, OptionSetType = ChoiceSetKind.Status },
         });
         return list;
     }
 
     private static readonly HashSet<string> GeneratedActivityNames = new(
-        CommonAttributes().Select(a => a.LogicalName).Concat(CustomPartyLists.Keys).Append(ActivityId), StringComparer.Ordinal);
+        CommonColumns().Select(a => a.LogicalName!).Concat(CustomPartyLists.Keys).Append(ActivityId), StringComparer.Ordinal);
 
     /// <summary>
     /// True for a column name a custom activity gets from the server (A2 columns, party lists, <c>activityid</c>): a caller cannot
@@ -355,7 +347,7 @@ public static class ActivitySchema
     /// the pointer and of the four standard tables (Learn), else the table's <c>CollectionSchemaName</c>, else its SchemaName and
     /// <c>s</c> (from memory: checklist 2a).
     /// </summary>
-    public static string CollectionSchemaName(EntityMetadata activity)
+    public static string CollectionSchemaName(TableDefinition activity)
     {
         ArgumentNullException.ThrowIfNull(activity);
         return activity.LogicalName switch
@@ -370,8 +362,8 @@ public static class ActivitySchema
     }
 
     /// <summary>A seeded table is named by its SchemaName in a relationship name (<c>Account_</c>), a custom one by its logical name.</summary>
-    internal static string RelationshipStem(EntityMetadata table) =>
-        MetadataStore.IsSystemEntity(table) ? table.SchemaName ?? table.LogicalName : table.LogicalName;
+    internal static string RelationshipStem(TableDefinition table) =>
+        MetadataStore.IsSystemEntity(table) ? (table.SchemaName ?? table.LogicalName)! : table.LogicalName!;
 
     /// <summary>
     /// The relationship of <paramref name="activity"/>'s <c>regardingobjectid</c> to <paramref name="target"/> (Global Constraints):
@@ -380,15 +372,15 @@ public static class ActivitySchema
     /// activity table, everything NoCascade but Delete RemoveLink to the pointer. The stem pattern (SchemaName of a seeded table,
     /// as <c>Contact_{collection}</c>) and <c>{logicalname}_{collection}</c> for a custom table are from memory: checklist 2a.
     /// </summary>
-    public static OneToManyRelationshipMetadata RegardingRelationship(EntityMetadata target, EntityMetadata activity)
+    public static OneToManyRelationship RegardingRelationship(TableDefinition target, TableDefinition activity)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(activity);
         var pointer = activity.LogicalName == Pointer;
-        return Relationship($"{RelationshipStem(target)}_{CollectionSchemaName(activity)}", target.LogicalName, activity.LogicalName, RegardingObjectId,
+        return RelationshipDefinition($"{RelationshipStem(target)}_{CollectionSchemaName(activity)}", target.LogicalName!, activity.LogicalName!, RegardingObjectId,
             pointer ? $"{RegardingObjectId}_{target.LogicalName}" : $"{RegardingObjectId}_{target.LogicalName}_{activity.LogicalName}",
-            pointer ? Cascade(delete: CascadeType.RemoveLink) : Cascade(CascadeType.Cascade, CascadeType.Cascade, CascadeType.Cascade, CascadeType.Cascade,
-                CascadeType.Cascade, CascadeType.Cascade));
+            pointer ? CascadeSettings(delete: CascadeAction.RemoveLink) : CascadeSettings(CascadeAction.Cascade, CascadeAction.Cascade, CascadeAction.Cascade, CascadeAction.Cascade,
+                CascadeAction.Cascade, CascadeAction.Cascade));
     }
 
     /// <summary>
@@ -396,13 +388,13 @@ public static class ActivitySchema
     /// table (<c>Account_Annotation</c>, <c>Email_Annotation</c>), <c>{logicalname}_Annotations</c> for a custom one (from memory:
     /// checklist 2a); navigation <c>objectid_{target}</c>; Assign, Delete, Reparent, Share and Unshare Cascade.
     /// </summary>
-    public static OneToManyRelationshipMetadata NotesRelationship(EntityMetadata target)
+    public static OneToManyRelationship NotesRelationship(TableDefinition target)
     {
         ArgumentNullException.ThrowIfNull(target);
         var name = MetadataStore.IsSystemEntity(target) ? $"{RelationshipStem(target)}_Annotation" : $"{target.LogicalName}_Annotations";
-        return Relationship(name, target.LogicalName, Annotation, ObjectId, $"{ObjectId}_{target.LogicalName}",
-            Cascade(assign: CascadeType.Cascade, delete: CascadeType.Cascade, reparent: CascadeType.Cascade, share: CascadeType.Cascade,
-                unshare: CascadeType.Cascade));
+        return RelationshipDefinition(name, target.LogicalName!, Annotation, ObjectId, $"{ObjectId}_{target.LogicalName}",
+            CascadeSettings(assign: CascadeAction.Cascade, delete: CascadeAction.Cascade, reparent: CascadeAction.Cascade, share: CascadeAction.Cascade,
+                unshare: CascadeAction.Cascade));
     }
 
     /// <summary>
@@ -410,11 +402,11 @@ public static class ActivitySchema
     /// ruling P4): <c>{target}_activity_mime_attachments</c>, navigation <c>objectid_{target}</c>; Delete Cascade (an email's
     /// attachments go with it), everything else NoCascade. The name is from memory: checklist 2a.
     /// </summary>
-    public static OneToManyRelationshipMetadata AttachmentRelationship(EntityMetadata target)
+    public static OneToManyRelationship AttachmentRelationship(TableDefinition target)
     {
         ArgumentNullException.ThrowIfNull(target);
-        return Relationship($"{target.LogicalName}_activity_mime_attachments", target.LogicalName, MailSchema.Attachment, ObjectId,
-            $"{ObjectId}_{target.LogicalName}", Cascade(delete: CascadeType.Cascade));
+        return RelationshipDefinition($"{target.LogicalName}_activity_mime_attachments", target.LogicalName!, MailSchema.Attachment, ObjectId,
+            $"{ObjectId}_{target.LogicalName}", CascadeSettings(delete: CascadeAction.Cascade));
     }
 
     /// <summary>
@@ -423,14 +415,14 @@ public static class ActivitySchema
     /// for a custom one; NoCascade, but Delete Cascade from the pointer (Learn). The custom navigation
     /// <c>activityid_{activity}_activityparty</c> is from memory: checklist 2a.
     /// </summary>
-    public static OneToManyRelationshipMetadata PartiesRelationship(EntityMetadata activity)
+    public static OneToManyRelationship PartiesRelationship(TableDefinition activity)
     {
         ArgumentNullException.ThrowIfNull(activity);
         var name = activity.LogicalName;
         var standard = name == Pointer || StandardActivities.Contains(name);
-        return Relationship($"{name}_activity_parties", name, Party, ActivityId,
+        return RelationshipDefinition($"{name}_activity_parties", name!, Party, ActivityId,
             standard ? $"{ActivityId}_{name}" : $"{ActivityId}_{name}_{Party}",
-            Cascade(delete: name == Pointer ? CascadeType.Cascade : CascadeType.NoCascade));
+            CascadeSettings(delete: name == Pointer ? CascadeAction.Cascade : CascadeAction.NoCascade));
     }
 
     /// <summary>
@@ -438,17 +430,17 @@ public static class ActivitySchema
     /// <c>account_activity_parties</c>, <c>contact_activity_parties</c>, <c>system_user_activity_parties</c> (Learn), navigation
     /// <c>partyid_{target}</c>, NoCascade (deleting a party record keeps its rows, A10).
     /// </summary>
-    public static OneToManyRelationshipMetadata PartyTargetRelationship(string target)
+    public static OneToManyRelationship PartyTargetRelationshipDefinition(string target)
     {
         ArgumentException.ThrowIfNullOrEmpty(target);
         var name = target == "systemuser" ? "system_user_activity_parties" : $"{target}_activity_parties";
-        var r = Relationship(name, target, Party, PartyId, $"{PartyId}_{target}", Cascade());
+        var r = RelationshipDefinition(name, target, Party, PartyId, $"{PartyId}_{target}", CascadeSettings());
         r.ReferencedAttribute = target + "id";
         return r;
     }
 
-    internal static OneToManyRelationshipMetadata Relationship(string schemaName, string referenced, string referencing, string attribute,
-        string navigation, CascadeConfiguration cascade) => new()
+    internal static OneToManyRelationship RelationshipDefinition(string schemaName, string referenced, string referencing, string attribute,
+        string navigation, CascadeSettings cascade) => new()
     {
         SchemaName = schemaName,
         ReferencedEntity = referenced,
@@ -461,20 +453,20 @@ public static class ActivitySchema
         CascadeConfiguration = cascade,
     };
 
-    internal static CascadeConfiguration Cascade(CascadeType assign = CascadeType.NoCascade, CascadeType delete = CascadeType.NoCascade,
-        CascadeType merge = CascadeType.NoCascade, CascadeType reparent = CascadeType.NoCascade, CascadeType share = CascadeType.NoCascade,
-        CascadeType unshare = CascadeType.NoCascade) => new()
+    internal static CascadeSettings CascadeSettings(CascadeAction assign = CascadeAction.NoCascade, CascadeAction delete = CascadeAction.NoCascade,
+        CascadeAction merge = CascadeAction.NoCascade, CascadeAction reparent = CascadeAction.NoCascade, CascadeAction share = CascadeAction.NoCascade,
+        CascadeAction unshare = CascadeAction.NoCascade) => new()
     {
         Assign = assign, Delete = delete, Merge = merge, Reparent = reparent, Share = share, Unshare = unshare,
-        Archive = CascadeType.NoCascade, RollupView = CascadeType.NoCascade,
+        Archive = CascadeAction.NoCascade, RollupView = CascadeAction.NoCascade,
     };
 
-    private static DateTimeAttributeMetadata Date(string logicalName, string schemaName, string label) =>
-        new(DateTimeFormat.DateAndTime, schemaName) { LogicalName = logicalName, DisplayName = Label(label) };
+    private static DateTimeColumn Date(string logicalName, string schemaName, string label) =>
+        new() { Format = DateTimeDisplayFormat.DateAndTime, SchemaName = schemaName, LogicalName = logicalName, DisplayName = Label(label) };
 
-    private static BooleanAttributeMetadata Flag(string logicalName, string schemaName, string label, bool validForWrite, bool defaultValue = false)
+    private static BooleanColumn Flag(string logicalName, string schemaName, string label, bool validForWrite, bool defaultValue = false)
     {
-        var a = new BooleanAttributeMetadata(schemaName) { LogicalName = logicalName, DisplayName = Label(label), DefaultValue = defaultValue };
+        var a = new BooleanColumn { SchemaName = schemaName, LogicalName = logicalName, DisplayName = Label(label), DefaultValue = defaultValue };
         if (!validForWrite)
         {
             a.IsValidForCreate = false;
@@ -483,5 +475,5 @@ public static class ActivitySchema
         return a;
     }
 
-    private static Label Label(string text) => SystemAttributes.CreateLabel(text, 1033);
+    private static LabelSet Label(string text) => SystemAttributes.CreateLabelSet(text, 1033);
 }

@@ -1,4 +1,4 @@
-using Microsoft.Xrm.Sdk.Metadata;
+using Xrmd.Model.Metadata;
 
 namespace Xrmd.Metadata;
 
@@ -14,7 +14,7 @@ namespace Xrmd.Metadata;
 /// The object type codes (8000, 8005, 8002) and the privilege names are from memory, not from Learn: they go on the acceptance
 /// checklist, as in plan 2.11.
 /// </remarks>
-public static class PostSchema
+public static partial class PostSchema
 {
     /// <summary>The tables.</summary>
     public const string Post = "post", Comment = "postcomment", Regarding = "postregarding";
@@ -49,11 +49,11 @@ public static class PostSchema
     /// <c>regardingobjectid_{target}</c>, Delete Cascade and every other action NoCascade (deleting the record deletes its
     /// <c>postregarding</c> row and so its posts).
     /// </summary>
-    public static OneToManyRelationshipMetadata PostRegardingsRelationship(EntityMetadata target)
+    public static OneToManyRelationship PostRegardingsRelationship(TableDefinition target)
     {
         ArgumentNullException.ThrowIfNull(target);
-        return ActivitySchema.Relationship($"{ActivitySchema.RelationshipStem(target)}_PostRegardings", target.LogicalName, Regarding,
+        return ActivitySchema.RelationshipDefinition($"{ActivitySchema.RelationshipStem(target)}_PostRegardings", target.LogicalName!, Regarding,
             ActivitySchema.RegardingObjectId, $"{ActivitySchema.RegardingObjectId}_{target.LogicalName}",
-            ActivitySchema.Cascade(delete: CascadeType.Cascade));
+            ActivitySchema.CascadeSettings(delete: CascadeAction.Cascade));
     }
 }

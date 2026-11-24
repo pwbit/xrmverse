@@ -60,6 +60,7 @@
     <None Include="..\fixtures\calculated\real\*.csv" LinkBase="fixtures\calculated\real" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\fixtures\workflows\yaml\*.yaml" LinkBase="fixtures\workflows\yaml" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\fixtures\formula\*.json" LinkBase="fixtures\formula" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\fixtures\metadata-golden\stored\**\*.json" LinkBase="fixtures\metadata-golden\stored" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <Import Project="..\TestPlugins.props" />

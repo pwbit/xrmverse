@@ -3,6 +3,7 @@ using FluentAssertions;
 using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Metadata.Computed;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Query.Model;
 using Xrmd.Query.Sql;
 using static Xrmd.Metadata.Computed.ComputedExpr;

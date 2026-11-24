@@ -34,6 +34,12 @@ public static class MetadataCorpus
         [typeof(OptionMetadata)] = ["OptionMetadata", "StateOptionMetadata"],
     };
 
+    /// <summary>
+    /// The subdirectory of the stored-row golden files (S.2b2, <c>Stored_json_is_unchanged</c> in the integration tests): not
+    /// part of this corpus, never rewritten by its update mode.
+    /// </summary>
+    public const string StoredPrefix = "stored/";
+
     /// <summary>The directory of the committed golden files (copied to the test output).</summary>
     public static string GoldenDirectory => Path.Combine(AppContext.BaseDirectory, "fixtures", "metadata-golden");
 
@@ -70,6 +76,7 @@ public static class MetadataCorpus
         return Directory.EnumerateFiles(root, "*.json", SearchOption.AllDirectories)
             .Select(path => Path.GetRelativePath(root, path).Replace('\\', '/'))
             .Select(rel => rel[..^".json".Length])
+            .Where(n => !n.StartsWith(StoredPrefix, StringComparison.Ordinal))
             .OrderBy(n => n, StringComparer.Ordinal)
             .Select(n => (n, RootOf(n), File.ReadAllText(Path.Combine(root, n + ".json"))))
             .ToList();

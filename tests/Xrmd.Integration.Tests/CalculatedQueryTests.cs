@@ -13,6 +13,7 @@ using Xrmd.Core;
 using Xrmd.Integration.Tests.Tds;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Computed;
+using Xrmd.Metadata.Sdk;
 using static Xrmd.Integration.Tests.SecurityTestHelper;
 
 namespace Xrmd.Integration.Tests;

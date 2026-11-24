@@ -1,4 +1,4 @@
-using Microsoft.Xrm.Sdk.Metadata;
+using Xrmd.Model.Metadata;
 using Xrmd.Abstractions;
 
 namespace Xrmd.Metadata.Computed;
@@ -30,7 +30,7 @@ public static class FormulaColumnRules
     /// a formula whose result type is not the column's (Learn; the type of a column never changes).
     /// </summary>
     /// <exception cref="XrmdValidationException">The definition is refused.</exception>
-    public static void Validate(EntityMetadata entity, AttributeMetadata a, AttributeMetadata? current, Func<string, EntityMetadata?> entities,
+    public static void Validate(TableDefinition entity, ColumnDefinition a, ColumnDefinition? current, Func<string, TableDefinition?> entities,
         IComputedColumns? computed)
     {
         ArgumentNullException.ThrowIfNull(entity);
@@ -59,18 +59,18 @@ public static class FormulaColumnRules
 
         switch (a)
         {
-            case StringAttributeMetadata s when s.Format is { } f && f != StringFormat.Text
-                                                || s.FormatName is { Value: { } name } && name != StringFormatName.Text.Value:
+            case TextColumn s when s.Format is { } f && f != TextDisplayFormat.Text
+                                                || s.FormatName is { Value: { } name } && name != "Text":
                 throw new XrmdValidationException($"A formula column of type String takes the format Text only: {where}.");
-            case IntegerAttributeMetadata { Format: { } format } when format != IntegerFormat.None:
+            case IntegerColumn { Format: { } format } when format != IntegerDisplayFormat.None:
                 throw new XrmdValidationException($"A formula column of type Integer takes the format None only: {where}.");
-            case DecimalAttributeMetadata d:
+            case DecimalColumn d:
                 d.Precision ??= DefaultPrecision;
                 if (d.Precision is < 0 or > MaxPrecision)
                     throw new XrmdValidationException(
                         $"The precision of the formula column {where} is {d.Precision}: a formula column takes 0 to {MaxPrecision}.");
                 break;
-            case DateTimeAttributeMetadata date:
+            case DateTimeColumn date:
                 DemandBehavior(date, definition.DateBehavior, where);
                 break;
         }
@@ -80,8 +80,8 @@ public static class FormulaColumnRules
         // A formula column is computed by the server: it is never written, and it cannot be required (Global Constraints).
         a.IsValidForCreate = false;
         a.IsValidForUpdate = false;
-        a.RequiredLevel = new AttributeRequiredLevelManagedProperty(AttributeRequiredLevel.None);
-        SdkProperty.Set(a, "SourceTypeMask", definition.SourceTypeMask);
+        a.RequiredLevel = ModelFactory.Required(RequirementLevel.None);
+        a.GetType().GetProperty("SourceTypeMask")!.SetValue(a, definition.SourceTypeMask);
     }
 
     /// <summary>A formula as stored: without surrounding whitespace and without one leading <c>=</c> (ruling F2).</summary>
@@ -125,21 +125,21 @@ public static class FormulaColumnRules
     /// column; a Date only date (or <c>UTCToday()</c>) a Date only or Time zone independent column; a Time zone independent date
     /// (or <c>UTCNow()</c>) a Time zone independent column. A result without a behaviour (null) is not checked.
     /// </summary>
-    private static void DemandBehavior(DateTimeAttributeMetadata column, string? result, string where)
+    private static void DemandBehavior(DateTimeColumn column, string? result, string where)
     {
         if (result is null) return; // a result with no date behaviour (Blank()): nothing to compare
         var behavior = RollupColumnRules.BehaviorOf(column);
-        var fits = result == DateTimeBehavior.UserLocal.Value ? behavior == DateTimeBehavior.UserLocal.Value
-            : result == DateTimeBehavior.DateOnly.Value ? behavior != DateTimeBehavior.UserLocal.Value
-            : behavior == DateTimeBehavior.TimeZoneIndependent.Value;
+        var fits = result == DateTimeBehaviors.UserLocal ? behavior == DateTimeBehaviors.UserLocal
+            : result == DateTimeBehaviors.DateOnly ? behavior != DateTimeBehaviors.UserLocal
+            : behavior == DateTimeBehaviors.TimeZoneIndependent;
         if (!fits)
             throw new XrmdValidationException($"The formula of {where} gives a {result} date, but the column is {behavior}.");
     }
 
     /// <summary>A range narrower than the type's widest one (as for calculated columns; Float's is ±100,000,000,000).</summary>
-    private static bool HasLimits(AttributeMetadata a) => a switch
+    private static bool HasLimits(ColumnDefinition a) => a switch
     {
-        DoubleAttributeMetadata d => d.MinValue is not null && d.MinValue != -WidestDouble || d.MaxValue is not null && d.MaxValue != WidestDouble,
+        DoubleColumn d => d.MinValue is not null && d.MinValue != -WidestDouble || d.MaxValue is not null && d.MaxValue != WidestDouble,
         _ => ComputedColumnRules.HasLimits(a),
     };
 

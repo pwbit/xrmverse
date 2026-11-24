@@ -12,6 +12,7 @@ using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
 using Xrmd.Core;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Pipeline.Async;
 using Xrmd.Security;
 using Xrmd.TestSupport;

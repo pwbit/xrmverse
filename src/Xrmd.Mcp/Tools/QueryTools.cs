@@ -8,6 +8,7 @@ using ModelContextProtocol.Server;
 using Xrmd.Abstractions;
 using Xrmd.Core;
 using Xrmd.Core.Errors;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Query.FetchXml;
 using Xrmd.Query.Model;
 using Xrmd.WebApi;

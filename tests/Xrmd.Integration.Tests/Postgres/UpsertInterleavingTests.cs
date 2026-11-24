@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Xrm.Sdk;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Pipeline.Async;
 using Xrmd.Pipeline.Webhooks;
 using Xrmd.Metadata;

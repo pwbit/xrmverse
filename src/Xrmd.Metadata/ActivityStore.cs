@@ -1,4 +1,4 @@
-using Microsoft.Xrm.Sdk.Metadata;
+using Xrmd.Model.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 
@@ -43,7 +43,7 @@ public sealed partial class MetadataStore
     /// mail merge is off.
     /// </summary>
     /// <exception cref="XrmdValidationException">400 naming the setting.</exception>
-    private static void PrepareCustomActivity(EntityMetadata e, AttributeMetadata? primaryName)
+    private static void PrepareCustomActivity(TableDefinition e, ColumnDefinition? primaryName)
     {
         var what = $"Custom activity '{e.LogicalName}'";
         if (primaryName is null || !string.Equals(primaryName.SchemaName, "Subject", StringComparison.Ordinal)
@@ -54,7 +54,7 @@ public sealed partial class MetadataStore
             throw new XrmdValidationException($"{what}: HasActivities must be false (an activity cannot be the regarding record of other activities).");
         if (e.HasNotes == false)
             throw new XrmdValidationException($"{what}: HasNotes must be true (every activity can have notes).");
-        if (e.OwnershipType is not (null or OwnershipTypes.UserOwned))
+        if (e.OwnershipType is not (null or TableOwnership.UserOwned))
             throw new XrmdValidationException(
                 $"{what}: the ownership '{e.OwnershipType}' is not supported: xrmverse creates custom activities owned by a user only.");
         if (e.ActivityTypeMask is not (null or 0 or 1))
@@ -64,14 +64,14 @@ public sealed partial class MetadataStore
         e.HasActivities = false;
         e.HasNotes = true;
         // Plan 4.1a: a custom activity is queue-enabled when created, unless the caller says otherwise.
-        e.IsValidForQueue ??= QueueSchema.SettingFlag(true);
+        e.IsValidForQueue ??= QueueSchema.SettingManagedFlag(true);
         e.ActivityTypeMask ??= 1;
-        e.OwnershipType = OwnershipTypes.UserOwned;
+        e.OwnershipType = TableOwnership.UserOwned;
     }
 
     /// <summary>A table that is not an activity has no <c>ActivityTypeMask</c> (A4: it is the setting of an activity).</summary>
     /// <exception cref="XrmdValidationException">400 naming <c>ActivityTypeMask</c>.</exception>
-    private static void DemandNoActivitySettings(EntityMetadata e)
+    private static void DemandNoActivitySettings(TableDefinition e)
     {
         if (e.ActivityTypeMask is not null)
             throw new XrmdValidationException(
@@ -85,7 +85,7 @@ public sealed partial class MetadataStore
     /// </summary>
     /// <returns>Which of <c>HasActivities</c> and <c>HasNotes</c> the update turns on.</returns>
     /// <exception cref="XrmdValidationException">400 naming the setting.</exception>
-    private static (bool Activities, bool Notes) ActivitySettingChanges(CacheState cache, EntityMetadata current, EntityMetadata changes)
+    private static (bool Activities, bool Notes) ActivitySettingChanges(CacheState cache, TableDefinition current, TableDefinition changes)
     {
         var name = current.LogicalName;
         if (changes.IsActivity is { } isActivity && isActivity != (current.IsActivity == true))
@@ -108,7 +108,7 @@ public sealed partial class MetadataStore
     /// <c>activityparty</c> or <c>annotation</c>; and the organization has the tables they link to.
     /// </summary>
     /// <exception cref="XrmdValidationException">400 naming the setting.</exception>
-    private static void DemandActivitySettingsAllowed(CacheState cache, EntityMetadata entity, bool activities, bool notes)
+    private static void DemandActivitySettingsAllowed(CacheState cache, TableDefinition entity, bool activities, bool notes)
     {
         if (ActivitySettingRefusal(cache.ByLogicalName.ContainsKey, entity, activities, notes) is { } refusal)
             throw new XrmdValidationException(refusal);
@@ -118,10 +118,10 @@ public sealed partial class MetadataStore
     /// Why <paramref name="entity"/> cannot have the settings asked for in this organization (the rule of
     /// <see cref="DemandActivitySettingsAllowed"/>), or null when it can. The startup upgrade reports a kept flag with it.
     /// </summary>
-    internal string? ActivitySettingRefusal(EntityMetadata entity, bool activities, bool notes) =>
+    internal string? ActivitySettingRefusal(TableDefinition entity, bool activities, bool notes) =>
         ActivitySettingRefusal(_cache.ByLogicalName.ContainsKey, entity, activities, notes);
 
-    private static string? ActivitySettingRefusal(Func<string, bool> hasTable, EntityMetadata entity, bool activities, bool notes)
+    private static string? ActivitySettingRefusal(Func<string, bool> hasTable, TableDefinition entity, bool activities, bool notes)
     {
         ArgumentNullException.ThrowIfNull(entity);
         var name = entity.LogicalName;
@@ -147,12 +147,12 @@ public sealed partial class MetadataStore
     }
 
     /// <summary>The tables whose <c>regardingobjectid</c> the store keeps: the pointer first, then the activity tables by name.</summary>
-    private static List<EntityMetadata> RegardingHolders(CacheState cache) =>
+    private static List<TableDefinition> RegardingHolders(CacheState cache) =>
         cache.ByLogicalName.Values.Where(e => e.LogicalName == ActivitySchema.Pointer || ActivitySchema.IsActivityTable(e))
             .OrderBy(e => e.LogicalName == ActivitySchema.Pointer ? 0 : 1).ThenBy(e => e.LogicalName, StringComparer.Ordinal).ToList();
 
     private static bool Targets(CacheState cache, string entity, string attribute, string target) =>
-        cache.ByLogicalName.GetValueOrDefault(entity)?.Attributes?.OfType<LookupAttributeMetadata>()
+        cache.ByLogicalName.GetValueOrDefault(entity)?.Attributes?.OfType<LookupColumn>()
             .FirstOrDefault(a => a.LogicalName == attribute)?.Targets?.Contains(target, StringComparer.Ordinal) == true;
 
     /// <summary>
@@ -161,13 +161,13 @@ public sealed partial class MetadataStore
     /// relationships are to be synchronized once the table is gone.
     /// </summary>
     /// <exception cref="XrmdValidationException">400 naming the number of activities, notes or posts.</exception>
-    private static async Task<bool> PrepareActivityUnlinkAsync(DataSession session, CacheState cache, EntityMetadata entity, CancellationToken ct)
+    private static async Task<bool> PrepareActivityUnlinkAsync(DataSession session, CacheState cache, TableDefinition entity, CancellationToken ct)
     {
         var (regarding, notes, refusal) = await ActivityDeleteBlockersAsync(session, cache, entity, locked: true, ignored: null, ct);
         if (refusal is not null) throw new XrmdValidationException(refusal);
-        return regarding || notes || PostTarget(cache, entity.LogicalName) || ActivitySchema.IsActivityTable(entity)
+        return regarding || notes || PostTarget(cache, entity.LogicalName!) || ActivitySchema.IsActivityTable(entity)
                || entity.HasActivities == true || entity.HasNotes == true || entity.IsValidForQueue?.Value == true
-               || Targets(cache, QueueSchema.QueueItem, QueueSchema.ObjectId, entity.LogicalName);
+               || Targets(cache, QueueSchema.QueueItem, QueueSchema.ObjectId, entity.LogicalName!);
     }
 
     /// <summary>
@@ -185,11 +185,11 @@ public sealed partial class MetadataStore
     }
 
     private static async Task<(bool Regarding, bool Notes, string? Refusal)> ActivityDeleteBlockersAsync(DataSession session, CacheState cache,
-        EntityMetadata entity, bool locked, IReadOnlySet<string>? ignored, CancellationToken ct)
+        TableDefinition entity, bool locked, IReadOnlySet<string>? ignored, CancellationToken ct)
     {
         var name = entity.LogicalName;
-        var regarding = RegardingHolders(cache).Any(h => Targets(cache, h.LogicalName, ActivitySchema.RegardingObjectId, name));
-        var notes = Targets(cache, ActivitySchema.Annotation, ActivitySchema.ObjectId, name);
+        var regarding = RegardingHolders(cache).Any(h => Targets(cache, h.LogicalName!, ActivitySchema.RegardingObjectId, name!));
+        var notes = Targets(cache, ActivitySchema.Annotation, ActivitySchema.ObjectId, name!);
         var hint = locked ? $"{session.Dialect.LockHint(RowLock.UpdateRange)}" : "";
         if (entity.ObjectTypeCode is { } code)
         {
@@ -198,11 +198,11 @@ public sealed partial class MetadataStore
                 var count = 0;
                 // Each activity is a row of its own table (the pointer repeats them).
                 foreach (var table in cache.ByLogicalName.Values.Where(ActivitySchema.IsActivityTable).Select(e => e.LogicalName)
-                             .Where(t => ignored?.Contains(t) != true).Order(StringComparer.Ordinal))
+                             .Where(t => ignored?.Contains(t!) != true).Order(StringComparer.Ordinal))
                 {
-                    if (locked) await session.KeyLockAsync(table, code, ct);
+                    if (locked) await session.KeyLockAsync(table!, code, ct);
                     count += await ScalarAsync<int>(session,
-                        $"SELECT COUNT(*) FROM {session.DataTable(table)}{hint} WHERE {session.Quote(ActivitySchema.RegardingObjectId + TypeMapping.TypeColumnSuffix)} = @code",
+                        $"SELECT COUNT(*) FROM {session.DataTable(table!)}{hint} WHERE {session.Quote(ActivitySchema.RegardingObjectId + TypeMapping.TypeColumnSuffix)} = @code",
                         ct, ("@code", code));
                 }
                 if (count > 0)
@@ -218,7 +218,7 @@ public sealed partial class MetadataStore
                     return (regarding, notes, $"Entity '{name}' cannot be deleted: {count} notes are attached to its records. Delete them first.");
             }
             // Plan 3.5 UI-1g: the posts regarding its records (their postregarding rows are deleted with the table).
-            if (PostTarget(cache, name) && cache.ByLogicalName.ContainsKey(PostSchema.Post))
+            if (PostTarget(cache, name!) && cache.ByLogicalName.ContainsKey(PostSchema.Post))
             {
                 if (locked) await session.KeyLockAsync(PostSchema.Post, code, ct);
                 var count = await ScalarAsync<int>(session,
@@ -229,7 +229,7 @@ public sealed partial class MetadataStore
             }
             // Plan 4.1a: the queue items of its records, refused as notes are (a raw delete would bypass the queue items' own
             // deletion log; removing them first goes through the messages).
-            if (Targets(cache, QueueSchema.QueueItem, QueueSchema.ObjectId, name))
+            if (Targets(cache, QueueSchema.QueueItem, QueueSchema.ObjectId, name!))
             {
                 if (locked) await session.KeyLockAsync(QueueSchema.QueueItem, code, ct);
                 var count = await ScalarAsync<int>(session,
@@ -253,9 +253,9 @@ public sealed partial class MetadataStore
     /// Deletes the <c>postregarding</c> rows of the records of <paramref name="entity"/> (plan 3.5 UI-1g), in the session that drops its
     /// table: no post regards them any more (<see cref="ActivityDeleteBlockersAsync"/>), and nothing else would remove them.
     /// </summary>
-    private static async Task DeletePostRegardingRowsAsync(DataSession session, CacheState cache, EntityMetadata entity, CancellationToken ct)
+    private static async Task DeletePostRegardingRowsAsync(DataSession session, CacheState cache, TableDefinition entity, CancellationToken ct)
     {
-        if (entity.ObjectTypeCode is not { } code || !Targets(cache, PostSchema.Regarding, ActivitySchema.RegardingObjectId, entity.LogicalName))
+        if (entity.ObjectTypeCode is not { } code || !Targets(cache, PostSchema.Regarding, ActivitySchema.RegardingObjectId, entity.LogicalName!))
             return;
         await ExecuteAsync(session,
             $"DELETE FROM {session.DataTable(PostSchema.Regarding)} WHERE {session.Quote(ActivitySchema.RegardingObjectId + TypeMapping.TypeColumnSuffix)} = @code",
@@ -266,7 +266,7 @@ public sealed partial class MetadataStore
     /// Deletes the pointer rows and the party rows of the custom activity <paramref name="entity"/> (A4), in the session that drops
     /// its table.
     /// </summary>
-    private static async Task DeleteActivityRowsAsync(DataSession session, CacheState cache, EntityMetadata entity, CancellationToken ct)
+    private static async Task DeleteActivityRowsAsync(DataSession session, CacheState cache, TableDefinition entity, CancellationToken ct)
     {
         if (entity.ObjectTypeCode is not { } code) return;
         // Neither table can be tracked (ChangeTrackingSchema.IneligibleTables, A13): no deletion log to write.
@@ -307,7 +307,7 @@ public sealed partial class MetadataStore
         var posts = cache.ByLogicalName.Values.Where(e => (e.HasNotes == true || e.HasActivities == true) && e.IsIntersect != true)
             .OrderBy(e => e.LogicalName, StringComparer.Ordinal).ToList();
         foreach (var holder in holders)
-            await SyncManagedLookupAsync(session, pending, holder.LogicalName, ActivitySchema.RegardingObjectId, regarding,
+            await SyncManagedLookupAsync(session, pending, holder.LogicalName!, ActivitySchema.RegardingObjectId, regarding,
                 target => ActivitySchema.RegardingRelationship(target, holder), ct);
         await SyncManagedLookupAsync(session, pending, ActivitySchema.Annotation, ActivitySchema.ObjectId, notes, ActivitySchema.NotesRelationship, ct);
         await SyncManagedLookupAsync(session, pending, ActivitySchema.Party, ActivitySchema.ActivityId, holders, ActivitySchema.PartiesRelationship, ct);
@@ -329,16 +329,16 @@ public sealed partial class MetadataStore
 
     /// <param name="relationship">The relationship of each target, or null for a lookup that has none (its stray ones are removed).</param>
     private async Task SyncManagedLookupAsync(DataSession session, PendingChanges pending, string entityLogicalName, string attribute,
-        IReadOnlyList<EntityMetadata> wanted, Func<EntityMetadata, OneToManyRelationshipMetadata>? relationship, CancellationToken ct)
+        IReadOnlyList<TableDefinition> wanted, Func<TableDefinition, OneToManyRelationship>? relationship, CancellationToken ct)
     {
         var cache = pending.Working;
         if (cache.ByLogicalName.GetValueOrDefault(entityLogicalName) is not { } owner
-            || (owner.Attributes ?? []).OfType<LookupAttributeMetadata>().FirstOrDefault(a => a.LogicalName == attribute) is not { } lookup)
+            || (owner.Attributes ?? []).OfType<LookupColumn>().FirstOrDefault(a => a.LogicalName == attribute) is not { } lookup)
             return;
-        var names = wanted.Select(w => w.LogicalName).ToList();
+        var names = wanted.Select(w => w.LogicalName!).ToList();
         var current = lookup.Targets ?? [];
         var targets = current.Where(names.Contains).Concat(names.Where(n => !current.Contains(n, StringComparer.Ordinal))).ToArray();
-        bool Mine(OneToManyRelationshipMetadata r) => r.ReferencingEntity == entityLogicalName && r.ReferencingAttribute == attribute;
+        bool Mine(OneToManyRelationship r) => r.ReferencingEntity == entityLogicalName && r.ReferencingAttribute == attribute;
         var stale = cache.SavedOneToMany.Values
             .Where(r => Mine(r) && (relationship is null || !targets.Contains(r.ReferencedEntity, StringComparer.Ordinal))).ToList();
         var missing = relationship is null ? []
@@ -350,10 +350,10 @@ public sealed partial class MetadataStore
         if (stale.Count > 0) await DeleteSavedOneToManyAsync(session, cache, stale.Contains, ct);
         if (retarget)
         {
-            var updated = MetadataSerializer.Clone(lookup);
-            updated.Targets = targets;
+            var updated = MetadataJson.Clone(lookup);
+            updated.Targets = [.. targets];
             await StoreAttributeAsync(session, entityLogicalName, updated, stamp, ct);
-            var copy = MetadataSerializer.Clone(owner);
+            var copy = MetadataJson.Clone(owner);
             copy.SetAttributes((owner.Attributes ?? []).Select(a => a.LogicalName == updated.LogicalName ? updated : a));
             cache.Put(copy, previous: owner);
         }
@@ -371,19 +371,19 @@ public sealed partial class MetadataStore
     /// The targets of <c>queueitem.objectid</c> in <paramref name="cache"/>: <c>activitypointer</c> first (Learn lists it, with
     /// <c>ActivityPointer_QueueItem</c>), then the tables with <c>IsValidForQueue</c> by name.
     /// </summary>
-    private static List<EntityMetadata> QueueItemTargets(CacheState cache) =>
+    private static List<TableDefinition> QueueItemTargets(CacheState cache) =>
         cache.ByLogicalName.Values
             .Where(e => e.IsIntersect != true && (e.LogicalName == ActivitySchema.Pointer || e.IsValidForQueue?.Value == true))
             .OrderBy(e => e.LogicalName == ActivitySchema.Pointer ? 0 : 1).ThenBy(e => e.LogicalName, StringComparer.Ordinal).ToList();
 
     /// <summary>
     /// What an update asks of <c>IsValidForQueue</c> of <paramref name="current"/>: one-way, false to true only, where
-    /// <see cref="QueueSettingRefusal(Func{string, bool}, EntityMetadata)"/> allows it. Only a change is checked, so a retrieved
+    /// <see cref="QueueSettingRefusal(Func{string, bool}, TableDefinition)"/> allows it. Only a change is checked, so a retrieved
     /// definition sent back passes.
     /// </summary>
     /// <returns>True when the update turns the setting on.</returns>
     /// <exception cref="XrmdValidationException">400 naming <c>IsValidForQueue</c>.</exception>
-    private static bool QueueSettingChange(CacheState cache, EntityMetadata current, EntityMetadata changes)
+    private static bool QueueSettingChange(CacheState cache, TableDefinition current, TableDefinition changes)
     {
         if (changes.IsValidForQueue is not { } flag || flag.Value == (current.IsValidForQueue?.Value == true)) return false;
         if (!flag.Value)
@@ -393,9 +393,9 @@ public sealed partial class MetadataStore
         return true;
     }
 
-    /// <summary><paramref name="entity"/> can be enabled for queues (<see cref="QueueSettingRefusal(Func{string, bool}, EntityMetadata)"/>).</summary>
+    /// <summary><paramref name="entity"/> can be enabled for queues (<see cref="QueueSettingRefusal(Func{string, bool}, TableDefinition)"/>).</summary>
     /// <exception cref="XrmdValidationException">400 naming <c>IsValidForQueue</c>.</exception>
-    private static void DemandQueueSettingAllowed(CacheState cache, EntityMetadata entity)
+    private static void DemandQueueSettingAllowed(CacheState cache, TableDefinition entity)
     {
         if (QueueSettingRefusal(cache.ByLogicalName.ContainsKey, entity) is { } refusal) throw new XrmdValidationException(refusal);
     }
@@ -404,13 +404,13 @@ public sealed partial class MetadataStore
     /// Why <paramref name="entity"/> cannot be enabled for queues in this organization, or null when it can. The startup upgrade
     /// reports a kept flag with it.
     /// </summary>
-    internal string? QueueSettingRefusal(EntityMetadata entity) => QueueSettingRefusal(_cache.ByLogicalName.ContainsKey, entity);
+    internal string? QueueSettingRefusal(TableDefinition entity) => QueueSettingRefusal(_cache.ByLogicalName.ContainsKey, entity);
 
     /// <summary>
     /// The rule of <c>IsValidForQueue</c> (plan 4.1a): neither an intersect table, nor the queue tables, the pointer, an activity
     /// party or a note can be put in a queue; the organization needs <c>queueitem</c>.
     /// </summary>
-    private static string? QueueSettingRefusal(Func<string, bool> hasTable, EntityMetadata entity)
+    private static string? QueueSettingRefusal(Func<string, bool> hasTable, TableDefinition entity)
     {
         ArgumentNullException.ThrowIfNull(entity);
         var name = entity.LogicalName;

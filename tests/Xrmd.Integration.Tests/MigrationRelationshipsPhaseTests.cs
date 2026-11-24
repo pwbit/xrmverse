@@ -5,6 +5,7 @@ using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Admin.Migration;
 using Xrmd.Admin.Migration.Import;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Migration.Records;
 using static Xrmd.Integration.Tests.MigrationTestPackage;
 

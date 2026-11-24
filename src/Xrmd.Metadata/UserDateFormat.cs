@@ -1,5 +1,5 @@
 using System.Globalization;
-using Microsoft.Xrm.Sdk.Metadata;
+using Xrmd.Model.Metadata;
 
 namespace Xrmd.Metadata;
 
@@ -8,7 +8,7 @@ namespace Xrmd.Metadata;
 /// formatted value of a date and time column is written with them. Patterns are .NET custom patterns, as Dataverse stores them:
 /// <c>/</c> stands for <see cref="DateSeparator"/>, <c>:</c> for <see cref="TimeSeparator"/> and <c>tt</c> for the designators.
 /// </summary>
-public sealed record UserDateFormat(
+public sealed partial record UserDateFormat(
     int TimeZoneCode, string DateFormat, string TimeFormat, string DateSeparator, string TimeSeparator, string AmDesignator, string PmDesignator)
 {
     /// <summary>The settings of a new user (ruling Z2): UTC and the en-US formats, which is also what internal callers get.</summary>
@@ -35,12 +35,12 @@ public sealed record UserDateFormat(
     /// to <see cref="TimeZoneCode"/> first (Date only and Time zone independent values are shown as stored); a Date only format
     /// shows the date pattern, any other the date and the time pattern. A pattern .NET cannot apply falls back to the default one.
     /// </summary>
-    public string Format(DateTimeAttributeMetadata a, DateTime value)
+    public string Format(DateTimeColumn a, DateTime value)
     {
         ArgumentNullException.ThrowIfNull(a);
         var behavior = a.DateTimeBehavior?.Value;
-        var shown = behavior is null || behavior == DateTimeBehavior.UserLocal.Value ? Local(value) : value;
-        var dateOnly = a.Format == DateTimeFormat.DateOnly || behavior == DateTimeBehavior.DateOnly.Value;
+        var shown = behavior is null || behavior == DateTimeBehaviors.UserLocal ? Local(value) : value;
+        var dateOnly = a.Format == DateTimeDisplayFormat.DateOnly || behavior == DateTimeBehaviors.DateOnly;
         var info = (DateTimeFormatInfo)EnUs.DateTimeFormat.Clone();
         info.DateSeparator = DateSeparator;
         info.TimeSeparator = TimeSeparator;

@@ -135,6 +135,20 @@ files are reviewed before they are committed. A change of a golden file is a cha
 that the server uses while the SDK is still in the process; a table with `Privileges` or `Keys[].AsyncJob` cannot be converted
 to the SDK side (stored metadata never has them).
 
+### SDK view of the metadata store
+
+The metadata store (`Xrmd.Metadata`, `IMetadataStore`) holds its tables, columns, choice sets and relationships as model types.
+Modules that have not moved to the model yet (Query, Security, Core, Pipeline, Web API, Solutions, Workflows and the rest) still
+read the SDK types (`EntityMetadata`, `AttributeMetadata`, `OptionSetMetadata`, `RelationshipMetadataBase`). They get them through
+the SDK view: extension methods with the same names in `src/Xrmd.Metadata/Sdk/SdkMetadataView.cs`, plus SDK twins of the helpers
+in `src/Xrmd.Metadata/Sdk/`. The view converts a model object to its SDK form by `SdkMetadataBridge` (a JSON round trip).
+
+The view is cached per model instance in `SdkViewCache` (a `ConditionalWeakTable`), so the same model gives the same SDK object
+for as long as the store holds it; a write replaces the model and so the view. A reverse map from view to model lets a twin find
+the model of a view without converting again; for an object that is not a view, the twin converts a fresh copy.
+
+The view is transitional. The other modules move to the model in S.2c to S.2h, and S.2i removes the view, the twins and the bridge.
+
 ## Tests on PostgreSQL
 
 The integration tests run on SQL Server by default. `XRMD_TEST_PROVIDER` chooses the engine of the run:

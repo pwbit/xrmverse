@@ -1,65 +1,71 @@
-using Microsoft.Xrm.Sdk.Metadata;
+using Xrmd.Model.Metadata;
 
 namespace Xrmd.Abstractions;
 
 /// <summary>
 /// Entity/attribute definitions (schema <c>meta</c>) with an in-memory cache, plus the physical tables they
 /// describe (schema <c>data</c>). Returned metadata objects are shared cache instances: treat them as read-only.
+/// The reads return and the writes take the own model types (<c>Xrmd.Model.Metadata</c>); the SDK-typed reads and writes of
+/// earlier versions are extension methods of <c>Xrmd.Metadata.Sdk.SdkMetadataView</c>.
 /// </summary>
 public interface IMetadataStore
 {
+    // Reads, on the model (S.2b2). The SDK-typed reads of earlier versions (GetEntity, GetAllEntities, GetOptionSet, ...) are
+    // extension methods of Xrmd.Metadata.Sdk.SdkMetadataView: a cached SDK view of these results for the modules that still
+    // work on the SDK types.
+
     /// <summary>From cache; null if absent.</summary>
     /// <remarks>
-    /// The cached attributes carry no <c>CanBeSecuredForCreate</c>, <c>CanBeSecuredForRead</c> or
+    /// The cached columns carry no <c>CanBeSecuredForCreate</c>, <c>CanBeSecuredForRead</c> or
     /// <c>CanBeSecuredForUpdate</c> (null): only the metadata reads compute them. Code that needs to know whether a column can
     /// be secured calls <c>Xrmd.Metadata.FieldSecurability.IsSecurable</c>. <c>IsSecured</c> is true only on a column the rule
     /// allows (a legacy flag on another column is read as false).
     /// </remarks>
-    EntityMetadata? GetEntity(string logicalName);
+    TableDefinition? GetTable(string logicalName);
 
     /// <summary>
-    /// An entity as <paramref name="session"/> sees it: its own metadata changes included when it has made some (a table it
+    /// A table as <paramref name="session"/> sees it: its own metadata changes included when it has made some (a table it
     /// created, with the ids of its columns), the published state otherwise. Takes no lock.
     /// </summary>
-    EntityMetadata? GetEntity(DataSession session, string logicalName) => GetEntity(logicalName);
+    TableDefinition? GetTable(DataSession session, string logicalName) => GetTable(logicalName);
 
-    EntityMetadata? GetEntityBySetName(string entitySetName);
+    TableDefinition? GetTableBySetName(string entitySetName);
 
-    /// <summary>From cache; null if no entity has this ObjectTypeCode.</summary>
-    EntityMetadata? GetEntityByObjectTypeCode(int objectTypeCode);
+    /// <summary>From cache; null if no table has this ObjectTypeCode.</summary>
+    TableDefinition? GetTableByObjectTypeCode(int objectTypeCode);
 
-    /// <summary>All entities ordered by LogicalName (a shared snapshot, rebuilt only when metadata changes).</summary>
-    IReadOnlyList<EntityMetadata> GetAllEntities();
+    /// <summary>All tables ordered by LogicalName (a shared snapshot, rebuilt only when metadata changes).</summary>
+    IReadOnlyList<TableDefinition> GetAllTables();
 
-    /// <summary>The global option set named <paramref name="name"/> (ignoring case), from cache; null if absent.</summary>
-    OptionSetMetadataBase? GetOptionSet(string name);
+    /// <summary>The global choice set named <paramref name="name"/> (ignoring case), from cache; null if absent.</summary>
+    ChoiceSetBase? GetChoiceSet(string name);
 
-    /// <summary>All global option sets ordered by Name (a shared snapshot, rebuilt only when metadata changes).</summary>
-    IReadOnlyList<OptionSetMetadataBase> GetAllOptionSets();
+    /// <summary>All global choice sets ordered by Name (a shared snapshot, rebuilt only when metadata changes).</summary>
+    IReadOnlyList<ChoiceSetBase> GetAllChoiceSets();
 
     /// <summary>
     /// The relationship named <paramref name="schemaName"/> (ignoring case), from cache: a saved
-    /// <see cref="ManyToManyRelationshipMetadata"/>, or one of <see cref="GetOneToManyRelationships"/>; null if absent.
+    /// <see cref="ManyToManyRelationship"/>, or one of <see cref="GetOneToManyDefinitions"/>; null if absent.
     /// </summary>
-    RelationshipMetadataBase? GetRelationship(string schemaName);
+    RelationshipDefinition? GetRelationshipDefinition(string schemaName);
 
     /// <summary>The saved many-to-many relationships ordered by SchemaName (a shared snapshot, rebuilt only when metadata changes).</summary>
-    IReadOnlyList<ManyToManyRelationshipMetadata> GetManyToManyRelationships();
+    IReadOnlyList<ManyToManyRelationship> GetManyToManyDefinitions();
 
     /// <summary>
     /// Every one-to-many relationship, ordered by SchemaName (a shared snapshot, rebuilt only when metadata changes): one
     /// per lookup target (a polymorphic lookup gives one per target), named <c>{referencing}_{lookup}_{target}</c> unless
     /// <see cref="CreateOneToManyAsync"/> gave it a SchemaName of its own.
     /// </summary>
-    IReadOnlyList<OneToManyRelationshipMetadata> GetOneToManyRelationships();
+    IReadOnlyList<OneToManyRelationship> GetOneToManyDefinitions();
 
     /// <summary>
     /// The hierarchical relationship of <paramref name="entityLogicalName"/>: the self-referencing one-to-many relationship with
     /// <c>IsHierarchical</c> true (a table has at most one); null when the table has none or does not exist.
     /// </summary>
-    OneToManyRelationshipMetadata? GetHierarchicalRelationship(string entityLogicalName) =>
-        GetOneToManyRelationships().FirstOrDefault(r => r.IsHierarchical == true
-                                                        && r.ReferencingEntity == entityLogicalName && r.ReferencedEntity == entityLogicalName);
+    OneToManyRelationship? GetHierarchicalDefinition(string entityLogicalName) =>
+        GetOneToManyDefinitions().FirstOrDefault(r => r.IsHierarchical == true
+                                                      && r.ReferencingEntity == entityLogicalName && r.ReferencedEntity == entityLogicalName);
 
     /// <summary>
     /// The logical names of the tables with <c>AutoCreateAccessTeams</c> true (plan 2.16), from cache. The targets of
@@ -67,21 +73,21 @@ public interface IMetadataStore
     /// disabled, see the metadata store).
     /// </summary>
     IReadOnlySet<string> AccessTeamTables =>
-        GetAllEntities().Where(e => e.AutoCreateAccessTeams == true).Select(e => e.LogicalName).ToHashSet(StringComparer.Ordinal);
+        GetAllTables().Where(e => e.AutoCreateAccessTeams == true).Select(e => e.LogicalName!).ToHashSet(StringComparer.Ordinal);
 
     /// <summary>
     /// The logical names of the tables with <c>ChangeTrackingEnabled</c> true (plan 2.13), from cache. A table enters it once
     /// and stays until it is deleted (tracking cannot be switched off).
     /// </summary>
     IReadOnlySet<string> ChangeTrackingTables =>
-        GetAllEntities().Where(e => e.ChangeTrackingEnabled == true).Select(e => e.LogicalName).ToHashSet(StringComparer.Ordinal);
+        GetAllTables().Where(e => e.ChangeTrackingEnabled == true).Select(e => e.LogicalName!).ToHashSet(StringComparer.Ordinal);
 
     /// <summary>
     /// The logical names of the activity tables (plan 2.11): the tables with <c>IsActivity</c> true, the four standard ones and
     /// the custom activities; not <c>activitypointer</c>, which reads them. From cache.
     /// </summary>
     IReadOnlySet<string> ActivityTables =>
-        GetAllEntities().Where(e => e.IsActivity == true && e.LogicalName != "activitypointer").Select(e => e.LogicalName)
+        GetAllTables().Where(e => e.IsActivity == true && e.LogicalName != "activitypointer").Select(e => e.LogicalName!)
             .ToHashSet(StringComparer.Ordinal);
 
     /// <summary>
@@ -89,21 +95,21 @@ public interface IMetadataStore
     /// <c>regardingobjectid</c> of <c>activitypointer</c> and of every activity table. From cache.
     /// </summary>
     IReadOnlySet<string> RegardingTables =>
-        GetAllEntities().Where(e => e.HasActivities == true).Select(e => e.LogicalName).ToHashSet(StringComparer.Ordinal);
+        GetAllTables().Where(e => e.HasActivities == true).Select(e => e.LogicalName!).ToHashSet(StringComparer.Ordinal);
 
     /// <summary>
     /// The logical names of the tables with <c>HasNotes</c> true (plan 2.11, ruling A15): the targets of <c>annotation.objectid</c>.
     /// From cache.
     /// </summary>
     IReadOnlySet<string> NotesTables =>
-        GetAllEntities().Where(e => e.HasNotes == true).Select(e => e.LogicalName).ToHashSet(StringComparer.Ordinal);
+        GetAllTables().Where(e => e.HasNotes == true).Select(e => e.LogicalName!).ToHashSet(StringComparer.Ordinal);
 
     /// <summary>
     /// The logical names of the tables with <c>IsValidForQueue</c> true (plan 4.1a): with <c>activitypointer</c>, the targets of
     /// <c>queueitem.objectid</c>. From cache.
     /// </summary>
     IReadOnlySet<string> QueueTables =>
-        GetAllEntities().Where(e => e.IsValidForQueue?.Value == true).Select(e => e.LogicalName).ToHashSet(StringComparer.Ordinal);
+        GetAllTables().Where(e => e.IsValidForQueue?.Value == true).Select(e => e.LogicalName!).ToHashSet(StringComparer.Ordinal);
 
     /// <summary>
     /// Why deleting the table <paramref name="logicalName"/> would be refused by the activity model now (plan 2.11: activities
@@ -118,7 +124,7 @@ public interface IMetadataStore
     /// <c>duplicaterecord.baserecordid</c> and <c>duplicaterecordid</c> hold every one of them.
     /// </summary>
     IReadOnlySet<string> DuplicateDetectionTables =>
-        GetAllEntities().Where(e => e.IsDuplicateDetectionEnabled?.Value == true).Select(e => e.LogicalName).ToHashSet(StringComparer.Ordinal);
+        GetAllTables().Where(e => e.IsDuplicateDetectionEnabled?.Value == true).Select(e => e.LogicalName!).ToHashSet(StringComparer.Ordinal);
 
     /// <summary>
     /// The creation ordinal of the image column <paramref name="attributeLogicalName"/> of <paramref name="entityLogicalName"/>
@@ -141,12 +147,15 @@ public interface IMetadataStore
     /// </summary>
     /// <exception cref="XrmdValidationException">Invalid logical names or attribute definitions; nothing is written.</exception>
     /// <exception cref="InvalidOperationException">An entity with the same logical name already exists.</exception>
-    Task CreateEntityAsync(EntityMetadata entity, AttributeMetadata primaryName, CancellationToken ct = default);
+    Task CreateEntityAsync(TableDefinition entity, ColumnDefinition primaryName, CancellationToken ct = default);
 
     /// <summary>Persists the attribute and adds its column(s) in a transaction of its own; then updates the cache.</summary>
     /// <exception cref="XrmdValidationException">Unknown entity or invalid attribute; nothing is written.</exception>
     /// <exception cref="InvalidOperationException">The attribute already exists.</exception>
-    Task AddAttributeAsync(string entityLogicalName, AttributeMetadata attribute, CancellationToken ct = default);
+    Task AddAttributeAsync(string entityLogicalName, ColumnDefinition attribute, CancellationToken ct = default);
+
+    // Writes, on the model (S.2b2). The SDK-typed overloads of earlier versions (same names and parameters) are extension
+    // methods of Xrmd.Metadata.Sdk.SdkMetadataView: each converts its arguments to the model and calls the member here.
 
     // Writes in a session. Every overload below writes meta.* and runs the DDL in session.Transaction (required). The
     // first write of a session takes the store's write lock and works on a private copy of the cache; the session's owner
@@ -155,32 +164,32 @@ public interface IMetadataStore
     // the entity exist?) see the session's own uncommitted changes; the read members above see only published metadata.
 
     /// <summary>
-    /// Like <see cref="CreateEntityAsync(EntityMetadata, AttributeMetadata, CancellationToken)"/> in <paramref name="session"/>;
+    /// Like <see cref="CreateEntityAsync(TableDefinition, ColumnDefinition, CancellationToken)"/> in <paramref name="session"/>;
     /// the <see cref="IEntityCreatedHandler"/>s run in the session too.
     /// </summary>
     /// <exception cref="XrmdValidationException">Invalid logical names or attribute definitions; nothing is written.</exception>
     /// <exception cref="InvalidOperationException">An entity with the same logical name already exists, or the session has no transaction.</exception>
-    Task CreateEntityAsync(DataSession session, EntityMetadata entity, AttributeMetadata primaryName, CancellationToken ct);
+    Task CreateEntityAsync(DataSession session, TableDefinition entity, ColumnDefinition primaryName, CancellationToken ct);
 
-    /// <summary>Like <see cref="AddAttributeAsync(string, AttributeMetadata, CancellationToken)"/> in <paramref name="session"/>.</summary>
+    /// <summary>Like <see cref="AddAttributeAsync(string, ColumnDefinition, CancellationToken)"/> in <paramref name="session"/>.</summary>
     /// <exception cref="XrmdValidationException">Unknown entity or invalid attribute; nothing is written.</exception>
     /// <exception cref="InvalidOperationException">The attribute already exists, or the session has no transaction.</exception>
-    Task AddAttributeAsync(DataSession session, string entityLogicalName, AttributeMetadata attribute, CancellationToken ct);
+    Task AddAttributeAsync(DataSession session, string entityLogicalName, ColumnDefinition attribute, CancellationToken ct);
 
     /// <summary>
     /// Updates the entity named by <paramref name="changes"/>.LogicalName: <c>DisplayName</c>, <c>DisplayCollectionName</c>
     /// and <c>Description</c> when set (null leaves them as they are). <c>EntitySetName</c> cannot change.
     /// </summary>
     /// <exception cref="XrmdValidationException">Unknown entity or a different <c>EntitySetName</c>; nothing is written.</exception>
-    Task UpdateEntityAsync(DataSession session, EntityMetadata changes, CancellationToken ct);
+    Task UpdateEntityAsync(DataSession session, TableDefinition changes, CancellationToken ct);
 
     /// <summary>
-    /// <see cref="UpdateEntityAsync(DataSession, EntityMetadata, CancellationToken)"/>; with <paramref name="replaceLabels"/>,
+    /// <see cref="UpdateEntityAsync(DataSession, TableDefinition, CancellationToken)"/>; with <paramref name="replaceLabels"/>,
     /// every label given (not null) replaces the current one, an empty one clearing it (the restore of a layer, plan 2.6
     /// ruling R6). Stores that do not support replacing labels refuse it.
     /// </summary>
     /// <exception cref="NotSupportedException">With <paramref name="replaceLabels"/>, on a store that cannot replace labels.</exception>
-    Task UpdateEntityAsync(DataSession session, EntityMetadata changes, bool replaceLabels, CancellationToken ct) =>
+    Task UpdateEntityAsync(DataSession session, TableDefinition changes, bool replaceLabels, CancellationToken ct) =>
         replaceLabels ? throw new NotSupportedException("This metadata store cannot replace labels.") : UpdateEntityAsync(session, changes, ct);
 
     /// <summary>
@@ -190,16 +199,16 @@ public interface IMetadataStore
     /// </summary>
     /// <exception cref="XrmdValidationException">Unknown entity/attribute, another attribute type, a smaller <c>MaxLength</c>,
     /// an option without value or options on a global option set; nothing is written.</exception>
-    Task UpdateAttributeAsync(DataSession session, string entityLogicalName, AttributeMetadata changes, CancellationToken ct);
+    Task UpdateAttributeAsync(DataSession session, string entityLogicalName, ColumnDefinition changes, CancellationToken ct);
 
     /// <summary>
-    /// <see cref="UpdateAttributeAsync(DataSession, string, AttributeMetadata, CancellationToken)"/>; with
+    /// <see cref="UpdateAttributeAsync(DataSession, string, ColumnDefinition, CancellationToken)"/>; with
     /// <paramref name="replaceLabels"/>, every label given (the column's and those of the options given) replaces the current
     /// one, an empty one clearing it, and so does a missing label of an option given (plan 2.6 ruling R6). No option is removed
     /// either way.
     /// </summary>
     /// <exception cref="NotSupportedException">With <paramref name="replaceLabels"/>, on a store that cannot replace labels.</exception>
-    Task UpdateAttributeAsync(DataSession session, string entityLogicalName, AttributeMetadata changes, bool replaceLabels, CancellationToken ct) =>
+    Task UpdateAttributeAsync(DataSession session, string entityLogicalName, ColumnDefinition changes, bool replaceLabels, CancellationToken ct) =>
         replaceLabels ? throw new NotSupportedException("This metadata store cannot replace labels.")
             : UpdateAttributeAsync(session, entityLogicalName, changes, ct);
 
@@ -246,29 +255,29 @@ public interface IMetadataStore
     // in the attribute (and every change of the set reaches every bound attribute).
 
     /// <summary>
-    /// Creates the global option set <paramref name="optionSet"/> (an <see cref="OptionSetMetadata"/>; <c>IsGlobal</c> is
+    /// Creates the global option set <paramref name="optionSet"/> (a <see cref="ChoiceSet"/>; <c>IsGlobal</c> is
     /// set). Its <c>MetadataId</c> is derived from the name (a caller value is ignored), so it is the same in every org.
     /// </summary>
-    /// <exception cref="XrmdValidationException">Not an <see cref="OptionSetMetadata"/>, an invalid name, an option without
+    /// <exception cref="XrmdValidationException">Not a <see cref="ChoiceSet"/>, an invalid name, an option without
     /// value or two options with the same value; nothing is written.</exception>
     /// <exception cref="InvalidOperationException">A global option set with the same name (ignoring case) exists, or the
     /// session has no transaction.</exception>
-    Task CreateOptionSetAsync(DataSession session, OptionSetMetadataBase optionSet, CancellationToken ct);
+    Task CreateOptionSetAsync(DataSession session, ChoiceSetBase optionSet, CancellationToken ct);
 
     /// <summary>
     /// Updates the global option set named by <paramref name="changes"/>.Name: <c>DisplayName</c> and <c>Description</c>
     /// when set; each option is added when its value is new and relabelled otherwise (none is removed).
     /// </summary>
     /// <exception cref="XrmdValidationException">Unknown option set or an option without value; nothing is written.</exception>
-    Task UpdateOptionSetAsync(DataSession session, OptionSetMetadataBase changes, CancellationToken ct);
+    Task UpdateOptionSetAsync(DataSession session, ChoiceSetBase changes, CancellationToken ct);
 
     /// <summary>
-    /// <see cref="UpdateOptionSetAsync(DataSession, OptionSetMetadataBase, CancellationToken)"/>; with
+    /// <see cref="UpdateOptionSetAsync(DataSession, ChoiceSetBase, CancellationToken)"/>; with
     /// <paramref name="replaceLabels"/>, every label given (the set's and its options') replaces the current one, an empty one
     /// clearing it, and so does a missing label of an option given (plan 2.6 ruling R6). No option is removed either way.
     /// </summary>
     /// <exception cref="NotSupportedException">With <paramref name="replaceLabels"/>, on a store that cannot replace labels.</exception>
-    Task UpdateOptionSetAsync(DataSession session, OptionSetMetadataBase changes, bool replaceLabels, CancellationToken ct) =>
+    Task UpdateOptionSetAsync(DataSession session, ChoiceSetBase changes, bool replaceLabels, CancellationToken ct) =>
         replaceLabels ? throw new NotSupportedException("This metadata store cannot replace labels.") : UpdateOptionSetAsync(session, changes, ct);
 
     /// <summary>Deletes the global option set named <paramref name="name"/>.</summary>
@@ -321,20 +330,20 @@ public interface IMetadataStore
     /// <exception cref="XrmdValidationException">Invalid names, an unknown entity or an intersect entity as a side; nothing is written.</exception>
     /// <exception cref="InvalidOperationException">A relationship with the same SchemaName (ignoring case) or an entity named
     /// like the intersect exists, or the session has no transaction.</exception>
-    Task CreateManyToManyAsync(DataSession session, ManyToManyRelationshipMetadata relationship, CancellationToken ct);
+    Task CreateManyToManyAsync(DataSession session, ManyToManyRelationship relationship, CancellationToken ct);
 
     /// <summary>
     /// Creates the one-to-many relationship <paramref name="relationship"/> (<c>SchemaName</c>, <c>ReferencedEntity</c>,
     /// <c>ReferencingEntity</c>) with its lookup attribute <paramref name="lookup"/> on the referencing entity (its
     /// <c>Targets</c> set to the referenced entity, <c>ReferencingAttribute</c> set to its name): the attribute as
-    /// <see cref="AddAttributeAsync(DataSession, string, AttributeMetadata, CancellationToken)"/> adds it, and a
+    /// <see cref="AddAttributeAsync(DataSession, string, ColumnDefinition, CancellationToken)"/> adds it, and a
     /// <c>meta.relationship</c> row that keeps the relationship's SchemaName and MetadataId (a new one when null). The row
     /// goes with the lookup (DeleteAttribute, DeleteRelationship) and with either entity.
     /// </summary>
     /// <exception cref="XrmdValidationException">Invalid names, an unknown or intersect entity, an invalid lookup; nothing is written.</exception>
     /// <exception cref="InvalidOperationException">A relationship with the same SchemaName (ignoring case) or the attribute
     /// exists, or the session has no transaction.</exception>
-    Task CreateOneToManyAsync(DataSession session, OneToManyRelationshipMetadata relationship, LookupAttributeMetadata lookup,
+    Task CreateOneToManyAsync(DataSession session, OneToManyRelationship relationship, LookupColumn lookup,
         CancellationToken ct);
 
     /// <summary>
@@ -342,16 +351,16 @@ public interface IMetadataStore
     /// targets <c>account</c> and <c>contact</c>, with its <c>&lt;name&gt;type</c> column) and one saved one-to-many relationship per
     /// target (<paramref name="relationships"/>: two, with the same <c>ReferencingEntity</c> and, as <c>ReferencedEntity</c>,
     /// <c>account</c> and <c>contact</c>), each keeping its SchemaName and MetadataId (a new one when null). Delete cascades
-    /// RemoveLink. This is the only way to create a Customer column; <see cref="AddAttributeAsync(DataSession, string, AttributeMetadata, CancellationToken)"/>,
-    /// <see cref="CreateEntityAsync(DataSession, EntityMetadata, AttributeMetadata, CancellationToken)"/> and
+    /// RemoveLink. This is the only way to create a Customer column; <see cref="AddAttributeAsync(DataSession, string, ColumnDefinition, CancellationToken)"/>,
+    /// <see cref="CreateEntityAsync(DataSession, TableDefinition, ColumnDefinition, CancellationToken)"/> and
     /// <see cref="CreateOneToManyAsync"/> refuse one.
     /// </summary>
     /// <exception cref="XrmdValidationException">Invalid names, targets other than exactly account and contact, an unknown or
     /// intersect entity, a cascade xrmverse does not enforce; nothing is written.</exception>
     /// <exception cref="InvalidOperationException">A relationship with the same SchemaName (ignoring case) or the attribute
     /// exists, or the session has no transaction.</exception>
-    Task CreateCustomerRelationshipsAsync(DataSession session, LookupAttributeMetadata lookup,
-        IReadOnlyList<OneToManyRelationshipMetadata> relationships, CancellationToken ct);
+    Task CreateCustomerRelationshipsAsync(DataSession session, LookupColumn lookup,
+        IReadOnlyList<OneToManyRelationship> relationships, CancellationToken ct);
 
     /// <summary>
     /// Deletes the relationship named <paramref name="schemaName"/> (ignoring case): a many-to-many one with its intersect

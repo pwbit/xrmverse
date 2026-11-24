@@ -14,7 +14,9 @@ public sealed class MetadataGoldenTests
         if (Environment.GetEnvironmentVariable(UpdateVariable) == "1")
         {
             var root = MetadataCorpus.SourceDirectory;
-            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+            // Only the corpus's own subdirectories: stored/ belongs to the integration tests.
+            foreach (var directory in Directory.Exists(root) ? Directory.GetDirectories(root) : [])
+                if (Path.GetFileName(directory) + "/" != MetadataCorpus.StoredPrefix) Directory.Delete(directory, recursive: true);
             foreach (var (name, _, json) in generated)
             {
                 var path = Path.Combine(root, name + ".json");

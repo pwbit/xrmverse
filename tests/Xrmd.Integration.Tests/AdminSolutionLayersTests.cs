@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Xrmd.Abstractions;
 using Xrmd.Core;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Pipeline.Registration;
 using Xrmd.Security;
 using Xrmd.Solution;

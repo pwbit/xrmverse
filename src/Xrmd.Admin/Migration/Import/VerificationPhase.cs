@@ -10,6 +10,7 @@ using Xrmd.Abstractions.Storage;
 using Xrmd.Core;
 using Xrmd.Core.Errors;
 using Xrmd.Files;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Migration.Packaging;
 using Xrmd.Migration.Records;
 

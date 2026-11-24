@@ -3,9 +3,9 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
+using Xrmd.Model.Metadata;
 
 namespace Xrmd.Metadata;
 
@@ -14,7 +14,7 @@ namespace Xrmd.Metadata;
 /// message, change tracking message, currency message, rollup message, SendEmail and the queue messages, and one filter row per (entity message, entity), with stable ids so that every restart and every instance derives the same rows. Idempotent. A deleted
 /// entity takes its filters with it, and the steps (with their images) registered on them.
 /// </summary>
-public sealed class SdkMessageCatalog(IDbConnectionFactory factory, IMetadataStore store, ILogger<SdkMessageCatalog>? logger = null) : IEntityCreatedHandler, IEntityDeletedHandler
+public sealed partial class SdkMessageCatalog(IDbConnectionFactory factory, IMetadataStore store, ILogger<SdkMessageCatalog>? logger = null) : IEntityCreatedHandler, IEntityDeletedHandler
 {
     /// <summary>Messages that get a filter for every entity.</summary>
     public static readonly IReadOnlyList<string> EntityMessages =
@@ -85,7 +85,7 @@ public sealed class SdkMessageCatalog(IDbConnectionFactory factory, IMetadataSto
     /// answers every entity message including <c>Upsert</c> and all four bulk messages. Any other table answers the entity
     /// messages without <c>Upsert</c> (not an event on a standard table), plus <c>CreateMultiple</c> and <c>UpdateMultiple</c>.
     /// </summary>
-    public static IReadOnlyList<string> EntityMessagesOf(EntityMetadata entity)
+    public static IReadOnlyList<string> EntityMessagesOf(TableDefinition entity)
     {
         ArgumentNullException.ThrowIfNull(entity);
         var name = entity.LogicalName;
@@ -110,7 +110,7 @@ public sealed class SdkMessageCatalog(IDbConnectionFactory factory, IMetadataSto
     };
 
     /// <summary>True when <paramref name="message"/> is an event on <paramref name="entity"/>: a filter row exists for it.</summary>
-    public static bool IsEventOn(string message, EntityMetadata entity) =>
+    public static bool IsEventOn(string message, TableDefinition entity) =>
         EntityMessagesOf(entity).Contains(message ?? "", StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
@@ -142,14 +142,14 @@ public sealed class SdkMessageCatalog(IDbConnectionFactory factory, IMetadataSto
         await using var conn = await factory.OpenAsync(ct);
         await using var tx = await conn.BeginTransactionAsync(ct);
         var session = new DataSession(conn, tx);
-        var entities = store.GetAllEntities().ToList();
+        var entities = store.GetAllTables().ToList();
         await UpsertAsync(session, entities, ct);
         await DeleteStaleUpsertFiltersAsync(session, entities, ct);
         await tx.CommitAsync(ct);
     }
 
     /// <summary>Creates, in the creating session, the filters of the new entity (and the message rows if still missing).</summary>
-    public Task OnEntityCreatedAsync(EntityMetadata entity, DataSession session, CancellationToken ct) =>
+    private Task OnTableCreatedAsync(TableDefinition entity, DataSession session, CancellationToken ct) =>
         UpsertAsync(session, [entity], ct);
 
     /// <summary>
@@ -160,9 +160,9 @@ public sealed class SdkMessageCatalog(IDbConnectionFactory factory, IMetadataSto
     /// nothing. It is not, at the SQL level, a check before any deletion.
     /// </summary>
     /// <exception cref="Xrmd.Core.Errors.XrmdFaultException">400 when a custom API is bound to the table.</exception>
-    public async Task OnEntityDeletingAsync(EntityMetadata entity, DataSession session, CancellationToken ct)
+    private async Task OnTableDeletingAsync(TableDefinition entity, DataSession session, CancellationToken ct)
     {
-        if (store.GetEntity(CustomApiTables.Api) is not null)
+        if (store.GetTable(CustomApiTables.Api) is not null)
         {
             await using var check = session.Command(
                 session.Dialect.Limit($"SELECT uniquename FROM data.{CustomApiTables.Api} WHERE {CustomApiTables.BoundEntityLogicalName} = @entity ORDER BY uniquename", "1"));
@@ -171,7 +171,7 @@ public sealed class SdkMessageCatalog(IDbConnectionFactory factory, IMetadataSto
                 throw Xrmd.Core.Errors.XrmdFaultException.InvalidArgument(
                     $"Table '{entity.LogicalName}' cannot be deleted: custom API '{api}' is bound to it.");
         }
-        if (store.GetEntity("sdkmessagefilter") is null) return;
+        if (store.GetTable("sdkmessagefilter") is null) return;
 
         // Plan 2.7a, Task 5 fix round 1: subqueries instead of T-SQL's DELETE-alias-FROM-JOIN, so both engines run the statements.
         await using var cmd = session.Command("""
@@ -194,9 +194,9 @@ public sealed class SdkMessageCatalog(IDbConnectionFactory factory, IMetadataSto
     /// #76, ruling B9: <c>Upsert</c> is not an event on a standard table, so the <c>Upsert</c> filters that earlier versions wrote
     /// for standard tables are deleted when no step uses them; one a step uses stays (the step never fires, as before) and is logged.
     /// </summary>
-    private async Task DeleteStaleUpsertFiltersAsync(DataSession session, IEnumerable<EntityMetadata> entities, CancellationToken ct)
+    private async Task DeleteStaleUpsertFiltersAsync(DataSession session, IEnumerable<TableDefinition> entities, CancellationToken ct)
     {
-        if (store.GetEntity("sdkmessagefilter") is null || store.GetEntity("sdkmessageprocessingstep") is null) return;
+        if (store.GetTable("sdkmessagefilter") is null || store.GetTable("sdkmessageprocessingstep") is null) return;
         var standard = JsonSerializer.Serialize(entities.Where(e => !ElasticTables.IsElastic(e)).Select(e => e.LogicalName));
         var upsert = MessageId("Upsert");
 
@@ -225,15 +225,15 @@ public sealed class SdkMessageCatalog(IDbConnectionFactory factory, IMetadataSto
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    private async Task UpsertAsync(DataSession session, IEnumerable<EntityMetadata> entities, CancellationToken ct)
+    private async Task UpsertAsync(DataSession session, IEnumerable<TableDefinition> entities, CancellationToken ct)
     {
         // During the first seed the catalog tables may not exist yet: EnsureAsync runs after the seed.
-        if (store.GetEntity("sdkmessage") is null || store.GetEntity("sdkmessagefilter") is null) return;
+        if (store.GetTable("sdkmessage") is null || store.GetTable("sdkmessagefilter") is null) return;
 
         var messages = JsonSerializer.Serialize(Messages.Select(m => new { id = MessageId(m), name = m }));
         var filters = JsonSerializer.Serialize(entities.SelectMany(e => EntityMessagesOf(e).Select(m => new
         {
-            id = FilterId(m, e.LogicalName),
+            id = FilterId(m, e.LogicalName!),
             name = $"{m}:{e.LogicalName}",
             message = MessageId(m),
             entity = e.LogicalName,

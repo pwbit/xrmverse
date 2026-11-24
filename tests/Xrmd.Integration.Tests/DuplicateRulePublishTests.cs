@@ -11,6 +11,7 @@ using Xrmd.Abstractions.Storage;
 using Xrmd.Core;
 using Xrmd.Core.Duplicates;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Pipeline;
 using Xrmd.Pipeline.Async;
 using Xrmd.Security;
@@ -186,15 +187,14 @@ public sealed class DuplicateRulePublishTests(XrmdFixture fx) : IAsyncLifetime
         var table = await CustomTableAsync("states");
         var state = Store.GetEntity(table)!.Attributes.OfType<StateAttributeMetadata>().Single();
         // The store hands out its shared definitions: a third state is added for this table only, then removed.
-        var extra = new StateOptionMetadata { Value = 2, DefaultStatus = 3, Label = Label("Pending") };
-        state.OptionSet.Options.Add(extra);
+        InMemoryMetadata.ChangeColumn(Store, table, state.LogicalName, c => ((Xrmd.Model.Metadata.StateColumn)c).OptionSet!.Options!.Add(new Xrmd.Model.Metadata.StateOption { Value = 2, DefaultStatus = 3, Label = new Xrmd.Model.Metadata.LabelSet { LocalizedLabels = [new Xrmd.Model.Metadata.LocalizedText { Label = "Pending", LanguageCode = 1033 }] } }));
         try
         {
             await RefusedAsync(await RuleAsync("new_code", table, excludeInactive: true), "only 0 is active, so other states cannot be excluded");
         }
         finally
         {
-            state.OptionSet.Options.Remove(extra);
+            InMemoryMetadata.ChangeColumn(Store, table, state.LogicalName, c => ((Xrmd.Model.Metadata.StateColumn)c).OptionSet!.Options!.RemoveAll(o => o.Value == 2));
             await DeleteCustomTableAsync(table);
         }
     }

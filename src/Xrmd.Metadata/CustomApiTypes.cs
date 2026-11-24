@@ -1,5 +1,3 @@
-using Microsoft.Xrm.Sdk;
-
 namespace Xrmd.Metadata;
 
 /// <summary>
@@ -8,29 +6,9 @@ namespace Xrmd.Metadata;
 /// property takes when the main operation leaves it unset. The validator and the Web API parsers use it, and <c>EdmTypeName</c> is the text of their messages with Dataverse's <c>mscrm</c> alias; the
 /// <c>$metadata</c> declarations (<c>CustomApiOperations</c>) are built apart, in the model's namespace, and a test keeps them equal.
 /// </summary>
-public static class CustomApiTypes
+public static partial class CustomApiTypes
 {
     private const string CrmBaseEntity = "mscrm.crmbaseentity";
-
-    /// <summary>The SDK type a value of <paramref name="type"/> must have, with no conversion.</summary>
-    /// <exception cref="ArgumentOutOfRangeException">A value outside 0–12.</exception>
-    public static Type SdkType(CustomApiType type) => type switch
-    {
-        CustomApiType.Boolean => typeof(bool),
-        CustomApiType.DateTime => typeof(DateTime),
-        CustomApiType.Decimal => typeof(decimal),
-        CustomApiType.Entity => typeof(Entity),
-        CustomApiType.EntityCollection => typeof(EntityCollection),
-        CustomApiType.EntityReference => typeof(EntityReference),
-        CustomApiType.Float => typeof(double),
-        CustomApiType.Integer => typeof(int),
-        CustomApiType.Money => typeof(Money),
-        CustomApiType.Picklist => typeof(OptionSetValue),
-        CustomApiType.String => typeof(string),
-        CustomApiType.StringArray => typeof(string[]),
-        CustomApiType.Guid => typeof(Guid),
-        _ => throw OutOfRange(type),
-    };
 
     /// <summary>
     /// The Edm type name of <paramref name="type"/>. An Entity or EntityReference with a <paramref name="logicalEntityName"/> is

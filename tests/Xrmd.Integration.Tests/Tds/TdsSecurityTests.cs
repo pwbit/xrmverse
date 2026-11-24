@@ -6,6 +6,7 @@ using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Core;
 using Xrmd.Abstractions;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Security;
 using Xrmd.Tds.Execution;
 

@@ -20,6 +20,7 @@ using Xrmd.Core.Validation;
 using Xrmd.Files;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Computed;
+using Xrmd.Metadata.Sdk;
 using Xrmd.Pipeline;
 using Xrmd.Query;
 using Xrmd.Query.FetchXml;

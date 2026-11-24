@@ -5,6 +5,7 @@ using Microsoft.Data.SqlClient;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
 
 namespace Xrmd.Integration.Tests;
 

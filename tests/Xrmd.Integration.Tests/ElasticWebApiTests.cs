@@ -13,6 +13,7 @@ using Xrmd.Abstractions;
 using Xrmd.Core;
 using Xrmd.Core.Elastic;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
 using Xrmd.WebApi;
 using static Xrmd.Integration.Tests.TestHelpers;
 

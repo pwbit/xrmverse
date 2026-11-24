@@ -1,4 +1,4 @@
-using Microsoft.Xrm.Sdk.Metadata;
+using Xrmd.Model.Metadata;
 
 namespace Xrmd.Metadata;
 
@@ -10,7 +10,7 @@ namespace Xrmd.Metadata;
 /// The object type codes 9605, 9606 and 1001 are from memory, not from Learn (not listed on the pages): checklist 1. That Exchange
 /// Online is <see cref="ServerTypeExchange"/> is from memory too: checklist 2.
 /// </remarks>
-public static class MailSchema
+public static partial class MailSchema
 {
     /// <summary>The tables.</summary>
     public const string EmailServerProfile = "emailserverprofile", Mailbox = "mailbox", Attachment = "activitymimeattachment";
@@ -136,6 +136,6 @@ public static class MailSchema
         };
 
     /// <summary>True for one of the <see cref="SecretColumns"/>.</summary>
-    public static bool IsSecret(AttributeMetadata a) =>
+    public static bool IsSecret(ColumnDefinition a) =>
         a.EntityLogicalName is { } table && SecretColumns.ContainsKey(table + "." + a.LogicalName);
 }

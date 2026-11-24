@@ -16,6 +16,7 @@ using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Host;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
 using Xrmd.TestSupport;
 using Xunit.Abstractions;
 
