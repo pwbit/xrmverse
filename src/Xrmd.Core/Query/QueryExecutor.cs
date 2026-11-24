@@ -8,6 +8,7 @@ using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Query;
 using Xrmd.Query;
 using Xrmd.Query.FetchXml;
 using Xrmd.Query.Model;
@@ -173,8 +174,8 @@ public sealed class QueryExecutor(SqlQueryCompiler compiler, IDbConnectionFactor
         UsesUserHierarchy(node.Filter) || node.Links.Any(UsesUserHierarchy);
 
     private static bool UsesUserHierarchy(FilterNode filter) =>
-        filter.Conditions.Any(c => c.Operator is Microsoft.Xrm.Sdk.Query.ConditionOperator.EqualUserOrUserHierarchy
-                                   or Microsoft.Xrm.Sdk.Query.ConditionOperator.EqualUserOrUserHierarchyAndTeams)
+        filter.Conditions.Any(c => c.Operator is FilterOperator.EqualUserOrUserHierarchy
+                                   or FilterOperator.EqualUserOrUserHierarchyAndTeams)
         || filter.Filters.Any(UsesUserHierarchy);
 
     /// <summary>

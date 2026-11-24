@@ -3,9 +3,9 @@ using System.Data.Common;
 using System.Text.RegularExpressions;
 using FluentAssertions;
 using Microsoft.Xrm.Sdk.Metadata;
-using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
 using Xrmd.Core.Errors;
+using Xrmd.Model.Query;
 using Xrmd.Query.Cosmos;
 using Xrmd.Query.Model;
 using Xrmd.Query.Sql;
@@ -198,8 +198,8 @@ public class JsonPathConditionCompilerTests
     public void Json_paths_combine_with_the_conditions_by_the_filter_operator()
     {
         var root = new EntityNode { EntityName = Table };
-        root.Filter.Operator = LogicalOperator.Or;
-        root.Filter.Conditions.Add(new ConditionNode(null, "new_name", ConditionOperator.Equal, ["n"]));
+        root.Filter.Operator = FilterLogic.Or;
+        root.Filter.Conditions.Add(new ConditionNode(null, "new_name", FilterOperator.Equal, ["n"]));
         root.Filter.JsonPaths.Add(Node(JsonPathTest.Defined, null));
 
         var where = Where(Compile(new QueryModel { Root = root }));
@@ -276,7 +276,7 @@ public class JsonPathConditionCompilerTests
 
     // ---- BinaryCollation on every string comparison ----------------------------------------------------------------
 
-    private static string CompileCondition(ConditionOperator op, params object?[] values)
+    private static string CompileCondition(FilterOperator op, params object?[] values)
     {
         var root = new EntityNode { EntityName = Table };
         root.Filter.Conditions.Add(new ConditionNode(null, "new_name", op, values, BinaryCollation: true));
@@ -284,21 +284,21 @@ public class JsonPathConditionCompilerTests
     }
 
     [Theory]
-    [InlineData(ConditionOperator.GreaterThan, ">")]
-    [InlineData(ConditionOperator.GreaterEqual, ">=")]
-    [InlineData(ConditionOperator.LessThan, "<")]
-    [InlineData(ConditionOperator.LessEqual, "<=")]
-    public void Binary_collation_applies_to_range_comparisons(ConditionOperator op, string sql) =>
+    [InlineData(FilterOperator.GreaterThan, ">")]
+    [InlineData(FilterOperator.GreaterEqual, ">=")]
+    [InlineData(FilterOperator.LessThan, "<")]
+    [InlineData(FilterOperator.LessEqual, "<=")]
+    public void Binary_collation_applies_to_range_comparisons(FilterOperator op, string sql) =>
         CompileCondition(op, "m").Should().Contain($"t0.[new_name] COLLATE Latin1_General_BIN2 {sql} @p0");
 
     [Fact]
     public void Binary_collation_equality_keeps_the_length_guard() =>
-        CompileCondition(ConditionOperator.Equal, "m").Should().Contain(
+        CompileCondition(FilterOperator.Equal, "m").Should().Contain(
             "(t0.[new_name] COLLATE Latin1_General_BIN2 = @p0 AND DATALENGTH(t0.[new_name]) = DATALENGTH(@p0))");
 
     [Fact]
     public void Binary_collation_not_equal_never_matches_null() =>
-        CompileCondition(ConditionOperator.NotEqual, "m").Should().Contain(
+        CompileCondition(FilterOperator.NotEqual, "m").Should().Contain(
             "(t0.[new_name] IS NOT NULL AND NOT ((t0.[new_name] COLLATE Latin1_General_BIN2 = @p0 AND DATALENGTH(t0.[new_name]) = DATALENGTH(@p0))))");
 
     // ---- JsonPaths.Format --------------------------------------------------------------------------------------------

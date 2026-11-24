@@ -14,6 +14,7 @@ using Xrmd.Core;
 using Xrmd.Core.Errors;
 using Xrmd.Core.Query;
 using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Query;
 using Xrmd.Query.Model;
 using Xrmd.Security;
 using static Xrmd.Integration.Tests.SecurityTestHelper;
@@ -288,7 +289,7 @@ public sealed class HierarchyReadTests(XrmdFixture fx) : IAsyncLifetime
         var executor = scope.ServiceProvider.GetRequiredService<QueryExecutor>();
         var root = new EntityNode { EntityName = "account" };
         root.Columns.Add(new ColumnNode("name"));
-        root.Filter.Conditions.Add(new ConditionNode(null, "name", ConditionOperator.BeginsWith, [_tag]));
+        root.Filter.Conditions.Add(new ConditionNode(null, "name", FilterOperator.BeginsWith, [_tag]));
         (await executor.ExecuteAsync(new QueryModel { Root = root }, new Caller(m.Id, _root))).Entities.Select(e => e.Id)
             .Should().BeEquivalentTo([ofM, ofR]);
     }

@@ -1,13 +1,20 @@
 using System.Data;
 using System.Globalization;
 using System.Text;
-using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Computed;
+using Xrmd.Model.Metadata;
 
 namespace Xrmd.Query.Sql;
+
+/// <summary>
+/// Translates the definition of the computed column <paramref name="column"/> of <paramref name="table"/> (an
+/// <see cref="IComputedColumns"/> called at the SDK edge, <c>Sdk/SdkQueryCallbacks</c>).
+/// </summary>
+/// <exception cref="XrmdValidationException">The definition is not valid.</exception>
+internal delegate ComputedDefinition ComputedTranslation(TableDefinition table, ColumnDefinition column);
 
 /// <summary>
 /// The SQL of a calculated column (plan 2.12a, rulings K6–K8, K10; plan 2.7a: in the SQL of <paramref name="dialect"/>): its <see cref="ComputedDefinition"/> written as an expression
@@ -17,7 +24,7 @@ namespace Xrmd.Query.Sql;
 /// apply carries no read restriction, and a missing parent (null lookup, deleted row) gives null columns. Every string or date
 /// constant is a parameter; whole and decimal constants are written as numbers (they are typed values, never caller text).
 /// </summary>
-internal sealed partial class ComputedSql(QueryParameters parameters, Func<string, EntityMetadata?> entities, IComputedColumns computed,
+internal sealed partial class ComputedSql(QueryParameters parameters, Func<string, TableDefinition?> entities, ComputedTranslation translate,
     ISqlDialect dialect)
 {
     /// <summary>The quoted identifier in the dialect's SQL.</summary>
@@ -25,6 +32,9 @@ internal sealed partial class ComputedSql(QueryParameters parameters, Func<strin
 
     /// <summary>The quoted data table of <paramref name="entity"/>.</summary>
     private string DataTable(string entity) => DdlGenerator.Table(entity, dialect);
+
+    /// <summary>The <c>DateTimeBehavior</c> of a date-only column (the SDK's <c>DateTimeBehavior.DateOnly</c>).</summary>
+    private const string DateOnly = "DateOnly";
 
     /// <summary>The most calculated columns a chain may hold (the definition check refuses more; a guard here).</summary>
     public const int MaxDepth = 5;
@@ -46,17 +56,17 @@ internal sealed partial class ComputedSql(QueryParameters parameters, Func<strin
     /// cast to its type (K8). <paramref name="depth"/> is 1 for a column the query reads, one more per chained calculated column.
     /// </summary>
     /// <exception cref="XrmdValidationException">A definition this translation cannot write (refused at definition time otherwise).</exception>
-    public string Expression(string sqlAlias, EntityMetadata entity, AttributeMetadata attribute, ComputedDefinition definition, int depth)
+    public string Expression(string sqlAlias, TableDefinition entity, ColumnDefinition attribute, ComputedDefinition definition, int depth)
     {
         BeginColumn();
         return Expression(sqlAlias, entity, attribute, definition, depth, formulaChain: false);
     }
 
     /// <summary>
-    /// <see cref="Expression(string, EntityMetadata, AttributeMetadata, ComputedDefinition, int)"/> of a column of a chain;
+    /// <see cref="Expression(string, TableDefinition, ColumnDefinition, ComputedDefinition, int)"/> of a column of a chain;
     /// <paramref name="formulaChain"/>: a formula column is in the chain before it (F10: the chain may then hold 10 columns).
     /// </summary>
-    private string Expression(string sqlAlias, EntityMetadata entity, AttributeMetadata attribute, ComputedDefinition definition, int depth,
+    private string Expression(string sqlAlias, TableDefinition entity, ColumnDefinition attribute, ComputedDefinition definition, int depth,
         bool formulaChain)
     {
         ArgumentNullException.ThrowIfNull(entity);
@@ -74,17 +84,17 @@ internal sealed partial class ComputedSql(QueryParameters parameters, Func<strin
         if (row.Formula) Share(definition.Body);
         var value = Eval(row, definition.Body);
         // Plan 2.12c: a decimal formula result outside ±100,000,000,000 is null, as its intermediates are (Limit).
-        if (row.Formula && attribute is DecimalAttributeMetadata && !value.InRange) value = Limit(row, value);
+        if (row.Formula && attribute is DecimalColumn && !value.InRange) value = Limit(row, value);
         return Result(row, attribute, value.Sql);
     }
 
-    private static string Kind(AttributeMetadata attribute) => attribute.SourceType == ComputedColumnRules.Formula ? "formula" : "calculated";
+    private static string Kind(ColumnDefinition attribute) => attribute.SourceType == ComputedColumnRules.Formula ? "formula" : "calculated";
 
     /// <summary>
     /// The <c>{money}_base</c> value of the calculated money column <paramref name="money"/>: its value divided by the row's
     /// <c>exchangerate</c>, rounded to 4 decimals as a stored base value is (K8); null without a rate.
     /// </summary>
-    public string BaseExpression(string sqlAlias, EntityMetadata entity, MoneyAttributeMetadata money, ComputedDefinition definition, int depth) =>
+    public string BaseExpression(string sqlAlias, TableDefinition entity, MoneyColumn money, ComputedDefinition definition, int depth) =>
         ToBase(sqlAlias, Expression(sqlAlias, entity, money, definition, depth));
 
     /// <summary>
@@ -99,10 +109,10 @@ internal sealed partial class ComputedSql(QueryParameters parameters, Func<strin
     /// <paramref name="sqlAlias"/>: a calculated column as its expression (cast to its type), any other one as its column. A refusal
     /// names the rollup column <paramref name="rollupTable"/>.<paramref name="rollup"/> (a calculated column it reads names itself).
     /// </summary>
-    internal string ColumnValue(string sqlAlias, EntityMetadata entity, AttributeMetadata column, EntityMetadata rollupTable, AttributeMetadata rollup)
+    internal string ColumnValue(string sqlAlias, TableDefinition entity, ColumnDefinition column, TableDefinition rollupTable, ColumnDefinition rollup)
     {
         BeginColumn();
-        return Value(RollupRow(sqlAlias, entity, rollupTable, rollup), new ComputedExpr.Column(null, column.LogicalName));
+        return Value(RollupRow(sqlAlias, entity, rollupTable, rollup), new ComputedExpr.Column(null, column.LogicalName!));
     }
 
     /// <summary>
@@ -110,13 +120,13 @@ internal sealed partial class ComputedSql(QueryParameters parameters, Func<strin
     /// <paramref name="entity"/>, with the operators and parameters of a calculated column's conditions. A refusal names the rollup
     /// column <paramref name="rollupTable"/>.<paramref name="rollup"/>.
     /// </summary>
-    internal string Predicate(string sqlAlias, EntityMetadata entity, ComputedCondition condition, EntityMetadata rollupTable, AttributeMetadata rollup)
+    internal string Predicate(string sqlAlias, TableDefinition entity, ComputedCondition condition, TableDefinition rollupTable, ColumnDefinition rollup)
     {
         BeginColumn();
         return Condition(RollupRow(sqlAlias, entity, rollupTable, rollup), condition);
     }
 
-    private static Row RollupRow(string sqlAlias, EntityMetadata entity, EntityMetadata rollupTable, AttributeMetadata rollup)
+    private static Row RollupRow(string sqlAlias, TableDefinition entity, TableDefinition rollupTable, ColumnDefinition rollup)
     {
         ArgumentNullException.ThrowIfNull(rollupTable);
         ArgumentNullException.ThrowIfNull(rollup);
@@ -131,7 +141,7 @@ internal sealed partial class ComputedSql(QueryParameters parameters, Func<strin
     /// The row a definition is evaluated on: its alias and table, and the calculated column being written (for messages); for a
     /// rollup's aggregated column or filter, <paramref name="Rollup"/> names the rollup column instead (its table is not the row's).
     /// </summary>
-    private sealed record Row(string Alias, EntityMetadata Entity, AttributeMetadata Column, int Depth, string? Rollup = null)
+    private sealed record Row(string Alias, TableDefinition Entity, ColumnDefinition Column, int Depth, string? Rollup = null)
     {
         public string Where => Rollup ?? $"'{Entity.LogicalName}.{Column.LogicalName}'";
 
@@ -147,18 +157,20 @@ internal sealed partial class ComputedSql(QueryParameters parameters, Func<strin
 
     // ---- result type (K8) ----------------------------------------------------------------------------------------------
 
-    private string Result(Row row, AttributeMetadata attribute, string value) => attribute switch
+    private string Result(Row row, ColumnDefinition attribute, string value) => attribute switch
     {
-        StringAttributeMetadata s => dialect.DatabaseText(
+        TextColumn s => dialect.DatabaseText(
             dialect.Left(value, (s.MaxLength ?? TypeMapping.DefaultStringLength).ToString(CultureInfo.InvariantCulture))),
-        IntegerAttributeMetadata => dialect.TryCast(value, "int"),
-        DecimalAttributeMetadata d => Decimal(value, d.Precision ?? TypeMapping.DefaultDecimalPrecision),
-        MoneyAttributeMetadata m => dialect.TryCast(dialect.Round(value, MoneyPrecision(row, m)), $"decimal(19, {TypeMapping.MoneyScale})"),
-        BooleanAttributeMetadata => $"CAST({value} AS {dialect.ColumnType(SqlColumnKind.Boolean)})",
-        DoubleAttributeMetadata => $"CAST({value} AS float)",
-        PicklistAttributeMetadata => dialect.TryCast(value, "int"),
-        DateTimeAttributeMetadata { DateTimeBehavior: var b } when b == DateTimeBehavior.DateOnly => $"CAST({value} AS date)",
-        DateTimeAttributeMetadata => $"CAST({value} AS {dialect.ColumnType(SqlColumnKind.DateTime)})",
+        IntegerColumn => dialect.TryCast(value, "int"),
+        DecimalColumn d => Decimal(value, d.Precision ?? TypeMapping.DefaultDecimalPrecision),
+        MoneyColumn m => dialect.TryCast(dialect.Round(value, MoneyPrecision(row, m)), $"decimal(19, {TypeMapping.MoneyScale})"),
+        BooleanColumn => $"CAST({value} AS {dialect.ColumnType(SqlColumnKind.Boolean)})",
+        DoubleColumn => $"CAST({value} AS float)",
+        ChoiceColumn => dialect.TryCast(value, "int"),
+        // The SDK compared DateTimeBehavior values ignoring case.
+        DateTimeColumn { DateTimeBehavior.Value: var b } when string.Equals(b, DateOnly, StringComparison.OrdinalIgnoreCase) =>
+            $"CAST({value} AS date)",
+        DateTimeColumn => $"CAST({value} AS {dialect.ColumnType(SqlColumnKind.DateTime)})",
         _ => throw Refuse(row, $"has the type {attribute.AttributeType}, which cannot be calculated"),
     };
 
@@ -172,7 +184,7 @@ internal sealed partial class ComputedSql(QueryParameters parameters, Func<strin
     /// The decimals a money value is rounded to (<see cref="CurrencyMath.EffectivePrecision"/>): the column's <c>Precision</c>
     /// (<c>PrecisionSource</c> 0), the organization's pricing precision (1) or the precision of the row's currency (2, the default).
     /// </summary>
-    private string MoneyPrecision(Row row, MoneyAttributeMetadata m)
+    private string MoneyPrecision(Row row, MoneyColumn m)
     {
         switch (m.PrecisionSource)
         {
@@ -308,24 +320,24 @@ internal sealed partial class ComputedSql(QueryParameters parameters, Func<strin
     }
 
     /// <summary>The SQL type of a column's value (null for a column that is not a number).</summary>
-    private static Num? TypeOf(AttributeMetadata a) => a switch
+    private static Num? TypeOf(ColumnDefinition a) => a switch
     {
-        IntegerAttributeMetadata => Int,
-        BigIntAttributeMetadata => BigInt,
-        MoneyAttributeMetadata => MoneyType,
-        DecimalAttributeMetadata d => Num.Dec(TypeMapping.DecimalDigits(d.Precision ?? TypeMapping.DefaultDecimalPrecision),
+        IntegerColumn => Int,
+        BigIntColumn => BigInt,
+        MoneyColumn => MoneyType,
+        DecimalColumn d => Num.Dec(TypeMapping.DecimalDigits(d.Precision ?? TypeMapping.DefaultDecimalPrecision),
             d.Precision ?? TypeMapping.DefaultDecimalPrecision),
-        DoubleAttributeMetadata => Float,
+        DoubleColumn => Float,
         _ => null,
     };
 
     /// <summary>The SQL type of a calculated column's value, as its K8 cast leaves it (<see cref="Result"/>).</summary>
-    private static Num? ResultTypeOf(AttributeMetadata a) => a switch
+    private static Num? ResultTypeOf(ColumnDefinition a) => a switch
     {
-        IntegerAttributeMetadata or PicklistAttributeMetadata => Int,
-        DecimalAttributeMetadata d => Num.Dec(MaxDigits, d.Precision ?? TypeMapping.DefaultDecimalPrecision),
-        MoneyAttributeMetadata => MoneyType,
-        DoubleAttributeMetadata => Float,
+        IntegerColumn or ChoiceColumn => Int,
+        DecimalColumn d => Num.Dec(MaxDigits, d.Precision ?? TypeMapping.DefaultDecimalPrecision),
+        MoneyColumn => MoneyType,
+        DoubleColumn => Float,
         _ => null,
     };
 
@@ -343,26 +355,26 @@ internal sealed partial class ComputedSql(QueryParameters parameters, Func<strin
         {
             var value = Chained(row, alias, owner, a);
             // A formula row reads a chained column once (final review C1): read 4 times by each link, it was written 4^n times.
-            if (row.Formula || row.FormulaChain) value = Once(row, value, bit: a is BooleanAttributeMetadata);
-            return column.Lookup is not null && a is MoneyAttributeMetadata
+            if (row.Formula || row.FormulaChain) value = Once(row, value, bit: a is BooleanColumn);
+            return column.Lookup is not null && a is MoneyColumn
                 ? InRowCurrency(row, ToBase(alias, value))
-                : new Typed(value, ResultTypeOf(a)) { Bit = a is BooleanAttributeMetadata };
+                : new Typed(value, ResultTypeOf(a)) { Bit = a is BooleanColumn };
         }
-        if (a is MoneyAttributeMetadata { IsBaseCurrency: true } baseMoney)
+        if (a is MoneyColumn { IsBaseCurrency: true } baseMoney)
         {
             // A base value is in the base currency, of the row or of its parent: it is read as is, from the column of a stored
             // money column or computed from a calculated one.
             var main = owner.Attributes?.FirstOrDefault(x => x.LogicalName + TypeMapping.BaseColumnSuffix == baseMoney.LogicalName);
-            if (main is MoneyAttributeMetadata { SourceType: ComputedColumnRules.Calculated } calculatedMoney)
+            if (main is MoneyColumn { SourceType: ComputedColumnRules.Calculated } calculatedMoney)
                 return new Typed(ToBase(alias, Chained(row, alias, owner, calculatedMoney)), MoneyType);
-            return new Typed($"{alias}.{Q(a.LogicalName)}", MoneyType);
+            return new Typed($"{alias}.{Q(a.LogicalName!)}", MoneyType);
         }
         // The definition check refuses a column without a value of its own (CalculatedTranslator); a guard here.
         if (TypeMapping.ToColumns(a).Count == 0)
             throw Refuse(row, $"reads the column '{owner.LogicalName}.{a.LogicalName}', which has no value of its own");
-        if (column.Lookup is not null && a is MoneyAttributeMetadata)
+        if (column.Lookup is not null && a is MoneyColumn)
             return InRowCurrency(row, $"{alias}.{Q(a.LogicalName + TypeMapping.BaseColumnSuffix)}");
-        return new Typed($"{alias}.{Q(a.LogicalName)}", TypeOf(a)) { Bit = a is BooleanAttributeMetadata };
+        return new Typed($"{alias}.{Q(a.LogicalName!)}", TypeOf(a)) { Bit = a is BooleanColumn };
     }
 
     /// <summary>
@@ -370,11 +382,11 @@ internal sealed partial class ComputedSql(QueryParameters parameters, Func<strin
     /// <paramref name="row"/>: written once per compilation for each row, depth and kind of chain (final review C1), the checks of the
     /// chain (depth, F10) being the same for the same depth.
     /// </summary>
-    private string Chained(Row row, string alias, EntityMetadata owner, AttributeMetadata a)
+    private string Chained(Row row, string alias, TableDefinition owner, ColumnDefinition a)
     {
-        var key = (alias, owner.LogicalName, a.LogicalName, row.Depth + 1, row.FormulaChain);
+        var key = (alias, owner.LogicalName!, a.LogicalName!, row.Depth + 1, row.FormulaChain);
         if (_chained.TryGetValue(key, out var known)) return known;
-        return _chained[key] = Expression(alias, owner, a, computed.Translate(owner, a, entities), row.Depth + 1, row.FormulaChain);
+        return _chained[key] = Expression(alias, owner, a, translate(owner, a), row.Depth + 1, row.FormulaChain);
     }
 
     /// <summary>
@@ -387,14 +399,14 @@ internal sealed partial class ComputedSql(QueryParameters parameters, Func<strin
             : new Typed(baseValue, MoneyType);
 
     /// <summary>The apply of the parent record a single-target lookup of the row points to, and its table.</summary>
-    private (string Alias, EntityMetadata Entity) Parent(Row row, string lookup)
+    private (string Alias, TableDefinition Entity) Parent(Row row, string lookup)
     {
         var a = row.Entity.Attributes?.FirstOrDefault(x => x.LogicalName == lookup);
-        if (a is not LookupAttributeMetadata { Targets: [var target] })
+        if (a is not LookupColumn { Targets: [var target] })
             throw Refuse(row, $"reads a parent record through '{lookup}', which is not a lookup to one table");
         var parent = entities(target) ?? throw Refuse(row, $"reads a parent record of the table '{target}', which does not exist");
         var alias = Apply(row.Alias, "parent:" + lookup,
-            $"(SELECT * FROM {DataTable(parent.LogicalName)} WHERE {Q(SystemAttributes.PrimaryIdName(parent))} = {row.Alias}.{Q(lookup)})");
+            $"(SELECT * FROM {DataTable(parent.LogicalName!)} WHERE {Q(SystemAttributes.PrimaryIdName(parent))} = {row.Alias}.{Q(lookup)})");
         return (alias, parent);
     }
 
@@ -592,7 +604,7 @@ internal sealed partial class ComputedSql(QueryParameters parameters, Func<strin
         _ => throw Refuse(row, $"uses a condition that cannot be computed ({c.GetType().Name})"),
     };
 
-    /// <summary>A comparison, with the SQL operators <see cref="ConditionCompiler"/> gives the same <c>ConditionOperator</c> names.</summary>
+    /// <summary>A comparison, with the SQL operators <see cref="ConditionCompiler"/> gives the same <c>FilterOperator</c> names.</summary>
     private string Compare(Row row, ComputedCondition.Compare c)
     {
         if (row.Formula && EmptyTextComparison(row, c) is { } empty) return empty;

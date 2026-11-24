@@ -8,6 +8,7 @@ using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Query;
 using Xrmd.Query;
 using Xrmd.Query.Model;
 using Xrmd.Query.Sql;
@@ -1084,7 +1085,7 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
         var key = SystemAttributes.PrimaryIdName(queue);
         var security = new ReadSecurity(principals, await cache.GetBusinessUnitTreeAsync(ct), store, queryUserId: Guid.Empty);
         var root = new EntityNode { EntityName = queue.LogicalName, Columns = { new ColumnNode(key) } };
-        root.Filter.Conditions.Add(new ConditionNode(null, key, Microsoft.Xrm.Sdk.Query.ConditionOperator.Equal, [queueId]));
+        root.Filter.Conditions.Add(new ConditionNode(null, key, FilterOperator.Equal, [queueId]));
         var compiled = new SqlQueryCompiler(store, session.Dialect).Compile(new QueryModel { Root = root, Top = 1 },
             new QueryContext(Guid.Empty, Guid.Empty, DateTime.UtcNow) { Security = security, Hierarchy = security });
         await using (var cmd = session.Command(compiled.Sql))

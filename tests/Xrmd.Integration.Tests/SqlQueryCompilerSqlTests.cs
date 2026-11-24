@@ -8,6 +8,7 @@ using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core;
 using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Query;
 using Xrmd.Query;
 using Xrmd.Query.Model;
 using Xrmd.Query.Sql;
@@ -76,13 +77,13 @@ public sealed class SqlQueryCompilerSqlTests(XrmdFixture fx) : IAsyncLifetime
     {
         var root = new EntityNode { EntityName = TestEntities.Project, AllColumns = true };
         root.Filter.Conditions.AddRange(conditions);
-        var link = new LinkNode { EntityName = "systemuser", From = "systemuserid", To = "pb_customerid", JoinType = JoinOperator.LeftOuter, Alias = "u" };
+        var link = new LinkNode { EntityName = "systemuser", From = "systemuserid", To = "pb_customerid", JoinType = JoinKind.LeftOuter, Alias = "u" };
         link.Columns.Add(new ColumnNode("fullname"));
         root.Links.Add(link);
         return new QueryModel { Root = root, Top = 10 };
     }
 
-    private static ConditionNode Cond(string attribute, ConditionOperator op, params object?[] values) => new(null, attribute, op, values);
+    private static ConditionNode Cond(string attribute, FilterOperator op, params object?[] values) => new(null, attribute, op, values);
 
     private static object?[] Many(object first, Func<int, object> other) =>
         [first, .. Enumerable.Range(0, 150).Select(other)];
@@ -92,26 +93,26 @@ public sealed class SqlQueryCompilerSqlTests(XrmdFixture fx) : IAsyncLifetime
     {
         var conditions = new[]
         {
-            Cond("pb_name", ConditionOperator.BeginsWith, "Q50%_["),
-            Cond("pb_name", ConditionOperator.EndsWith, _name[^6..]),
-            Cond("pb_count", ConditionOperator.Between, 5, 9),
-            Cond("pb_budget", ConditionOperator.GreaterThan, "1000"),
-            Cond("pb_ratio", ConditionOperator.LessEqual, 0.5),
-            Cond("pb_startdate", ConditionOperator.Equal, "2026-11-07T10:30:15Z"),
-            Cond("versionnumber", ConditionOperator.GreaterThan, 0L),
-            Cond("pb_count", ConditionOperator.In, Many(7, i => 1000 + i)),
-            Cond("pb_priority", ConditionOperator.In, Many(2, i => 1000 + i)),
-            Cond("pb_name", ConditionOperator.In, Many(_name, i => "x" + i)),
-            Cond("pb_projectid", ConditionOperator.In, Many(_projectId, _ => Guid.NewGuid())),
-            Cond("pb_startdate", ConditionOperator.In, Many(Start, i => Start.AddDays(i + 1))),
-            Cond("pb_budget", ConditionOperator.In, Many(1234.5m, i => (decimal)i)),
-            Cond("pb_ratio", ConditionOperator.In, Many(0.5, i => i + 0.25)),
-            Cond("pb_count", ConditionOperator.NotIn, Many(1, i => 1000 + i)),
+            Cond("pb_name", FilterOperator.BeginsWith, "Q50%_["),
+            Cond("pb_name", FilterOperator.EndsWith, _name[^6..]),
+            Cond("pb_count", FilterOperator.Between, 5, 9),
+            Cond("pb_budget", FilterOperator.GreaterThan, "1000"),
+            Cond("pb_ratio", FilterOperator.LessEqual, 0.5),
+            Cond("pb_startdate", FilterOperator.Equal, "2026-11-07T10:30:15Z"),
+            Cond("versionnumber", FilterOperator.GreaterThan, 0L),
+            Cond("pb_count", FilterOperator.In, Many(7, i => 1000 + i)),
+            Cond("pb_priority", FilterOperator.In, Many(2, i => 1000 + i)),
+            Cond("pb_name", FilterOperator.In, Many(_name, i => "x" + i)),
+            Cond("pb_projectid", FilterOperator.In, Many(_projectId, _ => Guid.NewGuid())),
+            Cond("pb_startdate", FilterOperator.In, Many(Start, i => Start.AddDays(i + 1))),
+            Cond("pb_budget", FilterOperator.In, Many(1234.5m, i => (decimal)i)),
+            Cond("pb_ratio", FilterOperator.In, Many(0.5, i => i + 0.25)),
+            Cond("pb_count", FilterOperator.NotIn, Many(1, i => 1000 + i)),
         };
         foreach (var condition in conditions)
         {
             // Each condition AND the unique name, so that rows of other tests never match.
-            var rows = await RunAsync(ProjectQuery(condition, Cond("pb_name", ConditionOperator.Equal, _name)));
+            var rows = await RunAsync(ProjectQuery(condition, Cond("pb_name", FilterOperator.Equal, _name)));
             rows.Should().ContainSingle($"condition {condition.Operator} on {condition.Attribute}");
             rows[0]["pb_projectid"].Should().Be(_projectId);
             rows[0]["u.fullname"].Should().Be(XrmdFixture.AdminName);
@@ -148,7 +149,7 @@ public sealed class SqlQueryCompilerSqlTests(XrmdFixture fx) : IAsyncLifetime
         {
             var root = new EntityNode { EntityName = TestEntities.Project };
             root.Columns.Add(new ColumnNode("pb_name"));
-            root.Filter.Conditions.Add(Cond("pb_name", ConditionOperator.Equal, _name));
+            root.Filter.Conditions.Add(Cond("pb_name", FilterOperator.Equal, _name));
             var q = new QueryModel { Root = root, ReturnTotalRecordCount = true };
             configure(q);
             return q;
@@ -179,7 +180,7 @@ public sealed class SqlQueryCompilerSqlTests(XrmdFixture fx) : IAsyncLifetime
         root.Columns.Add(new ColumnNode("pb_priority", "prio", GroupBy: true));
         root.Columns.Add(new ColumnNode("pb_startdate", "month", GroupBy: true, DateGrouping: DateGrouping.Month));
         root.Columns.Add(new ColumnNode("ownerid", "owner", GroupBy: true));
-        root.Filter.Conditions.Add(Cond("pb_name", ConditionOperator.Equal, _name));
+        root.Filter.Conditions.Add(Cond("pb_name", FilterOperator.Equal, _name));
         root.Orders.Add(new OrderNode("", true, "total"));
         var agg = new QueryModel { Root = root, Aggregate = true };
         var (c5, rows5, count5) = await RunRawAsync(agg);
@@ -232,7 +233,7 @@ public sealed class SqlQueryCompilerSqlTests(XrmdFixture fx) : IAsyncLifetime
     private static QueryModel NamedProjects(string name, params ConditionNode[] conditions)
     {
         var root = new EntityNode { EntityName = TestEntities.Project };
-        root.Filter.Conditions.Add(Cond("pb_name", ConditionOperator.Equal, name));
+        root.Filter.Conditions.Add(Cond("pb_name", FilterOperator.Equal, name));
         root.Filter.Conditions.AddRange(conditions);
         return new QueryModel { Root = root };
     }
@@ -251,14 +252,14 @@ public sealed class SqlQueryCompilerSqlTests(XrmdFixture fx) : IAsyncLifetime
         await ProjectOwnedByAsync(name, _adminId, 8);
         var context = new QueryContext(user, bu, DateTime.UtcNow) { Hierarchy = new FixedHierarchy(bu) };
 
-        var both = await RunAsync(NamedProjects(name, Cond("ownerid", ConditionOperator.EqualUserOrUserTeams)), context);
+        var both = await RunAsync(NamedProjects(name, Cond("ownerid", FilterOperator.EqualUserOrUserTeams)), context);
         both.Select(r => r["pb_projectid"]).Should().BeEquivalentTo(new object[] { own, teams });
-        var teamOnly = await RunAsync(NamedProjects(name, Cond("ownerid", ConditionOperator.EqualUserTeams)), context);
+        var teamOnly = await RunAsync(NamedProjects(name, Cond("ownerid", FilterOperator.EqualUserTeams)), context);
         teamOnly.Select(r => r["pb_projectid"]).Should().Equal(teams);
 
         // Hierarchy operators: ids from the resolver as OPENJSON.
-        (await RunAsync(NamedProjects(name, Cond("owningbusinessunit", ConditionOperator.Under, bu)), context)).Should().HaveCount(4);
-        (await RunAsync(NamedProjects(name, Cond("owningbusinessunit", ConditionOperator.NotUnder, bu)), context)).Should().BeEmpty();
+        (await RunAsync(NamedProjects(name, Cond("owningbusinessunit", FilterOperator.Under, bu)), context)).Should().HaveCount(4);
+        (await RunAsync(NamedProjects(name, Cond("owningbusinessunit", FilterOperator.NotUnder, bu)), context)).Should().BeEmpty();
     }
 
     [Fact]

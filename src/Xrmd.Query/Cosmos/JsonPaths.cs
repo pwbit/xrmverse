@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using Xrmd.Model.Metadata;
 
 namespace Xrmd.Query.Cosmos;
 
@@ -7,8 +8,11 @@ namespace Xrmd.Query.Cosmos;
 public static partial class JsonPaths
 {
     /// <summary>True for a string column with the JSON format.</summary>
-    public static bool IsJson(Microsoft.Xrm.Sdk.Metadata.AttributeMetadata attribute) =>
-        attribute is Microsoft.Xrm.Sdk.Metadata.StringAttributeMetadata { FormatName.Value: { } f } && f == Microsoft.Xrm.Sdk.Metadata.StringFormatName.Json.Value;
+    public static bool IsJson(ColumnDefinition attribute) =>
+        attribute is TextColumn { FormatName.Value: { } f } && f == JsonFormat;
+
+    /// <summary>The <c>FormatName</c> of a JSON string column (the SDK's <c>StringFormatName.Json</c>).</summary>
+    private const string JsonFormat = "Json";
 
     [GeneratedRegex("^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.CultureInvariant)]
     private static partial Regex Identifier();

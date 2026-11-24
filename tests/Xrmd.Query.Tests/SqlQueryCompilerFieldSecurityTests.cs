@@ -1,8 +1,8 @@
 using System.Text.RegularExpressions;
 using FluentAssertions;
 using Microsoft.Xrm.Sdk.Metadata;
-using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Core.Errors;
+using Xrmd.Model.Query;
 using Xrmd.Query.Model;
 using Xrmd.Query.Sql;
 
@@ -139,7 +139,7 @@ public class SqlQueryCompilerFieldSecurityTests
     public void Without_field_restriction_nothing_is_marked()
     {
         var root = new EntityNode { EntityName = "pb_project", AllColumns = true };
-        root.Filter.Conditions.Add(new ConditionNode(null, "pb_budget", ConditionOperator.NotNull, []));
+        root.Filter.Conditions.Add(new ConditionNode(null, "pb_budget", FilterOperator.NotNull, []));
         var c = Compile(new QueryModel { Root = root }, new QueryContext(UserId, Guid.NewGuid(), DateTime.UtcNow));
         c.Columns.Should().NotContain(x => x.Unreadable || x.Kind == ResultKind.RecordId);
     }
@@ -150,7 +150,7 @@ public class SqlQueryCompilerFieldSecurityTests
     public void Condition_on_unreadable_column_is_refused()
     {
         var root = Project("pb_name");
-        root.Filter.Conditions.Add(new ConditionNode(null, "pb_budget", ConditionOperator.GreaterThan, [10m]));
+        root.Filter.Conditions.Add(new ConditionNode(null, "pb_budget", FilterOperator.GreaterThan, [10m]));
         Refused(root, "pb_budget");
     }
 
@@ -158,10 +158,10 @@ public class SqlQueryCompilerFieldSecurityTests
     public void Condition_in_nested_filter_is_refused()
     {
         var root = Project("pb_name");
-        var or = new FilterNode { Operator = LogicalOperator.Or };
-        or.Conditions.Add(new ConditionNode(null, "pb_name", ConditionOperator.Equal, ["a"]));
+        var or = new FilterNode { Operator = FilterLogic.Or };
+        or.Conditions.Add(new ConditionNode(null, "pb_name", FilterOperator.Equal, ["a"]));
         var inner = new FilterNode();
-        inner.Conditions.Add(new ConditionNode(null, "pb_count", ConditionOperator.Equal, [1]));
+        inner.Conditions.Add(new ConditionNode(null, "pb_count", FilterOperator.Equal, [1]));
         or.Filters.Add(inner);
         root.Filter.Filters.Add(or);
         Refused(root, "pb_count");
@@ -172,7 +172,7 @@ public class SqlQueryCompilerFieldSecurityTests
     {
         var root = Project("pb_name");
         root.Links.Add(Customer("fullname"));
-        root.Filter.Conditions.Add(new ConditionNode("u", "domainname", ConditionOperator.Like, ["%x%"]));
+        root.Filter.Conditions.Add(new ConditionNode("u", "domainname", FilterOperator.Like, ["%x%"]));
         Refused(root, "domainname");
     }
 
@@ -181,7 +181,7 @@ public class SqlQueryCompilerFieldSecurityTests
     {
         var root = Project("pb_name");
         var link = Customer("fullname");
-        link.Filter.Conditions.Add(new ConditionNode(null, "domainname", ConditionOperator.Equal, ["x"]));
+        link.Filter.Conditions.Add(new ConditionNode(null, "domainname", FilterOperator.Equal, ["x"]));
         root.Links.Add(link);
         Refused(root, "domainname");
     }

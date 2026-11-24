@@ -4,11 +4,11 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using FluentAssertions;
 using Microsoft.Xrm.Sdk.Metadata;
-using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Metadata.Computed;
 using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Query;
 using Xrmd.Query.FetchXml;
 using Xrmd.Query.Model;
 using Xrmd.Query.Sql;
@@ -68,8 +68,8 @@ public sealed class CompilerSnapshotTests
     public void Filter_order_and_paging()
     {
         var q = Query("pb_project", "pb_name", "pb_count");
-        q.Root.Filter.Conditions.Add(new ConditionNode(null, "pb_count", ConditionOperator.GreaterThan, [1]));
-        q.Root.Filter.Conditions.Add(new ConditionNode(null, "pb_name", ConditionOperator.Like, ["a[_]%"]));
+        q.Root.Filter.Conditions.Add(new ConditionNode(null, "pb_count", FilterOperator.GreaterThan, [1]));
+        q.Root.Filter.Conditions.Add(new ConditionNode(null, "pb_name", FilterOperator.Like, ["a[_]%"]));
         q.Root.Orders.Add(new OrderNode("pb_name", Descending: true));
         q.PageSize = 50;
         q.PageNumber = 3;
@@ -93,10 +93,10 @@ public sealed class CompilerSnapshotTests
         var q = Query("pb_project", "pb_name");
         var link = new LinkNode
         {
-            EntityName = "systemuser", From = "systemuserid", To = "pb_customerid", JoinType = JoinOperator.LeftOuter, Alias = "u",
+            EntityName = "systemuser", From = "systemuserid", To = "pb_customerid", JoinType = JoinKind.LeftOuter, Alias = "u",
         };
         link.Columns.Add(new ColumnNode("fullname"));
-        link.Filter.Conditions.Add(new ConditionNode(null, "fullname", ConditionOperator.BeginsWith, ["Ad"]));
+        link.Filter.Conditions.Add(new ConditionNode(null, "fullname", FilterOperator.BeginsWith, ["Ad"]));
         q.Root.Links.Add(link);
         Matches(Compile(q));
     }
@@ -117,13 +117,13 @@ public sealed class CompilerSnapshotTests
     private static QueryModel TextKeyFilterModel()
     {
         var q = Query("pb_project", "pb_name");
-        q.Root.Filter.Conditions.Add(new ConditionNode(null, "pb_name", ConditionOperator.Equal, ["Acme "]));
-        q.Root.Filter.Conditions.Add(new ConditionNode(null, "pb_name", ConditionOperator.NotEqual, ["Beta"]));
-        q.Root.Filter.Conditions.Add(new ConditionNode(null, "pb_name", ConditionOperator.In, ["a", "b"]));
-        q.Root.Filter.Conditions.Add(new ConditionNode(null, "pb_name", ConditionOperator.In, Enumerable.Range(0, 101).Select(i => (object?)("v" + i)).ToList()));
-        q.Root.Filter.Conditions.Add(new ConditionNode(null, "pb_count", ConditionOperator.Equal, [3]));
-        q.Root.Filter.Conditions.Add(new ConditionNode(null, "pb_name", ConditionOperator.BeginsWith, ["Ac"]));
-        var link = new LinkNode { EntityName = "xrmv_calcorder", From = "xrmv_name", To = "pb_name", JoinType = JoinOperator.Inner, Alias = "o" };
+        q.Root.Filter.Conditions.Add(new ConditionNode(null, "pb_name", FilterOperator.Equal, ["Acme "]));
+        q.Root.Filter.Conditions.Add(new ConditionNode(null, "pb_name", FilterOperator.NotEqual, ["Beta"]));
+        q.Root.Filter.Conditions.Add(new ConditionNode(null, "pb_name", FilterOperator.In, ["a", "b"]));
+        q.Root.Filter.Conditions.Add(new ConditionNode(null, "pb_name", FilterOperator.In, Enumerable.Range(0, 101).Select(i => (object?)("v" + i)).ToList()));
+        q.Root.Filter.Conditions.Add(new ConditionNode(null, "pb_count", FilterOperator.Equal, [3]));
+        q.Root.Filter.Conditions.Add(new ConditionNode(null, "pb_name", FilterOperator.BeginsWith, ["Ac"]));
+        var link = new LinkNode { EntityName = "xrmv_calcorder", From = "xrmv_name", To = "pb_name", JoinType = JoinKind.Inner, Alias = "o" };
         q.Root.Links.Add(link);
         return q;
     }
@@ -179,8 +179,8 @@ public sealed class CompilerSnapshotTests
     public void Relative_date_operators()
     {
         var q = Query("pb_project", "pb_name");
-        q.Root.Filter.Conditions.Add(new ConditionNode(null, "pb_startdate", ConditionOperator.LastXDays, [7]));
-        q.Root.Filter.Conditions.Add(new ConditionNode(null, "pb_startdate", ConditionOperator.ThisMonth, []));
+        q.Root.Filter.Conditions.Add(new ConditionNode(null, "pb_startdate", FilterOperator.LastXDays, [7]));
+        q.Root.Filter.Conditions.Add(new ConditionNode(null, "pb_startdate", FilterOperator.ThisMonth, []));
         Matches(Compile(q));
     }
 

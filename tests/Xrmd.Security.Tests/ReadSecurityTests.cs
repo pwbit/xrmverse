@@ -7,6 +7,7 @@ using Xrmd.Core.Errors;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Sdk;
 using Xrmd.Model.Metadata;
+using Xrmd.Model.Query;
 using Xrmd.Query.Model;
 
 namespace Xrmd.Security.Tests;
@@ -77,31 +78,31 @@ public sealed class ReadSecurityTests
     public void Basic_is_owner_or_shared()
     {
         var f = ReadingProject(DepthMask.Basic).ReadFilter(Project)!;
-        f.Operator.Should().Be(LogicalOperator.Or);
+        f.Operator.Should().Be(FilterLogic.Or);
         f.Conditions.Should().ContainSingle().Which.Should().Match<ConditionNode>(c =>
-            c.EntityAlias == null && c.Attribute == "ownerid" && c.Operator == ConditionOperator.EqualUserOrUserTeams && c.Values.Count == 0);
+            c.EntityAlias == null && c.Attribute == "ownerid" && c.Operator == FilterOperator.EqualUserOrUserTeams && c.Values.Count == 0);
         f.Shared.Should().Equal(new SharedRecordsNode(Me, 10001, 1));
         f.Filters.Should().BeEmpty();
     }
 
     [Theory]
-    [InlineData(DepthMask.Local, ConditionOperator.Equal)]
-    [InlineData(DepthMask.Deep, ConditionOperator.UnderOrEqual)]
-    public void Local_and_deep_add_the_business_unit(DepthMask depth, ConditionOperator op)
+    [InlineData(DepthMask.Local, FilterOperator.Equal)]
+    [InlineData(DepthMask.Deep, FilterOperator.UnderOrEqual)]
+    public void Local_and_deep_add_the_business_unit(DepthMask depth, FilterOperator op)
     {
         var f = ReadingProject(depth).ReadFilter(Project)!;
-        f.Operator.Should().Be(LogicalOperator.Or);
-        f.Conditions.Select(c => c.Operator).Should().Equal(ConditionOperator.EqualUserOrUserTeams, op);
+        f.Operator.Should().Be(FilterLogic.Or);
+        f.Conditions.Select(c => c.Operator).Should().Equal(FilterOperator.EqualUserOrUserTeams, op);
         f.Conditions[1].Attribute.Should().Be("owningbusinessunit");
         f.Conditions[1].Values.Should().Equal(A);
         f.Shared.Should().ContainSingle();
     }
 
     [Theory]
-    [InlineData(DepthMask.Basic, ConditionOperator.Equal)]
-    [InlineData(DepthMask.Local, ConditionOperator.Equal)]
-    [InlineData(DepthMask.Deep, ConditionOperator.UnderOrEqual)]
-    public void Business_owned_is_judged_on_the_business_unit(DepthMask depth, ConditionOperator op)
+    [InlineData(DepthMask.Basic, FilterOperator.Equal)]
+    [InlineData(DepthMask.Local, FilterOperator.Equal)]
+    [InlineData(DepthMask.Deep, FilterOperator.UnderOrEqual)]
+    public void Business_owned_is_judged_on_the_business_unit(DepthMask depth, FilterOperator op)
     {
         var f = For(Profile(Me, A, privileges: ("prvReadTeam", depth))).ReadFilter(Team)!;
         f.Conditions.Should().ContainSingle().Which.Should().Match<ConditionNode>(c => c.Attribute == "owningbusinessunit" && c.Operator == op);
@@ -151,7 +152,7 @@ public sealed class ReadSecurityTests
 
         var filter = With("email").ReadFilter(Pointer)!;
         filter.Filters.SelectMany(f => f.Conditions).Concat(filter.Conditions)
-            .Should().Contain(c => c.Attribute == "activitytypecode" && c.Operator == ConditionOperator.NotIn);
+            .Should().Contain(c => c.Attribute == "activitytypecode" && c.Operator == FilterOperator.NotIn);
         var act = () => With("email", "xv_fax").ReadFilter(Pointer);
         act.Should().Throw<InvalidOperationException>().WithMessage("*xv_fax*");
     }
@@ -181,13 +182,13 @@ public sealed class ReadSecurityTests
         var security = For(Profile(Me, A, privileges: ("prvReadpb_Project", DepthMask.Basic)),
             Profile(Other, B, privileges: ("prvReadpb_Project", DepthMask.Local)));
         var f = security.ReadFilter(Project)!;
-        f.Operator.Should().Be(LogicalOperator.And);
+        f.Operator.Should().Be(FilterLogic.And);
         f.Filters.Should().HaveCount(2);
         f.Filters[1].Conditions[1].Values.Should().Equal(B);
 
         // A principal without restriction adds nothing; one without privilege denies.
         For(Profile(Me, A, privileges: ("prvReadpb_Project", DepthMask.Basic)), Profile(Other, B, admin: true)).ReadFilter(Project)!
-            .Operator.Should().Be(LogicalOperator.Or);
+            .Operator.Should().Be(FilterLogic.Or);
         var act = () => For(Profile(Me, A, admin: true), Profile(Other, B)).ReadFilter(Project);
         act.Should().Throw<XrmdFaultException>().Where(e => e.ErrorCode == ErrorCodes.PrivilegeDenied && e.Message.Contains(Other.ToString()));
     }
@@ -211,8 +212,8 @@ public sealed class ReadSecurityTests
     public void Manager_reads_owned_and_shared_records_of_its_reach(DepthMask depth)
     {
         var f = For(Manager(depth)).ReadFilter(Project)!;
-        f.Operator.Should().Be(LogicalOperator.Or);
-        f.Conditions.Should().NotContain(c => c.Operator == ConditionOperator.In, "the reach is one JSON parameter, not inline values");
+        f.Operator.Should().Be(FilterLogic.Or);
+        f.Conditions.Should().NotContain(c => c.Operator == FilterOperator.In, "the reach is one JSON parameter, not inline values");
         f.Owned.Should().ContainSingle().Which.Principals.Should().BeEquivalentTo([Report, ReportTeam]);
         f.Shared.Should().HaveCount(2);
         f.Shared[0].Should().Be(new SharedRecordsNode(Me, 10001, 1));
@@ -227,7 +228,7 @@ public sealed class ReadSecurityTests
         // Excluded table, business-owned table, Global depth, System Administrator.
         For(Manager(DepthMask.Basic, excluded: "PB_PROJECT")).ReadFilter(Project)!.Shared.Should().ContainSingle();
         For(Manager(DepthMask.Basic, excluded: "pb_project")).ReadFilter(Project)!.Conditions.Should().ContainSingle()
-            .Which.Operator.Should().Be(ConditionOperator.EqualUserOrUserTeams);
+            .Which.Operator.Should().Be(FilterOperator.EqualUserOrUserTeams);
         For(Manager(DepthMask.Basic)).ReadFilter(Team)!.Conditions.Should().ContainSingle()
             .Which.Attribute.Should().Be("owningbusinessunit");
         For(Manager(DepthMask.Global)).ReadFilter(Project).Should().BeNull();
@@ -238,7 +239,7 @@ public sealed class ReadSecurityTests
     public void Impersonation_ands_the_reach_with_the_other_principal()
     {
         var f = For(Manager(DepthMask.Basic), Profile(Other, B, privileges: ("prvReadpb_Project", DepthMask.Basic))).ReadFilter(Project)!;
-        f.Operator.Should().Be(LogicalOperator.And);
+        f.Operator.Should().Be(FilterLogic.And);
         f.Filters[0].Shared.Should().HaveCount(2);
         f.Filters[1].Shared.Should().ContainSingle();
         f.Filters[1].Conditions.Should().ContainSingle();
@@ -270,8 +271,8 @@ public sealed class ReadSecurityTests
         var f = new ReadSecurity([other, me], Tree, new Store(BusinessUnit, Project, Team), Me).ReadFilter(Project)!;
 
         f.Filters.Should().HaveCount(2);
-        f.Filters[0].Conditions[0].Should().Match<ConditionNode>(c => c.Operator == ConditionOperator.In && c.Values.Contains(Other));
-        f.Filters[1].Conditions[0].Operator.Should().Be(ConditionOperator.EqualUserOrUserTeams);
+        f.Filters[0].Conditions[0].Should().Match<ConditionNode>(c => c.Operator == FilterOperator.In && c.Values.Contains(Other));
+        f.Filters[1].Conditions[0].Operator.Should().Be(FilterOperator.EqualUserOrUserTeams);
     }
 
     [Fact]

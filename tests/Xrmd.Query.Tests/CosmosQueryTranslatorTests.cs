@@ -1,8 +1,8 @@
 using FluentAssertions;
-using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Query;
 using Xrmd.Query.Cosmos;
 using Xrmd.Query.FetchXml;
 using Xrmd.Query.Model;
@@ -67,12 +67,12 @@ public sealed class CosmosQueryTranslatorTests
     public void Top_level_comparisons_become_condition_nodes()
     {
         var p = new Dictionary<string, object?> { ["@v"] = 5 };
-        Filter("c.props.pb_value >= @v", p).Conditions.Should().BeEquivalentTo(new[] { new ConditionNode(null, "pb_value", ConditionOperator.GreaterEqual, [5]) }, o => o.WithStrictOrdering());
+        Filter("c.props.pb_value >= @v", p).Conditions.Should().BeEquivalentTo(new[] { new ConditionNode(null, "pb_value", FilterOperator.GreaterEqual, [5]) }, o => o.WithStrictOrdering());
         Filter("5 < c.props.pb_value").Conditions.Should().ContainSingle()
-            .Which.Should().BeEquivalentTo(new { Attribute = "pb_value", Operator = ConditionOperator.GreaterThan });
-        Filter("c.props.pb_name = 'x'").Conditions.Should().BeEquivalentTo(new[] { new ConditionNode(null, "pb_name", ConditionOperator.Equal, ["x"], true) }, o => o.WithStrictOrdering());
-        Filter("c.props.pb_name != null").Conditions.Should().BeEquivalentTo(new[] { new ConditionNode(null, "pb_name", ConditionOperator.NotNull, [], true) }, o => o.WithStrictOrdering());
-        Filter("IS_DEFINED(c.props.pb_value)").Conditions.Should().BeEquivalentTo(new[] { new ConditionNode(null, "pb_value", ConditionOperator.NotNull, []) }, o => o.WithStrictOrdering());
+            .Which.Should().BeEquivalentTo(new { Attribute = "pb_value", Operator = FilterOperator.GreaterThan });
+        Filter("c.props.pb_name = 'x'").Conditions.Should().BeEquivalentTo(new[] { new ConditionNode(null, "pb_name", FilterOperator.Equal, ["x"], true) }, o => o.WithStrictOrdering());
+        Filter("c.props.pb_name != null").Conditions.Should().BeEquivalentTo(new[] { new ConditionNode(null, "pb_name", FilterOperator.NotNull, [], true) }, o => o.WithStrictOrdering());
+        Filter("IS_DEFINED(c.props.pb_value)").Conditions.Should().BeEquivalentTo(new[] { new ConditionNode(null, "pb_value", FilterOperator.NotNull, []) }, o => o.WithStrictOrdering());
     }
 
     [Fact]
@@ -157,12 +157,12 @@ public sealed class CosmosQueryTranslatorTests
         f.JsonPaths.Should().Equal(new JsonPathConditionNode("pb_payload", "$", "n", JsonPathTest.LessEqual, 5d));
 
         var g = Filter("NOT (c.props.pb_payload.a = 1 AND c.props.pb_payload.b = 2)");
-        g.Operator.Should().Be(LogicalOperator.Or);
+        g.Operator.Should().Be(FilterLogic.Or);
         g.JsonPaths.Select(j => j.Test).Should().Equal(JsonPathTest.NotEqual, JsonPathTest.NotEqual);
 
         Filter("NOT IS_DEFINED(c.props.pb_payload.n)").JsonPaths.Should().ContainSingle().Which.Test.Should().Be(JsonPathTest.NotDefined);
-        Filter("NOT IS_DEFINED(c.props.pb_value)").Conditions.Should().BeEquivalentTo(new[] { new ConditionNode(null, "pb_value", ConditionOperator.Null, []) }, o => o.WithStrictOrdering());
-        Filter("NOT NOT (c.props.pb_value = 1)").Conditions.Single().Operator.Should().Be(ConditionOperator.Equal);
+        Filter("NOT IS_DEFINED(c.props.pb_value)").Conditions.Should().BeEquivalentTo(new[] { new ConditionNode(null, "pb_value", FilterOperator.Null, []) }, o => o.WithStrictOrdering());
+        Filter("NOT NOT (c.props.pb_value = 1)").Conditions.Single().Operator.Should().Be(FilterOperator.Equal);
     }
 
     [Fact]
@@ -175,12 +175,12 @@ public sealed class CosmosQueryTranslatorTests
 
         var mixed = string.Join(" OR ", Enumerable.Range(0, 1000).Select(i => i % 2 == 0 ? $"c.props.pb_value = {i}" : $"c.props.pb_payload.a = {i}"));
         var m = Filter(mixed);
-        m.Operator.Should().Be(LogicalOperator.Or);
+        m.Operator.Should().Be(FilterLogic.Or);
         (m.Conditions.Count + m.JsonPaths.Count).Should().Be(1000);
         Depth(m).Should().Be(1);
 
         var alternating = Filter("(c.props.pb_value = 1 OR c.props.pb_value = 2) AND (c.props.pb_value = 3 OR c.props.pb_value = 4) AND c.props.pb_value = 5");
-        alternating.Operator.Should().Be(LogicalOperator.And);
+        alternating.Operator.Should().Be(FilterLogic.And);
         alternating.Filters.Should().HaveCount(2);
         alternating.Conditions.Should().HaveCount(1);
     }

@@ -1,9 +1,9 @@
 using System.Globalization;
-using Microsoft.Xrm.Sdk.Metadata;
-using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
+using Xrmd.Model.Metadata;
+using Xrmd.Model.Query;
 using Xrmd.Query.Model;
 using Xrmd.Query.Sql;
 
@@ -20,7 +20,7 @@ public sealed record CosmosQueryPlan(QueryModel Model, IReadOnlyList<CosmosProje
 /// ordinary <see cref="QueryModel"/>: top-level columns become <see cref="ConditionNode"/>s, paths inside a JSON column become
 /// <see cref="JsonPathConditionNode"/>s. <c>NOT</c> is pushed down to the comparisons first.
 /// </summary>
-public static class CosmosQueryTranslator
+public static partial class CosmosQueryTranslator
 {
     
     private static XrmdFaultException Unsupported(string construct) =>
@@ -28,7 +28,7 @@ public static class CosmosQueryTranslator
 
     /// <param name="parameters">Normalized: keys with the leading <c>@</c>, values of a ruling J6 type.</param>
     /// <exception cref="XrmdFaultException">400 for every construct, value or cookie that cannot be translated.</exception>
-    public static CosmosQueryPlan Translate(CosmosQuery query, EntityMetadata table, IReadOnlyDictionary<string, object?> parameters,
+    public static CosmosQueryPlan Translate(CosmosQuery query, TableDefinition table, IReadOnlyDictionary<string, object?> parameters,
         int? pageSize, string? pagingCookie)
     {
         ArgumentNullException.ThrowIfNull(query);
@@ -39,7 +39,7 @@ public static class CosmosQueryTranslator
 
         var binder = new Binder(table, parameters);
         var primaryId = SystemAttributes.PrimaryIdName(table);
-        var root = new EntityNode { EntityName = table.LogicalName };
+        var root = new EntityNode { EntityName = table.LogicalName! };
         root.Columns.Add(new ColumnNode(primaryId));
 
         var projection = new List<CosmosProjection>();
@@ -56,8 +56,8 @@ public static class CosmosQueryTranslator
             if (name.StartsWith('@'))
                 throw XrmdFaultException.InvalidArgument($"ExecuteCosmosSqlQuery: the result name '{name}' is reserved.");
             if (!names.Add(name)) throw XrmdFaultException.InvalidArgument($"ExecuteCosmosSqlQuery: duplicate result name '{name}'.");
-            if (root.Columns.All(c => c.Attribute != column.LogicalName)) root.Columns.Add(new ColumnNode(column.LogicalName));
-            projection.Add(new CosmosProjection(name, column.LogicalName, rest));
+            if (root.Columns.All(c => c.Attribute != column.LogicalName)) root.Columns.Add(new ColumnNode(column.LogicalName!));
+            projection.Add(new CosmosProjection(name, column.LogicalName!, rest));
         }
 
         if (query.Where is not null)
@@ -72,7 +72,7 @@ public static class CosmosQueryTranslator
         {
             var (column, rest) = binder.Resolve(order.Path);
             if (rest.Count > 0 || JsonPaths.IsJson(column)) throw Unsupported("ORDER BY on a JSON path");
-            if (column.LogicalName != primaryId) root.Orders.Add(new OrderNode(column.LogicalName, order.Descending));
+            if (column.LogicalName != primaryId) root.Orders.Add(new OrderNode(column.LogicalName!, order.Descending));
             else if (order.Descending) root.Orders.Add(new OrderNode(primaryId, true));
         }
         if (root.Orders.All(o => o.Attribute != primaryId)) root.Orders.Add(new OrderNode(primaryId, false));
@@ -93,7 +93,7 @@ public static class CosmosQueryTranslator
 
     private sealed record Leaf(ConditionNode? Condition, JsonPathConditionNode? Json) : Ir;
 
-    private sealed record Group(LogicalOperator Operator, List<Ir> Items) : Ir;
+    private sealed record Group(FilterLogic Operator, List<Ir> Items) : Ir;
 
     /// <summary>Pushes <paramref name="negated"/> down (De Morgan, operator negation) and flattens same-operator chains.</summary>
     private static Ir Build(CosmosExpr expr, bool negated, Binder binder)
@@ -104,7 +104,7 @@ public static class CosmosQueryTranslator
                 return Build(n.Inner, !negated, binder);
             case And or Or:
             {
-                var op = (expr is And) != negated ? LogicalOperator.And : LogicalOperator.Or;
+                var op = (expr is And) != negated ? FilterLogic.And : FilterLogic.Or;
                 var items = new List<Ir>();
                 Collect(expr, negated, op, items, binder);
                 return new Group(op, items);
@@ -118,7 +118,7 @@ public static class CosmosQueryTranslator
         }
     }
 
-    private static void Collect(CosmosExpr expr, bool negated, LogicalOperator op, List<Ir> items, Binder binder)
+    private static void Collect(CosmosExpr expr, bool negated, FilterLogic op, List<Ir> items, Binder binder)
     {
         // Iterative along the left spine: a chain of 1000 connectives is left-nested.
         var stack = new Stack<(CosmosExpr Expr, bool Negated)>();
@@ -129,7 +129,7 @@ public static class CosmosQueryTranslator
             var inner = e;
             var n = neg;
             while (inner is Not not) { inner = not.Inner; n = !n; }
-            if (inner is And or Or && ((inner is And) != n ? LogicalOperator.And : LogicalOperator.Or) == op)
+            if (inner is And or Or && ((inner is And) != n ? FilterLogic.And : FilterLogic.Or) == op)
             {
                 var (left, right) = inner is And a ? (a.Left, a.Right) : (((Or)inner).Left, ((Or)inner).Right);
                 stack.Push((right, n));
@@ -174,15 +174,15 @@ public static class CosmosQueryTranslator
 
     // ---- binding to the table ---------------------------------------------------------------------------------------------
 
-    private sealed class Binder(EntityMetadata table, IReadOnlyDictionary<string, object?> parameters)
+    private sealed class Binder(TableDefinition table, IReadOnlyDictionary<string, object?> parameters)
     {
         /// <summary>The column a path starts at and the steps that continue into it (only for a JSON column).</summary>
-        public (AttributeMetadata Column, IReadOnlyList<CosmosPathStep> Steps) Resolve(CosmosPath path)
+        public (ColumnDefinition Column, IReadOnlyList<CosmosPathStep> Steps) Resolve(CosmosPath path)
         {
             var steps = path.Steps;
             if (steps.Count < 2 || steps[0] is not PropertyStep { Name: "props" } || steps[1] is not PropertyStep columnStep)
                 throw Unsupported("a property outside c.props");
-            var column = table.Attributes.FirstOrDefault(a =>
+            var column = table.Attributes!.FirstOrDefault(a =>
                     string.Equals(a.LogicalName, columnStep.Name, StringComparison.OrdinalIgnoreCase) && TypeMapping.IsReadable(a))
                 ?? throw new XrmdValidationException(
                     $"'{table.LogicalName}' entity doesn't contain attribute with Name = '{columnStep.Name}'.");
@@ -196,7 +196,7 @@ public static class CosmosQueryTranslator
         {
             var (column, rest) = Resolve(path);
             if (rest.Count == 0)
-                return new Leaf(new ConditionNode(null, column.LogicalName, negated ? ConditionOperator.Null : ConditionOperator.NotNull, []), null);
+                return new Leaf(new ConditionNode(null, column.LogicalName!, negated ? FilterOperator.Null : FilterOperator.NotNull, []), null);
             return new Leaf(null, Json(column, rest, negated ? JsonPathTest.NotDefined : JsonPathTest.Defined, null));
         }
 
@@ -225,15 +225,15 @@ public static class CosmosQueryTranslator
             return rest.Count > 0 ? JsonCompare(column, rest, op, literal) : ColumnCompare(column, op, literal, negated);
         }
 
-        private Ir ColumnCompare(AttributeMetadata column, CosmosComparisonOp op, object? literal, bool negated)
+        private Ir ColumnCompare(ColumnDefinition column, CosmosComparisonOp op, object? literal, bool negated)
         {
             if (JsonPaths.IsJson(column)) throw Unsupported($"a comparison of the whole JSON column '{column.LogicalName}'");
-            var binary = column is StringAttributeMetadata or MemoAttributeMetadata;
+            var binary = column is TextColumn or MemoColumn;
             if (literal is null)
             {
                 return op switch
                 {
-                    CosmosComparisonOp.NotEqual => new Leaf(new ConditionNode(null, column.LogicalName, ConditionOperator.NotNull, [], binary), null),
+                    CosmosComparisonOp.NotEqual => new Leaf(new ConditionNode(null, column.LogicalName!, FilterOperator.NotNull, [], binary), null),
                     CosmosComparisonOp.Equal when negated => throw Unsupported("comparing a column with null (use IS_DEFINED or NOT IS_DEFINED)"),
                     CosmosComparisonOp.Equal => throw Unsupported("a comparison of a column with null (use NOT IS_DEFINED)"),
                     _ => throw Unsupported("a range comparison with null"),
@@ -242,32 +242,32 @@ public static class CosmosQueryTranslator
             RequireMatchingType(column, literal);
             var cop = op switch
             {
-                CosmosComparisonOp.Equal => ConditionOperator.Equal,
-                CosmosComparisonOp.NotEqual => ConditionOperator.NotEqual,
-                CosmosComparisonOp.Less => ConditionOperator.LessThan,
-                CosmosComparisonOp.LessEqual => ConditionOperator.LessEqual,
-                CosmosComparisonOp.Greater => ConditionOperator.GreaterThan,
-                _ => ConditionOperator.GreaterEqual,
+                CosmosComparisonOp.Equal => FilterOperator.Equal,
+                CosmosComparisonOp.NotEqual => FilterOperator.NotEqual,
+                CosmosComparisonOp.Less => FilterOperator.LessThan,
+                CosmosComparisonOp.LessEqual => FilterOperator.LessEqual,
+                CosmosComparisonOp.Greater => FilterOperator.GreaterThan,
+                _ => FilterOperator.GreaterEqual,
             };
-            return new Leaf(new ConditionNode(null, column.LogicalName, cop, [literal], binary), null);
+            return new Leaf(new ConditionNode(null, column.LogicalName!, cop, [literal], binary), null);
         }
 
         /// <summary>Type-strict literals on text and number columns; other column types are left to the value coercion.</summary>
-        private static void RequireMatchingType(AttributeMetadata column, object literal)
+        private static void RequireMatchingType(ColumnDefinition column, object literal)
         {
-            if (column is StringAttributeMetadata or MemoAttributeMetadata)
+            if (column is TextColumn or MemoColumn)
             {
                 if (literal is not string)
                     throw XrmdFaultException.InvalidArgument($"ExecuteCosmosSqlQuery: the value for '{column.LogicalName}' must be a string.");
             }
-            else if (column is IntegerAttributeMetadata or BigIntAttributeMetadata or DecimalAttributeMetadata or DoubleAttributeMetadata
-                     or MoneyAttributeMetadata && literal is string or bool)
+            else if (column is IntegerColumn or BigIntColumn or DecimalColumn or DoubleColumn
+                     or MoneyColumn && literal is string or bool)
             {
                 throw XrmdFaultException.InvalidArgument($"ExecuteCosmosSqlQuery: the value for '{column.LogicalName}' must be a number.");
             }
         }
 
-        private Ir JsonCompare(AttributeMetadata column, IReadOnlyList<CosmosPathStep> rest, CosmosComparisonOp op, object? literal)
+        private Ir JsonCompare(ColumnDefinition column, IReadOnlyList<CosmosPathStep> rest, CosmosComparisonOp op, object? literal)
         {
             var test = op switch
             {
@@ -290,13 +290,13 @@ public static class CosmosQueryTranslator
             return new Leaf(null, Json(column, rest, test, value));
         }
 
-        private static JsonPathConditionNode Json(AttributeMetadata column, IReadOnlyList<CosmosPathStep> rest, JsonPathTest test, object? value)
+        private static JsonPathConditionNode Json(ColumnDefinition column, IReadOnlyList<CosmosPathStep> rest, JsonPathTest test, object? value)
         {
             var parent = JsonPaths.Format(rest.Take(rest.Count - 1));
             return rest[^1] switch
             {
-                IndexStep i => new JsonPathConditionNode(column.LogicalName, parent, i.Index.ToString(CultureInfo.InvariantCulture), test, value, true),
-                PropertyStep p => new JsonPathConditionNode(column.LogicalName, parent, p.Name, test, value),
+                IndexStep i => new JsonPathConditionNode(column.LogicalName!, parent, i.Index.ToString(CultureInfo.InvariantCulture), test, value, true),
+                PropertyStep p => new JsonPathConditionNode(column.LogicalName!, parent, p.Name, test, value),
                 _ => throw new InvalidOperationException("Unknown path step."),
             };
         }

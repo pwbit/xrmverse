@@ -2,10 +2,10 @@ using System.Globalization;
 using System.Text;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk.Metadata;
-using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Query;
 using Xrmd.Query.Model;
 
 namespace Xrmd.Tds.Translation;
@@ -403,8 +403,8 @@ public sealed class SqlTranslator(IMetadataStore store)
                     if (join.JoinHint != JoinHint.None) throw TdsSqlErrors.NotSupported("join hints");
                     var joinType = join.QualifiedJoinType switch
                     {
-                        QualifiedJoinType.Inner => JoinOperator.Inner,
-                        QualifiedJoinType.LeftOuter => JoinOperator.LeftOuter,
+                        QualifiedJoinType.Inner => JoinKind.Inner,
+                        QualifiedJoinType.LeftOuter => JoinKind.LeftOuter,
                         _ => throw TdsSqlErrors.NotSupported("RIGHT and FULL joins"),
                     };
                     AddTables(join.FirstTableReference);
@@ -454,7 +454,7 @@ public sealed class SqlTranslator(IMetadataStore store)
         }
 
         /// <summary><c>JOIN t ON a.lookup = t.primarykey</c> or <c>ON t.lookup = a.primarykey</c>, in either order.</summary>
-        private void AddJoin(NamedTableReference named, JoinOperator joinType, BooleanExpression on)
+        private void AddJoin(NamedTableReference named, JoinKind joinType, BooleanExpression on)
         {
             var (entity, exposed) = ResolveTable(named);
             var link = new LinkNode { EntityName = entity.LogicalName, From = "", To = "", JoinType = joinType, Alias = exposed };
@@ -751,7 +751,7 @@ public sealed class SqlTranslator(IMetadataStore store)
                     Read(binary);
                     var and = binary.BinaryExpressionType == BooleanBinaryExpressionType.And;
                     // De Morgan: NOT (a AND b) = NOT a OR NOT b. It holds in SQL's three-valued logic too.
-                    var op = and != negate ? LogicalOperator.And : LogicalOperator.Or;
+                    var op = and != negate ? FilterLogic.And : FilterLogic.Or;
                     var into = target;
                     if (op != target.Operator)
                     {
@@ -770,7 +770,7 @@ public sealed class SqlTranslator(IMetadataStore store)
                     Read(like);
                     if (like.EscapeExpression is not null || like.OdbcEscape) throw TdsSqlErrors.NotSupported("LIKE … ESCAPE");
                     var column = ConditionColumn(like.FirstExpression, "LIKE");
-                    var op = like.NotDefined != negate ? ConditionOperator.NotLike : ConditionOperator.Like;
+                    var op = like.NotDefined != negate ? FilterOperator.NotLike : FilterOperator.Like;
                     target.Conditions.Add(Condition(column, op, [Value(like.SecondExpression)]));
                     break;
                 }
@@ -779,7 +779,7 @@ public sealed class SqlTranslator(IMetadataStore store)
                     Read(@in);
                     if (@in.Subquery is not null) throw TdsSqlErrors.NotSupported(Describe(@in.Subquery));
                     var column = ConditionColumn(@in.Expression, "IN");
-                    var op = @in.NotDefined != negate ? ConditionOperator.NotIn : ConditionOperator.In;
+                    var op = @in.NotDefined != negate ? FilterOperator.NotIn : FilterOperator.In;
                     target.Conditions.Add(Condition(column, op, @in.Values.Select(Value).ToList()));
                     break;
                 }
@@ -788,7 +788,7 @@ public sealed class SqlTranslator(IMetadataStore store)
                     Read(ternary);
                     var between = ternary.TernaryExpressionType == BooleanTernaryExpressionType.Between;
                     var column = ConditionColumn(ternary.FirstExpression, "BETWEEN");
-                    var op = between != negate ? ConditionOperator.Between : ConditionOperator.NotBetween;
+                    var op = between != negate ? FilterOperator.Between : FilterOperator.NotBetween;
                     target.Conditions.Add(Condition(column, op, [Value(ternary.SecondExpression), Value(ternary.ThirdExpression)]));
                     break;
                 }
@@ -796,7 +796,7 @@ public sealed class SqlTranslator(IMetadataStore store)
                 {
                     Read(isNull);
                     var column = ConditionColumn(isNull.Expression, "IS NULL");
-                    var op = isNull.IsNot != negate ? ConditionOperator.NotNull : ConditionOperator.Null;
+                    var op = isNull.IsNot != negate ? FilterOperator.NotNull : FilterOperator.Null;
                     target.Conditions.Add(Condition(column, op, []));
                     break;
                 }
@@ -811,12 +811,12 @@ public sealed class SqlTranslator(IMetadataStore store)
             Read(comparison);
             var op = comparison.ComparisonType switch
             {
-                BooleanComparisonType.Equals => ConditionOperator.Equal,
-                BooleanComparisonType.NotEqualToBrackets or BooleanComparisonType.NotEqualToExclamation => ConditionOperator.NotEqual,
-                BooleanComparisonType.LessThan => ConditionOperator.LessThan,
-                BooleanComparisonType.LessThanOrEqualTo => ConditionOperator.LessEqual,
-                BooleanComparisonType.GreaterThan => ConditionOperator.GreaterThan,
-                BooleanComparisonType.GreaterThanOrEqualTo => ConditionOperator.GreaterEqual,
+                BooleanComparisonType.Equals => FilterOperator.Equal,
+                BooleanComparisonType.NotEqualToBrackets or BooleanComparisonType.NotEqualToExclamation => FilterOperator.NotEqual,
+                BooleanComparisonType.LessThan => FilterOperator.LessThan,
+                BooleanComparisonType.LessThanOrEqualTo => FilterOperator.LessEqual,
+                BooleanComparisonType.GreaterThan => FilterOperator.GreaterThan,
+                BooleanComparisonType.GreaterThanOrEqualTo => FilterOperator.GreaterEqual,
                 _ => throw TdsSqlErrors.NotSupported($"the comparison {comparison.ComparisonType}"),
             };
             var first = UnparenthesizeScalar(comparison.FirstExpression);
@@ -830,10 +830,10 @@ public sealed class SqlTranslator(IMetadataStore store)
                 (columnSide, valueSide) = (second, first);
                 op = op switch
                 {
-                    ConditionOperator.LessThan => ConditionOperator.GreaterThan,
-                    ConditionOperator.LessEqual => ConditionOperator.GreaterEqual,
-                    ConditionOperator.GreaterThan => ConditionOperator.LessThan,
-                    ConditionOperator.GreaterEqual => ConditionOperator.LessEqual,
+                    FilterOperator.LessThan => FilterOperator.GreaterThan,
+                    FilterOperator.LessEqual => FilterOperator.GreaterEqual,
+                    FilterOperator.GreaterThan => FilterOperator.LessThan,
+                    FilterOperator.GreaterEqual => FilterOperator.LessEqual,
                     _ => op,
                 };
             }
@@ -848,12 +848,12 @@ public sealed class SqlTranslator(IMetadataStore store)
                 // Each negation keeps SQL's three-valued logic: a NULL column satisfies neither.
                 op = op switch
                 {
-                    ConditionOperator.Equal => ConditionOperator.NotEqual,
-                    ConditionOperator.NotEqual => ConditionOperator.Equal,
-                    ConditionOperator.LessThan => ConditionOperator.GreaterEqual,
-                    ConditionOperator.LessEqual => ConditionOperator.GreaterThan,
-                    ConditionOperator.GreaterThan => ConditionOperator.LessEqual,
-                    ConditionOperator.GreaterEqual => ConditionOperator.LessThan,
+                    FilterOperator.Equal => FilterOperator.NotEqual,
+                    FilterOperator.NotEqual => FilterOperator.Equal,
+                    FilterOperator.LessThan => FilterOperator.GreaterEqual,
+                    FilterOperator.LessEqual => FilterOperator.GreaterThan,
+                    FilterOperator.GreaterThan => FilterOperator.LessEqual,
+                    FilterOperator.GreaterEqual => FilterOperator.LessThan,
                     _ => throw new InvalidOperationException($"No negation for the comparison operator {op}."),
                 };
             }
@@ -870,7 +870,7 @@ public sealed class SqlTranslator(IMetadataStore store)
             return column;
         }
 
-        private static ConditionNode Condition(Column column, ConditionOperator op, IReadOnlyList<object?> values) =>
+        private static ConditionNode Condition(Column column, FilterOperator op, IReadOnlyList<object?> values) =>
             new(column.Table.IsRoot ? null : column.Table.Exposed, column.Attribute.LogicalName, op, values);
 
         /// <summary>A literal or a parameter: the only values the subset takes.</summary>

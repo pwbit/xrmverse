@@ -1,8 +1,8 @@
 using System.Data;
 using System.Globalization;
-using Microsoft.Xrm.Sdk;
-using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
+using Xrmd.Model.Metadata;
+using Xrmd.Query.Sdk;
 
 namespace Xrmd.Query.Sql;
 
@@ -10,7 +10,7 @@ namespace Xrmd.Query.Sql;
 /// Converts condition values (FetchXML strings or typed SDK values from QueryExpression) to the CLR type of the
 /// attribute's column, so they can travel as typed <c>DbParameter</c>s.
 /// </summary>
-public static class ValueCoercer
+public static partial class ValueCoercer
 {
     private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
 
@@ -20,22 +20,22 @@ public static class ValueCoercer
     /// </summary>
     /// <exception cref="XrmdValidationException">The value is null, cannot be converted, or the attribute type cannot be
     /// used in conditions; the message names the attribute and the value.</exception>
-    public static object Coerce(AttributeMetadata a, object? value)
+    public static object Coerce(ColumnDefinition a, object? value)
     {
         if (value is null) throw Invalid(a, value);
         object? result = a switch
         {
-            StringAttributeMetadata or MemoAttributeMetadata => ToStringValue(value),
-            IntegerAttributeMetadata => ToInt(value),
-            BigIntAttributeMetadata => ToLong(value),
-            DecimalAttributeMetadata or MoneyAttributeMetadata => ToDecimal(value),
-            DoubleAttributeMetadata => ToDouble(value),
-            BooleanAttributeMetadata => ToBool(value),
-            MultiSelectPicklistAttributeMetadata => throw new XrmdValidationException(
+            TextColumn or MemoColumn => ToStringValue(value),
+            IntegerColumn => ToInt(value),
+            BigIntColumn => ToLong(value),
+            DecimalColumn or MoneyColumn => ToDecimal(value),
+            DoubleColumn => ToDouble(value),
+            BooleanColumn => ToBool(value),
+            MultiChoiceColumn => throw new XrmdValidationException(
                 $"Attribute '{a.LogicalName}' of type {a.AttributeType} cannot be compared with this operator."),
-            EnumAttributeMetadata => ToInt(value is OptionSetValue o ? o.Value : value),
-            DateTimeAttributeMetadata => ToDateTime(value),
-            LookupAttributeMetadata or UniqueIdentifierAttributeMetadata => ToGuid(value),
+            ChoiceColumnBase => ToInt(SdkConditionValues.Unwrap(value) is int o ? o : value), // OptionSetValue
+            DateTimeColumn => ToDateTime(value),
+            LookupColumn or UniqueIdentifierColumn => ToGuid(value),
             _ => throw new XrmdValidationException(
                 $"Attribute '{a.LogicalName}' of type {a.AttributeType} cannot be used in a condition."),
         };
@@ -43,20 +43,20 @@ public static class ValueCoercer
     }
 
     /// <summary>The parameter type for values coerced for <paramref name="a"/>.</summary>
-    public static DbType DbTypeOf(AttributeMetadata a) => a switch
+    public static DbType DbTypeOf(ColumnDefinition a) => a switch
     {
-        StringAttributeMetadata or MemoAttributeMetadata => DbType.String,
-        IntegerAttributeMetadata or EnumAttributeMetadata => DbType.Int32,
-        BigIntAttributeMetadata => DbType.Int64,
-        DecimalAttributeMetadata or MoneyAttributeMetadata => DbType.Decimal,
-        DoubleAttributeMetadata => DbType.Double,
-        BooleanAttributeMetadata => DbType.Boolean,
-        DateTimeAttributeMetadata => DbType.DateTime2,
-        LookupAttributeMetadata or UniqueIdentifierAttributeMetadata => DbType.Guid,
+        TextColumn or MemoColumn => DbType.String,
+        IntegerColumn or ChoiceColumnBase => DbType.Int32,
+        BigIntColumn => DbType.Int64,
+        DecimalColumn or MoneyColumn => DbType.Decimal,
+        DoubleColumn => DbType.Double,
+        BooleanColumn => DbType.Boolean,
+        DateTimeColumn => DbType.DateTime2,
+        LookupColumn or UniqueIdentifierColumn => DbType.Guid,
         _ => throw new XrmdValidationException($"Attribute '{a.LogicalName}' of type {a.AttributeType} cannot be used in a condition."),
     };
 
-    private static XrmdValidationException Invalid(AttributeMetadata a, object? value) =>
+    private static XrmdValidationException Invalid(ColumnDefinition a, object? value) =>
         new($"Invalid value '{(value is null ? "null" : Convert.ToString(value, Invariant))}' for attribute '{a.LogicalName}' of type {a.AttributeType}.");
 
     private static string? ToStringValue(object value) => value switch
@@ -90,7 +90,7 @@ public static class ValueCoercer
     private static decimal? ToDecimal(object value) => value switch
     {
         decimal d => d,
-        Money m => m.Value,
+        _ when SdkConditionValues.Unwrap(value) is decimal m => m, // Money
         int or long or short or byte => Convert.ToDecimal(value, Invariant),
         double or float => double.IsFinite(Convert.ToDouble(value, Invariant))
             && Math.Abs(Convert.ToDouble(value, Invariant)) < (double)decimal.MaxValue ? Convert.ToDecimal(value, Invariant) : null,
@@ -131,7 +131,7 @@ public static class ValueCoercer
     private static Guid? ToGuid(object value) => value switch
     {
         Guid g => g,
-        EntityReference r => r.Id,
+        _ when SdkConditionValues.Unwrap(value) is Guid r => r, // EntityReference
         string s => Guid.TryParse(s.Trim(), out var r) ? r : null,
         _ => null,
     };

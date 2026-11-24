@@ -5,6 +5,7 @@ using Xrmd.Abstractions;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Query;
 using Xrmd.Query;
 using Xrmd.Query.Model;
 
@@ -72,7 +73,7 @@ public sealed class ReadSecurity(IReadOnlyList<SecurityProfile> principals, Busi
         foreach (var p in principals)
             if (PrincipalFilter(p, entity, isQueryUser: p.UserId == queryUserId) is { } filter) filters.Add(filter);
         if (filters.Count <= 1) return filters.SingleOrDefault();
-        var all = new FilterNode { Operator = LogicalOperator.And };
+        var all = new FilterNode { Operator = FilterLogic.And };
         all.Filters.AddRange(filters);
         return all;
     }
@@ -99,7 +100,7 @@ public sealed class ReadSecurity(IReadOnlyList<SecurityProfile> principals, Busi
     private static FilterNode And(FilterNode? left, FilterNode right)
     {
         if (left is null) return right;
-        var and = new FilterNode { Operator = LogicalOperator.And };
+        var and = new FilterNode { Operator = FilterLogic.And };
         and.Filters.Add(left);
         and.Filters.Add(right);
         return and;
@@ -114,8 +115,8 @@ public sealed class ReadSecurity(IReadOnlyList<SecurityProfile> principals, Busi
     /// </summary>
     private FilterNode QueuePrivacy(SecurityProfile p, EntityMetadata queue, bool isQueryUser)
     {
-        var filter = new FilterNode { Operator = LogicalOperator.Or };
-        filter.Conditions.Add(new ConditionNode(null, QueueViewType, ConditionOperator.Equal, [QueueSchema.PublicViewType]));
+        var filter = new FilterNode { Operator = FilterLogic.Or };
+        filter.Conditions.Add(new ConditionNode(null, QueueViewType, FilterOperator.Equal, [QueueSchema.PublicViewType]));
         filter.Conditions.Add(OwnedBy(p, isQueryUser));
         filter.QueueMembers.Add(new QueueMemberNode(p.UserId));
         filter.Shared.Add(new SharedRecordsNode(p.UserId, queue.ObjectTypeCode ?? 0, (int)AccessRights.ReadAccess));
@@ -168,7 +169,7 @@ public sealed class ReadSecurity(IReadOnlyList<SecurityProfile> principals, Busi
         if (entity.LogicalName == AuditTable.Name)
             throw XrmdFaultException.PrivilegeDenied(p.UserId, privilege, entity.LogicalName, entity.ObjectTypeCode ?? 0);
 
-        var filter = new FilterNode { Operator = LogicalOperator.Or };
+        var filter = new FilterNode { Operator = FilterLogic.Or };
         switch (entity.OwnershipType)
         {
             case OwnershipTypes.OrganizationOwned or OwnershipTypes.None:
@@ -183,12 +184,12 @@ public sealed class ReadSecurity(IReadOnlyList<SecurityProfile> principals, Busi
                 {
                     var principals = reach.ReadPrincipals.Order().ToList();
                     var excluded = ExcludedActivityTypes(entity, reach);
-                    var hierarchy = excluded is null ? filter : new FilterNode { Operator = LogicalOperator.Or };
+                    var hierarchy = excluded is null ? filter : new FilterNode { Operator = FilterLogic.Or };
                     hierarchy.Owned.Add(new OwnedRecordsNode(principals)); // one JSON parameter, like the shared branch
                     hierarchy.Shared.Add(new SharedRecordsNode(p.UserId, entity.ObjectTypeCode ?? 0, (int)AccessRights.ReadAccess, principals, typeAttribute));
                     if (excluded is not null)
                     {
-                        var and = new FilterNode { Operator = LogicalOperator.And };
+                        var and = new FilterNode { Operator = FilterLogic.And };
                         and.Conditions.Add(excluded);
                         and.Filters.Add(hierarchy);
                         filter.Filters.Add(and);
@@ -292,7 +293,7 @@ public sealed class ReadSecurity(IReadOnlyList<SecurityProfile> principals, Busi
             throw new InvalidOperationException(
                 $"The activity table '{untyped.LogicalName}' is excluded from hierarchy security but has no object type code: its pointer rows cannot be told apart.");
         var excluded = excludedTables.Select(e => (object?)e!.ObjectTypeCode!.Value).Distinct().ToList();
-        return excluded.Count == 0 ? null : new ConditionNode(null, ActivitySchema.ActivityTypeCode, ConditionOperator.NotIn, excluded);
+        return excluded.Count == 0 ? null : new ConditionNode(null, ActivitySchema.ActivityTypeCode, FilterOperator.NotIn, excluded);
     }
 
     /// <summary>
@@ -355,7 +356,7 @@ public sealed class ReadSecurity(IReadOnlyList<SecurityProfile> principals, Busi
             .Select(a => (object?)a.LogicalName).ToList();
         if (columns.Count == 0) return null;
         var filter = new FilterNode();
-        filter.Conditions.Add(new ConditionNode(null, AttachmentColumn, ConditionOperator.NotIn, columns));
+        filter.Conditions.Add(new ConditionNode(null, AttachmentColumn, FilterOperator.NotIn, columns));
         return filter;
     }
 
@@ -363,14 +364,14 @@ public sealed class ReadSecurity(IReadOnlyList<SecurityProfile> principals, Busi
 
     /// <summary>Owned by the principal or one of its teams.</summary>
     private static ConditionNode OwnedBy(SecurityProfile p, bool isQueryUser) => isQueryUser
-        ? new ConditionNode(null, OwnerId, ConditionOperator.EqualUserOrUserTeams, [])
-        : new ConditionNode(null, OwnerId, ConditionOperator.In, [p.UserId, .. p.TeamIds.Cast<object?>()]);
+        ? new ConditionNode(null, OwnerId, FilterOperator.EqualUserOrUserTeams, [])
+        : new ConditionNode(null, OwnerId, FilterOperator.In, [p.UserId, .. p.TeamIds.Cast<object?>()]);
 
     private static ConditionNode InUnit(SecurityProfile p) =>
-        new(null, OwningBusinessUnit, ConditionOperator.Equal, [p.BusinessUnitId]);
+        new(null, OwningBusinessUnit, FilterOperator.Equal, [p.BusinessUnitId]);
 
     private static ConditionNode InSubtree(SecurityProfile p) =>
-        new(null, OwningBusinessUnit, ConditionOperator.UnderOrEqual, [p.BusinessUnitId]);
+        new(null, OwningBusinessUnit, FilterOperator.UnderOrEqual, [p.BusinessUnitId]);
 
     /// <inheritdoc />
     /// <exception cref="XrmdValidationException">The hierarchy security model is disabled.</exception>

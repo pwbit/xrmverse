@@ -147,7 +147,12 @@ The view is cached per model instance in `SdkViewCache` (a `ConditionalWeakTable
 for as long as the store holds it; a write replaces the model and so the view. A reverse map from view to model lets a twin find
 the model of a view without converting again; for an object that is not a view, the twin converts a fresh copy.
 
-The view is transitional. The other modules move to the model in S.2c to S.2h, and S.2i removes the view, the twins and the bridge.
+Query (`Xrmd.Query`) is on the model since S.2c: its compilers and translators read `Xrmd.Model.Metadata` types and no longer
+touch the SDK metadata types. Its SDK edge is `src/Xrmd.Query/Sdk/`: the `QueryExpression` reader (SDK query to the model query),
+the SDK condition values, the callback interfaces that other modules implement (`IQuerySecurity`, `IHierarchyResolver`; the
+compilers pass them cached SDK views), and SDK twins of the public helpers that other modules still call.
+
+The view is transitional. The other modules move to the model in S.2d to S.2h, and S.2i removes the view, the twins and the bridge.
 
 ## Tests on PostgreSQL
 

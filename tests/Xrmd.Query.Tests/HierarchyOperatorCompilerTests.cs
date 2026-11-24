@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using FluentAssertions;
 using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
+using Xrmd.Model.Query;
 using Xrmd.Query.FetchXml;
 using Xrmd.Query.Model;
 using Xrmd.Query.Sql;
@@ -25,7 +26,7 @@ public class HierarchyOperatorCompilerTests
         return new QueryModel { Root = root };
     }
 
-    private static ConditionNode Cond(string attribute, ConditionOperator op, params object?[] values) => new(null, attribute, op, values);
+    private static ConditionNode Cond(string attribute, FilterOperator op, params object?[] values) => new(null, attribute, op, values);
 
     private const string Down =
         "WITH h0 (id, lvl) AS (SELECT t.[accountid], 0 FROM [data].[account] AS t WHERE t.[accountid] = @p0 " +
@@ -38,12 +39,12 @@ public class HierarchyOperatorCompilerTests
         "WHERE h.lvl < 100 AND c.[accountid] <> @p0)";
 
     [Theory]
-    [InlineData(ConditionOperator.Under, Down, "t0.[accountid] IN (SELECT id FROM h0 WHERE lvl > 0)")]
-    [InlineData(ConditionOperator.UnderOrEqual, Down, "t0.[accountid] IN (SELECT id FROM h0)")]
-    [InlineData(ConditionOperator.NotUnder, Down, "(t0.[accountid] NOT IN (SELECT id FROM h0) OR t0.[accountid] IS NULL)")]
-    [InlineData(ConditionOperator.Above, Up, "t0.[accountid] IN (SELECT id FROM h0 WHERE lvl > 0)")]
-    [InlineData(ConditionOperator.AboveOrEqual, Up, "t0.[accountid] IN (SELECT id FROM h0)")]
-    public void Operators_on_the_primary_key_compile_to_a_cte(ConditionOperator op, string cte, string predicate)
+    [InlineData(FilterOperator.Under, Down, "t0.[accountid] IN (SELECT id FROM h0 WHERE lvl > 0)")]
+    [InlineData(FilterOperator.UnderOrEqual, Down, "t0.[accountid] IN (SELECT id FROM h0)")]
+    [InlineData(FilterOperator.NotUnder, Down, "(t0.[accountid] NOT IN (SELECT id FROM h0) OR t0.[accountid] IS NULL)")]
+    [InlineData(FilterOperator.Above, Up, "t0.[accountid] IN (SELECT id FROM h0 WHERE lvl > 0)")]
+    [InlineData(FilterOperator.AboveOrEqual, Up, "t0.[accountid] IN (SELECT id FROM h0)")]
+    public void Operators_on_the_primary_key_compile_to_a_cte(FilterOperator op, string cte, string predicate)
     {
         var id = Guid.NewGuid();
         var c = Compile(Query("account", Cond("accountid", op, id)));
@@ -54,12 +55,12 @@ public class HierarchyOperatorCompilerTests
     }
 
     [Theory]
-    [InlineData(ConditionOperator.Under, Down, "t0.[parentaccountid] IN (SELECT id FROM h0 WHERE lvl > 0)")]
-    [InlineData(ConditionOperator.UnderOrEqual, Down, "t0.[parentaccountid] IN (SELECT id FROM h0)")]
-    [InlineData(ConditionOperator.NotUnder, Down, "(t0.[parentaccountid] NOT IN (SELECT id FROM h0) OR t0.[parentaccountid] IS NULL)")]
-    [InlineData(ConditionOperator.Above, Up, "t0.[parentaccountid] IN (SELECT id FROM h0 WHERE lvl > 0)")]
-    [InlineData(ConditionOperator.AboveOrEqual, Up, "t0.[parentaccountid] IN (SELECT id FROM h0)")]
-    public void Operators_on_a_lookup_to_the_hierarchical_table_run_the_cte_on_the_target(ConditionOperator op, string cte, string predicate)
+    [InlineData(FilterOperator.Under, Down, "t0.[parentaccountid] IN (SELECT id FROM h0 WHERE lvl > 0)")]
+    [InlineData(FilterOperator.UnderOrEqual, Down, "t0.[parentaccountid] IN (SELECT id FROM h0)")]
+    [InlineData(FilterOperator.NotUnder, Down, "(t0.[parentaccountid] NOT IN (SELECT id FROM h0) OR t0.[parentaccountid] IS NULL)")]
+    [InlineData(FilterOperator.Above, Up, "t0.[parentaccountid] IN (SELECT id FROM h0 WHERE lvl > 0)")]
+    [InlineData(FilterOperator.AboveOrEqual, Up, "t0.[parentaccountid] IN (SELECT id FROM h0)")]
+    public void Operators_on_a_lookup_to_the_hierarchical_table_run_the_cte_on_the_target(FilterOperator op, string cte, string predicate)
     {
         // account.parentaccountid is a lookup to account: the CTE runs on account, the predicate on the lookup column.
         var c = Compile(Query("account", Cond("parentaccountid", op, Guid.NewGuid())));
@@ -73,7 +74,7 @@ public class HierarchyOperatorCompilerTests
     {
         var a = Guid.NewGuid();
         var b = Guid.NewGuid();
-        var c = Compile(Query("account", Cond("accountid", ConditionOperator.Under, a), Cond("parentaccountid", ConditionOperator.Above, b)));
+        var c = Compile(Query("account", Cond("accountid", FilterOperator.Under, a), Cond("parentaccountid", FilterOperator.Above, b)));
         var sql = Normalize(c.Sql);
         sql.Should().StartWith("WITH h0 (id, lvl) AS (");
         sql.Should().Contain("), h1 (id, parent, lvl) AS (");
@@ -89,7 +90,7 @@ public class HierarchyOperatorCompilerTests
     public void The_prelude_is_the_first_token_of_every_statement()
     {
         var id = Guid.NewGuid();
-        var q = Query("account", Cond("accountid", ConditionOperator.UnderOrEqual, id));
+        var q = Query("account", Cond("accountid", FilterOperator.UnderOrEqual, id));
         q.ReturnTotalRecordCount = true;
         q.Distinct = true;
         var c = Compile(q);
@@ -101,7 +102,7 @@ public class HierarchyOperatorCompilerTests
     [Fact]
     public void The_prelude_precedes_the_count_probe_of_an_aggregate_query()
     {
-        var q = Query("account", Cond("accountid", ConditionOperator.Under, Guid.NewGuid()));
+        var q = Query("account", Cond("accountid", FilterOperator.Under, Guid.NewGuid()));
         q.Aggregate = true;
         q.Root.Columns.Add(new ColumnNode("accountid", "n", XrmAggregate.Count, false, false, null));
         var c = Compile(q);
@@ -112,7 +113,7 @@ public class HierarchyOperatorCompilerTests
     [Fact]
     public void The_prelude_precedes_offset_and_keyset_paging()
     {
-        var q = Query("account", Cond("accountid", ConditionOperator.Under, Guid.NewGuid()));
+        var q = Query("account", Cond("accountid", FilterOperator.Under, Guid.NewGuid()));
         q.PageNumber = 2;
         q.PageSize = 10;
         var offset = Compile(q);
@@ -127,14 +128,14 @@ public class HierarchyOperatorCompilerTests
     [Fact]
     public void Query_without_hierarchical_conditions_has_no_prelude()
     {
-        Compile(Query("account", Cond("name", ConditionOperator.Equal, "x"))).Sql.Should().StartWith("SELECT");
+        Compile(Query("account", Cond("name", FilterOperator.Equal, "x"))).Sql.Should().StartWith("SELECT");
     }
 
     [Fact]
     public void Business_unit_conditions_still_use_the_resolver_without_a_cte()
     {
         var resolver = new Resolver(Guid.NewGuid());
-        var c = Compile(Query("systemuser", Cond("businessunitid", ConditionOperator.Under, Guid.NewGuid())), Context with { Hierarchy = resolver });
+        var c = Compile(Query("systemuser", Cond("businessunitid", FilterOperator.Under, Guid.NewGuid())), Context with { Hierarchy = resolver });
         c.Sql.Should().StartWith("SELECT").And.NotContain("WITH h");
         Normalize(c.Sql).Should().Contain("OPENJSON(@p0)");
         resolver.Calls.Should().Equal("businessunit");
@@ -145,17 +146,17 @@ public class HierarchyOperatorCompilerTests
     [InlineData("pb_project", "pb_customerid")] // a lookup to systemuser, which has no hierarchical relationship in this metadata
     public void A_table_without_a_hierarchical_relationship_is_refused(string entity, string attribute)
     {
-        var act = () => Compile(Query(entity, Cond(attribute, ConditionOperator.Under, Guid.NewGuid())), Context with { Hierarchy = new Resolver() });
+        var act = () => Compile(Query(entity, Cond(attribute, FilterOperator.Under, Guid.NewGuid())), Context with { Hierarchy = new Resolver() });
         act.Should().Throw<XrmdValidationException>().WithMessage("*hierarchical relationship*");
     }
 
     [Theory]
-    [InlineData(ConditionOperator.Under)]
-    [InlineData(ConditionOperator.UnderOrEqual)]
-    [InlineData(ConditionOperator.Above)]
-    [InlineData(ConditionOperator.AboveOrEqual)]
-    [InlineData(ConditionOperator.NotUnder)]
-    public void A_multi_target_lookup_is_refused_instead_of_walking_its_first_target(ConditionOperator op)
+    [InlineData(FilterOperator.Under)]
+    [InlineData(FilterOperator.UnderOrEqual)]
+    [InlineData(FilterOperator.Above)]
+    [InlineData(FilterOperator.AboveOrEqual)]
+    [InlineData(FilterOperator.NotUnder)]
+    public void A_multi_target_lookup_is_refused_instead_of_walking_its_first_target(FilterOperator op)
     {
         // pb_regardingid targets account (hierarchical) and systemuser: walking account would silently miss a user value.
         var act = () => Compile(Query("account", Cond("pb_regardingid", op, Guid.NewGuid())));
@@ -168,7 +169,7 @@ public class HierarchyOperatorCompilerTests
     {
         // ownerid targets systemuser and team: the user hierarchy applies (this metadata gives systemuser no hierarchical
         // relationship, so the refusal names the table the compiler chose).
-        var act = () => Compile(Query("account", Cond("ownerid", ConditionOperator.Under, Guid.NewGuid())));
+        var act = () => Compile(Query("account", Cond("ownerid", FilterOperator.Under, Guid.NewGuid())));
         act.Should().Throw<XrmdValidationException>().WithMessage("*'systemuser' has none*");
     }
 
@@ -195,14 +196,14 @@ public class HierarchyOperatorCompilerTests
     [Fact]
     public void A_non_key_non_lookup_attribute_is_refused()
     {
-        var act = () => Compile(Query("account", Cond("name", ConditionOperator.Under, Guid.NewGuid())));
+        var act = () => Compile(Query("account", Cond("name", FilterOperator.Under, Guid.NewGuid())));
         act.Should().Throw<XrmdValidationException>().WithMessage("*lookup or uniqueidentifier*");
     }
 
     [Fact]
     public void A_tree_operator_takes_one_value()
     {
-        var act = () => Compile(Query("account", Cond("accountid", ConditionOperator.Under)));
+        var act = () => Compile(Query("account", Cond("accountid", FilterOperator.Under)));
         act.Should().Throw<XrmdValidationException>().WithMessage("*exactly one value*");
     }
 

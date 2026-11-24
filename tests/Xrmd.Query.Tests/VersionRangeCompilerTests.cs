@@ -3,6 +3,7 @@ using System.Data.Common;
 using System.Text.RegularExpressions;
 using FluentAssertions;
 using Xrmd.Abstractions;
+using Xrmd.Model.Query;
 using Xrmd.Query.Model;
 using Xrmd.Query.Sql;
 
@@ -40,7 +41,7 @@ public class VersionRangeCompilerTests
     public void Version_range_is_anded_with_the_conditions()
     {
         var root = new EntityNode { EntityName = "pb_project" };
-        root.Filter.Conditions.Add(new ConditionNode(null, "pb_name", Microsoft.Xrm.Sdk.Query.ConditionOperator.Equal, ["x"]));
+        root.Filter.Conditions.Add(new ConditionNode(null, "pb_name", FilterOperator.Equal, ["x"]));
         root.Filter.Versions.Add(new VersionRangeNode(1, 2));
 
         var c = Compile(new QueryModel { Root = root });

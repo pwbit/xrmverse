@@ -1,7 +1,7 @@
 using System.Text.RegularExpressions;
 using FluentAssertions;
-using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
+using Xrmd.Model.Query;
 using Xrmd.Query.FetchXml;
 using Xrmd.Query.Model;
 using Xrmd.Query.Sql;
@@ -57,7 +57,7 @@ public class PagingCompilerTests
         q.PageSize = 10;
         q.PageNumber = 2;
         q.PagingCookie = Cookie(1, g);
-        q.Root.Filter.Conditions.Add(new ConditionNode(null, "pb_count", ConditionOperator.GreaterThan, [1]));
+        q.Root.Filter.Conditions.Add(new ConditionNode(null, "pb_count", FilterOperator.GreaterThan, [1]));
         var c = Compile(q);
         var sql = Normalize(c.Sql);
         c.UsesKeyset.Should().BeTrue();
@@ -200,7 +200,7 @@ public class PagingCompilerTests
         q.ReturnTotalRecordCount = true;
         q.PageNumber = 2;
         q.PagingCookie = Cookie(1, Guid.NewGuid());
-        q.Root.Filter.Conditions.Add(new ConditionNode(null, "pb_count", ConditionOperator.GreaterThan, [1]));
+        q.Root.Filter.Conditions.Add(new ConditionNode(null, "pb_count", FilterOperator.GreaterThan, [1]));
         var c = Compile(q);
         c.UsesKeyset.Should().BeTrue();
         c.Columns.Should().NotContain(x => x.Kind == ResultKind.TotalCount);

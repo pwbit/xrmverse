@@ -7,6 +7,7 @@ using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core;
+using Xrmd.Model.Query;
 using Xrmd.Query;
 using Xrmd.Query.Cosmos;
 using Xrmd.Query.Model;
@@ -81,7 +82,7 @@ public sealed class JsonPathConditionSqlTests(XrmdFixture fx)
     {
         var root = new EntityNode { EntityName = table };
         root.Columns.Add(new ColumnNode("new_name"));
-        root.Filter.Conditions.Add(new ConditionNode(null, "new_name", ConditionOperator.BeginsWith, [tag]));
+        root.Filter.Conditions.Add(new ConditionNode(null, "new_name", FilterOperator.BeginsWith, [tag]));
         root.Filter.JsonPaths.AddRange(nodes);
         var store = fx.App.Services.GetRequiredService<IMetadataStore>();
         var factory = fx.App.Services.GetRequiredService<IDbConnectionFactory>();

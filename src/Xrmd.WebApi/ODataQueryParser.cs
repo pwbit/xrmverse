@@ -8,10 +8,10 @@ using Microsoft.OData.Edm;
 using Microsoft.OData.UriParser;
 using Microsoft.OData.UriParser.Aggregation;
 using Microsoft.Xrm.Sdk.Metadata;
-using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Query;
 using Xrmd.Query.FetchXml;
 using Xrmd.Query.Model;
 using Xrmd.Query.Sql;
@@ -148,7 +148,7 @@ public sealed class ODataQueryParser(ODataEdmModelBuilder edm, IMetadataStore st
         {
             throw new XrmdValidationException(ex.Message, ex);
         }
-        root.Filter.Conditions.Add(new ConditionNode(null, SystemAttributes.PrimaryIdName(m), ConditionOperator.Equal, [id]));
+        root.Filter.Conditions.Add(new ConditionNode(null, SystemAttributes.PrimaryIdName(m), FilterOperator.Equal, [id]));
         return new QueryModel { Root = root, Top = 1 };
     }
 
@@ -499,7 +499,7 @@ public sealed class ODataQueryParser(ODataEdmModelBuilder edm, IMetadataStore st
         var pk = SystemAttributes.PrimaryIdName(target);
         var link = new LinkNode
         {
-            EntityName = target.LogicalName, From = pk, To = lookup.LogicalName, JoinType = JoinOperator.LeftOuter,
+            EntityName = target.LogicalName, From = pk, To = lookup.LogicalName, JoinType = JoinKind.LeftOuter,
             Alias = expands.Take(parentAlias is null ? name : $"{parentAlias}_{name}"), NavigationProperty = name,
         };
         if (activityTarget is not null)
@@ -633,7 +633,7 @@ public sealed class ODataQueryParser(ODataEdmModelBuilder edm, IMetadataStore st
         {
             var filter = new FilterNode
             {
-                Operator = logical.OperatorKind == BinaryOperatorKind.And ? LogicalOperator.And : LogicalOperator.Or,
+                Operator = logical.OperatorKind == BinaryOperatorKind.And ? FilterLogic.And : FilterLogic.Or,
             };
             Add(filter, logical.OperatorKind, logical.Left);
             Add(filter, logical.OperatorKind, logical.Right);
@@ -668,12 +668,12 @@ public sealed class ODataQueryParser(ODataEdmModelBuilder edm, IMetadataStore st
         {
             var op = binary.OperatorKind switch
             {
-                BinaryOperatorKind.Equal => ConditionOperator.Equal,
-                BinaryOperatorKind.NotEqual => ConditionOperator.NotEqual,
-                BinaryOperatorKind.GreaterThan => ConditionOperator.GreaterThan,
-                BinaryOperatorKind.GreaterThanOrEqual => ConditionOperator.GreaterEqual,
-                BinaryOperatorKind.LessThan => ConditionOperator.LessThan,
-                BinaryOperatorKind.LessThanOrEqual => ConditionOperator.LessEqual,
+                BinaryOperatorKind.Equal => FilterOperator.Equal,
+                BinaryOperatorKind.NotEqual => FilterOperator.NotEqual,
+                BinaryOperatorKind.GreaterThan => FilterOperator.GreaterThan,
+                BinaryOperatorKind.GreaterThanOrEqual => FilterOperator.GreaterEqual,
+                BinaryOperatorKind.LessThan => FilterOperator.LessThan,
+                BinaryOperatorKind.LessThanOrEqual => FilterOperator.LessEqual,
                 _ => throw Unsupported($"the operator '{binary.OperatorKind}' is not supported"),
             };
             var attribute = TryProperty(binary.Left, lookups);
@@ -690,8 +690,8 @@ public sealed class ODataQueryParser(ODataEdmModelBuilder edm, IMetadataStore st
             if (constant.Value is null)
                 return op switch
                 {
-                    ConditionOperator.Equal => new ConditionNode(null, attribute, ConditionOperator.Null, []),
-                    ConditionOperator.NotEqual => new ConditionNode(null, attribute, ConditionOperator.NotNull, []),
+                    FilterOperator.Equal => new ConditionNode(null, attribute, FilterOperator.Null, []),
+                    FilterOperator.NotEqual => new ConditionNode(null, attribute, FilterOperator.NotNull, []),
                     _ => throw Unsupported("null can only be compared with eq or ne"),
                 };
             return new ConditionNode(null, attribute, op, [Value(constant.Value)]);
@@ -702,9 +702,9 @@ public sealed class ODataQueryParser(ODataEdmModelBuilder edm, IMetadataStore st
             var parameters = call.Parameters.ToList();
             var op = call.Name switch
             {
-                "contains" => negated ? ConditionOperator.NotLike : ConditionOperator.Like,
-                "startswith" => negated ? ConditionOperator.DoesNotBeginWith : ConditionOperator.BeginsWith,
-                "endswith" => negated ? ConditionOperator.DoesNotEndWith : ConditionOperator.EndsWith,
+                "contains" => negated ? FilterOperator.NotLike : FilterOperator.Like,
+                "startswith" => negated ? FilterOperator.DoesNotBeginWith : FilterOperator.BeginsWith,
+                "endswith" => negated ? FilterOperator.DoesNotEndWith : FilterOperator.EndsWith,
                 _ => throw Unsupported($"the function '{call.Name}' is not supported"),
             };
             var attribute = parameters.Count == 2 ? TryProperty(parameters[0], lookups) : null;
@@ -713,12 +713,12 @@ public sealed class ODataQueryParser(ODataEdmModelBuilder edm, IMetadataStore st
             return new ConditionNode(null, attribute, op, [call.Name == "contains" ? "%" + EscapeLike(value) + "%" : value]);
         }
 
-        private static ConditionOperator Flip(ConditionOperator op) => op switch
+        private static FilterOperator Flip(FilterOperator op) => op switch
         {
-            ConditionOperator.GreaterThan => ConditionOperator.LessThan,
-            ConditionOperator.GreaterEqual => ConditionOperator.LessEqual,
-            ConditionOperator.LessThan => ConditionOperator.GreaterThan,
-            ConditionOperator.LessEqual => ConditionOperator.GreaterEqual,
+            FilterOperator.GreaterThan => FilterOperator.LessThan,
+            FilterOperator.GreaterEqual => FilterOperator.LessEqual,
+            FilterOperator.LessThan => FilterOperator.GreaterThan,
+            FilterOperator.LessEqual => FilterOperator.GreaterEqual,
             _ => op,
         };
 

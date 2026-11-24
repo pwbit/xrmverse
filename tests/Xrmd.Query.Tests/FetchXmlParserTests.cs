@@ -1,6 +1,6 @@
 using FluentAssertions;
-using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
+using Xrmd.Model.Query;
 using Xrmd.Query.FetchXml;
 using Xrmd.Query.Model;
 
@@ -39,22 +39,22 @@ public class FetchXmlParserTests
         q.Root.EntityName.Should().Be("pb_project");
         q.Root.AllColumns.Should().BeFalse();
         q.Root.Columns.Should().Equal(new ColumnNode("pb_name"), new ColumnNode("pb_count", "c"));
-        q.Root.Filter.Operator.Should().Be(LogicalOperator.And);
+        q.Root.Filter.Operator.Should().Be(FilterLogic.And);
         var cond = q.Root.Filter.Conditions.Should().ContainSingle().Subject;
         cond.Attribute.Should().Be("pb_name");
-        cond.Operator.Should().Be(ConditionOperator.Equal);
+        cond.Operator.Should().Be(FilterOperator.Equal);
         cond.Values.Should().Equal("x");
         var inner = q.Root.Filter.Filters.Should().ContainSingle().Subject;
-        inner.Operator.Should().Be(LogicalOperator.Or);
+        inner.Operator.Should().Be(FilterLogic.Or);
         inner.Conditions.Should().HaveCount(2);
         inner.Conditions[1].EntityAlias.Should().Be("o");
-        inner.Conditions[1].Operator.Should().Be(ConditionOperator.Null);
+        inner.Conditions[1].Operator.Should().Be(FilterOperator.Null);
         inner.Conditions[1].Values.Should().BeEmpty();
         var link = q.Root.Links.Should().ContainSingle().Subject;
         link.EntityName.Should().Be("account");
         link.From.Should().Be("accountid");
         link.To.Should().Be("pb_accountid");
-        link.JoinType.Should().Be(JoinOperator.LeftOuter);
+        link.JoinType.Should().Be(JoinKind.LeftOuter);
         link.Alias.Should().Be("o");
         link.Columns.Should().Equal(new ColumnNode("name"));
         link.Orders.Should().Equal(new OrderNode("name", false));
@@ -70,9 +70,9 @@ public class FetchXmlParserTests
             <filter><condition attribute="y" operator="null"/></filter>
             </entity></fetch>
             """);
-        q.Root.Filter.Operator.Should().Be(LogicalOperator.And);
+        q.Root.Filter.Operator.Should().Be(FilterLogic.And);
         q.Root.Filter.Conditions.Should().BeEmpty();
-        q.Root.Filter.Filters.Select(f => f.Operator).Should().Equal(LogicalOperator.Or, LogicalOperator.And);
+        q.Root.Filter.Filters.Select(f => f.Operator).Should().Equal(FilterLogic.Or, FilterLogic.And);
         q.Root.Filter.Filters.Select(f => f.Conditions.Single().Attribute).Should().Equal("x", "y");
 
         var q3 = FetchXmlParser.Parse("""
@@ -82,7 +82,7 @@ public class FetchXmlParserTests
             <filter><condition attribute="z" operator="null"/></filter>
             </entity></fetch>
             """);
-        q3.Root.Filter.Operator.Should().Be(LogicalOperator.And);
+        q3.Root.Filter.Operator.Should().Be(FilterLogic.And);
         q3.Root.Filter.Filters.Select(f => f.Conditions.Single().Attribute).Should().Equal("x", "y", "z");
     }
 
@@ -94,41 +94,41 @@ public class FetchXmlParserTests
         q.Top.Should().BeNull();
         q.PageNumber.Should().Be(1);
         q.Root.AllColumns.Should().BeTrue();
-        q.Root.Links[0].JoinType.Should().Be(JoinOperator.Inner);
+        q.Root.Links[0].JoinType.Should().Be(JoinKind.Inner);
     }
 
     [Theory]
-    [InlineData("eq", ConditionOperator.Equal)]
-    [InlineData("ne", ConditionOperator.NotEqual)]
-    [InlineData("gt", ConditionOperator.GreaterThan)]
-    [InlineData("ge", ConditionOperator.GreaterEqual)]
-    [InlineData("lt", ConditionOperator.LessThan)]
-    [InlineData("le", ConditionOperator.LessEqual)]
-    [InlineData("like", ConditionOperator.Like)]
-    [InlineData("not-like", ConditionOperator.NotLike)]
-    [InlineData("in", ConditionOperator.In)]
-    [InlineData("not-in", ConditionOperator.NotIn)]
-    [InlineData("null", ConditionOperator.Null)]
-    [InlineData("not-null", ConditionOperator.NotNull)]
-    [InlineData("begins-with", ConditionOperator.BeginsWith)]
-    [InlineData("not-begin-with", ConditionOperator.DoesNotBeginWith)]
-    [InlineData("ends-with", ConditionOperator.EndsWith)]
-    [InlineData("not-end-with", ConditionOperator.DoesNotEndWith)]
-    [InlineData("between", ConditionOperator.Between)]
-    [InlineData("not-between", ConditionOperator.NotBetween)]
-    [InlineData("on", ConditionOperator.On)]
-    [InlineData("on-or-after", ConditionOperator.OnOrAfter)]
-    [InlineData("on-or-before", ConditionOperator.OnOrBefore)]
-    [InlineData("last-x-days", ConditionOperator.LastXDays)]
-    [InlineData("next-x-days", ConditionOperator.NextXDays)]
-    [InlineData("last-x-months", ConditionOperator.LastXMonths)]
-    [InlineData("this-month", ConditionOperator.ThisMonth)]
-    [InlineData("this-year", ConditionOperator.ThisYear)]
-    [InlineData("eq-userid", ConditionOperator.EqualUserId)]
-    [InlineData("ne-userid", ConditionOperator.NotEqualUserId)]
-    [InlineData("eq-businessid", ConditionOperator.EqualBusinessId)]
-    [InlineData("eq-userteams", ConditionOperator.EqualUserTeams)]
-    public void Parse_operators(string op, ConditionOperator expected)
+    [InlineData("eq", FilterOperator.Equal)]
+    [InlineData("ne", FilterOperator.NotEqual)]
+    [InlineData("gt", FilterOperator.GreaterThan)]
+    [InlineData("ge", FilterOperator.GreaterEqual)]
+    [InlineData("lt", FilterOperator.LessThan)]
+    [InlineData("le", FilterOperator.LessEqual)]
+    [InlineData("like", FilterOperator.Like)]
+    [InlineData("not-like", FilterOperator.NotLike)]
+    [InlineData("in", FilterOperator.In)]
+    [InlineData("not-in", FilterOperator.NotIn)]
+    [InlineData("null", FilterOperator.Null)]
+    [InlineData("not-null", FilterOperator.NotNull)]
+    [InlineData("begins-with", FilterOperator.BeginsWith)]
+    [InlineData("not-begin-with", FilterOperator.DoesNotBeginWith)]
+    [InlineData("ends-with", FilterOperator.EndsWith)]
+    [InlineData("not-end-with", FilterOperator.DoesNotEndWith)]
+    [InlineData("between", FilterOperator.Between)]
+    [InlineData("not-between", FilterOperator.NotBetween)]
+    [InlineData("on", FilterOperator.On)]
+    [InlineData("on-or-after", FilterOperator.OnOrAfter)]
+    [InlineData("on-or-before", FilterOperator.OnOrBefore)]
+    [InlineData("last-x-days", FilterOperator.LastXDays)]
+    [InlineData("next-x-days", FilterOperator.NextXDays)]
+    [InlineData("last-x-months", FilterOperator.LastXMonths)]
+    [InlineData("this-month", FilterOperator.ThisMonth)]
+    [InlineData("this-year", FilterOperator.ThisYear)]
+    [InlineData("eq-userid", FilterOperator.EqualUserId)]
+    [InlineData("ne-userid", FilterOperator.NotEqualUserId)]
+    [InlineData("eq-businessid", FilterOperator.EqualBusinessId)]
+    [InlineData("eq-userteams", FilterOperator.EqualUserTeams)]
+    public void Parse_operators(string op, FilterOperator expected)
     {
         var q = FetchXmlParser.Parse($"""<fetch><entity name="a"><filter><condition attribute="x" operator="{op}"/></filter></entity></fetch>""");
         q.Root.Filter.Conditions.Single().Operator.Should().Be(expected);

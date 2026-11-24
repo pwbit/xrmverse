@@ -21,6 +21,7 @@ using Xrmd.Files;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Computed;
 using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Query;
 using Xrmd.Pipeline;
 using Xrmd.Query;
 using Xrmd.Query.FetchXml;
@@ -1569,7 +1570,7 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
             // Plan 3.4, ruling E1: the partition matches exactly (the query's comparison follows the column's collation).
             if (!(await ElasticRecords.FindAsync(s, m, k, lockRow: false, ct)).Found) throw XrmdFaultException.ObjectDoesNotExist(m.LogicalName, id);
         }
-        ConditionNode[] identity = key?.Conditions(m) ?? [new ConditionNode(null, SystemAttributes.PrimaryIdName(m), ConditionOperator.Equal, [id])];
+        ConditionNode[] identity = key?.Conditions(m) ?? [new ConditionNode(null, SystemAttributes.PrimaryIdName(m), FilterOperator.Equal, [id])];
         var root = new EntityNode { EntityName = m.LogicalName, AllColumns = columns?.AllColumns == true };
         if (!root.AllColumns)
             foreach (var column in columns?.Columns ?? Enumerable.Empty<string>()) root.Columns.Add(new ColumnNode(column));

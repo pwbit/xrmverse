@@ -7,6 +7,7 @@ using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core;
 using Xrmd.Core.Query;
+using Xrmd.Model.Query;
 using Xrmd.Query.Model;
 using Xrmd.Query.Sql;
 
@@ -50,7 +51,7 @@ public sealed class CoreOperationsTests(XrmdFixture fx) : IAsyncLifetime
     {
         var root = new EntityNode { EntityName = Project };
         root.Columns.Add(new ColumnNode("pb_name"));
-        root.Filter.Conditions.Add(new ConditionNode(null, "pb_name", ConditionOperator.Equal, [name]));
+        root.Filter.Conditions.Add(new ConditionNode(null, "pb_name", FilterOperator.Equal, [name]));
         return new QueryModel { Root = root };
     }
 

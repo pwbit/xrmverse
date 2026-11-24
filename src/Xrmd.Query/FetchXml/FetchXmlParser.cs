@@ -1,8 +1,8 @@
 using System.Globalization;
 using System.Xml;
 using System.Xml.Linq;
-using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
+using Xrmd.Model.Query;
 using Xrmd.Query.Model;
 
 namespace Xrmd.Query.FetchXml;
@@ -11,46 +11,46 @@ public static class FetchXmlParser
 {
     private const int MaxPageSize = 5000;
 
-    private static readonly Dictionary<string, ConditionOperator> Operators = new(StringComparer.Ordinal)
+    private static readonly Dictionary<string, FilterOperator> Operators = new(StringComparer.Ordinal)
     {
-        ["eq"] = ConditionOperator.Equal,
-        ["ne"] = ConditionOperator.NotEqual,
-        ["gt"] = ConditionOperator.GreaterThan,
-        ["ge"] = ConditionOperator.GreaterEqual,
-        ["lt"] = ConditionOperator.LessThan,
-        ["le"] = ConditionOperator.LessEqual,
-        ["like"] = ConditionOperator.Like,
-        ["not-like"] = ConditionOperator.NotLike,
-        ["in"] = ConditionOperator.In,
-        ["not-in"] = ConditionOperator.NotIn,
-        ["null"] = ConditionOperator.Null,
-        ["not-null"] = ConditionOperator.NotNull,
-        ["begins-with"] = ConditionOperator.BeginsWith,
-        ["not-begin-with"] = ConditionOperator.DoesNotBeginWith,
-        ["ends-with"] = ConditionOperator.EndsWith,
-        ["not-end-with"] = ConditionOperator.DoesNotEndWith,
-        ["between"] = ConditionOperator.Between,
-        ["not-between"] = ConditionOperator.NotBetween,
-        ["on"] = ConditionOperator.On,
-        ["on-or-after"] = ConditionOperator.OnOrAfter,
-        ["on-or-before"] = ConditionOperator.OnOrBefore,
-        ["last-x-days"] = ConditionOperator.LastXDays,
-        ["next-x-days"] = ConditionOperator.NextXDays,
-        ["last-x-months"] = ConditionOperator.LastXMonths,
-        ["this-month"] = ConditionOperator.ThisMonth,
-        ["this-year"] = ConditionOperator.ThisYear,
-        ["eq-userid"] = ConditionOperator.EqualUserId,
-        ["ne-userid"] = ConditionOperator.NotEqualUserId,
-        ["eq-businessid"] = ConditionOperator.EqualBusinessId,
-        ["eq-userteams"] = ConditionOperator.EqualUserTeams,
-        ["eq-useroruserteams"] = ConditionOperator.EqualUserOrUserTeams,
-        ["eq-useroruserhierarchy"] = ConditionOperator.EqualUserOrUserHierarchy,
-        ["eq-useroruserhierarchyandteams"] = ConditionOperator.EqualUserOrUserHierarchyAndTeams,
-        ["under"] = ConditionOperator.Under,
-        ["eq-or-under"] = ConditionOperator.UnderOrEqual,
-        ["above"] = ConditionOperator.Above,
-        ["eq-or-above"] = ConditionOperator.AboveOrEqual,
-        ["not-under"] = ConditionOperator.NotUnder,
+        ["eq"] = FilterOperator.Equal,
+        ["ne"] = FilterOperator.NotEqual,
+        ["gt"] = FilterOperator.GreaterThan,
+        ["ge"] = FilterOperator.GreaterEqual,
+        ["lt"] = FilterOperator.LessThan,
+        ["le"] = FilterOperator.LessEqual,
+        ["like"] = FilterOperator.Like,
+        ["not-like"] = FilterOperator.NotLike,
+        ["in"] = FilterOperator.In,
+        ["not-in"] = FilterOperator.NotIn,
+        ["null"] = FilterOperator.Null,
+        ["not-null"] = FilterOperator.NotNull,
+        ["begins-with"] = FilterOperator.BeginsWith,
+        ["not-begin-with"] = FilterOperator.DoesNotBeginWith,
+        ["ends-with"] = FilterOperator.EndsWith,
+        ["not-end-with"] = FilterOperator.DoesNotEndWith,
+        ["between"] = FilterOperator.Between,
+        ["not-between"] = FilterOperator.NotBetween,
+        ["on"] = FilterOperator.On,
+        ["on-or-after"] = FilterOperator.OnOrAfter,
+        ["on-or-before"] = FilterOperator.OnOrBefore,
+        ["last-x-days"] = FilterOperator.LastXDays,
+        ["next-x-days"] = FilterOperator.NextXDays,
+        ["last-x-months"] = FilterOperator.LastXMonths,
+        ["this-month"] = FilterOperator.ThisMonth,
+        ["this-year"] = FilterOperator.ThisYear,
+        ["eq-userid"] = FilterOperator.EqualUserId,
+        ["ne-userid"] = FilterOperator.NotEqualUserId,
+        ["eq-businessid"] = FilterOperator.EqualBusinessId,
+        ["eq-userteams"] = FilterOperator.EqualUserTeams,
+        ["eq-useroruserteams"] = FilterOperator.EqualUserOrUserTeams,
+        ["eq-useroruserhierarchy"] = FilterOperator.EqualUserOrUserHierarchy,
+        ["eq-useroruserhierarchyandteams"] = FilterOperator.EqualUserOrUserHierarchyAndTeams,
+        ["under"] = FilterOperator.Under,
+        ["eq-or-under"] = FilterOperator.UnderOrEqual,
+        ["above"] = FilterOperator.Above,
+        ["eq-or-above"] = FilterOperator.AboveOrEqual,
+        ["not-under"] = FilterOperator.NotUnder,
     };
 
     private static readonly Dictionary<string, XrmAggregate> Aggregates = new(StringComparer.OrdinalIgnoreCase)
@@ -157,7 +157,7 @@ public static class FetchXmlParser
         if (filters.Count == 1) node.Filter = filters[0];
         else if (filters.Count > 1)
         {
-            var and = new FilterNode { Operator = LogicalOperator.And };
+            var and = new FilterNode { Operator = FilterLogic.And };
             and.Filters.AddRange(filters);
             node.Filter = and;
         }
@@ -198,8 +198,8 @@ public static class FetchXmlParser
         {
             node.Operator = type.ToLowerInvariant() switch
             {
-                "and" => LogicalOperator.And,
-                "or" => LogicalOperator.Or,
+                "and" => FilterLogic.And,
+                "or" => FilterLogic.Or,
                 _ => throw new XrmdValidationException($"Unknown filter type '{type}'."),
             };
         }
@@ -241,8 +241,8 @@ public static class FetchXmlParser
         var linkType = (string?)e.Attribute("link-type") ?? "inner";
         var join = linkType.ToLowerInvariant() switch
         {
-            "inner" => JoinOperator.Inner,
-            "outer" => JoinOperator.LeftOuter,
+            "inner" => JoinKind.Inner,
+            "outer" => JoinKind.LeftOuter,
             _ => throw new XrmdValidationException($"Unsupported link-type '{linkType}'."),
         };
         var link = new LinkNode

@@ -13,6 +13,7 @@ using Xrmd.Core.Elastic;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Query;
 using Xrmd.Pipeline.CustomApis;
 using Xrmd.Query.Model;
 
@@ -211,7 +212,7 @@ public static class EntitySetController
                 foreach (var column in expand.Columns ?? []) root.Columns.Add(new ColumnNode(column));
                 if (expand.Columns is not null && !expand.Columns.Contains(ActivitySchema.ActivityId))
                     root.Columns.Add(new ColumnNode(ActivitySchema.ActivityId)); // to group the rows; not written unless selected
-                root.Filter.Conditions.Add(new ConditionNode(null, ActivitySchema.ActivityId, ConditionOperator.In, [.. chunk.Cast<object?>()]));
+                root.Filter.Conditions.Add(new ConditionNode(null, ActivitySchema.ActivityId, FilterOperator.In, [.. chunk.Cast<object?>()]));
                 root.Orders.Add(new OrderNode(ActivitySchema.ParticipationTypeMask, false));
                 root.Orders.Add(new OrderNode("createdon", false));
                 // The parties are ordered by their participation type's value (sender, to, cc, …), not by its label.

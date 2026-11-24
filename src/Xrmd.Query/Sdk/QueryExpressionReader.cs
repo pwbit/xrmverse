@@ -1,5 +1,6 @@
 using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
+using Xrmd.Model.Query;
 using Xrmd.Query.Model;
 
 namespace Xrmd.Query;
@@ -33,7 +34,7 @@ public static class QueryExpressionReader
         for (var i = 0; i < query.Attributes.Count; i++)
         {
             var value = i < query.Values.Count ? query.Values[i] : null;
-            root.Filter.Conditions.Add(new ConditionNode(null, query.Attributes[i], ConditionOperator.Equal, new[] { value }));
+            root.Filter.Conditions.Add(new ConditionNode(null, query.Attributes[i], FilterOperator.Equal, new[] { value }));
         }
         foreach (var o in query.Orders)
             root.Orders.Add(new OrderNode(o.AttributeName, o.OrderType == OrderType.Descending));
@@ -80,7 +81,7 @@ public static class QueryExpressionReader
                 EntityName = l.LinkToEntityName,
                 From = l.LinkToAttributeName,
                 To = l.LinkFromAttributeName,
-                JoinType = l.JoinOperator,
+                JoinType = (JoinKind)(int)l.JoinOperator, // unchecked: see ReadFilter
                 Alias = string.IsNullOrEmpty(l.EntityAlias) ? null : l.EntityAlias,
             };
             ReadColumns(node, l.Columns);
@@ -97,14 +98,17 @@ public static class QueryExpressionReader
             throw new XrmdValidationException($"Filters are nested more than {QueryLimits.MaxFilterDepth} levels deep.");
         var node = new FilterNode();
         if (f == null) return node;
-        node.Operator = f.FilterOperator;
+        // Unchecked casts, not ToModel(): the numbers are pinned by QueryEnumParityTests, and an undefined value (an
+        // in-process cast) keeps its old behaviour: the compiler refuses an undefined operator (XrmdValidationException)
+        // and treats an undefined logical operator as AND.
+        node.Operator = (FilterLogic)(int)f.FilterOperator;
         foreach (var c in f.Conditions)
         {
             if (c.CompareColumns)
                 throw new XrmdValidationException($"Condition on '{c.AttributeName}': column comparison (CompareColumns) is not supported.");
             node.Conditions.Add(new ConditionNode(
                 string.IsNullOrEmpty(c.EntityName) ? null : c.EntityName,
-                c.AttributeName, c.Operator, c.Values.ToArray<object?>()));
+                c.AttributeName, (FilterOperator)(int)c.Operator, c.Values.ToArray<object?>()));
         }
         foreach (var sub in f.Filters) node.Filters.Add(ReadFilter(sub, depth + 1));
         return node;

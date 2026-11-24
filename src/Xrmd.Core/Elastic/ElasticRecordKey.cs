@@ -1,8 +1,8 @@
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
-using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
+using Xrmd.Model.Query;
 using Xrmd.Query.Model;
 
 namespace Xrmd.Core.Elastic;
@@ -91,10 +91,10 @@ public readonly record struct ElasticRecordKey(Guid Id, string? PartitionId)
         ArgumentNullException.ThrowIfNull(m);
         return
         [
-            new ConditionNode(null, SystemAttributes.PrimaryIdName(m), ConditionOperator.Equal, [Id]),
+            new ConditionNode(null, SystemAttributes.PrimaryIdName(m), FilterOperator.Equal, [Id]),
             PartitionId is null
-                ? new ConditionNode(null, ElasticTables.PartitionId, ConditionOperator.Null, [])
-                : new ConditionNode(null, ElasticTables.PartitionId, ConditionOperator.Equal, [PartitionId]),
+                ? new ConditionNode(null, ElasticTables.PartitionId, FilterOperator.Null, [])
+                : new ConditionNode(null, ElasticTables.PartitionId, FilterOperator.Equal, [PartitionId]),
         ];
     }
 

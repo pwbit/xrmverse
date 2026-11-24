@@ -2,12 +2,12 @@ using System.Data;
 using System.Data.Common;
 using System.Globalization;
 using System.Text;
-using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Computed;
-using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Metadata;
+using Xrmd.Query.Sdk;
 
 namespace Xrmd.Query.Sql;
 
@@ -48,7 +48,7 @@ public sealed record RollupCommand(string Sql, IReadOnlyList<DbParameter> Parame
 /// metadata; constants of the definition are written by <see cref="ComputedSql"/> (texts and dates as parameters), the rest
 /// (time, ids, ranges) as parameters.
 /// </summary>
-public sealed class RollupSql(IMetadataStore store, ISqlDialect dialect, IComputedColumns? computed)
+public sealed partial class RollupSql(IMetadataStore store, ISqlDialect dialect, IComputedColumns? computed)
 {
     /// <summary>The most hierarchy levels below a row a job walks (R6); deeper gives state 5.</summary>
     public const int MaxJobDepth = 100;
@@ -58,7 +58,7 @@ public sealed class RollupSql(IMetadataStore store, ISqlDialect dialect, IComput
     /// <paramref name="definition"/>) on the rows of <paramref name="scope"/>, stamping <c>_date</c> with <paramref name="nowUtc"/>.
     /// </summary>
     /// <exception cref="XrmdValidationException">A definition this translation cannot write (refused at definition time otherwise).</exception>
-    public RollupCommand Recalculate(EntityMetadata table, AttributeMetadata rollup, RollupDefinition definition, RollupScope scope, DateTime nowUtc)
+    public RollupCommand Recalculate(TableDefinition table, ColumnDefinition rollup, RollupDefinition definition, RollupScope scope, DateTime nowUtc)
     {
         ArgumentNullException.ThrowIfNull(scope);
         return new Builder(store, dialect, computed, table, rollup, definition).Recalculate(scope, nowUtc);
@@ -69,16 +69,8 @@ public sealed class RollupSql(IMetadataStore store, ISqlDialect dialect, IComput
     /// <c>depth</c> (the deepest level below the row, walked up to <paramref name="maxDepth"/> + 1) and <c>rows</c> (the rows the
     /// aggregate reads within <paramref name="maxDepth"/> levels).
     /// </summary>
-    public RollupCommand Measure(EntityMetadata table, AttributeMetadata rollup, RollupDefinition definition, Guid id, int maxDepth) =>
+    public RollupCommand Measure(TableDefinition table, ColumnDefinition rollup, RollupDefinition definition, Guid id, int maxDepth) =>
         new Builder(store, dialect, computed, table, rollup, definition).Measure(id, maxDepth);
-
-    /// <summary>Refuses every calculated column: used when the server has no calculated column translator.</summary>
-    private sealed class NoComputedColumns : IComputedColumns
-    {
-        public ComputedDefinition Translate(EntityMetadata entity, AttributeMetadata attribute, Func<string, EntityMetadata?> entities) =>
-            throw new XrmdValidationException(
-                $"The column '{entity.LogicalName}.{attribute.LogicalName}' is calculated, and calculated columns are not available on this server.");
-    }
 
     /// <summary>The kind of value a rollup holds.</summary>
     private enum Kind { Whole, Decimal, Money, Date }
@@ -87,19 +79,19 @@ public sealed class RollupSql(IMetadataStore store, ISqlDialect dialect, IComput
     {
         private readonly IMetadataStore _store;
         private readonly ISqlDialect _dialect;
-        private readonly EntityMetadata _table;
-        private readonly AttributeMetadata _rollup;
+        private readonly TableDefinition _table;
+        private readonly ColumnDefinition _rollup;
         private readonly RollupDefinition _definition;
         private readonly QueryParameters _parameters = new();
         private readonly ComputedSql _computed;
         private readonly Kind _kind;
         private readonly string _pk;
         private readonly string _tableSql;
-        private readonly OneToManyRelationshipMetadata? _hierarchy;
-        private readonly EntityMetadata? _related;
+        private readonly OneToManyRelationship? _hierarchy;
+        private readonly TableDefinition? _related;
         private readonly string? _lookup;
 
-        public Builder(IMetadataStore store, ISqlDialect dialect, IComputedColumns? computed, EntityMetadata table, AttributeMetadata rollup, RollupDefinition definition)
+        public Builder(IMetadataStore store, ISqlDialect dialect, IComputedColumns? computed, TableDefinition table, ColumnDefinition rollup, RollupDefinition definition)
         {
             ArgumentNullException.ThrowIfNull(table);
             ArgumentNullException.ThrowIfNull(rollup);
@@ -109,28 +101,28 @@ public sealed class RollupSql(IMetadataStore store, ISqlDialect dialect, IComput
             _table = table;
             _rollup = rollup;
             _definition = definition;
-            _computed = new ComputedSql(_parameters, store.GetEntity, computed ?? new NoComputedColumns(), dialect);
+            _computed = new ComputedSql(_parameters, store.GetTable, SdkQueryCallbacks.Published(computed ?? new NoComputedColumns(), store), dialect);
             _kind = rollup switch
             {
-                IntegerAttributeMetadata => Kind.Whole,
-                DecimalAttributeMetadata => Kind.Decimal,
-                MoneyAttributeMetadata => Kind.Money,
-                DateTimeAttributeMetadata => Kind.Date,
+                IntegerColumn => Kind.Whole,
+                DecimalColumn => Kind.Decimal,
+                MoneyColumn => Kind.Money,
+                DateTimeColumn => Kind.Date,
                 _ => throw Refuse($"has the type {rollup.AttributeType}, which a rollup cannot have"),
             };
             _pk = SystemAttributes.PrimaryIdName(table);
-            _tableSql = DataTable(table.LogicalName);
+            _tableSql = DataTable(table.LogicalName!);
             if (definition.HierarchicalRelationship is { } name)
             {
-                _hierarchy = store.GetRelationship(name) as OneToManyRelationshipMetadata
-                             ?? store.GetOneToManyRelationships().FirstOrDefault(r => string.Equals(r.SchemaName, name, StringComparison.OrdinalIgnoreCase));
-                if (_hierarchy?.ReferencingAttribute is null || _hierarchy.ReferencingEntity != table.LogicalName)
+                _hierarchy = store.GetRelationshipDefinition(name) as OneToManyRelationship
+                             ?? store.GetOneToManyDefinitions().FirstOrDefault(r => string.Equals(r.SchemaName, name, StringComparison.OrdinalIgnoreCase));
+                if (_hierarchy?.ReferencingAttribute is null || _hierarchy.ReferencingEntity != table.LogicalName!)
                     throw Refuse($"walks the hierarchy '{name}', which is not a relationship of the table to itself");
             }
             if (definition.Related is { } related)
             {
-                _related = store.GetEntity(related.Entity) ?? throw Refuse($"reads the table '{related.Entity}', which does not exist");
-                _lookup = _related.Attributes?.FirstOrDefault(a => a.LogicalName == related.Lookup && a is LookupAttributeMetadata)?.LogicalName
+                _related = store.GetTable(related.Entity) ?? throw Refuse($"reads the table '{related.Entity}', which does not exist");
+                _lookup = _related.Attributes?.FirstOrDefault(a => a.LogicalName == related.Lookup && a is LookupColumn)?.LogicalName
                           ?? throw Refuse($"follows the lookup '{_related.LogicalName}.{related.Lookup}', which does not exist");
             }
             DemandAggregateFitsType();
@@ -166,11 +158,11 @@ public sealed class RollupSql(IMetadataStore store, ISqlDialect dialect, IComput
         private string Precision => _kind switch
         {
             Kind.Whole => "0",
-            Kind.Decimal => Num(((DecimalAttributeMetadata)_rollup).Precision ?? TypeMapping.DefaultDecimalPrecision),
+            Kind.Decimal => Num(((DecimalColumn)_rollup).Precision ?? TypeMapping.DefaultDecimalPrecision),
             _ => "tg.prec",
         };
 
-        private int DecimalScale => _kind == Kind.Decimal ? ((DecimalAttributeMetadata)_rollup).Precision ?? TypeMapping.DefaultDecimalPrecision : 0;
+        private int DecimalScale => _kind == Kind.Decimal ? ((DecimalColumn)_rollup).Precision ?? TypeMapping.DefaultDecimalPrecision : 0;
 
         private string Column(string suffix = "") => Q(_rollup.LogicalName + suffix);
 
@@ -196,7 +188,7 @@ public sealed class RollupSql(IMetadataStore store, ISqlDialect dialect, IComput
                     .Append($", CASE WHEN t.{Q(CurrencySchema.CurrencyId)} IS NULL OR t.{Q(CurrencySchema.ExchangeRate)} IS NULL THEN 0 ELSE 1 END AS hascurrency");
             }
             sql.Append($" FROM {_tableSql} AS t");
-            if (_kind == Kind.Money && ((MoneyAttributeMetadata)_rollup).PrecisionSource is not (0 or 1))
+            if (_kind == Kind.Money && ((MoneyColumn)_rollup).PrecisionSource is not (0 or 1))
                 sql.Append($" LEFT JOIN {DataTable(CurrencySchema.Table)} AS cur ON cur.{Q(CurrencySchema.CurrencyId)} = t.{Q(CurrencySchema.CurrencyId)}");
             if (where is not null) sql.Append(" WHERE ").Append(where);
             return sql.Append(')').ToString();
@@ -205,7 +197,7 @@ public sealed class RollupSql(IMetadataStore store, ISqlDialect dialect, IComput
         /// <summary>The decimals of a Currency value: the column's (PrecisionSource 0), the organization's pricing ones (1), the row currency's (2).</summary>
         private string MoneyPrecision()
         {
-            var m = (MoneyAttributeMetadata)_rollup;
+            var m = (MoneyColumn)_rollup;
             return m.PrecisionSource switch
             {
                 0 => Num(Math.Clamp(m.Precision ?? CurrencyMath.DefaultPrecision, CurrencySchema.MinPrecision, CurrencySchema.MaxPrecision)),
@@ -225,7 +217,7 @@ public sealed class RollupSql(IMetadataStore store, ISqlDialect dialect, IComput
             return
                 "tree AS (SELECT tg.id AS root, tg.id AS node, 0 AS depth, 0 AS revisit FROM tg UNION ALL " +
                 $"SELECT tree.root, ch.{Q(_pk)}, tree.depth + 1, CASE WHEN ch.{Q(_pk)} = tree.root THEN 1 ELSE 0 END " +
-                $"FROM tree JOIN {_tableSql} AS ch ON ch.{Q(_hierarchy.ReferencingAttribute)} = tree.node " +
+                $"FROM tree JOIN {_tableSql} AS ch ON ch.{Q(_hierarchy.ReferencingAttribute!)} = tree.node " +
                 $"WHERE tree.revisit = 0 AND tree.depth <= {depth}),\n" +
                 $"nodes AS (SELECT root, node FROM tree WHERE revisit = 0 AND depth <= {depth})";
         }
@@ -259,32 +251,32 @@ public sealed class RollupSql(IMetadataStore store, ISqlDialect dialect, IComput
         }
 
         /// <summary>A table with its alias, in parentheses with the applies its calculated columns need.</summary>
-        private string Table(EntityMetadata entity, string alias)
+        private string Table(TableDefinition entity, string alias)
         {
             var applies = _computed.Applies(alias);
-            var table = $"{DataTable(entity.LogicalName)} AS {alias}";
+            var table = $"{DataTable(entity.LogicalName!)} AS {alias}";
             return applies.Length == 0 ? table : $"({table}{applies})";
         }
 
         /// <summary>The value of a column as is (what COUNT counts: a money column's own value, not its base).</summary>
-        private string Plain(string alias, EntityMetadata entity, AttributeMetadata a) => _computed.ColumnValue(alias, entity, a, _table, _rollup);
+        private string Plain(string alias, TableDefinition entity, ColumnDefinition a) => _computed.ColumnValue(alias, entity, a, _table, _rollup);
 
         /// <summary>
         /// The value a SUM, MIN, MAX or AVG aggregates: a money column's base value for a Currency rollup, cut to the rollup's
         /// precision (R7) for a number.
         /// </summary>
-        private string Aggregated(string alias, EntityMetadata entity, AttributeMetadata a)
+        private string Aggregated(string alias, TableDefinition entity, ColumnDefinition a)
         {
             if (_kind == Kind.Money)
             {
-                if (a is not MoneyAttributeMetadata money)
+                if (a is not MoneyColumn money)
                     throw Refuse($"aggregates '{entity.LogicalName}.{a.LogicalName}', which is not a Currency column");
                 // Dataverse converts each row to the base currency from its full value and its own rate, not from its rounded
                 // _base, and does not round the sum (parity run, plan 2.12b Task 7: 200/12 + 80/12 + 40 = 63.333332).
                 if (money.SourceType == ComputedColumnRules.Calculated)
                     return _computed.ColumnValue(alias, entity,
-                        entity.Attributes.First(x => x.LogicalName == a.LogicalName + TypeMapping.BaseColumnSuffix), _table, _rollup);
-                return $"(CAST({alias}.{Q(a.LogicalName)} AS decimal(38, 10)) / NULLIF(CAST({alias}.{Q(CurrencySchema.ExchangeRate)} AS decimal(38, 10)), 0))";
+                        entity.Attributes!.First(x => x.LogicalName == a.LogicalName + TypeMapping.BaseColumnSuffix), _table, _rollup);
+                return $"(CAST({alias}.{Q(a.LogicalName!)} AS decimal(38, 10)) / NULLIF(CAST({alias}.{Q(CurrencySchema.ExchangeRate)} AS decimal(38, 10)), 0))";
             }
             var value = Plain(alias, entity, a);
             return _kind == Kind.Decimal ? _dialect.Truncate(value, Precision) : value;
@@ -366,9 +358,9 @@ public sealed class RollupSql(IMetadataStore store, ISqlDialect dialect, IComput
         /// <summary>The column's MinValue and MaxValue (R7), when it has them.</summary>
         private (decimal? Min, decimal? Max) Range() => _rollup switch
         {
-            IntegerAttributeMetadata i => (i.MinValue, i.MaxValue),
-            DecimalAttributeMetadata d => (d.MinValue, d.MaxValue),
-            MoneyAttributeMetadata m => (ToDecimal(m.MinValue), ToDecimal(m.MaxValue)),
+            IntegerColumn i => (i.MinValue, i.MaxValue),
+            DecimalColumn d => (d.MinValue, d.MaxValue),
+            MoneyColumn m => (ToDecimal(m.MinValue), ToDecimal(m.MaxValue)),
             _ => (null, null),
         };
 
@@ -395,9 +387,9 @@ public sealed class RollupSql(IMetadataStore store, ISqlDialect dialect, IComput
         {
             var changed = new StringBuilder($"SELECT t.{Q(_pk)} AS id FROM {_tableSql} AS t WHERE t.{Q("modifiedon")} >= @since");
             if (_definition.Related is not null)
-                changed.Append($" UNION SELECT r.{Q(_lookup!)} FROM {DataTable(_related!.LogicalName)} AS r WHERE r.{Q("modifiedon")} >= @since AND r.{Q(_lookup!)} IS NOT NULL");
+                changed.Append($" UNION SELECT r.{Q(_lookup!)} FROM {DataTable(_related!.LogicalName!)} AS r WHERE r.{Q("modifiedon")} >= @since AND r.{Q(_lookup!)} IS NOT NULL");
             if (_hierarchy is null) return $"touched AS ({changed})";
-            var parent = _hierarchy.ReferencingAttribute;
+            var parent = _hierarchy.ReferencingAttribute!;
             return
                 $"changed AS ({changed}),\n" +
                 $"up AS (SELECT id, 0 AS depth FROM changed UNION ALL SELECT p.{Q(parent)}, up.depth + 1 FROM up " +

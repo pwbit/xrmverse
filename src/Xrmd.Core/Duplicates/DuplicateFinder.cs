@@ -8,6 +8,7 @@ using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Query;
 using Xrmd.Query.Model;
 using static Xrmd.Metadata.DuplicateDetectionSchema;
 
@@ -252,7 +253,7 @@ public sealed class DuplicateFinder(CoreOperations core, IMetadataStore store, M
     {
         var pk = SystemAttributes.PrimaryIdName(matching);
         var root = new EntityNode { EntityName = matching.LogicalName, AllColumns = true };
-        root.Filter.Conditions.Add(new ConditionNode(null, pk, ConditionOperator.In, ids.Cast<object?>().ToList()));
+        root.Filter.Conditions.Add(new ConditionNode(null, pk, FilterOperator.In, ids.Cast<object?>().ToList()));
         root.Orders.Add(new OrderNode(pk, Descending: false));
         return (await core.RetrieveMultipleAsync(s, caller, new QueryModel { Root = root }, ct)).Entities;
     }

@@ -4,8 +4,10 @@ using FluentAssertions;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
+using Xrmd.Model.Query;
 using Xrmd.Query.FetchXml;
 using Xrmd.Query.Model;
+using Xrmd.Query.Sdk;
 using Xrmd.Query.Sql;
 
 namespace Xrmd.Query.Tests;
@@ -23,7 +25,7 @@ public class SecurityCompilerTests
 
     private static string Normalize(string sql) => Regex.Replace(sql, @"\s+", " ").Trim();
 
-    private static ConditionNode Cond(string attribute, ConditionOperator op, params object?[] values) => new(null, attribute, op, values);
+    private static ConditionNode Cond(string attribute, FilterOperator op, params object?[] values) => new(null, attribute, op, values);
 
     private static QueryModel Project(params ConditionNode[] conditions)
     {
@@ -76,7 +78,7 @@ public class SecurityCompilerTests
     private static FilterNode OwnedBy(Guid owner)
     {
         var f = new FilterNode();
-        f.Conditions.Add(Cond("owninguser", ConditionOperator.Equal, owner));
+        f.Conditions.Add(Cond("owninguser", FilterOperator.Equal, owner));
         return f;
     }
 
@@ -85,7 +87,7 @@ public class SecurityCompilerTests
     [Fact]
     public void EqualUserTeams_compiles_to_teammembership_subquery()
     {
-        var c = Compile(Project(Cond("ownerid", ConditionOperator.EqualUserTeams)));
+        var c = Compile(Project(Cond("ownerid", FilterOperator.EqualUserTeams)));
         Normalize(c.Sql).Should().Contain($"WHERE (t0.[ownerid] IN {TeamSubquery})");
         Param(c, "@p0").Should().Be(UserId);
     }
@@ -93,7 +95,7 @@ public class SecurityCompilerTests
     [Fact]
     public void EqualUserOrUserTeams_compiles_to_user_or_teams()
     {
-        var c = Compile(Project(Cond("ownerid", ConditionOperator.EqualUserOrUserTeams, "ignored")));
+        var c = Compile(Project(Cond("ownerid", FilterOperator.EqualUserOrUserTeams, "ignored")));
         Normalize(c.Sql).Should().Contain($"WHERE ((t0.[ownerid] = @p0 OR t0.[ownerid] IN {TeamSubquery}))");
         c.Parameters.Where(p => p.ParameterName.StartsWith("@p", StringComparison.Ordinal)).Should().ContainSingle()
             .Which.Value.Should().Be(UserId);
@@ -102,7 +104,7 @@ public class SecurityCompilerTests
     [Fact]
     public void Team_operators_require_a_lookup_or_uniqueidentifier()
     {
-        var act = () => Compile(Project(Cond("pb_name", ConditionOperator.EqualUserTeams)));
+        var act = () => Compile(Project(Cond("pb_name", FilterOperator.EqualUserTeams)));
         act.Should().Throw<XrmdValidationException>().WithMessage("*lookup or uniqueidentifier*");
     }
 
@@ -113,7 +115,7 @@ public class SecurityCompilerTests
     {
         Guid a = Guid.NewGuid(), b = Guid.NewGuid(), bu = Guid.NewGuid();
         var hierarchy = new FakeHierarchy(a, b);
-        var c = Compile(Project(Cond("owningbusinessunit", ConditionOperator.Under, bu.ToString())), Context with { Hierarchy = hierarchy });
+        var c = Compile(Project(Cond("owningbusinessunit", FilterOperator.Under, bu.ToString())), Context with { Hierarchy = hierarchy });
 
         Normalize(c.Sql).Should().Contain("WHERE (t0.[owningbusinessunit] IN (SELECT CAST([value] AS uniqueidentifier) FROM OPENJSON(@p0)))");
         var p = c.Parameters.Single(x => x.ParameterName == "@p0");
@@ -130,7 +132,7 @@ public class SecurityCompilerTests
     {
         var bu = Guid.NewGuid();
         var hierarchy = new FakeHierarchy(Guid.NewGuid());
-        var c = Compile(Project(Cond("owningbusinessunit", op, bu)), Context with { Hierarchy = hierarchy });
+        var c = Compile(Project(Cond("owningbusinessunit", op.ToModel(), bu)), Context with { Hierarchy = hierarchy });
         Normalize(c.Sql).Should().Contain("WHERE (t0.[owningbusinessunit] IN (SELECT CAST([value] AS uniqueidentifier) FROM OPENJSON(@p0)))");
         hierarchy.Calls.Should().Equal(("businessunit", bu, op));
     }
@@ -143,9 +145,9 @@ public class SecurityCompilerTests
 
         // A lookup to systemuser and the primary key of pb_project: neither has a hierarchical relationship in the test metadata,
         // and neither is the business unit tree, so the in-memory resolver is never asked.
-        var lookup = () => Compile(Project(Cond("pb_customerid", ConditionOperator.Under, Guid.NewGuid())), context);
+        var lookup = () => Compile(Project(Cond("pb_customerid", FilterOperator.Under, Guid.NewGuid())), context);
         lookup.Should().Throw<XrmdValidationException>().WithMessage("*hierarchical relationship*");
-        var pk = () => Compile(Project(Cond("pb_projectid", ConditionOperator.Under, Guid.NewGuid())), context);
+        var pk = () => Compile(Project(Cond("pb_projectid", FilterOperator.Under, Guid.NewGuid())), context);
         pk.Should().Throw<XrmdValidationException>().WithMessage("*hierarchical relationship*");
         hierarchy.Calls.Should().BeEmpty();
     }
@@ -153,21 +155,21 @@ public class SecurityCompilerTests
     [Fact]
     public void Under_without_hierarchy_resolver_is_rejected()
     {
-        var act = () => Compile(Project(Cond("owningbusinessunit", ConditionOperator.Under, Guid.NewGuid())));
+        var act = () => Compile(Project(Cond("owningbusinessunit", FilterOperator.Under, Guid.NewGuid())));
         act.Should().Throw<XrmdValidationException>().WithMessage("*Under*");
     }
 
     [Fact]
     public void Under_requires_one_value()
     {
-        var act = () => Compile(Project(Cond("owningbusinessunit", ConditionOperator.Under)), Context with { Hierarchy = new FakeHierarchy() });
+        var act = () => Compile(Project(Cond("owningbusinessunit", FilterOperator.Under)), Context with { Hierarchy = new FakeHierarchy() });
         act.Should().Throw<XrmdValidationException>().WithMessage("*exactly one value*");
     }
 
     [Fact]
     public void NotUnder_includes_nulls()
     {
-        var c = Compile(Project(Cond("owningbusinessunit", ConditionOperator.NotUnder, Guid.NewGuid())),
+        var c = Compile(Project(Cond("owningbusinessunit", FilterOperator.NotUnder, Guid.NewGuid())),
             Context with { Hierarchy = new FakeHierarchy(Guid.NewGuid()) });
         Normalize(c.Sql).Should().Contain(
             "WHERE ((t0.[owningbusinessunit] NOT IN (SELECT CAST([value] AS uniqueidentifier) FROM OPENJSON(@p0)) OR t0.[owningbusinessunit] IS NULL))");
@@ -177,9 +179,9 @@ public class SecurityCompilerTests
     public void Empty_hierarchy_matches_nothing_and_NotUnder_everything()
     {
         var context = Context with { Hierarchy = new FakeHierarchy() };
-        Normalize(Compile(Project(Cond("owningbusinessunit", ConditionOperator.Under, Guid.NewGuid())), context).Sql)
+        Normalize(Compile(Project(Cond("owningbusinessunit", FilterOperator.Under, Guid.NewGuid())), context).Sql)
             .Should().Contain("WHERE (1 = 0)");
-        Normalize(Compile(Project(Cond("owningbusinessunit", ConditionOperator.NotUnder, Guid.NewGuid())), context).Sql)
+        Normalize(Compile(Project(Cond("owningbusinessunit", FilterOperator.NotUnder, Guid.NewGuid())), context).Sql)
             .Should().Contain("WHERE (1 = 1)");
     }
 
@@ -190,9 +192,9 @@ public class SecurityCompilerTests
     {
         var owner = Guid.NewGuid();
         var q = Project();
-        q.Root.Filter.Operator = LogicalOperator.Or;
-        q.Root.Filter.Conditions.Add(Cond("pb_name", ConditionOperator.Equal, "a"));
-        q.Root.Filter.Conditions.Add(Cond("pb_name", ConditionOperator.Equal, "b"));
+        q.Root.Filter.Operator = FilterLogic.Or;
+        q.Root.Filter.Conditions.Add(Cond("pb_name", FilterOperator.Equal, "a"));
+        q.Root.Filter.Conditions.Add(Cond("pb_name", FilterOperator.Equal, "b"));
         var security = new FakeSecurity(_ => OwnedBy(owner));
 
         var c = Compile(q, Context with { Security = security });
@@ -219,11 +221,11 @@ public class SecurityCompilerTests
     [Fact]
     public void Empty_security_filter_denies_everything()
     {
-        var empty = new FakeSecurity(_ => new FilterNode { Operator = LogicalOperator.Or });
+        var empty = new FakeSecurity(_ => new FilterNode { Operator = FilterLogic.Or });
         Normalize(Compile(Project(), Context with { Security = empty }).Sql).Should().Contain("WHERE (1 = 0)");
 
         var q = Project();
-        q.Root.Links.Add(new LinkNode { EntityName = "systemuser", From = "systemuserid", To = "pb_customerid", JoinType = JoinOperator.LeftOuter, Alias = "u" });
+        q.Root.Links.Add(new LinkNode { EntityName = "systemuser", From = "systemuserid", To = "pb_customerid", JoinType = JoinKind.LeftOuter, Alias = "u" });
         var linkOnly = new FakeSecurity(e => e.LogicalName == "systemuser" ? new FilterNode() : null);
         var sql = Normalize(Compile(q, Context with { Security = linkOnly }).Sql);
         sql.Should().Contain("LEFT OUTER JOIN [data].[systemuser] AS t1 ON t1.[systemuserid] = t0.[pb_customerid] AND (1 = 0)");
@@ -235,8 +237,8 @@ public class SecurityCompilerTests
     {
         var linkOwner = Guid.NewGuid();
         var q = Project();
-        var link = new LinkNode { EntityName = "systemuser", From = "systemuserid", To = "pb_customerid", JoinType = JoinOperator.LeftOuter, Alias = "u" };
-        link.Filter.Conditions.Add(Cond("fullname", ConditionOperator.Equal, "x"));
+        var link = new LinkNode { EntityName = "systemuser", From = "systemuserid", To = "pb_customerid", JoinType = JoinKind.LeftOuter, Alias = "u" };
+        link.Filter.Conditions.Add(Cond("fullname", FilterOperator.Equal, "x"));
         q.Root.Links.Add(link);
         var security = new FakeSecurity(e => e.LogicalName == "systemuser" ? OwnedBy(linkOwner) : null);
 
@@ -256,7 +258,7 @@ public class SecurityCompilerTests
         var context = Context with { Security = new FakeSecurity(_ => OwnedBy(owner)) };
 
         // Keyset page with total record count: the count runs as its own statement.
-        var keyset = Project(Cond("pb_name", ConditionOperator.Equal, "a"));
+        var keyset = Project(Cond("pb_name", FilterOperator.Equal, "a"));
         keyset.ReturnTotalRecordCount = true;
         keyset.PageNumber = 2;
         keyset.PagingCookie = new PagingCookie(1, "pb_projectid", Guid.Empty, Guid.NewGuid()).Format();
@@ -285,8 +287,8 @@ public class SecurityCompilerTests
     public void Shared_node_compiles_to_poa_subquery()
     {
         var user = Guid.NewGuid();
-        var filter = new FilterNode { Operator = LogicalOperator.Or };
-        filter.Conditions.Add(Cond("ownerid", ConditionOperator.EqualUserOrUserTeams));
+        var filter = new FilterNode { Operator = FilterLogic.Or };
+        filter.Conditions.Add(Cond("ownerid", FilterOperator.EqualUserOrUserTeams));
         filter.Shared.Add(new SharedRecordsNode(user, 10000, 1));
 
         var c = Compile(Project(), Context with { Security = new FakeSecurity(_ => filter) });
@@ -306,7 +308,7 @@ public class SecurityCompilerTests
     {
         // Plan 2.11 A13 (RF1), review C1: activitypointer rows are shared through their activity, recorded with the activity's
         // table code, which the row holds in activitytypecode. The share must match that code, never the id alone.
-        var filter = new FilterNode { Operator = LogicalOperator.Or };
+        var filter = new FilterNode { Operator = FilterLogic.Or };
         filter.Shared.Add(new SharedRecordsNode(UserId, 10000, 1, TypeAttribute: "pb_count"));
 
         var c = Compile(Project(), Context with { Security = new FakeSecurity(_ => filter) });
@@ -322,7 +324,7 @@ public class SecurityCompilerTests
     {
         var a = Guid.NewGuid();
         var b = Guid.NewGuid();
-        var filter = new FilterNode { Operator = LogicalOperator.Or };
+        var filter = new FilterNode { Operator = FilterLogic.Or };
         filter.Shared.Add(new SharedRecordsNode(UserId, 10000, 1, [a, b]));
 
         var c = Compile(Project(), Context with { Security = new FakeSecurity(_ => filter) });
@@ -335,7 +337,7 @@ public class SecurityCompilerTests
         c.Parameters.Should().NotContain(p => Equals(p.Value, UserId), "the principal set replaces the user and its teams");
 
         // An empty set shares nothing.
-        var none = new FilterNode { Operator = LogicalOperator.Or };
+        var none = new FilterNode { Operator = FilterLogic.Or };
         none.Shared.Add(new SharedRecordsNode(UserId, 10000, 1, []));
         Normalize(Compile(Project(), Context with { Security = new FakeSecurity(_ => none) }).Sql).Should().Contain("WHERE (1 = 0)");
     }
@@ -345,7 +347,7 @@ public class SecurityCompilerTests
     {
         // A manager with many reports (plan 2.5, H4): the owner branch must not inline one parameter per principal.
         var many = Enumerable.Range(0, 500).Select(_ => Guid.NewGuid()).ToList();
-        var filter = new FilterNode { Operator = LogicalOperator.Or };
+        var filter = new FilterNode { Operator = FilterLogic.Or };
         filter.Owned.Add(new OwnedRecordsNode(many));
 
         var c = Compile(Project(), Context with { Security = new FakeSecurity(_ => filter) });
@@ -355,7 +357,7 @@ public class SecurityCompilerTests
         ((string)Param(c, "@p0")!).Should().Contain(many[0].ToString()).And.Contain(many[^1].ToString());
 
         // An empty set owns nothing.
-        var none = new FilterNode { Operator = LogicalOperator.Or };
+        var none = new FilterNode { Operator = FilterLogic.Or };
         none.Owned.Add(new OwnedRecordsNode([]));
         Normalize(Compile(Project(), Context with { Security = new FakeSecurity(_ => none) }).Sql).Should().Contain("WHERE (1 = 0)");
     }
@@ -372,7 +374,7 @@ public class SecurityCompilerTests
         {
             Security = new FakeSecurity(_ =>
             {
-                var f = new FilterNode { Operator = LogicalOperator.Or };
+                var f = new FilterNode { Operator = FilterLogic.Or };
                 f.Owned.Add(new OwnedRecordsNode(reach));
                 return f;
             }),
@@ -384,9 +386,9 @@ public class SecurityCompilerTests
     // ---- user hierarchy operators (plan 2.5, H7) --------------------------------------------------------------------
 
     [Theory]
-    [InlineData(ConditionOperator.EqualUserOrUserHierarchy, false)]
-    [InlineData(ConditionOperator.EqualUserOrUserHierarchyAndTeams, true)]
-    public void User_hierarchy_operators_compile_to_the_resolved_ids(ConditionOperator op, bool teams)
+    [InlineData(FilterOperator.EqualUserOrUserHierarchy, false)]
+    [InlineData(FilterOperator.EqualUserOrUserHierarchyAndTeams, true)]
+    public void User_hierarchy_operators_compile_to_the_resolved_ids(FilterOperator op, bool teams)
     {
         var report = Guid.NewGuid();
         var team = Guid.NewGuid();
@@ -405,19 +407,19 @@ public class SecurityCompilerTests
     public void User_hierarchy_operators_need_an_id_column_and_a_resolver()
     {
         var resolver = new FakeHierarchy { Reporting = ([UserId], [UserId]) };
-        var onName = () => Compile(Project(Cond("pb_name", ConditionOperator.EqualUserOrUserHierarchy)), Context with { Hierarchy = resolver });
+        var onName = () => Compile(Project(Cond("pb_name", FilterOperator.EqualUserOrUserHierarchy)), Context with { Hierarchy = resolver });
         onName.Should().Throw<XrmdValidationException>().WithMessage("*requires a lookup or uniqueidentifier*");
 
-        var noResolver = () => Compile(Project(Cond("ownerid", ConditionOperator.EqualUserOrUserHierarchyAndTeams)));
+        var noResolver = () => Compile(Project(Cond("ownerid", FilterOperator.EqualUserOrUserHierarchyAndTeams)));
         noResolver.Should().Throw<XrmdValidationException>().WithMessage("*EqualUserOrUserHierarchyAndTeams*not supported in this context*");
 
         // A resolver that refuses (the model is disabled) passes its error through.
         var disabled = new RefusingHierarchy();
-        var refused = () => Compile(Project(Cond("ownerid", ConditionOperator.EqualUserOrUserHierarchy)), Context with { Hierarchy = disabled });
+        var refused = () => Compile(Project(Cond("ownerid", FilterOperator.EqualUserOrUserHierarchy)), Context with { Hierarchy = disabled });
         refused.Should().Throw<XrmdValidationException>().WithMessage("disabled");
 
         // No id at all matches nothing.
-        Normalize(Compile(Project(Cond("ownerid", ConditionOperator.EqualUserOrUserHierarchy)), Context with { Hierarchy = new FakeHierarchy() }).Sql)
+        Normalize(Compile(Project(Cond("ownerid", FilterOperator.EqualUserOrUserHierarchy)), Context with { Hierarchy = new FakeHierarchy() }).Sql)
             .Should().Contain("WHERE (1 = 0)");
     }
 
@@ -431,15 +433,15 @@ public class SecurityCompilerTests
     // ---- FetchXML ---------------------------------------------------------------------------------------------------
 
     [Theory]
-    [InlineData("eq-useroruserteams", ConditionOperator.EqualUserOrUserTeams)]
-    [InlineData("under", ConditionOperator.Under)]
-    [InlineData("eq-or-under", ConditionOperator.UnderOrEqual)]
-    [InlineData("above", ConditionOperator.Above)]
-    [InlineData("eq-or-above", ConditionOperator.AboveOrEqual)]
-    [InlineData("not-under", ConditionOperator.NotUnder)]
-    [InlineData("eq-useroruserhierarchy", ConditionOperator.EqualUserOrUserHierarchy)]
-    [InlineData("eq-useroruserhierarchyandteams", ConditionOperator.EqualUserOrUserHierarchyAndTeams)]
-    public void FetchXml_parses_team_and_hierarchy_operators(string op, ConditionOperator expected)
+    [InlineData("eq-useroruserteams", FilterOperator.EqualUserOrUserTeams)]
+    [InlineData("under", FilterOperator.Under)]
+    [InlineData("eq-or-under", FilterOperator.UnderOrEqual)]
+    [InlineData("above", FilterOperator.Above)]
+    [InlineData("eq-or-above", FilterOperator.AboveOrEqual)]
+    [InlineData("not-under", FilterOperator.NotUnder)]
+    [InlineData("eq-useroruserhierarchy", FilterOperator.EqualUserOrUserHierarchy)]
+    [InlineData("eq-useroruserhierarchyandteams", FilterOperator.EqualUserOrUserHierarchyAndTeams)]
+    public void FetchXml_parses_team_and_hierarchy_operators(string op, FilterOperator expected)
     {
         var q = FetchXmlParser.Parse($"""<fetch><entity name="a"><filter><condition attribute="x" operator="{op}"/></filter></entity></fetch>""");
         q.Root.Filter.Conditions.Single().Operator.Should().Be(expected);

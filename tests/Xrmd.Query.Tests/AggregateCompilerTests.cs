@@ -1,7 +1,7 @@
 using System.Text.RegularExpressions;
 using FluentAssertions;
-using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
+using Xrmd.Model.Query;
 using Xrmd.Query.Model;
 using Xrmd.Query.Sql;
 
@@ -47,7 +47,7 @@ public class AggregateCompilerTests
     public void Sum_and_groupby()
     {
         var q = Aggregate(new ColumnNode("pb_count", "total", XrmAggregate.Sum), new ColumnNode("pb_priority", "prio", GroupBy: true));
-        q.Root.Filter.Conditions.Add(new ConditionNode(null, "pb_count", ConditionOperator.GreaterThan, [1]));
+        q.Root.Filter.Conditions.Add(new ConditionNode(null, "pb_count", FilterOperator.GreaterThan, [1]));
         var c = Compile(q);
         var sql = Normalize(c.Sql);
         sql.Should().StartWith("SELECT TOP (@top) SUM(CAST(t0.[pb_count] AS bigint)) AS c0, t0.[pb_priority] AS c1 FROM [data].[pb_project] AS t0 WHERE (t0.[pb_count] > @p0) GROUP BY t0.[pb_priority]");
@@ -104,7 +104,7 @@ public class AggregateCompilerTests
     public void Count_sql_probes_the_record_limit()
     {
         var q = Aggregate(new ColumnNode("pb_count", "total", XrmAggregate.Sum), new ColumnNode("pb_priority", "prio", GroupBy: true));
-        q.Root.Filter.Conditions.Add(new ConditionNode(null, "pb_count", ConditionOperator.GreaterThan, [1]));
+        q.Root.Filter.Conditions.Add(new ConditionNode(null, "pb_count", FilterOperator.GreaterThan, [1]));
         var c = Compile(q);
         Normalize(c.CountSql!).Should().Be(
             "SELECT COUNT(*) FROM (SELECT TOP 50001 1 AS x FROM [data].[pb_project] AS t0 WHERE (t0.[pb_count] > @p0)) AS q");

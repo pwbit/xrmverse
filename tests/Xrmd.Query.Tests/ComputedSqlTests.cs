@@ -2,9 +2,9 @@ using System.Data;
 using System.Text.RegularExpressions;
 using FluentAssertions;
 using Microsoft.Xrm.Sdk.Metadata;
-using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
 using Xrmd.Metadata.Computed;
+using Xrmd.Model.Query;
 using Xrmd.Query.Model;
 using Xrmd.Query.Sql;
 using static Xrmd.Metadata.Computed.ComputedExpr;
@@ -122,9 +122,9 @@ public sealed class ComputedSqlTests
         _computed.Set(Order, "xrmv_label", new Function("CONCAT", [Own("xrmv_name"), new Column("xrmv_accountid", "name")]));
         var root = new EntityNode { EntityName = "account" };
         root.Columns.Add(new ColumnNode("name"));
-        var link = new LinkNode { EntityName = Order, From = "xrmv_accountid", To = "accountid", Alias = "o", JoinType = JoinOperator.LeftOuter };
+        var link = new LinkNode { EntityName = Order, From = "xrmv_accountid", To = "accountid", Alias = "o", JoinType = JoinKind.LeftOuter };
         link.Columns.Add(new ColumnNode("xrmv_label"));
-        link.Filter.Conditions.Add(new ConditionNode(null, "xrmv_label", ConditionOperator.NotNull, []));
+        link.Filter.Conditions.Add(new ConditionNode(null, "xrmv_label", FilterOperator.NotNull, []));
         root.Links.Add(link);
 
         var sql = Normalize(Compile(new QueryModel { Root = root }).Sql);
@@ -151,7 +151,7 @@ public sealed class ComputedSqlTests
     {
         _computed.Set(Order, "xrmv_label", new Function("CONCAT", [Own("xrmv_name"), new Literal(" / "), new Column("xrmv_accountid", "name")]));
         var root = Root("xrmv_label");
-        root.Filter.Conditions.Add(new ConditionNode(null, "xrmv_label", ConditionOperator.Like, ["a%"]));
+        root.Filter.Conditions.Add(new ConditionNode(null, "xrmv_label", FilterOperator.Like, ["a%"]));
         root.Orders.Add(new OrderNode("xrmv_label", Descending: true));
 
         var c = Compile(new QueryModel { Root = root });
@@ -435,7 +435,7 @@ public sealed class ComputedSqlTests
         {
             Requested.Add(entity.LogicalName);
             var filter = new FilterNode();
-            filter.Conditions.Add(new ConditionNode(null, "ownerid", ConditionOperator.Equal, [owner]));
+            filter.Conditions.Add(new ConditionNode(null, "ownerid", FilterOperator.Equal, [owner]));
             return filter;
         }
 

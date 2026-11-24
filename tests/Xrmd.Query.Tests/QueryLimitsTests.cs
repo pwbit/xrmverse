@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using FluentAssertions;
 using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
+using Xrmd.Model.Query;
 using Xrmd.Query.FetchXml;
 using Xrmd.Query.Model;
 using Xrmd.Query.Sql;
@@ -58,7 +59,7 @@ public class QueryLimitsTests
             current.Filters.Add(child);
             current = child;
         }
-        current.Conditions.Add(new ConditionNode(null, "pb_name", ConditionOperator.Equal, ["x"]));
+        current.Conditions.Add(new ConditionNode(null, "pb_name", FilterOperator.Equal, ["x"]));
         return root;
     }
 
@@ -74,7 +75,7 @@ public class QueryLimitsTests
                 EntityName = "systemuser",
                 From = "systemuserid",
                 To = i == 0 ? "pb_customerid" : "createdby",
-                JoinType = JoinOperator.LeftOuter,
+                JoinType = JoinKind.LeftOuter,
             };
             parent.Links.Add(link);
             parent = link;
@@ -139,7 +140,7 @@ public class QueryLimitsTests
     {
         var q = NestedLinks(1);
         q.Root.Links[0].Filter = NestedFilters(QueryLimits.MaxFilterDepth + 1);
-        q.Root.Links[0].Filter.Filters[0].Conditions.Add(new ConditionNode(null, "fullname", ConditionOperator.Equal, ["x"]));
+        q.Root.Links[0].Filter.Filters[0].Conditions.Add(new ConditionNode(null, "fullname", FilterOperator.Equal, ["x"]));
         FluentActions.Invoking(() => Compile(q)).Should().Throw<XrmdValidationException>().WithMessage("*nested more than 32*");
     }
 
@@ -197,9 +198,9 @@ public class QueryLimitsTests
     public void Compiler_rejects_more_than_2000_parameters()
     {
         var q = Project("pb_name");
-        q.Root.Filter.Operator = LogicalOperator.Or;
+        q.Root.Filter.Operator = FilterLogic.Or;
         for (var i = 0; i < 2100; i++)
-            q.Root.Filter.Conditions.Add(new ConditionNode(null, "pb_count", ConditionOperator.Equal, [i]));
+            q.Root.Filter.Conditions.Add(new ConditionNode(null, "pb_count", FilterOperator.Equal, [i]));
         FluentActions.Invoking(() => Compile(q)).Should().Throw<XrmdValidationException>().WithMessage("*2000*");
     }
 
@@ -207,9 +208,9 @@ public class QueryLimitsTests
     public void Compiler_counts_paging_parameters_in_the_limit()
     {
         var q = Project("pb_name");
-        q.Root.Filter.Operator = LogicalOperator.Or;
+        q.Root.Filter.Operator = FilterLogic.Or;
         for (var i = 0; i < QueryLimits.MaxParameters; i++)
-            q.Root.Filter.Conditions.Add(new ConditionNode(null, "pb_count", ConditionOperator.Equal, [i]));
+            q.Root.Filter.Conditions.Add(new ConditionNode(null, "pb_count", FilterOperator.Equal, [i]));
         // 2000 condition parameters + @top.
         FluentActions.Invoking(() => Compile(q)).Should().Throw<XrmdValidationException>();
         q.Root.Filter.Conditions.RemoveAt(0);
@@ -230,7 +231,7 @@ public class QueryLimitsTests
     public void Link_condition_on_a_later_link_is_rejected()
     {
         var q = TwoLinks();
-        q.Root.Links[0].Filter.Conditions.Add(new ConditionNode("b", "fullname", ConditionOperator.Equal, ["x"]));
+        q.Root.Links[0].Filter.Conditions.Add(new ConditionNode("b", "fullname", FilterOperator.Equal, ["x"]));
         FluentActions.Invoking(() => Compile(q)).Should().Throw<XrmdValidationException>().WithMessage("*'a'*'b'*joined after*");
     }
 
@@ -238,8 +239,8 @@ public class QueryLimitsTests
     public void Link_condition_on_an_earlier_link_or_itself_is_accepted()
     {
         var q = TwoLinks();
-        q.Root.Links[1].Filter.Conditions.Add(new ConditionNode("a", "fullname", ConditionOperator.Equal, ["x"]));
-        q.Root.Links[1].Filter.Conditions.Add(new ConditionNode("b", "fullname", ConditionOperator.Equal, ["y"]));
+        q.Root.Links[1].Filter.Conditions.Add(new ConditionNode("a", "fullname", FilterOperator.Equal, ["x"]));
+        q.Root.Links[1].Filter.Conditions.Add(new ConditionNode("b", "fullname", FilterOperator.Equal, ["y"]));
         var sql = Normalize(Compile(q).Sql);
         sql.Should().Contain("AS t2 ON t2.[systemuserid] = t0.[createdby] AND (t1.[fullname] = @p0 AND t2.[fullname] = @p1)");
     }
@@ -248,7 +249,7 @@ public class QueryLimitsTests
     public void Root_condition_on_any_link_is_accepted()
     {
         var q = TwoLinks();
-        q.Root.Filter.Conditions.Add(new ConditionNode("b", "fullname", ConditionOperator.Equal, ["x"]));
+        q.Root.Filter.Conditions.Add(new ConditionNode("b", "fullname", FilterOperator.Equal, ["x"]));
         Normalize(Compile(q).Sql).Should().Contain("WHERE (t2.[fullname] = @p0)");
     }
 

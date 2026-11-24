@@ -3,13 +3,13 @@ using System.Data.Common;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Xrm.Sdk.Metadata;
-using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Metadata;
-using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Metadata;
+using Xrmd.Model.Query;
 using Xrmd.Query.Model;
+using Xrmd.Query.Sdk;
 
 namespace Xrmd.Query.Sql;
 
@@ -44,7 +44,7 @@ internal sealed class QueryParameters
 
 /// <summary>The column a condition applies to.</summary>
 /// <param name="Column">SQL expression of the column (e.g. <c>t0.[pb_name]</c>), built from metadata only.</param>
-internal sealed record ConditionTarget(string Column, AttributeMetadata Attribute, string EntityName)
+internal sealed record ConditionTarget(string Column, ColumnDefinition Attribute, string EntityName)
 {
     /// <summary>
     /// For a lookup (not a party list): builds the SQL expression of the related record's primary name, null when no target has
@@ -54,7 +54,7 @@ internal sealed record ConditionTarget(string Column, AttributeMetadata Attribut
 }
 
 /// <summary>
-/// Compiles one condition into a T-SQL predicate. Dispatches per <see cref="ConditionOperator"/>; operators not handled
+/// Compiles one condition into a T-SQL predicate. Dispatches per <see cref="FilterOperator"/>; operators not handled
 /// here are rejected with <see cref="XrmdValidationException"/>. Values are coerced to the column type
 /// (<see cref="ValueCoercer"/>) and always passed as parameters.
 /// </summary>
@@ -93,14 +93,14 @@ internal sealed class ConditionCompiler(QueryParameters parameters, QueryContext
     private ConditionNode AuditObjectTypeCodes(ConditionTarget t, ConditionNode c)
     {
         if (store is null || t.EntityName != AuditTable.Name || t.Attribute.LogicalName != AuditTable.ObjectTypeCodeColumn
-            || c.Operator is not (ConditionOperator.Equal or ConditionOperator.NotEqual or ConditionOperator.In or ConditionOperator.NotIn))
+            || c.Operator is not (FilterOperator.Equal or FilterOperator.NotEqual or FilterOperator.In or FilterOperator.NotIn))
             return c;
         var values = new List<object?>(c.Values.Count);
         foreach (var value in c.Values)
         {
             var text = value as string ?? (value is int or long or short ? Convert.ToString(value, CultureInfo.InvariantCulture) : null);
             if (text is not null && int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var code))
-                values.Add(store.GetEntityByObjectTypeCode(code)?.LogicalName
+                values.Add(store.GetTableByObjectTypeCode(code)?.LogicalName
                            ?? throw new XrmdValidationException($"No table has the object type code {code} (attribute '{t.Attribute.LogicalName}')."));
             else values.Add(value);
         }
@@ -115,9 +115,9 @@ internal sealed class ConditionCompiler(QueryParameters parameters, QueryContext
     /// </summary>
     private ConditionNode EntityNameCodes(ConditionTarget t, ConditionNode c)
     {
-        if (t.Attribute is not EntityNameAttributeMetadata) return c;
-        if (c.Operator is ConditionOperator.Null or ConditionOperator.NotNull) return c;
-        if (c.Operator is not (ConditionOperator.Equal or ConditionOperator.NotEqual or ConditionOperator.In or ConditionOperator.NotIn))
+        if (t.Attribute is not EntityNameColumn) return c;
+        if (c.Operator is FilterOperator.Null or FilterOperator.NotNull) return c;
+        if (c.Operator is not (FilterOperator.Equal or FilterOperator.NotEqual or FilterOperator.In or FilterOperator.NotIn))
             throw new XrmdValidationException(
                 $"Operator {c.Operator} cannot be used on attribute '{t.Attribute.LogicalName}', which names a table: use eq, ne, in, not-in, null or not-null.");
         if (store is null) return c;
@@ -125,7 +125,7 @@ internal sealed class ConditionCompiler(QueryParameters parameters, QueryContext
         foreach (var value in c.Values)
         {
             if (value is string text && !int.TryParse(text, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out _))
-                values.Add(store.GetEntity(text)?.ObjectTypeCode
+                values.Add(store.GetTable(text)?.ObjectTypeCode
                            ?? throw new XrmdValidationException($"No table is named '{text}' (attribute '{t.Attribute.LogicalName}')."));
             else values.Add(value);
         }
@@ -134,42 +134,42 @@ internal sealed class ConditionCompiler(QueryParameters parameters, QueryContext
 
     private string CompileCore(ConditionTarget t, ConditionNode c) => c.Operator switch
     {
-        ConditionOperator.Equal => Comparison(t, c, "="),
-        ConditionOperator.NotEqual => Comparison(t, c, "<>"),
-        ConditionOperator.GreaterThan => Comparison(t, c, ">"),
-        ConditionOperator.GreaterEqual => Comparison(t, c, ">="),
-        ConditionOperator.LessThan => Comparison(t, c, "<"),
-        ConditionOperator.LessEqual => Comparison(t, c, "<="),
-        ConditionOperator.Null => NoValue(t, c, "IS NULL"),
-        ConditionOperator.NotNull => NoValue(t, c, "IS NOT NULL"),
-        ConditionOperator.Like => Like(t, c, "LIKE", v => v),
-        ConditionOperator.NotLike => Like(t, c, "NOT LIKE", v => v),
-        ConditionOperator.BeginsWith => Like(t, c, "LIKE", v => EscapeLike(v) + "%"),
-        ConditionOperator.DoesNotBeginWith => Like(t, c, "NOT LIKE", v => EscapeLike(v) + "%"),
-        ConditionOperator.EndsWith => Like(t, c, "LIKE", v => "%" + EscapeLike(v)),
-        ConditionOperator.DoesNotEndWith => Like(t, c, "NOT LIKE", v => "%" + EscapeLike(v)),
-        ConditionOperator.In => In(t, c, "IN"),
-        ConditionOperator.NotIn => In(t, c, "NOT IN"),
-        ConditionOperator.Between => Between(t, c, "BETWEEN"),
-        ConditionOperator.NotBetween => Between(t, c, "NOT BETWEEN"),
-        ConditionOperator.On => DateOn(t, c),
-        ConditionOperator.OnOrAfter => DateRange(t, c, OnDate(t, c), null, false),
-        ConditionOperator.OnOrBefore => DateRange(t, c, null, OnDate(t, c).AddDays(1), false),
-        ConditionOperator.LastXDays => DateRange(t, c, Today.AddDays(-Count(t, c)), Context.UtcNow, true),
-        ConditionOperator.NextXDays => DateRange(t, c, Context.UtcNow, Today.AddDays(Count(t, c)).AddDays(1), false),
-        ConditionOperator.LastXMonths => DateRange(t, c, Context.UtcNow.AddMonths(-Count(t, c)), Context.UtcNow, true),
-        ConditionOperator.ThisMonth => DateRange(t, c, MonthStart, MonthStart.AddMonths(1), false, noValue: true),
-        ConditionOperator.ThisYear => DateRange(t, c, YearStart, YearStart.AddYears(1), false, noValue: true),
-        ConditionOperator.EqualUserId => ContextId(t, c, "=", Context.UserId),
-        ConditionOperator.NotEqualUserId => ContextId(t, c, "<>", Context.UserId),
-        ConditionOperator.EqualBusinessId => ContextId(t, c, "=", Context.BusinessUnitId),
-        ConditionOperator.EqualUserTeams => UserTeams(t, c, includeUser: false),
-        ConditionOperator.EqualUserOrUserTeams => UserTeams(t, c, includeUser: true),
-        ConditionOperator.EqualUserOrUserHierarchy => UserHierarchy(t, c, includeTeams: false),
-        ConditionOperator.EqualUserOrUserHierarchyAndTeams => UserHierarchy(t, c, includeTeams: true),
-        ConditionOperator.Under or ConditionOperator.UnderOrEqual or ConditionOperator.Above
-            or ConditionOperator.AboveOrEqual => Hierarchy(t, c, "IN"),
-        ConditionOperator.NotUnder => Hierarchy(t, c, "NOT IN"),
+        FilterOperator.Equal => Comparison(t, c, "="),
+        FilterOperator.NotEqual => Comparison(t, c, "<>"),
+        FilterOperator.GreaterThan => Comparison(t, c, ">"),
+        FilterOperator.GreaterEqual => Comparison(t, c, ">="),
+        FilterOperator.LessThan => Comparison(t, c, "<"),
+        FilterOperator.LessEqual => Comparison(t, c, "<="),
+        FilterOperator.Null => NoValue(t, c, "IS NULL"),
+        FilterOperator.NotNull => NoValue(t, c, "IS NOT NULL"),
+        FilterOperator.Like => Like(t, c, "LIKE", v => v),
+        FilterOperator.NotLike => Like(t, c, "NOT LIKE", v => v),
+        FilterOperator.BeginsWith => Like(t, c, "LIKE", v => EscapeLike(v) + "%"),
+        FilterOperator.DoesNotBeginWith => Like(t, c, "NOT LIKE", v => EscapeLike(v) + "%"),
+        FilterOperator.EndsWith => Like(t, c, "LIKE", v => "%" + EscapeLike(v)),
+        FilterOperator.DoesNotEndWith => Like(t, c, "NOT LIKE", v => "%" + EscapeLike(v)),
+        FilterOperator.In => In(t, c, "IN"),
+        FilterOperator.NotIn => In(t, c, "NOT IN"),
+        FilterOperator.Between => Between(t, c, "BETWEEN"),
+        FilterOperator.NotBetween => Between(t, c, "NOT BETWEEN"),
+        FilterOperator.On => DateOn(t, c),
+        FilterOperator.OnOrAfter => DateRange(t, c, OnDate(t, c), null, false),
+        FilterOperator.OnOrBefore => DateRange(t, c, null, OnDate(t, c).AddDays(1), false),
+        FilterOperator.LastXDays => DateRange(t, c, Today.AddDays(-Count(t, c)), Context.UtcNow, true),
+        FilterOperator.NextXDays => DateRange(t, c, Context.UtcNow, Today.AddDays(Count(t, c)).AddDays(1), false),
+        FilterOperator.LastXMonths => DateRange(t, c, Context.UtcNow.AddMonths(-Count(t, c)), Context.UtcNow, true),
+        FilterOperator.ThisMonth => DateRange(t, c, MonthStart, MonthStart.AddMonths(1), false, noValue: true),
+        FilterOperator.ThisYear => DateRange(t, c, YearStart, YearStart.AddYears(1), false, noValue: true),
+        FilterOperator.EqualUserId => ContextId(t, c, "=", Context.UserId),
+        FilterOperator.NotEqualUserId => ContextId(t, c, "<>", Context.UserId),
+        FilterOperator.EqualBusinessId => ContextId(t, c, "=", Context.BusinessUnitId),
+        FilterOperator.EqualUserTeams => UserTeams(t, c, includeUser: false),
+        FilterOperator.EqualUserOrUserTeams => UserTeams(t, c, includeUser: true),
+        FilterOperator.EqualUserOrUserHierarchy => UserHierarchy(t, c, includeTeams: false),
+        FilterOperator.EqualUserOrUserHierarchyAndTeams => UserHierarchy(t, c, includeTeams: true),
+        FilterOperator.Under or FilterOperator.UnderOrEqual or FilterOperator.Above
+            or FilterOperator.AboveOrEqual => Hierarchy(t, c, "IN"),
+        FilterOperator.NotUnder => Hierarchy(t, c, "NOT IN"),
         _ => throw new XrmdValidationException($"Operator {c.Operator} is not supported (attribute '{c.Attribute}')."),
     };
 
@@ -187,7 +187,7 @@ internal sealed class ConditionCompiler(QueryParameters parameters, QueryContext
 
     private static void RequireDateTime(ConditionTarget t, ConditionNode c)
     {
-        if (t.Attribute is not DateTimeAttributeMetadata)
+        if (t.Attribute is not DateTimeColumn)
             throw new XrmdValidationException(
                 $"Operator {c.Operator} requires a DateTime attribute; '{t.Attribute.LogicalName}' is {t.Attribute.AttributeType}.");
     }
@@ -326,7 +326,7 @@ internal sealed class ConditionCompiler(QueryParameters parameters, QueryContext
 
     private static void RequireId(ConditionTarget t, ConditionNode c)
     {
-        if (t.Attribute is not (LookupAttributeMetadata or UniqueIdentifierAttributeMetadata))
+        if (t.Attribute is not (LookupColumn or UniqueIdentifierColumn))
             throw new XrmdValidationException(
                 $"Operator {c.Operator} requires a lookup or uniqueidentifier attribute; '{t.Attribute.LogicalName}' is {t.Attribute.AttributeType}.");
     }
@@ -372,16 +372,16 @@ internal sealed class ConditionCompiler(QueryParameters parameters, QueryContext
             return notIn ? $"({predicate} OR {t.Column} IS NULL)" : predicate;
         }
 
-        var relationship = store?.GetHierarchicalRelationship(entity);
-        var metadata = store?.GetEntity(entity);
+        var relationship = store?.GetHierarchicalDefinition(entity);
+        var metadata = store?.GetTable(entity);
         if (relationship?.ReferencingAttribute is not { } parent || metadata is null)
             throw new XrmdValidationException(
                 $"Operator {c.Operator} (attribute '{t.Attribute.LogicalName}') needs a table with a hierarchical relationship; '{entity}' has none.");
         var cte = TreeCte(entity, SystemAttributes.PrimaryIdName(metadata), parent, (Guid)Single(t, c), c.Operator);
         return c.Operator switch
         {
-            ConditionOperator.Under or ConditionOperator.Above => $"{t.Column} IN (SELECT id FROM {cte} WHERE lvl > 0)",
-            ConditionOperator.NotUnder => $"({t.Column} NOT IN (SELECT id FROM {cte}) OR {t.Column} IS NULL)",
+            FilterOperator.Under or FilterOperator.Above => $"{t.Column} IN (SELECT id FROM {cte} WHERE lvl > 0)",
+            FilterOperator.NotUnder => $"({t.Column} NOT IN (SELECT id FROM {cte}) OR {t.Column} IS NULL)",
             _ => $"{t.Column} IN (SELECT id FROM {cte})",
         };
     }
@@ -395,11 +395,11 @@ internal sealed class ConditionCompiler(QueryParameters parameters, QueryContext
     private static string TreeEntity(ConditionTarget t, ConditionNode c)
     {
         if (t.Attribute.IsPrimaryId == true) return t.EntityName;
-        var targets = (t.Attribute as LookupAttributeMetadata)?.Targets;
-        if (targets is not { Length: > 0 })
+        var targets = (t.Attribute as LookupColumn)?.Targets;
+        if (targets is not { Count: > 0 })
             throw new XrmdValidationException(
                 $"Operator {c.Operator} requires a lookup or the primary key; '{t.Attribute.LogicalName}' is {t.Attribute.AttributeType}.");
-        if (targets.Length == 1) return targets[0];
+        if (targets.Count == 1) return targets[0];
         if (t.Attribute.LogicalName == OwnerIdAttribute && targets.Contains(SystemUser)) return SystemUser;
         throw new XrmdValidationException(
             $"Operator {c.Operator} is not supported on the multi-target lookup '{t.Attribute.LogicalName}' " +
@@ -415,12 +415,12 @@ internal sealed class ConditionCompiler(QueryParameters parameters, QueryContext
     /// joins on <c>[k] = h.parent</c>), at most 100 levels (no error at the limit). The start record is never visited again,
     /// so a loop through it does not return it as its own descendant or ancestor. Names come from metadata, the id is a parameter.
     /// </summary>
-    private string TreeCte(string entity, string key, string parent, Guid id, ConditionOperator op)
+    private string TreeCte(string entity, string key, string parent, Guid id, FilterOperator op)
     {
         var name = "h" + _ctes.Count.ToString(CultureInfo.InvariantCulture);
         var table = $"{DataTable(entity)}";
         var start = parameters.Add(DbType.Guid, id);
-        var up = op is ConditionOperator.Above or ConditionOperator.AboveOrEqual;
+        var up = op is FilterOperator.Above or FilterOperator.AboveOrEqual;
         _ctes.Add(up
             ? $"{name} (id, parent, lvl) AS (SELECT t.{Q(key)}, t.{Q(parent)}, 0 FROM {table} AS t WHERE t.{Q(key)} = {start} " +
               $"UNION ALL SELECT c.{Q(key)}, c.{Q(parent)}, h.lvl + 1 FROM {table} AS c JOIN {name} AS h ON c.{Q(key)} = h.parent " +
@@ -445,7 +445,7 @@ internal sealed class ConditionCompiler(QueryParameters parameters, QueryContext
     private string Comparison(ConditionTarget t, ConditionNode c, string op)
     {
         var value = Single(t, c);
-        if (c.BinaryCollation && t.Attribute is StringAttributeMetadata or MemoAttributeMetadata)
+        if (c.BinaryCollation && t.Attribute is TextColumn or MemoColumn)
         {
             var p = Parameter(t, value);
             if (op == "<>")
@@ -462,7 +462,7 @@ internal sealed class ConditionCompiler(QueryParameters parameters, QueryContext
     }
 
     /// <summary>A text column (<c>citext</c> on PostgreSQL), compared through <see cref="ISqlDialect.TextKey"/> (plan 2.7b, ruling Q1).</summary>
-    internal static bool IsText(AttributeMetadata a) => a is StringAttributeMetadata or MemoAttributeMetadata;
+    internal static bool IsText(ColumnDefinition a) => a is TextColumn or MemoColumn;
 
     private static string NoValue(ConditionTarget t, ConditionNode c, string predicate)
     {
@@ -473,11 +473,11 @@ internal sealed class ConditionCompiler(QueryParameters parameters, QueryContext
 
     private string Like(ConditionTarget t, ConditionNode c, string op, Func<string, string> pattern)
     {
-        if (t.Attribute is LookupAttributeMetadata lookup)
+        if (t.Attribute is LookupColumn lookup)
         {
             // Dataverse matches a like-family condition on a lookup against the related record's primary name (#107). A scalar
             // name expression keeps the NULL semantics of its name column: an empty lookup matches neither LIKE nor NOT LIKE.
-            if (lookup.AttributeType == AttributeTypeCode.PartyList)
+            if (lookup.AttributeType == ColumnTypeCode.PartyList)
                 throw new XrmdValidationException(
                     $"Operator {c.Operator} cannot be used on '{t.Attribute.LogicalName}', a party list, which has no column to match.");
             if (c.Values is not [string text])
@@ -487,7 +487,7 @@ internal sealed class ConditionCompiler(QueryParameters parameters, QueryContext
                 $"Operator {c.Operator} on lookup '{t.Attribute.LogicalName}' needs the related table's primary name; none of its targets has one.");
             return dialect.Like(name, pattern(text), op == "NOT LIKE", p => parameters.Add(DbType.String, p));
         }
-        if (t.Attribute is not (StringAttributeMetadata or MemoAttributeMetadata))
+        if (t.Attribute is not (TextColumn or MemoColumn))
             throw new XrmdValidationException(
                 $"Operator {c.Operator} requires a string attribute; '{t.Attribute.LogicalName}' is {t.Attribute.AttributeType}.");
         var value = (string)Single(t, c);
@@ -534,10 +534,10 @@ internal sealed class ConditionCompiler(QueryParameters parameters, QueryContext
     /// The <c>value</c> column of the JSON values of <c>In</c> (ruling P8): the column type, widened where a narrower type would
     /// silently truncate or round the value (strings, decimals) and produce false matches.
     /// </summary>
-    private static JsonColumn JsonValueColumn(AttributeMetadata a) => a switch
+    private static JsonColumn JsonValueColumn(ColumnDefinition a) => a switch
     {
-        StringAttributeMetadata or MemoAttributeMetadata => new("value", SqlColumnKind.Text, Path: "$"),
-        DecimalAttributeMetadata or MoneyAttributeMetadata => new("value", SqlColumnKind.Decimal, Path: "$", Precision: 38, Scale: 10),
+        TextColumn or MemoColumn => new("value", SqlColumnKind.Text, Path: "$"),
+        DecimalColumn or MoneyColumn => new("value", SqlColumnKind.Decimal, Path: "$", Precision: 38, Scale: 10),
         _ => new("value", ValueCoercer.DbTypeOf(a) switch
         {
             DbType.Int32 => SqlColumnKind.Int32,

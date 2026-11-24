@@ -1,10 +1,10 @@
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
-using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Query;
 using Xrmd.Query.Model;
 
 namespace Xrmd.Core.Elastic;
@@ -60,9 +60,9 @@ public static class ElasticQueryRules
         ArgumentNullException.ThrowIfNull(q);
         ArgumentNullException.ThrowIfNull(partitionId);
         ElasticTables.DemandValidPartitionId(partitionId);
-        var filter = new FilterNode { Operator = LogicalOperator.And };
+        var filter = new FilterNode { Operator = FilterLogic.And };
         filter.Filters.Add(q.Root.Filter);
-        filter.Conditions.Add(new ConditionNode(null, ElasticTables.PartitionId, ConditionOperator.Equal, [partitionId], BinaryCollation: true));
+        filter.Conditions.Add(new ConditionNode(null, ElasticTables.PartitionId, FilterOperator.Equal, [partitionId], BinaryCollation: true));
         var root = new EntityNode { EntityName = q.Root.EntityName, AllColumns = q.Root.AllColumns, Filter = filter };
         root.Columns.AddRange(q.Root.Columns);
         root.Links.AddRange(q.Root.Links);

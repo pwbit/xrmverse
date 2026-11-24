@@ -8,6 +8,7 @@ using Xrmd.Core.Errors;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Sdk;
 using Xrmd.Model.Metadata;
+using Xrmd.Model.Query;
 using Xrmd.Query.Model;
 
 namespace Xrmd.Core.Tests;
@@ -115,7 +116,7 @@ public sealed class ElasticQueryRulesTests
     {
         var q = Query("new_sensor", q =>
         {
-            q.Root.Filter.Conditions.Add(new ConditionNode(null, "new_value", ConditionOperator.GreaterThan, [3]));
+            q.Root.Filter.Conditions.Add(new ConditionNode(null, "new_value", FilterOperator.GreaterThan, [3]));
             q.Root.Orders.Add(new OrderNode("new_value", true));
         });
         Demand(q).Should().NotThrow();
@@ -200,15 +201,15 @@ public sealed class ElasticQueryRulesTests
     {
         var q = Query("new_sensor", q =>
         {
-            q.Root.Filter.Operator = LogicalOperator.Or;
-            q.Root.Filter.Conditions.Add(new ConditionNode(null, "new_value", ConditionOperator.Equal, [1]));
+            q.Root.Filter.Operator = FilterLogic.Or;
+            q.Root.Filter.Conditions.Add(new ConditionNode(null, "new_value", FilterOperator.Equal, [1]));
         });
         var scoped = ElasticQueryRules.WithPartition(q, "p1");
-        scoped.Root.Filter.Operator.Should().Be(LogicalOperator.And);
-        scoped.Root.Filter.Filters.Should().ContainSingle().Which.Operator.Should().Be(LogicalOperator.Or);
+        scoped.Root.Filter.Operator.Should().Be(FilterLogic.And);
+        scoped.Root.Filter.Filters.Should().ContainSingle().Which.Operator.Should().Be(FilterLogic.Or);
         scoped.Root.Filter.Conditions.Should().ContainSingle().Which.Should().Match<ConditionNode>(c =>
             c.Attribute == "partitionid" && c.BinaryCollation && (string)c.Values[0]! == "p1");
-        q.Root.Filter.Operator.Should().Be(LogicalOperator.Or, "the original model is not changed");
+        q.Root.Filter.Operator.Should().Be(FilterLogic.Or, "the original model is not changed");
     }
 
     [Fact]

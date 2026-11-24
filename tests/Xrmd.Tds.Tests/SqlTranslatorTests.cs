@@ -1,5 +1,5 @@
 using FluentAssertions;
-using Microsoft.Xrm.Sdk.Query;
+using Xrmd.Model.Query;
 using Xrmd.Query;
 using Xrmd.Query.Model;
 using Xrmd.Query.Sql;
@@ -31,11 +31,11 @@ public sealed class SqlTranslatorTests
         q.Model.Root.EntityName.Should().Be("account");
         q.Model.Root.AllColumns.Should().BeFalse();
         q.Model.Root.Columns.Select(c => c.Attribute).Should().Equal("name", "accountnumber");
-        q.Model.Root.Filter.Operator.Should().Be(LogicalOperator.And);
+        q.Model.Root.Filter.Operator.Should().Be(FilterLogic.And);
         q.Model.Root.Filter.Filters.Should().BeEmpty();
         q.Model.Root.Filter.Conditions.Should().HaveCount(2);
-        q.Model.Root.Filter.Conditions[0].Should().BeEquivalentTo(new ConditionNode(null, "name", ConditionOperator.Like, ["A%"]));
-        q.Model.Root.Filter.Conditions[1].Should().BeEquivalentTo(new ConditionNode(null, "statecode", ConditionOperator.Equal, [0]));
+        q.Model.Root.Filter.Conditions[0].Should().BeEquivalentTo(new ConditionNode(null, "name", FilterOperator.Like, ["A%"]));
+        q.Model.Root.Filter.Conditions[1].Should().BeEquivalentTo(new ConditionNode(null, "statecode", FilterOperator.Equal, [0]));
         q.Model.Root.Orders.Should().Equal(new OrderNode("name", true));
         q.Model.OrderByStoredValues.Should().BeTrue(); // SQL ORDER BY semantics: a lookup or a choice by its stored value
         q.Model.Top.Should().Be(5);
@@ -61,11 +61,11 @@ public sealed class SqlTranslatorTests
     }
 
     [Theory]
-    [InlineData("SELECT a.name, c.fullname FROM account a INNER JOIN contact c ON a.primarycontactid = c.contactid", JoinOperator.Inner)]
-    [InlineData("SELECT a.name, c.fullname FROM account a JOIN contact c ON c.contactid = a.primarycontactid", JoinOperator.Inner)]
-    [InlineData("SELECT a.name, c.fullname FROM account a LEFT JOIN contact c ON a.primarycontactid = c.contactid", JoinOperator.LeftOuter)]
-    [InlineData("SELECT a.name, c.fullname FROM account a LEFT OUTER JOIN contact c ON c.contactid = a.primarycontactid", JoinOperator.LeftOuter)]
-    public void Join_on_lookup_becomes_link(string sql, JoinOperator join)
+    [InlineData("SELECT a.name, c.fullname FROM account a INNER JOIN contact c ON a.primarycontactid = c.contactid", JoinKind.Inner)]
+    [InlineData("SELECT a.name, c.fullname FROM account a JOIN contact c ON c.contactid = a.primarycontactid", JoinKind.Inner)]
+    [InlineData("SELECT a.name, c.fullname FROM account a LEFT JOIN contact c ON a.primarycontactid = c.contactid", JoinKind.LeftOuter)]
+    [InlineData("SELECT a.name, c.fullname FROM account a LEFT OUTER JOIN contact c ON c.contactid = a.primarycontactid", JoinKind.LeftOuter)]
+    public void Join_on_lookup_becomes_link(string sql, JoinKind join)
     {
         var q = Query(sql);
 
@@ -90,7 +90,7 @@ public sealed class SqlTranslatorTests
         link.From.Should().Be("primarycontactid");
         link.To.Should().Be("contactid");
         q.Model.Root.Filter.Conditions.Should().ContainSingle()
-            .Which.Should().BeEquivalentTo(new ConditionNode("a", "name", ConditionOperator.Equal, ["Acme"]));
+            .Which.Should().BeEquivalentTo(new ConditionNode("a", "name", FilterOperator.Equal, ["Acme"]));
         q.Model.Root.Orders.Should().Equal(new OrderNode("fullname", false));
     }
 
@@ -163,7 +163,7 @@ public sealed class SqlTranslatorTests
         var q = Query("SELECT name FROM account WHERE name = @n", new Dictionary<string, object?> { ["@n"] = "Acme" });
 
         q.Model.Root.Filter.Conditions.Should().ContainSingle()
-            .Which.Should().BeEquivalentTo(new ConditionNode(null, "name", ConditionOperator.Equal, ["Acme"]));
+            .Which.Should().BeEquivalentTo(new ConditionNode(null, "name", FilterOperator.Equal, ["Acme"]));
 
         // Names without '@' and in another case bind too (SQL Server variable names ignore case).
         Query("SELECT name FROM account WHERE name = @N", new Dictionary<string, object?> { ["n"] = "Acme" })
@@ -187,21 +187,21 @@ public sealed class SqlTranslatorTests
             """);
 
         var f = q.Model.Root.Filter;
-        f.Operator.Should().Be(LogicalOperator.And);
+        f.Operator.Should().Be(FilterLogic.And);
         f.Conditions.Should().BeEquivalentTo(new[]
         {
-            new ConditionNode(null, "numberofemployees", ConditionOperator.Between, [10, -5]),
-            new ConditionNode(null, "industrycode", ConditionOperator.In, [1, 2]),
-            new ConditionNode(null, "statecode", ConditionOperator.Equal, [1]),
-            new ConditionNode(null, "numberofemployees", ConditionOperator.LessThan, [3]),
-            new ConditionNode(null, "numberofemployees", ConditionOperator.GreaterThan, [7]),
+            new ConditionNode(null, "numberofemployees", FilterOperator.Between, [10, -5]),
+            new ConditionNode(null, "industrycode", FilterOperator.In, [1, 2]),
+            new ConditionNode(null, "statecode", FilterOperator.Equal, [1]),
+            new ConditionNode(null, "numberofemployees", FilterOperator.LessThan, [3]),
+            new ConditionNode(null, "numberofemployees", FilterOperator.GreaterThan, [7]),
         }, o => o.WithStrictOrdering());
         var or = f.Filters.Should().ContainSingle().Subject;
-        or.Operator.Should().Be(LogicalOperator.Or);
+        or.Operator.Should().Be(FilterLogic.Or);
         or.Conditions.Should().BeEquivalentTo(new[]
         {
-            new ConditionNode(null, "name", ConditionOperator.NotLike, ["Z%"]),
-            new ConditionNode(null, "accountnumber", ConditionOperator.Null, []),
+            new ConditionNode(null, "name", FilterOperator.NotLike, ["Z%"]),
+            new ConditionNode(null, "accountnumber", FilterOperator.Null, []),
         }, o => o.WithStrictOrdering());
     }
 

@@ -1,7 +1,7 @@
 using System.Text.RegularExpressions;
 using FluentAssertions;
-using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
+using Xrmd.Model.Query;
 using Xrmd.Query.FetchXml;
 using Xrmd.Query.Model;
 using Xrmd.Query.Sql;
@@ -29,11 +29,11 @@ public class LookupNameCompilerTests
         return new QueryModel { Root = root };
     }
 
-    private static ConditionNode Cond(string attribute, ConditionOperator op, params object?[] values) => new(null, attribute, op, values);
+    private static ConditionNode Cond(string attribute, FilterOperator op, params object?[] values) => new(null, attribute, op, values);
 
     private static object? Param(CompiledQuery c, string name) => c.Parameters.Single(p => p.ParameterName == name).Value;
 
-    private static QueryModel Filtered(string attribute, ConditionOperator op, string value)
+    private static QueryModel Filtered(string attribute, FilterOperator op, string value)
     {
         var q = Project("pb_name");
         q.Root.Filter.Conditions.Add(Cond(attribute, op, value));
@@ -43,7 +43,7 @@ public class LookupNameCompilerTests
     [Fact]
     public void Like_on_lookup_matches_the_target_primary_name()
     {
-        var c = Compile(Filtered("pb_customerid", ConditionOperator.Like, "Ann%"));
+        var c = Compile(Filtered("pb_customerid", FilterOperator.Like, "Ann%"));
         Normalize(c.Sql).Should().Contain($"WHERE ({UserName} LIKE @p0)");
         Param(c, "@p0").Should().Be("Ann%");
     }
@@ -51,7 +51,7 @@ public class LookupNameCompilerTests
     [Fact]
     public void Like_on_customer_lookup_switches_on_the_type_column()
     {
-        var c = Compile(Filtered("pb_partnerid", ConditionOperator.Like, "Acme%"));
+        var c = Compile(Filtered("pb_partnerid", FilterOperator.Like, "Acme%"));
         Normalize(c.Sql).Should().Contain(
             "WHERE (CASE t0.[pb_partneridtype] " +
             "WHEN @p0 THEN (SELECT n.[name] FROM [data].[account] AS n WHERE n.[accountid] = t0.[pb_partnerid]) " +
@@ -62,12 +62,12 @@ public class LookupNameCompilerTests
     }
 
     [Theory]
-    [InlineData(ConditionOperator.BeginsWith, "LIKE", "50[%]%")]
-    [InlineData(ConditionOperator.DoesNotBeginWith, "NOT LIKE", "50[%]%")]
-    [InlineData(ConditionOperator.EndsWith, "LIKE", "%50[%]")]
-    [InlineData(ConditionOperator.DoesNotEndWith, "NOT LIKE", "%50[%]")]
-    [InlineData(ConditionOperator.NotLike, "NOT LIKE", "50%")]
-    public void Like_family_on_lookup_uses_the_name_and_escapes_as_on_text(ConditionOperator op, string sqlOp, string pattern)
+    [InlineData(FilterOperator.BeginsWith, "LIKE", "50[%]%")]
+    [InlineData(FilterOperator.DoesNotBeginWith, "NOT LIKE", "50[%]%")]
+    [InlineData(FilterOperator.EndsWith, "LIKE", "%50[%]")]
+    [InlineData(FilterOperator.DoesNotEndWith, "NOT LIKE", "%50[%]")]
+    [InlineData(FilterOperator.NotLike, "NOT LIKE", "50%")]
+    public void Like_family_on_lookup_uses_the_name_and_escapes_as_on_text(FilterOperator op, string sqlOp, string pattern)
     {
         var c = Compile(Filtered("pb_customerid", op, "50%"));
         // NOT LIKE over the scalar name keeps NULL semantics: an empty lookup matches neither LIKE nor NOT LIKE (no NOT EXISTS).
@@ -80,7 +80,7 @@ public class LookupNameCompilerTests
     {
         var q = Project("pb_name");
         var link = new LinkNode { EntityName = "pb_project", From = "pb_customerid", To = "pb_customerid", Alias = "p" };
-        link.Filter.Conditions.Add(Cond("pb_customerid", ConditionOperator.Like, "Ann%"));
+        link.Filter.Conditions.Add(Cond("pb_customerid", FilterOperator.Like, "Ann%"));
         q.Root.Links.Add(link);
         Normalize(Compile(q).Sql).Should().Contain(
             "(SELECT n.[fullname] FROM [data].[systemuser] AS n WHERE n.[systemuserid] = t1.[pb_customerid]) LIKE @p0");
@@ -90,7 +90,7 @@ public class LookupNameCompilerTests
     public void Like_on_lookup_without_named_target_is_refused()
     {
         var q = new QueryModel { Root = new EntityNode { EntityName = "annotation" } };
-        q.Root.Filter.Conditions.Add(Cond("objectid", ConditionOperator.Like, "x%"));
+        q.Root.Filter.Conditions.Add(Cond("objectid", FilterOperator.Like, "x%"));
         FluentActions.Invoking(() => Compile(q)).Should().Throw<XrmdValidationException>().WithMessage("*objectid*primary name*");
     }
 
@@ -98,7 +98,7 @@ public class LookupNameCompilerTests
     public void Like_on_partylist_is_refused()
     {
         // A party list has no column (plan 2.11 A8): it cannot be named in a condition at all.
-        FluentActions.Invoking(() => Compile(Filtered("pb_parties", ConditionOperator.Like, "x%")))
+        FluentActions.Invoking(() => Compile(Filtered("pb_parties", FilterOperator.Like, "x%")))
             .Should().Throw<XrmdValidationException>().WithMessage("*pb_parties*");
     }
 
@@ -106,7 +106,7 @@ public class LookupNameCompilerTests
     public void Like_on_lookup_requires_one_text_value()
     {
         var q = Project();
-        q.Root.Filter.Conditions.Add(Cond("pb_customerid", ConditionOperator.Like, "a", "b"));
+        q.Root.Filter.Conditions.Add(Cond("pb_customerid", FilterOperator.Like, "a", "b"));
         FluentActions.Invoking(() => Compile(q)).Should().Throw<XrmdValidationException>().WithMessage("*pb_customerid*one*");
     }
 
@@ -114,7 +114,7 @@ public class LookupNameCompilerTests
     public void Queries_without_lookup_like_keep_parameter_numbering()
     {
         var q = Project("ownerid");
-        q.Root.Filter.Conditions.Add(Cond("pb_customerid", ConditionOperator.Equal, Guid.Empty));
+        q.Root.Filter.Conditions.Add(Cond("pb_customerid", FilterOperator.Equal, Guid.Empty));
         var c = Compile(q);
         // The condition is @p0 and only the selected owner name adds its type code parameter after it.
         Normalize(c.Sql).Should().Contain("WHERE (t0.[pb_customerid] = @p0)");

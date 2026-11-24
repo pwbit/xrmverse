@@ -60,6 +60,52 @@ public static class SdkMetadataView
             ? (OneToManyRelationshipMetadata)SdkViewCache.Of(relationship)
             : null;
 
+    // Between a model definition and its SDK view, for the SDK edges of the modules on the model (S.2c: Xrmd.Query's Sdk/ twins and
+    // callbacks). Transitional: removed with the SDK view (S.2i).
+
+    /// <summary>
+    /// The model of <paramref name="view"/>: the model instance a view of this cache was built from (the one the store hands out),
+    /// else a fresh conversion, never cached (an SDK object that is not a view belongs to its caller, who may change it).
+    /// </summary>
+    public static TableDefinition ToModel(this EntityMetadata view)
+    {
+        ArgumentNullException.ThrowIfNull(view);
+        return SdkTwin.Model(view);
+    }
+
+    /// <summary>
+    /// The model of <paramref name="view"/>: for a column of a view of this cache, the matching column of the model table, else a
+    /// fresh conversion, never cached (see <see cref="ToModel(EntityMetadata)"/>).
+    /// </summary>
+    public static ColumnDefinition ToModel(this AttributeMetadata view)
+    {
+        ArgumentNullException.ThrowIfNull(view);
+        return SdkTwin.Model(view);
+    }
+
+    /// <summary>The cached SDK view of <paramref name="table"/>: the instance <see cref="GetEntity(IMetadataStore, string)"/> returns for it.</summary>
+    /// <remarks>
+    /// Only for a definition the store hands out, which never changes. The view is built once per instance and cached: a table the
+    /// caller owns and changes afterwards gets a view that never follows those changes.
+    /// </remarks>
+    public static EntityMetadata SdkView(this TableDefinition table)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+        return SdkViewCache.Of(table);
+    }
+
+    /// <summary>
+    /// The SDK view of <paramref name="column"/> of <paramref name="table"/>: the matching column of <see cref="SdkView(TableDefinition)"/>
+    /// (so a reader sees one consistent table), else the column's own cached view.
+    /// </summary>
+    /// <remarks>As <see cref="SdkView(TableDefinition)"/>: only for a definition the store hands out, which never changes.</remarks>
+    public static AttributeMetadata SdkView(this TableDefinition table, ColumnDefinition column)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+        ArgumentNullException.ThrowIfNull(column);
+        return SdkViewCache.Of(table, column);
+    }
+
     // Writes: the SDK overloads of the store's model writes, with the same names, parameter names and semantics. Each converts its
     // arguments with SdkMetadataBridge.ToModel (a fresh conversion, never cached: a caller may change and send the same instance
     // again) and calls the model member; a null stays null, so the store reports it as before. The caller's objects are not changed.

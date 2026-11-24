@@ -1,5 +1,4 @@
-using Microsoft.Xrm.Sdk;
-using Microsoft.Xrm.Sdk.Query;
+using Xrmd.Model.Query;
 
 namespace Xrmd.Query.Model;
 
@@ -19,7 +18,7 @@ public sealed class LinkNode : EntityNode
     public required string From { get; set; }
     /// <summary>Attribute of the parent entity.</summary>
     public required string To { get; set; }
-    public JoinOperator JoinType { get; set; } = JoinOperator.Inner;
+    public JoinKind JoinType { get; set; } = JoinKind.Inner;
     /// <summary>Null: assigned by the compiler ({name}1, {name}2...).</summary>
     public string? Alias { get; set; }
     /// <summary>
@@ -49,7 +48,7 @@ public enum DateGrouping { Day, Week, Month, Quarter, Year }
 
 public sealed class FilterNode
 {
-    public LogicalOperator Operator { get; set; } = LogicalOperator.And;
+    public FilterLogic Operator { get; set; } = FilterLogic.And;
     public List<ConditionNode> Conditions { get; } = [];
     public List<FilterNode> Filters { get; } = [];
     /// <summary>Records shared with a user; combined with the conditions by <see cref="Operator"/>.</summary>
@@ -144,7 +143,7 @@ public sealed record SharedRecordsNode(Guid UserId, int ObjectTypeCode, int Acce
 
 /// <param name="BinaryCollation">Compares a string column with the binary collation (exact, case-sensitive) instead of the column's
 /// own; set only by the elastic partition filter (plan 3.4) and the Cosmos SQL translator (plan #78), never by a query front end.</param>
-public sealed record ConditionNode(string? EntityAlias, string Attribute, ConditionOperator Operator, IReadOnlyList<object?> Values,
+public sealed record ConditionNode(string? EntityAlias, string Attribute, FilterOperator Operator, IReadOnlyList<object?> Values,
     bool BinaryCollation = false);
 
 /// <summary>Alias: order by an aggregate alias.</summary>

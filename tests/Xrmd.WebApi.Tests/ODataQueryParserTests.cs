@@ -5,6 +5,7 @@ using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
 using Xrmd.Metadata;
+using Xrmd.Model.Query;
 using Xrmd.Query.Model;
 using Xrmd.WebApi;
 
@@ -67,15 +68,15 @@ public class ODataQueryParserTests
         var model = Parse("$filter=pb_count gt 5 and (contains(pb_name,'a') or pb_name eq 'b')");
 
         var filter = model.Root.Filter;
-        filter.Operator.Should().Be(LogicalOperator.And);
+        filter.Operator.Should().Be(FilterLogic.And);
         filter.Conditions.Should().ContainSingle()
-            .Which.Should().BeEquivalentTo(new ConditionNode(null, "pb_count", ConditionOperator.GreaterThan, [5]));
+            .Which.Should().BeEquivalentTo(new ConditionNode(null, "pb_count", FilterOperator.GreaterThan, [5]));
         var or = filter.Filters.Should().ContainSingle().Subject;
-        or.Operator.Should().Be(LogicalOperator.Or);
+        or.Operator.Should().Be(FilterLogic.Or);
         or.Filters.Should().BeEmpty();
         or.Conditions.Should().HaveCount(2);
-        or.Conditions[0].Should().BeEquivalentTo(new ConditionNode(null, "pb_name", ConditionOperator.Like, ["%a%"]));
-        or.Conditions[1].Should().BeEquivalentTo(new ConditionNode(null, "pb_name", ConditionOperator.Equal, ["b"]));
+        or.Conditions[0].Should().BeEquivalentTo(new ConditionNode(null, "pb_name", FilterOperator.Like, ["%a%"]));
+        or.Conditions[1].Should().BeEquivalentTo(new ConditionNode(null, "pb_name", FilterOperator.Equal, ["b"]));
     }
 
     [Fact]
@@ -86,12 +87,12 @@ public class ODataQueryParserTests
         var filter = model.Root.Filter;
         filter.Filters.Should().BeEmpty();
         filter.Conditions.Select(c => (c.Attribute, c.Operator)).Should().Equal(
-            ("pb_count", ConditionOperator.GreaterEqual),
-            ("pb_count", ConditionOperator.LessEqual),
-            ("pb_count", ConditionOperator.NotEqual),
-            ("pb_priority", ConditionOperator.LessThan),
-            ("pb_name", ConditionOperator.NotNull),
-            ("pb_startdate", ConditionOperator.Null));
+            ("pb_count", FilterOperator.GreaterEqual),
+            ("pb_count", FilterOperator.LessEqual),
+            ("pb_count", FilterOperator.NotEqual),
+            ("pb_priority", FilterOperator.LessThan),
+            ("pb_name", FilterOperator.NotNull),
+            ("pb_startdate", FilterOperator.Null));
         filter.Conditions[4].Values.Should().BeEmpty();
     }
 
@@ -102,13 +103,13 @@ public class ODataQueryParserTests
                           "or not startswith(pb_name,'q') or not endswith(pb_name,'w')");
 
         var filter = model.Root.Filter;
-        filter.Operator.Should().Be(LogicalOperator.Or);
+        filter.Operator.Should().Be(FilterLogic.Or);
         filter.Conditions.Select(c => (c.Operator, c.Values.Single())).Should().Equal(
-            (ConditionOperator.BeginsWith, "A_"),
-            (ConditionOperator.EndsWith, "z"),
-            (ConditionOperator.NotLike, "%[%]%"),
-            (ConditionOperator.DoesNotBeginWith, "q"),
-            (ConditionOperator.DoesNotEndWith, "w"));
+            (FilterOperator.BeginsWith, "A_"),
+            (FilterOperator.EndsWith, "z"),
+            (FilterOperator.NotLike, "%[%]%"),
+            (FilterOperator.DoesNotBeginWith, "q"),
+            (FilterOperator.DoesNotEndWith, "w"));
     }
 
     [Fact]
@@ -117,7 +118,7 @@ public class ODataQueryParserTests
         var model = Parse($"$filter=_pb_customerid_value eq {CustomerId}");
 
         model.Root.Filter.Conditions.Should().ContainSingle()
-            .Which.Should().BeEquivalentTo(new ConditionNode(null, "pb_customerid", ConditionOperator.Equal, [CustomerId]));
+            .Which.Should().BeEquivalentTo(new ConditionNode(null, "pb_customerid", FilterOperator.Equal, [CustomerId]));
     }
 
     [Fact]
@@ -126,7 +127,7 @@ public class ODataQueryParserTests
         var model = Parse("$filter=5 lt pb_count");
 
         model.Root.Filter.Conditions.Should().ContainSingle()
-            .Which.Should().BeEquivalentTo(new ConditionNode(null, "pb_count", ConditionOperator.GreaterThan, [5]));
+            .Which.Should().BeEquivalentTo(new ConditionNode(null, "pb_count", FilterOperator.GreaterThan, [5]));
     }
 
     [Fact]
@@ -289,7 +290,7 @@ public class ODataQueryParserTests
         var model = Parse("$apply=filter(pb_count gt 5)/aggregate($count as c)");
 
         model.Root.Filter.Conditions.Should().ContainSingle()
-            .Which.Should().BeEquivalentTo(new ConditionNode(null, "pb_count", ConditionOperator.GreaterThan, [5]));
+            .Which.Should().BeEquivalentTo(new ConditionNode(null, "pb_count", FilterOperator.GreaterThan, [5]));
         model.Root.Columns.Should().Equal(new ColumnNode("pb_projectid", "c", XrmAggregate.Count));
     }
 
@@ -329,7 +330,7 @@ public class ODataQueryParserTests
         link.EntityName.Should().Be("systemuser");
         link.From.Should().Be("systemuserid");
         link.To.Should().Be("pb_customerid");
-        link.JoinType.Should().Be(JoinOperator.LeftOuter);
+        link.JoinType.Should().Be(JoinKind.LeftOuter);
         link.Alias.Should().Be("pb_customerid");
         link.AllColumns.Should().BeFalse();
         link.Columns.Select(c => c.Attribute).Should().BeEquivalentTo("systemuserid", "fullname");
@@ -367,7 +368,7 @@ public class ODataQueryParserTests
 
         model.Top.Should().Be(1);
         model.Root.Filter.Conditions.Should().ContainSingle()
-            .Which.Should().BeEquivalentTo(new ConditionNode(null, "pb_projectid", ConditionOperator.Equal, [CustomerId]));
+            .Which.Should().BeEquivalentTo(new ConditionNode(null, "pb_projectid", FilterOperator.Equal, [CustomerId]));
         model.Root.Links.Should().ContainSingle().Which.Alias.Should().Be("pb_customerid");
     }
 
@@ -467,7 +468,7 @@ public class ODataQueryParserTests
         nested.EntityName.Should().Be("systemuser");
         nested.From.Should().Be("systemuserid");
         nested.To.Should().Be("createdby");
-        nested.JoinType.Should().Be(JoinOperator.LeftOuter);
+        nested.JoinType.Should().Be(JoinKind.LeftOuter);
         nested.Alias.Should().Be("pb_customerid_createdby");
         nested.NavigationProperty.Should().Be("createdby");
         nested.Columns.Select(c => c.Attribute).Should().BeEquivalentTo("systemuserid", "fullname");

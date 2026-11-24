@@ -814,7 +814,9 @@ public sealed class MailboxSyncTests(XrmdFixture fx, GreenMailFixture mail) : IC
         var factory = fx.App.Services.GetRequiredService<IDbConnectionFactory>();
         var queue = fx.App.Services.GetRequiredService<AsyncOperationQueue>();
 
-        (await MailboxSyncJob.ScheduleReceivableAsync(factory, queue, null, default)).Should().BeGreaterThanOrEqualTo(2);
+        // The host's own periodic sweep (MailboxSyncStartup) runs in this fixture and may queue these mailboxes first, so the first
+        // count is not asserted: the jobs below prove the scheduling, and the second call proves it is done once.
+        await MailboxSyncJob.ScheduleReceivableAsync(factory, queue, null, default);
         (await MailboxSyncJob.ScheduleReceivableAsync(factory, queue, null, default)).Should().Be(0, "every receivable mailbox has its job");
 
         (await JobsAsync(first.Mailbox)).Should().ContainSingle().Which.Owner.Should().Be(first.User);

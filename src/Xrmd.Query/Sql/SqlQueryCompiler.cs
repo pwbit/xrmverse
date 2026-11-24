@@ -1,15 +1,15 @@
 using System.Data;
 using System.Globalization;
 using System.Text;
-using Microsoft.Xrm.Sdk.Metadata;
-using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Computed;
-using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Metadata;
+using Xrmd.Model.Query;
 using Xrmd.Query.FetchXml;
 using Xrmd.Query.Model;
+using Xrmd.Query.Sdk;
 
 namespace Xrmd.Query.Sql;
 
@@ -67,10 +67,10 @@ public sealed class SqlQueryCompiler(IMetadataStore store, ISqlDialect dialect, 
     /// <param name="SqlAlias"><c>t0..tn</c>.</param>
     /// <param name="Alias">The caller's (or generated) link alias; null for the root.</param>
     /// <param name="Unreadable">The secured columns of the entity the caller cannot read (<see cref="IQuerySecurity.UnreadableColumns"/>).</param>
-    private sealed record Scope(string SqlAlias, string? Alias, EntityMetadata Metadata,
-        IReadOnlyDictionary<string, AttributeMetadata> Attributes, EntityNode Node, Scope? Parent, IReadOnlySet<string> Unreadable)
+    private sealed record Scope(string SqlAlias, string? Alias, TableDefinition Metadata,
+        IReadOnlyDictionary<string, ColumnDefinition> Attributes, EntityNode Node, Scope? Parent, IReadOnlySet<string> Unreadable)
     {
-        public string EntityName => Metadata.LogicalName;
+        public string EntityName => Metadata.LogicalName!;
     }
 
     /// <summary>State of one compilation; each stage appends to the SQL clauses.</summary>
@@ -85,6 +85,7 @@ public sealed class SqlQueryCompiler(IMetadataStore store, ISqlDialect dialect, 
         private readonly QueryParameters _parameters = new();
         private readonly List<Scope> _scopes = [];
         private readonly List<ResultColumn> _columns = [];
+        private readonly ResultColumnViews _views = new();
         private readonly List<string> _selectList = [];
         /// <summary>Select expression → its column alias (first occurrence).</summary>
         private readonly Dictionary<string, string> _selectAliases = new(StringComparer.Ordinal);
@@ -94,7 +95,7 @@ public sealed class SqlQueryCompiler(IMetadataStore store, ISqlDialect dialect, 
         /// <summary>Aliases (c0..) of the group-by columns, in declaration order.</summary>
         private readonly List<string> _groupByAliases = [];
         /// <summary>Lookups selected as values: they get a <see cref="ResultKind.LookupName"/> column (see <see cref="AddLookupNames"/>).</summary>
-        private readonly List<(Scope Scope, AttributeMetadata Attribute, string ResultName)> _lookups = [];
+        private readonly List<(Scope Scope, ColumnDefinition Attribute, string ResultName)> _lookups = [];
         private ConditionCompiler? _conditions;
         /// <summary>The scopes of the parent subqueries of <see cref="ParentRecordsNode"/> (p0..pn).</summary>
         private int _parentScopes;
@@ -109,7 +110,13 @@ public sealed class SqlQueryCompiler(IMetadataStore store, ISqlDialect dialect, 
         /// <summary>The distinct calculated columns (<c>table.column</c>) the query reads, at most <see cref="MaxCalculatedColumns"/>.</summary>
         private readonly HashSet<string> _calculated = new(StringComparer.Ordinal);
 
-        private ComputedSql Computed => _computedSql ??= new ComputedSql(_parameters, store.GetEntity, Translator, dialect);
+        private ComputedSql Computed => _computedSql ??= new ComputedSql(_parameters, store.GetTable, Translate, dialect);
+
+        private ComputedTranslation? _translate;
+
+        /// <summary>The translation of the calculated columns of the store's tables (<see cref="Translator"/>, at the SDK edge).</summary>
+        /// <exception cref="XrmdValidationException">The server has no translator: calculated columns cannot be read.</exception>
+        private ComputedTranslation Translate => _translate ??= SdkQueryCallbacks.Published(Translator, store);
 
         /// <summary>The translator of calculated column definitions.</summary>
         /// <exception cref="XrmdValidationException">The server has none: calculated columns cannot be read.</exception>
@@ -251,9 +258,9 @@ public sealed class SqlQueryCompiler(IMetadataStore store, ISqlDialect dialect, 
 
         private Scope NewScope(EntityNode node, string? alias, Scope? parent)
         {
-            var m = store.GetEntity(node.EntityName)
+            var m = store.GetTable(node.EntityName)
                     ?? throw new XrmdValidationException($"The entity with a name = '{node.EntityName}' was not found in the MetadataCache.");
-            var attrs = (m.Attributes ?? []).ToDictionary(a => a.LogicalName, StringComparer.Ordinal);
+            var attrs = (m.Attributes ?? []).ToDictionary(a => a.LogicalName!, StringComparer.Ordinal);
             var scope = new Scope("t" + _scopes.Count.ToString(CultureInfo.InvariantCulture), alias, m, attrs, node, parent,
                 context.Security?.UnreadableColumns(m) ?? NoColumns);
             _scopes.Add(scope);
@@ -280,7 +287,7 @@ public sealed class SqlQueryCompiler(IMetadataStore store, ISqlDialect dialect, 
         /// A readable attribute of the scope's entity used other than in the projection (a condition, an order, an aggregate or
         /// a join): it must not be a secured column the caller cannot read (<see cref="DemandReadable"/>).
         /// </summary>
-        private AttributeMetadata AttributeOf(Scope scope, string name)
+        private ColumnDefinition AttributeOf(Scope scope, string name)
         {
             var a = Selectable(scope, name);
             DemandReadable(scope, a);
@@ -288,7 +295,7 @@ public sealed class SqlQueryCompiler(IMetadataStore store, ISqlDialect dialect, 
         }
 
         /// <summary>A readable attribute of the scope's entity, as the projection reads it (an unreadable secured column too).</summary>
-        private AttributeMetadata Selectable(Scope scope, string name) =>
+        private ColumnDefinition Selectable(Scope scope, string name) =>
             scope.Attributes.TryGetValue(name, out var a) && IsReadable(scope, a)
                 ? a
                 : throw new XrmdValidationException($"'{scope.EntityName}' entity doesn't contain attribute with Name = '{name}'.");
@@ -297,20 +304,20 @@ public sealed class SqlQueryCompiler(IMetadataStore store, ISqlDialect dialect, 
         /// <see cref="TypeMapping.IsReadable"/>, where a calculated column (and the <c>_base</c> of a calculated money column) is
         /// readable only with a translator of definitions.
         /// </summary>
-        private bool IsReadable(Scope scope, AttributeMetadata a) =>
+        private bool IsReadable(Scope scope, ColumnDefinition a) =>
             CalculatedOf(scope, a) is null ? TypeMapping.IsReadable(a) : computed is not null;
 
         /// <summary>
         /// The calculated column <paramref name="a"/> reads: itself when it is calculated, its money column when it is the <c>_base</c>
         /// of a calculated money column; null otherwise.
         /// </summary>
-        private static AttributeMetadata? CalculatedOf(Scope scope, AttributeMetadata a)
+        private static ColumnDefinition? CalculatedOf(Scope scope, ColumnDefinition a)
         {
             if (ComputedColumnRules.IsComputed(a)) return a;
-            if (a is MoneyAttributeMetadata { IsBaseCurrency: true }
-                && a.LogicalName.EndsWith(TypeMapping.BaseColumnSuffix, StringComparison.Ordinal)
-                && scope.Attributes.TryGetValue(a.LogicalName[..^TypeMapping.BaseColumnSuffix.Length], out var money)
-                && money is MoneyAttributeMetadata { SourceType: ComputedColumnRules.Calculated })
+            if (a is MoneyColumn { IsBaseCurrency: true }
+                && a.LogicalName!.EndsWith(TypeMapping.BaseColumnSuffix, StringComparison.Ordinal)
+                && scope.Attributes.TryGetValue(a.LogicalName![..^TypeMapping.BaseColumnSuffix.Length], out var money)
+                && money is MoneyColumn { SourceType: ComputedColumnRules.Calculated })
                 return money;
             return null;
         }
@@ -320,10 +327,10 @@ public sealed class SqlQueryCompiler(IMetadataStore store, ISqlDialect dialect, 
         /// cannot read is refused there, before any SQL runs, even when a field share would grant it on some rows.
         /// </summary>
         /// <exception cref="Xrmd.Core.Errors.XrmdFaultException">403 FieldReadDenied (0x8004F504).</exception>
-        private void DemandReadable(Scope scope, AttributeMetadata a)
+        private void DemandReadable(Scope scope, ColumnDefinition a)
         {
-            if (scope.Unreadable.Contains(a.LogicalName))
-                throw Xrmd.Core.Errors.XrmdFaultException.FieldReadDenied(scope.EntityName, a.LogicalName, context.UserId);
+            if (scope.Unreadable.Contains(a.LogicalName!))
+                throw Xrmd.Core.Errors.XrmdFaultException.FieldReadDenied(scope.EntityName, a.LogicalName!, context.UserId);
         }
 
         /// <summary>
@@ -332,17 +339,17 @@ public sealed class SqlQueryCompiler(IMetadataStore store, ISqlDialect dialect, 
         /// </summary>
         /// <exception cref="XrmdValidationException">The computed url of an image column, which has no column: it can be selected
         /// (<see cref="ProjectionSql"/>), not filtered, sorted, joined on or aggregated.</exception>
-        private string ColumnSql(Scope scope, AttributeMetadata a)
+        private string ColumnSql(Scope scope, ColumnDefinition a)
         {
             if (FileColumns.IsUrlCompanion(a))
                 throw new XrmdValidationException(
                     $"Attribute '{a.LogicalName}' of '{scope.EntityName}' is computed from the image id and timestamp: it can be selected but not used in a condition, an order, a join or an aggregate.");
             if (CalculatedOf(scope, a) is { } calculated) return CalculatedSql(scope, a, calculated);
-            if (a is EntityNameAttributeMetadata entityName)
+            if (a is EntityNameColumn entityName)
                 return $"{scope.SqlAlias}.{Q(TypeMapping.EntityNameColumn(entityName))}"; // plan 2.11 A7: an object type code
             return a.LogicalName == TypeMapping.VersionNumber
-                ? $"CAST({scope.SqlAlias}.{Q(a.LogicalName)} AS bigint)"
-                : $"{scope.SqlAlias}.{Q(a.LogicalName)}";
+                ? $"CAST({scope.SqlAlias}.{Q(a.LogicalName!)} AS bigint)"
+                : $"{scope.SqlAlias}.{Q(a.LogicalName!)}";
         }
 
         /// <summary>
@@ -352,18 +359,18 @@ public sealed class SqlQueryCompiler(IMetadataStore store, ISqlDialect dialect, 
         /// </summary>
         /// <exception cref="XrmdValidationException">More than <see cref="MaxCalculatedColumns"/> calculated columns, or a definition
         /// that cannot be read.</exception>
-        private string CalculatedSql(Scope scope, AttributeMetadata a, AttributeMetadata calculated)
+        private string CalculatedSql(Scope scope, ColumnDefinition a, ColumnDefinition calculated)
         {
-            if (_calculatedSql.TryGetValue((scope.SqlAlias, a.LogicalName), out var known)) return known;
+            if (_calculatedSql.TryGetValue((scope.SqlAlias, a.LogicalName!), out var known)) return known;
             var name = $"{scope.EntityName}.{calculated.LogicalName}";
             if (_calculated.Add(name) && _calculated.Count > MaxCalculatedColumns)
                 throw new XrmdValidationException(
                     $"A query cannot read more than {MaxCalculatedColumns} calculated columns: '{name}' is one more.");
-            var definition = Translator.Translate(scope.Metadata, calculated, store.GetEntity);
+            var definition = Translate(scope.Metadata, calculated);
             var sql = a == calculated
                 ? Computed.Expression(scope.SqlAlias, scope.Metadata, calculated, definition, depth: 1)
-                : Computed.BaseExpression(scope.SqlAlias, scope.Metadata, (MoneyAttributeMetadata)calculated, definition, depth: 1);
-            _calculatedSql[(scope.SqlAlias, a.LogicalName)] = sql;
+                : Computed.BaseExpression(scope.SqlAlias, scope.Metadata, (MoneyColumn)calculated, definition, depth: 1);
+            _calculatedSql[(scope.SqlAlias, a.LogicalName!)] = sql;
             return sql;
         }
 
@@ -371,7 +378,7 @@ public sealed class SqlQueryCompiler(IMetadataStore store, ISqlDialect dialect, 
         /// The selected expression of an attribute: its column, or for the url of an image column the download url computed from
         /// the image id and timestamp (<see cref="FileColumns.IsUrlCompanion"/>), NULL when the image id is.
         /// </summary>
-        private string ProjectionSql(Scope scope, AttributeMetadata a)
+        private string ProjectionSql(Scope scope, ColumnDefinition a)
         {
             if (!FileColumns.IsUrlCompanion(a)) return ColumnSql(scope, a);
             var image = a.AttributeOf!;
@@ -392,8 +399,8 @@ public sealed class SqlQueryCompiler(IMetadataStore store, ISqlDialect dialect, 
                 var selected = SelectedAttributes(scope);
                 foreach (var (attribute, alias) in selected)
                 {
-                    var resultName = alias ?? (scope.Alias is null ? attribute.LogicalName : $"{scope.Alias}.{attribute.LogicalName}");
-                    if (scope.Unreadable.Contains(attribute.LogicalName))
+                    var resultName = alias ?? (scope.Alias is null ? attribute.LogicalName! : $"{scope.Alias}.{attribute.LogicalName}");
+                    if (scope.Unreadable.Contains(attribute.LogicalName!))
                     {
                         // Read for the rows a field share grants it on (the executor nulls it elsewhere, companions included);
                         // never in a distinct query, whose rows (and their order) the value would shape.
@@ -409,7 +416,7 @@ public sealed class SqlQueryCompiler(IMetadataStore store, ISqlDialect dialect, 
                     if (TypeMapping.IsPolymorphicLookup(attribute))
                         AddColumn($"{scope.SqlAlias}.{Q(attribute.LogicalName + TypeMapping.TypeColumnSuffix)}",
                             scope, attribute, ResultKind.LookupType, resultName);
-                    if (attribute is LookupAttributeMetadata) _lookups.Add((scope, attribute, resultName));
+                    if (attribute is LookupColumn) _lookups.Add((scope, attribute, resultName));
                 }
                 // The record a link-entity's field shares are looked up for (the root always reads its primary key).
                 if (unreadable && scope.Parent is not null && !query.Distinct)
@@ -424,7 +431,7 @@ public sealed class SqlQueryCompiler(IMetadataStore store, ISqlDialect dialect, 
             {
                 var root = _scopes[0];
                 var pk = AttributeOf(root, SystemAttributes.PrimaryIdName(root.Metadata));
-                AddColumn(ColumnSql(root, pk), root, pk, ResultKind.Value, pk.LogicalName);
+                AddColumn(ColumnSql(root, pk), root, pk, ResultKind.Value, pk.LogicalName!);
             }
         }
 
@@ -433,14 +440,14 @@ public sealed class SqlQueryCompiler(IMetadataStore store, ISqlDialect dialect, 
         /// values, which take the base currency), as a <see cref="ResultKind.Currency"/> column the executor formats the money with.
         /// Not in a distinct query, whose rows the column would change.
         /// </summary>
-        private void AddCurrency(Scope scope, IEnumerable<(AttributeMetadata Attribute, string? Alias)> selected)
+        private void AddCurrency(Scope scope, IEnumerable<(ColumnDefinition Attribute, string? Alias)> selected)
         {
-            if (!selected.Any(s => s.Attribute is MoneyAttributeMetadata { IsBaseCurrency: not true })
+            if (!selected.Any(s => s.Attribute is MoneyColumn { IsBaseCurrency: not true })
                 || !CurrencySchema.HasCurrencyColumns(scope.Metadata)
                 || !scope.Attributes.TryGetValue(CurrencySchema.CurrencyId, out var currency))
                 return;
             AddColumn(ColumnSql(scope, currency), scope, currency, ResultKind.Currency,
-                scope.Alias is null ? currency.LogicalName : $"{scope.Alias}.{currency.LogicalName}");
+                scope.Alias is null ? currency.LogicalName! : $"{scope.Alias}.{currency.LogicalName}");
         }
 
         /// <summary>
@@ -474,16 +481,16 @@ public sealed class SqlQueryCompiler(IMetadataStore store, ISqlDialect dialect, 
         /// null when none is left. Shared by the selected name (<see cref="AddLookupNames"/>), the like-family conditions
         /// (#107) and the order on a lookup (plan 3.5 UI-1a final review, I2), so that what is matched and sorted is what is shown.
         /// </summary>
-        private string? LookupNameExpression(Scope scope, AttributeMetadata attribute)
+        private string? LookupNameExpression(Scope scope, ColumnDefinition attribute)
         {
-            var targets = ((LookupAttributeMetadata)attribute).Targets ?? [];
-            var column = $"{scope.SqlAlias}.{Q(attribute.LogicalName)}";
+            var targets = ((LookupColumn)attribute).Targets ?? [];
+            var column = $"{scope.SqlAlias}.{Q(attribute.LogicalName!)}";
             if (TypeMapping.IsPolymorphicLookup(attribute))
             {
                 var branches = new StringBuilder();
                 foreach (var target in targets)
                 {
-                    var m = store.GetEntity(target);
+                    var m = store.GetTable(target);
                     if (m?.ObjectTypeCode is not { } otc || NameSubquery(m, column) is not { } subquery) continue;
                     branches.Append(" WHEN ").Append(_parameters.Add(DbType.Int32, otc)).Append(" THEN ").Append(subquery);
                 }
@@ -491,18 +498,18 @@ public sealed class SqlQueryCompiler(IMetadataStore store, ISqlDialect dialect, 
                     ? null
                     : $"CASE {scope.SqlAlias}.{Q(attribute.LogicalName + TypeMapping.TypeColumnSuffix)}{branches} END";
             }
-            var single = targets.Length > 0 ? store.GetEntity(targets[0]) : null;
+            var single = targets.Count > 0 ? store.GetTable(targets[0]) : null;
             return single is null ? null : NameSubquery(single, column);
         }
 
         /// <summary><c>(SELECT n.[name] FROM [data].[target] AS n WHERE n.[pk] = {column})</c>, or null without a readable primary name.</summary>
-        private string? NameSubquery(EntityMetadata target, string column)
+        private string? NameSubquery(TableDefinition target, string column)
         {
             var name = target.PrimaryNameAttribute;
             if (string.IsNullOrEmpty(name) || target.Attributes?.FirstOrDefault(a => a.LogicalName == name) is not { } a
                 || !TypeMapping.IsReadable(a) || ComputedColumnRules.IsComputed(a))
                 return null;
-            return $"(SELECT n.{Q(a.LogicalName)} FROM {DataTable(target.LogicalName)} AS n " +
+            return $"(SELECT n.{Q(a.LogicalName!)} FROM {DataTable(target.LogicalName!)} AS n " +
                    $"WHERE n.{Q(SystemAttributes.PrimaryIdName(target))} = {column})";
         }
 
@@ -511,18 +518,18 @@ public sealed class SqlQueryCompiler(IMetadataStore store, ISqlDialect dialect, 
         /// selects the primary key only when requested (explicitly or by AllColumns), so that it does not make every row
         /// distinct. Link-entities: only the requested columns.
         /// </summary>
-        private IEnumerable<(AttributeMetadata Attribute, string? Alias)> SelectedAttributes(Scope scope)
+        private IEnumerable<(ColumnDefinition Attribute, string? Alias)> SelectedAttributes(Scope scope)
         {
             var node = scope.Node;
             var pk = Selectable(scope, SystemAttributes.PrimaryIdName(scope.Metadata));
-            var result = new List<(AttributeMetadata, string?)>();
+            var result = new List<(ColumnDefinition, string?)>();
             if ((scope.Parent is null && !query.Distinct) || node.AllColumns) result.Add((pk, null));
             if (node.AllColumns)
             {
                 // Learn (image column data): all columns do not include image columns, for performance; their companions are included.
                 result.AddRange((scope.Metadata.Attributes ?? [])
                     // Nor a column that is not valid for read (post.postregardingid, plan 3.5 UI-1g).
-                    .Where(a => a != pk && IsReadable(scope, a) && a is not ImageAttributeMetadata && a.IsValidForRead != false)
+                    .Where(a => a != pk && IsReadable(scope, a) && a is not ImageColumn && a.IsValidForRead != false)
                     .Select(a => (a, (string?)null)));
                 return result;
             }
@@ -542,21 +549,21 @@ public sealed class SqlQueryCompiler(IMetadataStore store, ISqlDialect dialect, 
         /// SQL Server's <c>_CI_AS</c> make one row that shows a stored value (plan 2.7b, ruling Q1 and Task 2 fix round 1; the column
         /// itself on SQL Server).
         /// </summary>
-        private string DistinctKey(string expression, AttributeMetadata attribute) =>
+        private string DistinctKey(string expression, ColumnDefinition attribute) =>
             query.Distinct && ConditionCompiler.IsText(attribute) ? dialect.TextKeyDistinctMember(expression) : expression;
 
         /// <summary>A text column's text key (plan 2.7b, ruling Q1: grouped and joined on it), any other column as it is.</summary>
-        private string TextKeyOf(string expression, AttributeMetadata attribute) =>
+        private string TextKeyOf(string expression, ColumnDefinition attribute) =>
             ConditionCompiler.IsText(attribute) ? dialect.TextKey(expression) : expression;
 
-        private string AddColumn(string expression, Scope scope, AttributeMetadata? attribute, ResultKind kind, string resultName,
+        private string AddColumn(string expression, Scope scope, ColumnDefinition? attribute, ResultKind kind, string resultName,
             bool unreadable = false)
         {
             var sqlAlias = "c" + _columns.Count.ToString(CultureInfo.InvariantCulture);
             _selectList.Add($"{expression} AS {sqlAlias}");
             _selectAliases.TryAdd(expression, sqlAlias);
             _aliasExpressions.Add(sqlAlias, expression);
-            _columns.Add(new ResultColumn(sqlAlias, scope.Alias, scope.EntityName, attribute, kind, resultName, unreadable));
+            _columns.Add(new ResultColumn(sqlAlias, scope.Alias, scope.EntityName, attribute, kind, resultName, unreadable).WithView(_views, scope.Metadata));
             return sqlAlias;
         }
 
@@ -595,14 +602,14 @@ public sealed class SqlQueryCompiler(IMetadataStore store, ISqlDialect dialect, 
                 throw new XrmdValidationException("An aggregate query requires at least one aggregate or groupby attribute.");
         }
 
-        private void AddGroupBy(Scope scope, AttributeMetadata a, ColumnNode column)
+        private void AddGroupBy(Scope scope, ColumnDefinition a, ColumnNode column)
         {
             if (column.Aggregate is not null || column.Distinct)
                 throw new XrmdValidationException($"Column '{column.Attribute}': groupby cannot be combined with an aggregate or distinct.");
             var expression = ColumnSql(scope, a);
             if (column.DateGrouping is { } grouping)
             {
-                if (a is not DateTimeAttributeMetadata)
+                if (a is not DateTimeColumn)
                     throw new XrmdValidationException($"Column '{column.Attribute}': dategrouping requires a DateTime attribute.");
                 expression = grouping switch
                 {
@@ -631,21 +638,21 @@ public sealed class SqlQueryCompiler(IMetadataStore store, ISqlDialect dialect, 
             }
             // The target's primary name, for the formatted value of the group (plan 3.5 UI-1f): a scalar subquery on the grouped
             // id (and type), so that the rows stay grouped by id.
-            if (column.DateGrouping is null && a is LookupAttributeMetadata) _lookups.Add((scope, a, column.Alias!));
+            if (column.DateGrouping is null && a is LookupColumn) _lookups.Add((scope, a, column.Alias!));
         }
 
-        private string AggregateSql(Scope scope, AttributeMetadata a, ColumnNode column, XrmAggregate aggregate)
+        private string AggregateSql(Scope scope, ColumnDefinition a, ColumnNode column, XrmAggregate aggregate)
         {
             if (column.DateGrouping is not null)
                 throw new XrmdValidationException($"Column '{column.Attribute}': dategrouping requires groupby.");
             if (column.Distinct && aggregate != XrmAggregate.CountColumn)
                 throw new XrmdValidationException($"Column '{column.Attribute}': distinct is supported only with countcolumn.");
             var expression = ColumnSql(scope, a);
-            var numeric = a is IntegerAttributeMetadata or BigIntAttributeMetadata or DecimalAttributeMetadata
-                or DoubleAttributeMetadata or MoneyAttributeMetadata;
-            var integer = a is IntegerAttributeMetadata or BigIntAttributeMetadata;
+            var numeric = a is IntegerColumn or BigIntColumn or DecimalColumn
+                or DoubleColumn or MoneyColumn;
+            var integer = a is IntegerColumn or BigIntColumn;
             if (aggregate is XrmAggregate.Sum or XrmAggregate.Avg && !numeric
-                || aggregate is XrmAggregate.Min or XrmAggregate.Max && !numeric && a is not DateTimeAttributeMetadata)
+                || aggregate is XrmAggregate.Min or XrmAggregate.Max && !numeric && a is not DateTimeColumn)
                 throw new XrmdValidationException($"Column '{column.Attribute}': aggregate {aggregate} is not supported on attributes of type {a.AttributeType}.");
             return aggregate switch
             {
@@ -655,8 +662,8 @@ public sealed class SqlQueryCompiler(IMetadataStore store, ISqlDialect dialect, 
                 // A bigint sum must overflow too (PostgreSQL's SUM(bigint) is a numeric): plan 2.7a, Task 7.
                 XrmAggregate.Sum => a switch
                 {
-                    IntegerAttributeMetadata => dialect.SumBigint(expression),
-                    BigIntAttributeMetadata => dialect.SumBigint(expression, bigint: true),
+                    IntegerColumn => dialect.SumBigint(expression),
+                    BigIntColumn => dialect.SumBigint(expression, bigint: true),
                     _ => $"SUM({expression})",
                 },
                 // AVG of an integer column would truncate to an integer.
@@ -683,8 +690,8 @@ public sealed class SqlQueryCompiler(IMetadataStore store, ISqlDialect dialect, 
                 var link = (LinkNode)scope.Node;
                 var join = link.JoinType switch
                 {
-                    JoinOperator.Inner => "INNER JOIN",
-                    JoinOperator.LeftOuter => "LEFT OUTER JOIN",
+                    JoinKind.Inner => "INNER JOIN",
+                    JoinKind.LeftOuter => "LEFT OUTER JOIN",
                     _ => throw new XrmdValidationException($"Link-entity join operator {link.JoinType} is not supported."),
                 };
                 var from = AttributeOf(scope, link.From);
@@ -746,7 +753,7 @@ public sealed class SqlQueryCompiler(IMetadataStore store, ISqlDialect dialect, 
                 var a = AttributeOf(scope, condition.Attribute);
                 parts.Add(Conditions.Compile(new ConditionTarget(ColumnSql(scope, a), a, scope.EntityName)
                 {
-                    LookupName = a is LookupAttributeMetadata { AttributeType: not AttributeTypeCode.PartyList }
+                    LookupName = a is LookupColumn { AttributeType: not ColumnTypeCode.PartyList }
                         ? () => LookupNameExpression(scope, a)
                         : null,
                 }, condition));
@@ -770,10 +777,10 @@ public sealed class SqlQueryCompiler(IMetadataStore store, ISqlDialect dialect, 
                 parts.Add(JsonPathConditions.Compile(ColumnSql(owner, a), path, _parameters, dialect));
             }
             foreach (var versions in filter.Versions)
-                parts.Add(Conditions.VersionRange($"{owner.SqlAlias}.{Q(AttributeOf(owner, TypeMapping.VersionNumber).LogicalName)}", versions));
+                parts.Add(Conditions.VersionRange($"{owner.SqlAlias}.{Q(AttributeOf(owner, TypeMapping.VersionNumber).LogicalName!)}", versions));
 
             if (parts.Count == 0) return null;
-            var op = filter.Operator == LogicalOperator.Or ? " OR " : " AND ";
+            var op = filter.Operator == FilterLogic.Or ? " OR " : " AND ";
             return "(" + string.Join(op, parts) + ")";
         }
 
@@ -789,7 +796,7 @@ public sealed class SqlQueryCompiler(IMetadataStore store, ISqlDialect dialect, 
             var lookup = AttributeOf(owner, node.LookupAttribute);
             // A lookup with one target and no type column (postcomment.postid, plan 3.5 UI-1g): its value can only name that table.
             var polymorphic = TypeMapping.IsPolymorphicLookup(lookup);
-            if (!polymorphic && !(lookup is LookupAttributeMetadata { Targets: [var only] }
+            if (!polymorphic && !(lookup is LookupColumn { Targets: [var only] }
                                   && node.Targets.All(t => t.EntityName == only && t.TypeAttribute is null)))
                 throw new XrmdValidationException($"'{owner.EntityName}.{node.LookupAttribute}' is not a polymorphic lookup.");
             var parts = new List<string>();
@@ -808,10 +815,10 @@ public sealed class SqlQueryCompiler(IMetadataStore store, ISqlDialect dialect, 
                     parts.Add($"({string.Join(" AND ", conditions)})");
                     continue;
                 }
-                var m = store.GetEntity(target.EntityName)
+                var m = store.GetTable(target.EntityName)
                         ?? throw new XrmdValidationException($"The entity with a name = '{target.EntityName}' was not found in the MetadataCache.");
                 var scope = new Scope("p" + (_parentScopes++).ToString(CultureInfo.InvariantCulture), null, m,
-                    (m.Attributes ?? []).ToDictionary(a => a.LogicalName, StringComparer.Ordinal), new EntityNode { EntityName = m.LogicalName }, null,
+                    (m.Attributes ?? []).ToDictionary(a => a.LogicalName!, StringComparer.Ordinal), new EntityNode { EntityName = m.LogicalName! }, null,
                     NoColumns);
                 var restriction = target.ReadFilter is null ? "(1 = 1)" : CompileFilter(target.ReadFilter, scope, joined: null, depth + 1) ?? "(1 = 0)";
                 // The parent row's type attribute must name the child's type: never the id alone.
@@ -819,7 +826,7 @@ public sealed class SqlQueryCompiler(IMetadataStore store, ISqlDialect dialect, 
                     restriction = $"({ColumnSql(scope, AttributeOf(scope, typeAttribute))} = {typeColumn} AND {restriction})";
                 var pk = ColumnSql(scope, AttributeOf(scope, SystemAttributes.PrimaryIdName(m)));
                 var applies = _computedSql?.Applies(scope.SqlAlias) ?? "";
-                conditions.Add($"{ColumnSql(owner, lookup)} IN (SELECT {pk} FROM {DataTable(m.LogicalName)} AS {scope.SqlAlias}{applies} WHERE {restriction})");
+                conditions.Add($"{ColumnSql(owner, lookup)} IN (SELECT {pk} FROM {DataTable(m.LogicalName!)} AS {scope.SqlAlias}{applies} WHERE {restriction})");
                 parts.Add($"({string.Join(" AND ", conditions)})");
             }
             return parts.Count == 0 ? "(1 = 0)" : "(" + string.Join(" OR ", parts) + ")";
@@ -858,13 +865,13 @@ public sealed class SqlQueryCompiler(IMetadataStore store, ISqlDialect dialect, 
                         throw new XrmdValidationException(
                             $"A distinct query cannot be ordered by '{order.Attribute}', which is not among the selected attributes.");
                     if (query.OrderByStoredValues) AddOrder(items, ordered, column, order.Descending);
-                    else if (attribute is LookupAttributeMetadata { AttributeType: not AttributeTypeCode.PartyList })
+                    else if (attribute is LookupColumn { AttributeType: not ColumnTypeCode.PartyList })
                     {
                         // Learn ("Ordering lookup and choice columns"): a lookup is sorted by the related table's primary name.
                         if (query.Distinct)
                         {
                             var name = _columns.FirstOrDefault(c => c.Kind == ResultKind.LookupName && c.EntityAlias == scope.Alias
-                                                                    && c.Attribute == attribute)
+                                                                    && c.Column == attribute)
                                        ?? throw NoLookupName(order.Attribute);
                             AddOrder(items, ordered, _aliasExpressions[name.SqlAlias], order.Descending, name.SqlAlias);
                         }
@@ -899,14 +906,14 @@ public sealed class SqlQueryCompiler(IMetadataStore store, ISqlDialect dialect, 
         /// or a choice without a labelled option. An option missing from the metadata sorts as NULL, as its empty formatted value.
         /// The option values come from metadata and are integers, so they are written as literals; the labels are parameters.
         /// </summary>
-        private string? ChoiceLabelExpression(string column, AttributeMetadata attribute)
+        private string? ChoiceLabelExpression(string column, ColumnDefinition attribute)
         {
             var options = attribute switch
             {
-                EntityNameAttributeMetadata or MultiSelectPicklistAttributeMetadata => null,
-                EnumAttributeMetadata e => e.OptionSet?.Options?.Where(o => o.Value is not null).Select(o => (o.Value!.Value, o.Label)).ToList(),
-                BooleanAttributeMetadata b => new[] { (1, b.OptionSet?.TrueOption?.Label), (0, b.OptionSet?.FalseOption?.Label) }
-                    .Where(o => o.Item2 is not null).Select(o => (o.Item1, o.Item2!)).ToList(),
+                EntityNameColumn or MultiChoiceColumn => null,
+                ChoiceColumnBase e => e.OptionSet?.Options?.Where(o => o.Value is not null).Select(o => (o.Value!.Value, o.Label)).ToList(),
+                BooleanColumn b => new[] { (1, b.OptionSet?.TrueOption?.Label), (0, b.OptionSet?.FalseOption?.Label) }
+                    .Where(o => o.Item2 is not null).ToList(),
                 _ => null,
             };
             var branches = new StringBuilder();

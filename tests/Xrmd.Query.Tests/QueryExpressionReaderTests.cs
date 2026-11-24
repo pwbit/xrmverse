@@ -1,8 +1,11 @@
 using FluentAssertions;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
+using Xrmd.Model.Query;
 using Xrmd.Query;
+using Xrmd.Abstractions;
 using Xrmd.Query.Model;
+using Xrmd.Query.Sql;
 
 namespace Xrmd.Query.Tests;
 
@@ -33,14 +36,14 @@ public class QueryExpressionReaderTests
         m.Root.EntityName.Should().Be("pb_project");
         m.Root.Columns.Should().Equal(new ColumnNode("pb_name"));
         m.Root.Filter.Conditions[0].Should().BeEquivalentTo(
-            new ConditionNode(null, "pb_count", ConditionOperator.GreaterThan, new object?[] { 5 }));
+            new ConditionNode(null, "pb_count", FilterOperator.GreaterThan, new object?[] { 5 }));
         m.Root.Filter.Filters.Should().HaveCount(1);
-        m.Root.Filter.Filters[0].Operator.Should().Be(LogicalOperator.Or);
+        m.Root.Filter.Filters[0].Operator.Should().Be(FilterLogic.Or);
         var l = m.Root.Links[0];
         l.EntityName.Should().Be("systemuser");
         l.From.Should().Be("systemuserid");
         l.To.Should().Be("pb_customerid");
-        l.JoinType.Should().Be(JoinOperator.LeftOuter);
+        l.JoinType.Should().Be(JoinKind.LeftOuter);
         l.Alias.Should().Be("u");
         l.Columns.Should().Equal(new ColumnNode("fullname"));
         m.Root.Orders[0].Descending.Should().BeTrue();
@@ -102,9 +105,9 @@ public class QueryExpressionReaderTests
 
         var m = QueryExpressionReader.Read(q);
 
-        m.Root.Filter.Operator.Should().Be(LogicalOperator.And);
+        m.Root.Filter.Operator.Should().Be(FilterLogic.And);
         m.Root.Filter.Conditions.Should().HaveCount(2);
-        m.Root.Filter.Conditions.Should().OnlyContain(c => c.Operator == ConditionOperator.Equal);
+        m.Root.Filter.Conditions.Should().OnlyContain(c => c.Operator == FilterOperator.Equal);
         m.Root.Filter.Conditions[1].Values.Should().Equal(3);
     }
 
@@ -115,5 +118,37 @@ public class QueryExpressionReaderTests
         q.Criteria.AddCondition(new ConditionExpression("u", "fullname", ConditionOperator.Equal, "x"));
         var m = QueryExpressionReader.Read(q);
         m.Root.Filter.Conditions[0].EntityAlias.Should().Be("u");
+    }
+
+    private static CompiledQuery Compile(QueryExpression q) =>
+        new SqlQueryCompiler(TestMetadata.Instance, TestMetadata.Dialect)
+            .Compile(QueryExpressionReader.Read(q), new QueryContext(Guid.NewGuid(), Guid.NewGuid(), DateTime.UtcNow));
+
+    [Fact]
+    public void An_undefined_condition_operator_is_refused_by_the_compiler_as_before()
+    {
+        var q = new QueryExpression("pb_project") { ColumnSet = new ColumnSet("pb_name") };
+        q.Criteria.AddCondition("pb_name", (ConditionOperator)999, "a");
+
+        var act = () => Compile(q);
+
+        act.Should().Throw<XrmdValidationException>().WithMessage("Operator 999 is not supported (attribute 'pb_name').");
+    }
+
+    [Fact]
+    public void An_undefined_logical_operator_falls_back_to_and_as_before()
+    {
+        QueryExpression Query(LogicalOperator op)
+        {
+            var q = new QueryExpression("pb_project") { ColumnSet = new ColumnSet("pb_name") };
+            q.Criteria.FilterOperator = op;
+            q.Criteria.AddCondition("pb_name", ConditionOperator.Equal, "a");
+            q.Criteria.AddCondition("pb_count", ConditionOperator.Equal, 1);
+            return q;
+        }
+
+        var undefined = Compile(Query((LogicalOperator)7)).Sql;
+
+        undefined.Should().Be(Compile(Query(LogicalOperator.And)).Sql).And.Contain(" AND ");
     }
 }

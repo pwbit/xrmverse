@@ -1,6 +1,6 @@
 using FluentAssertions;
-using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
+using Xrmd.Model.Query;
 using Xrmd.Query.Model;
 using Xrmd.Query.Sql;
 
@@ -26,7 +26,7 @@ public sealed class CurrencyCompilerTests
 
     private static LinkNode Linked(string alias, params string[] columns)
     {
-        var link = new LinkNode { EntityName = "pb_project", From = "pb_projectid", To = "pb_projectid", Alias = alias, JoinType = JoinOperator.LeftOuter };
+        var link = new LinkNode { EntityName = "pb_project", From = "pb_projectid", To = "pb_projectid", Alias = alias, JoinType = JoinKind.LeftOuter };
         link.Columns.AddRange(columns.Select(c => new ColumnNode(c)));
         return link;
     }
