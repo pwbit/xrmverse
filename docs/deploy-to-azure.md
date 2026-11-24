@@ -110,8 +110,8 @@ Back up, install the CLI of the new version, then upgrade the server to the same
 and the server always have the same version). From an SSH session on the VM:
 
 ```bash
-V=0.1.10   # the new version
-U=https://github.com/pwbit/xrmverse-releases/releases/download/v$V
+V=0.1.11   # the new version
+U=https://github.com/pwbit/xrmverse/releases/download/v$V
 
 # back up first
 sudo xrmd org backup <org> --profile <org>
@@ -139,8 +139,8 @@ paste the commands without `sudo` (they run as root) and select **Run**. From th
 
 ```bash
 az vm run-command invoke -g <resource group> -n <vm name> --command-id RunShellScript --scripts '
-V=0.1.10
-U=https://github.com/pwbit/xrmverse-releases/releases/download/v$V
+V=0.1.11
+U=https://github.com/pwbit/xrmverse/releases/download/v$V
 cd /tmp && curl -fLO $U/xrmd-linux-x64.tar.gz && curl -fLO $U/SHA256SUMS
 sha256sum -c --ignore-missing SHA256SUMS && tar -C /usr/local/bin -xzf xrmd-linux-x64.tar.gz xrmd
 xrmd server upgrade --dir /srv/xrmd --to $V && xrmd server doctor --dir /srv/xrmd'

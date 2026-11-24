@@ -32,9 +32,9 @@ flowchart LR
 | [10. Backup, upgrade and uninstall](#10-backup-upgrade-and-uninstall) | Day-to-day operations |
 | [11. Not supported yet](#11-not-supported-yet) | Platforms and channels not offered |
 
-> **Public downloads.** The v0.1.10 CLI and server archive are available from
-> [xrmverse-releases](https://github.com/pwbit/xrmverse-releases/releases/tag/v0.1.10), separately from the source repository.
-> The server image `ghcr.io/pwbit/xrmd:0.1.10` is also public and can be pulled without a GHCR login. For offline
+> **Public downloads.** The v0.1.11 CLI and server archive are available from
+> the [v0.1.11 release](https://github.com/pwbit/xrmverse/releases/tag/v0.1.11) of the public source repository (releases up to 0.1.10 are in `pwbit/xrmverse-releases`).
+> The server image `ghcr.io/pwbit/xrmd:0.1.11` is also public and can be pulled without a GHCR login. For offline
 > transfer, use the release's server archive and checksum with `docker load` before `server up`
 > (see [Offline install](#9-offline-install)). Downloading an archive does not verify a registry signature.
 > The source tree may be ahead of the release.
@@ -59,15 +59,15 @@ flowchart LR
 ## 2. Install the CLI
 
 Download `xrmd-linux-x64.tar.gz` from the public release page
-[xrmverse-releases](https://github.com/pwbit/xrmverse-releases/releases) and check its SHA-256 digest
+[pwbit/xrmverse](https://github.com/pwbit/xrmverse/releases) and check its SHA-256 digest
 against `SHA256SUMS` of the same release. That digest comes from the same place as the file, so it detects a corrupted
 download, not a tampered release (the CLI archive is not signed yet); authenticity is checked on the server image,
 which is signed: see `cosign verify` in [Start and verify](#8-start-and-verify).
 
 ```bash
-V=0.1.10   # the release you install
-curl -fLO https://github.com/pwbit/xrmverse-releases/releases/download/v$V/xrmd-linux-x64.tar.gz
-curl -fLO https://github.com/pwbit/xrmverse-releases/releases/download/v$V/SHA256SUMS
+V=0.1.11   # the release you install
+curl -fLO https://github.com/pwbit/xrmverse/releases/download/v$V/xrmd-linux-x64.tar.gz
+curl -fLO https://github.com/pwbit/xrmverse/releases/download/v$V/SHA256SUMS
 sha256sum -c --ignore-missing SHA256SUMS
 sudo tar -C /usr/local/bin -xzf xrmd-linux-x64.tar.gz xrmd
 xrmd --version

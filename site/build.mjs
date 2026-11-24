@@ -320,7 +320,7 @@ function githubButton() {
 
 const AZURE_PORTAL_DEPLOY_URL =
   'https://portal.azure.com/#create/Microsoft.Template/uri/' + encodeURIComponent('https://xrmverse.com/deploy/azure/azuredeploy.json');
-const RELEASES_URL = 'https://github.com/pwbit/xrmverse-releases/releases';
+const RELEASES_URL = 'https://github.com/pwbit/xrmverse/releases';
 
 /** The "Effective date: <date>." line of a standalone page (site/pages/<name>.md): the version the visitor accepts. */
 async function effectiveDate(name) {

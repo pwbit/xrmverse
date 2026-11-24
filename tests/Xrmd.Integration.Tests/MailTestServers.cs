@@ -80,6 +80,9 @@ internal sealed class GreenMail : IAsyncDisposable
     /// <summary>Puts <paramref name="message"/> in the inbox of <paramref name="user"/> with the internal date <paramref name="receivedOn"/> (IMAP APPEND).</summary>
     public async Task AppendAsync(MailUser user, MimeMessage message, DateTimeOffset receivedOn)
     {
+        // GreenMail 2.1.8 parses the APPEND date with "dd-MMM-yyyy hh:mm:ss Z" (12-hour clock, lenient): hour 12 is read as 00, so an
+        // internal date between 12:00 and 12:59 lands 12 hours early. The same instant written with another offset avoids hour 12.
+        if (receivedOn.Hour == 12) receivedOn = receivedOn.ToOffset(receivedOn.Offset + TimeSpan.FromHours(1));
         using var imap = await ImapAsync(user);
         await imap.Inbox.AppendAsync(new AppendRequest(message, MessageFlags.None, receivedOn));
         await imap.DisconnectAsync(true);

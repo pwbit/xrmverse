@@ -10,18 +10,18 @@
 
 Keep your data on your own servers, reuse familiar APIs and .NET plug-ins, and manage the platform with a CLI or AI agents through MCP. xrmverse is open source under Apache 2.0, with no xrmverse per-user or per-capacity license fee. Infrastructure and third-party license terms still apply.
 
-**[Quick Start](#quick-start)** · **[Try a local demo](#try-a-local-demo)** · **[Download v0.1.10](https://github.com/pwbit/xrmverse-releases/releases/tag/v0.1.10)** · **[Compatibility](docs/dataverse-comparison.md)** · **[Known limits](docs/known-issues.md)** · **[Documentation](#documentation)**
+**[Quick Start](#quick-start)** · **[Try a local demo](#try-a-local-demo)** · **[Download v0.1.11](https://github.com/pwbit/xrmverse/releases/tag/v0.1.11)** · **[Compatibility](docs/dataverse-comparison.md)** · **[Known limits](docs/known-issues.md)** · **[Documentation](#documentation)**
 
 Compatibility has a defined scope: supported clients, plug-ins and solution components are described in the documentation; this is not a guarantee that every Dataverse application runs unchanged. Microsoft first-party Dynamics 365 solutions are not supported. Power Automate, canvas apps, Copilot in Power Apps and Power Pages are not replacements provided by xrmverse.
 
 ## Quick Start
 
-For a local evaluation, you need Docker Engine/Desktop with Compose v2 and the **released `xrmd` CLI** for your machine. The server image is Linux x86-64; Apple Silicon uses emulation. Download the matching CLI archive from [v0.1.10](https://github.com/pwbit/xrmverse-releases/releases/tag/v0.1.10), verify it against that release's `SHA256SUMS`, extract it and put `xrmd` on your PATH. See [installation and checksum instructions](docs/install.md#2-install-the-cli). NuGet.org, Homebrew and winget installation are not available yet.
+For a local evaluation, you need Docker Engine/Desktop with Compose v2 and the **released `xrmd` CLI** for your machine. The server image is Linux x86-64; Apple Silicon uses emulation. Download the matching CLI archive from [v0.1.11](https://github.com/pwbit/xrmverse/releases/tag/v0.1.11), verify it against that release's `SHA256SUMS`, extract it and put `xrmd` on your PATH. See [installation and checksum instructions](docs/install.md#2-install-the-cli). NuGet.org, Homebrew and winget installation are not available yet.
 
-The public CLI binaries currently live in **`pwbit/xrmverse-releases`**, separately from this source repository. The matching server image, **`ghcr.io/pwbit/xrmd:0.1.10`**, is public and can be pulled without a GHCR login:
+The public CLI binaries are attached to the [releases of this repository](https://github.com/pwbit/xrmverse/releases) (releases up to 0.1.10 are in `pwbit/xrmverse-releases`). The matching server image, **`ghcr.io/pwbit/xrmd:0.1.11`**, is public and can be pulled without a GHCR login:
 
 ```bash
-docker pull ghcr.io/pwbit/xrmd:0.1.10
+docker pull ghcr.io/pwbit/xrmd:0.1.11
 xrmd server init --dir ./xrmd-server
 xrmd sdk install --dir ./xrmd-server
 xrmd server up --dir ./xrmd-server
@@ -44,7 +44,7 @@ This is a guided local demo; no hosted demo or video is linked here. Share repro
 
 ## Project status
 
-**Status as of November 23, 2026**: phases 1 (MVP), 2 (platform), 3 (extensibility and UI) and 4 (email and queues) are complete, the last item of phase 2 being PostgreSQL organizations with every feature of SQL Server ones and the last item of phase 3 the workflow studio (3.7); SDK independence (S.2 to S.4) is next; the migration from Dataverse is done (M1–M6) and accepted on a real Dataverse environment; the latest public binary release is [`v0.1.10`](https://github.com/pwbit/xrmverse-releases/releases/tag/v0.1.10) in the separate releases repository. The roadmap below describes the source tree, which can be ahead of those binaries.
+**Status as of November 23, 2026**: phases 1 (MVP), 2 (platform), 3 (extensibility and UI) and 4 (email and queues) are complete, the last item of phase 2 being PostgreSQL organizations with every feature of SQL Server ones and the last item of phase 3 the workflow studio (3.7); SDK independence (S.2 to S.4) is next; the migration from Dataverse is done (M1–M6) and accepted on a real Dataverse environment; the latest public binary release is [`v0.1.11`](https://github.com/pwbit/xrmverse/releases/tag/v0.1.11). The roadmap below describes the source tree, which can be ahead of those binaries.
 
 This page is the entry point: what xrmverse is, why it exists and where it is going. Everything else is in the [documentation](#documentation), one page per topic.
 

@@ -23,20 +23,20 @@ For a server that other people will use (host names, certificates, Entra ID, bac
 |---|---|
 | Docker with Compose | On Apple Silicon the SQL Server image runs under emulation (see [Notes](#notes)) |
 | The `xrmd` CLI | See [CLI xrmd](cli.md); not needed for the repository compose file path |
-| Access to the server image | `ghcr.io/pwbit/xrmd:0.1.10` is public; no GHCR login is needed. An [offline archive](#public-release-and-image-access) and source builds are alternatives |
+| Access to the server image | `ghcr.io/pwbit/xrmd:0.1.11` is public; no GHCR login is needed. An [offline archive](#public-release-and-image-access) and source builds are alternatives |
 | Your acceptance of two sets of license terms | SQL Server's (see [SQL Server editions](sql-server-editions.md)) and the Microsoft SDK's (see [Installing the Microsoft SDK](microsoft-sdk.md)); both questions default to no |
 
 ## Public release and image access
 
-The public v0.1.10 CLI archives, server archive and checksums are on
-[xrmverse-releases](https://github.com/pwbit/xrmverse-releases/releases/tag/v0.1.10), separately from the source repository.
+The public v0.1.11 CLI archives, server archive and checksums are on the
+[v0.1.11 release](https://github.com/pwbit/xrmverse/releases/tag/v0.1.11) of the public source repository (releases up to 0.1.10 are in `pwbit/xrmverse-releases`).
 See [installing the CLI](install.md#2-install-the-cli); it is not published to NuGet.org, Homebrew or winget.
 The current source tree may contain features newer than the released binaries.
 
-The server image `ghcr.io/pwbit/xrmd:0.1.10` is public and supports anonymous pulls; no `docker login` is needed.
-For an offline transfer, download `xrmd-server-0.1.10-linux-amd64.tar.gz` and its `.sha256` from the same release, verify the
+The server image `ghcr.io/pwbit/xrmd:0.1.11` is public and supports anonymous pulls; no `docker login` is needed.
+For an offline transfer, download `xrmd-server-0.1.11-linux-amd64.tar.gz` and its `.sha256` from the same release, verify the
 checksum (`sha256sum -c <file>.sha256`, or `shasum -a 256 -c <file>.sha256` on macOS), then run
-`docker load -i xrmd-server-0.1.10-linux-amd64.tar.gz`. This loads the tag the v0.1.10 CLI expects; `server up`
+`docker load -i xrmd-server-0.1.11-linux-amd64.tar.gz`. This loads the tag the v0.1.11 CLI expects; `server up`
 can use the loaded image without pulling it. SQL Server and the Microsoft SDK still require separate downloads
 and your acceptance of their terms. See [offline installation and verification limits](install.md#9-offline-install).
 

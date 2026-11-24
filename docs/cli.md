@@ -32,14 +32,14 @@ the server's Web API, Admin API or MCP endpoint **as the signed-in user**: the C
 ## Install
 
 Download a self-contained CLI archive for your platform (`win-x64`, `osx-arm64`, `osx-x64`, `linux-x64`) from
-the [public v0.1.10 release](https://github.com/pwbit/xrmverse-releases/releases/tag/v0.1.10).
+the [public v0.1.11 release](https://github.com/pwbit/xrmverse/releases/tag/v0.1.11).
 Verify it against that release's `SHA256SUMS`, extract it and put the executable on your PATH;
 see [Installing xrmverse](install.md#2-install-the-cli) for the Linux commands. No .NET runtime is needed for these archives.
 
 The release also carries a `xrmd` nupkg. For a local tool-package install, download it to a directory you control, then:
 
 ```bash
-dotnet tool install --global xrmd --version 0.1.10 --add-source /path/to/downloaded-package
+dotnet tool install --global xrmd --version 0.1.11 --add-source /path/to/downloaded-package
 ```
 
 This tool-package path requires the .NET 10 runtime. Nothing is published to NuGet.org; Homebrew and winget are not

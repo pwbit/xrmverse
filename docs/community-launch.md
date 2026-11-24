@@ -15,7 +15,7 @@ The goal is to reuse familiar APIs, .NET plug-ins and solution components while 
 Compatibility has limits: this is not every Power Platform service on a local server. Microsoft first-party Dynamics 365 solutions are not supported, and each application needs validation against the documented compatibility scope. The source tree can also be ahead of the current binary release.
 
 Start here: https://github.com/pwbit/xrmverse
-Public binary downloads: https://github.com/pwbit/xrmverse-releases/releases/tag/v0.1.10
+Public binary downloads: https://github.com/pwbit/xrmverse/releases/tag/v0.1.11
 Compatibility: https://xrmverse.com/docs/dataverse-comparison.html
 Known limits: https://xrmverse.com/docs/known-issues.html
 
@@ -41,7 +41,7 @@ This is a recording plan; no hosted demo or video has been published by this cha
 3. Open the solution's model-driven app at `/apps` and show one supported view and form.
 4. End on the compatibility guide and Quick Start. If demonstrating migration, record it separately against a licensed source environment and show verification, not only import completion.
 
-Record the version used. Do not present features in the current source tree as available in v0.1.10 without checking them.
+Record the version used. Do not present features in the current source tree as available in v0.1.11 without checking them.
 
 ## Feedback and contribution paths
 
