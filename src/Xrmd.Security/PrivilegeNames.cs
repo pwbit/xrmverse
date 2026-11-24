@@ -1,14 +1,14 @@
 using System.Security.Cryptography;
 using System.Text;
-using Microsoft.Crm.Sdk.Messages;
-using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Metadata;
+using Xrmd.Model.Metadata;
+using Xrmd.Model.Security;
 
 namespace Xrmd.Security;
 
 /// <summary>Names and ids of privileges: <c>"prv" + verb + SchemaName</c>, compared case-insensitively.</summary>
-public static class PrivilegeNames
+public static partial class PrivilegeNames
 {
     /// <summary>Privilege to act on behalf of another user (not tied to an entity).</summary>
     public const string ActOnBehalfOfAnotherUser = "prvActOnBehalfOfAnotherUser";
@@ -116,32 +116,32 @@ public static class PrivilegeNames
             OverrideCreatedOnCreatedBy,
         ];
 
-    /// <summary>The verbs, in the order privileges are created; each has a single-bit <see cref="AccessRights"/> value.</summary>
-    internal static readonly IReadOnlyList<(AccessRights Right, string Verb)> Verbs =
+    /// <summary>The verbs, in the order privileges are created; each has a single-bit <see cref="AccessMask"/> value.</summary>
+    internal static readonly IReadOnlyList<(AccessMask Right, string Verb)> ModelVerbs =
     [
-        (AccessRights.CreateAccess, "Create"), (AccessRights.ReadAccess, "Read"), (AccessRights.WriteAccess, "Write"),
-        (AccessRights.DeleteAccess, "Delete"), (AccessRights.AppendAccess, "Append"), (AccessRights.AppendToAccess, "AppendTo"),
-        (AccessRights.AssignAccess, "Assign"), (AccessRights.ShareAccess, "Share"),
+        (AccessMask.CreateAccess, "Create"), (AccessMask.ReadAccess, "Read"), (AccessMask.WriteAccess, "Write"),
+        (AccessMask.DeleteAccess, "Delete"), (AccessMask.AppendAccess, "Append"), (AccessMask.AppendToAccess, "AppendTo"),
+        (AccessMask.AssignAccess, "Assign"), (AccessMask.ShareAccess, "Share"),
     ];
 
     /// <summary>
     /// The stem of the privilege names of <paramref name="entity"/> (plan 2.11 A12): <c>Activity</c> for the pointer and every
     /// activity table, <c>Note</c> for <c>annotation</c>, the SchemaName (else the logical name) otherwise.
     /// </summary>
-    public static string Stem(EntityMetadata entity)
+    public static string Stem(TableDefinition entity)
     {
         ArgumentNullException.ThrowIfNull(entity);
-        return ActivitySchema.PrivilegeStem(entity) ?? entity.SchemaName ?? entity.LogicalName;
+        return ActivitySchema.PrivilegeStem(entity) ?? entity.SchemaName ?? entity.LogicalName!;
     }
 
     /// <summary>The privilege name for <paramref name="right"/> on <paramref name="entity"/>, e.g. <c>prvReadAccount</c>, <c>prvReadActivity</c>.</summary>
     /// <exception cref="XrmdValidationException">The right is not a single access right with a verb (400).</exception>
-    public static string For(AccessRights right, EntityMetadata entity)
+    public static string For(AccessMask right, TableDefinition entity)
     {
         ArgumentNullException.ThrowIfNull(entity);
         // The audit table has no entity privileges of its own: reading it is the audit summary privilege.
-        if (right == AccessRights.ReadAccess && entity.LogicalName == AuditTable.Name) return ReadAuditSummary;
-        foreach (var (r, verb) in Verbs)
+        if (right == AccessMask.ReadAccess && entity.LogicalName == AuditTable.Name) return ReadAuditSummary;
+        foreach (var (r, verb) in ModelVerbs)
             if (r == right) return "prv" + verb + Stem(entity);
         throw new XrmdValidationException($"Access right '{right}' has no privilege.");
     }

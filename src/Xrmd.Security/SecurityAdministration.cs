@@ -2,12 +2,13 @@ using System.Data;
 using System.Text.Json;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Xrm.Sdk;
-using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
-using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Metadata;
+using Xrmd.Model.Security;
+using Xrmd.Security.Sdk;
 
 namespace Xrmd.Security;
 
@@ -94,7 +95,7 @@ public sealed class SecurityAdministration(IMetadataStore store, SecurityCache c
 
     /// <summary>
     /// The privileges of SDK <see cref="RolePrivilege"/>s: <c>PrivilegeId</c>, or (when empty) the id of <c>PrivilegeName</c>
-    /// (<see cref="PrivilegeNames.IdOf"/>); the depth through <see cref="DepthMasks.FromSdk"/> (<see cref="DepthMask.None"/>
+    /// (<see cref="PrivilegeNames.IdOf"/>); the depth through <see cref="DepthMasks.From"/> (<see cref="DepthMask.None"/>
     /// for a value that is not an SDK depth, which <see cref="SetRolePrivilegesAsync"/> rejects).
     /// </summary>
     public static IReadOnlyList<(Guid PrivilegeId, DepthMask Depth)> FromSdk(IEnumerable<RolePrivilege?> privileges)
@@ -106,7 +107,7 @@ public sealed class SecurityAdministration(IMetadataStore store, SecurityCache c
             var id = p.PrivilegeId != Guid.Empty ? p.PrivilegeId
                 : string.IsNullOrEmpty(p.PrivilegeName) ? Guid.Empty
                 : PrivilegeNames.IdOf(p.PrivilegeName);
-            var depth = Enum.IsDefined(p.Depth) ? DepthMasks.FromSdk(p.Depth) : DepthMask.None;
+            var depth = Enum.IsDefined(p.Depth) ? DepthMasks.From(p.Depth.ToModel()) : DepthMask.None;
             return (id, depth);
         }).ToList();
     }
@@ -233,7 +234,7 @@ public sealed class SecurityAdministration(IMetadataStore store, SecurityCache c
         }
 
         var entity = Definition(RolePrivilegesEntity);
-        var table = $"{s.DataTable(entity.LogicalName)}";
+        var table = $"{s.DataTable(entity.LogicalName!)}";
         // Plan 2.7a, Task 6: the table variable became the JSON rows read twice, the batch two statements.
         var d = s.Dialect;
         var json = JsonSerializer.Serialize(rows.Select(r => new { id = r.Key, depth = (int)r.Value }));
@@ -268,7 +269,7 @@ public sealed class SecurityAdministration(IMetadataStore store, SecurityCache c
         var entity = Definition(RolePrivilegesEntity);
         await using var cmd = s.Command($"""
             SELECT rp.privilegeid, rp.privilegedepthmask, r.businessunitid
-            FROM {s.DataTable(entity.LogicalName)} AS rp
+            FROM {s.DataTable(entity.LogicalName!)} AS rp
             JOIN {s.DataTable("role")} AS r ON r.roleid = rp.roleid
             WHERE rp.roleid = @role ORDER BY rp.privilegeid
             """);
@@ -281,17 +282,17 @@ public sealed class SecurityAdministration(IMetadataStore store, SecurityCache c
             // RolePrivilege carries one depth, so the audit cannot show more than that either.
             var depth = DepthMasks.Highest(rd.IsDBNull(1) ? DepthMask.None : (DepthMask)rd.GetInt32(1));
             if (depth == DepthMask.None) continue;
-            result.Add(new RolePrivilege((int)ToSdk(depth), rd.GetGuid(0), rd.IsDBNull(2) ? Guid.Empty : rd.GetGuid(2)));
+            result.Add(new RolePrivilege((int)Scope(depth), rd.GetGuid(0), rd.IsDBNull(2) ? Guid.Empty : rd.GetGuid(2)));
         }
         return result;
     }
 
-    private static PrivilegeDepth ToSdk(DepthMask depth) => depth switch
+    private static PrivilegeScope Scope(DepthMask depth) => depth switch
     {
-        DepthMask.Basic => PrivilegeDepth.Basic,
-        DepthMask.Local => PrivilegeDepth.Local,
-        DepthMask.Deep => PrivilegeDepth.Deep,
-        _ => PrivilegeDepth.Global,
+        DepthMask.Basic => PrivilegeScope.Basic,
+        DepthMask.Local => PrivilegeScope.Local,
+        DepthMask.Deep => PrivilegeScope.Deep,
+        _ => PrivilegeScope.Global,
     };
 
     /// <summary>Removes the privilege from the role (not in the role is not an error).</summary>
@@ -326,8 +327,8 @@ public sealed class SecurityAdministration(IMetadataStore store, SecurityCache c
         };
     }
 
-    private EntityMetadata Definition(string logicalName) =>
-        store.GetEntity(logicalName) ?? throw new InvalidOperationException($"Entity '{logicalName}' is not defined.");
+    private TableDefinition Definition(string logicalName) =>
+        store.GetTable(logicalName) ?? throw new InvalidOperationException($"Entity '{logicalName}' is not defined.");
 
     /// <summary>The intersect and principal column of a role assignment.</summary>
     /// <exception cref="XrmdFaultException">400 for a principal that is not a systemuser or team.</exception>
@@ -354,10 +355,10 @@ public sealed class SecurityAdministration(IMetadataStore store, SecurityCache c
     {
         var entity = Definition(entityName);
         await using var cmd = s.Command(
-            $"SELECT 1 FROM {s.DataTable(entity.LogicalName)}{s.Dialect.LockHint(RowLock.Shared)} " +
+            $"SELECT 1 FROM {s.DataTable(entity.LogicalName!)}{s.Dialect.LockHint(RowLock.Shared)} " +
             $"WHERE {s.Quote(SystemAttributes.PrimaryIdName(entity))} = {IdParameter}{s.Dialect.LockClause(RowLock.Shared)}");
         cmd.AddParameter(IdParameter, DbType.Guid, id);
-        if (await cmd.ExecuteScalarAsync(ct) is null) throw XrmdFaultException.ObjectDoesNotExist(entity.LogicalName, id);
+        if (await cmd.ExecuteScalarAsync(ct) is null) throw XrmdFaultException.ObjectDoesNotExist(entity.LogicalName!, id);
     }
 
     /// <summary>The <c>teamtype</c> of the team (NULL counts as an owner team).</summary>
@@ -366,10 +367,10 @@ public sealed class SecurityAdministration(IMetadataStore store, SecurityCache c
     {
         var entity = Definition(Team);
         await using var cmd = s.Command(
-            $"SELECT {s.Dialect.IsNull("teamtype", "0")} FROM {s.DataTable(entity.LogicalName)}{s.Dialect.LockHint(RowLock.Shared)} " +
+            $"SELECT {s.Dialect.IsNull("teamtype", "0")} FROM {s.DataTable(entity.LogicalName!)}{s.Dialect.LockHint(RowLock.Shared)} " +
             $"WHERE {s.Quote(SystemAttributes.PrimaryIdName(entity))} = {IdParameter}{s.Dialect.LockClause(RowLock.Shared)}");
         cmd.AddParameter(IdParameter, DbType.Guid, teamId);
-        return await cmd.ExecuteScalarAsync(ct) as int? ?? throw XrmdFaultException.ObjectDoesNotExist(entity.LogicalName, teamId);
+        return await cmd.ExecuteScalarAsync(ct) as int? ?? throw XrmdFaultException.ObjectDoesNotExist(entity.LogicalName!, teamId);
     }
 
     /// <summary>The catalog rows of <paramref name="ids"/> that exist, by id.</summary>
@@ -378,7 +379,7 @@ public sealed class SecurityAdministration(IMetadataStore store, SecurityCache c
         var entity = Definition(Privilege);
         await using var cmd = s.Command($"""
             SELECT p.privilegeid, p.name, {s.Dialect.IsNull("p.canbebasic", s.Dialect.BooleanLiteral(false))}, {s.Dialect.IsNull("p.canbelocal", s.Dialect.BooleanLiteral(false))}, {s.Dialect.IsNull("p.canbedeep", s.Dialect.BooleanLiteral(false))}, {s.Dialect.IsNull("p.canbeglobal", s.Dialect.BooleanLiteral(false))}
-            FROM {s.DataTable(entity.LogicalName)} AS p
+            FROM {s.DataTable(entity.LogicalName!)} AS p
             WHERE p.privilegeid IN (SELECT j.id FROM {s.Dialect.JsonRecords("@ids", [new JsonColumn("id", SqlColumnKind.Guid, Path: "$")])} AS j)
             """);
         cmd.AddParameter("@ids", DbType.String, JsonSerializer.Serialize(ids.Distinct()), -1);
@@ -396,10 +397,10 @@ public sealed class SecurityAdministration(IMetadataStore store, SecurityCache c
         (string Column, Guid Value) second, CancellationToken ct)
     {
         var entity = Definition(intersect);
-        var table = $"{s.DataTable(entity.LogicalName)}";
+        var table = $"{s.DataTable(entity.LogicalName!)}";
         // Plan 2.7a, Task 6: the key lock of the pair, then one insert that checks for it under the range lock.
         var d = s.Dialect;
-        await s.KeyLockAsync(entity.LogicalName, $"{first.Value:N}:{second.Value:N}", ct);
+        await s.KeyLockAsync(entity.LogicalName!, $"{first.Value:N}:{second.Value:N}", ct);
         await using var cmd = s.Command($"""
             INSERT INTO {table} ({s.Quote(SystemAttributes.PrimaryIdName(entity))}, {s.Quote(first.Column)}, {s.Quote(second.Column)},
                 owningbusinessunit, createdon, modifiedon, statecode, statuscode)
@@ -415,8 +416,9 @@ public sealed class SecurityAdministration(IMetadataStore store, SecurityCache c
         (string Column, Guid Value) second, CancellationToken ct)
     {
         var entity = Definition(intersect);
+        var table = s.DataTable(entity.LogicalName!);
         await using var cmd = s.Command(
-            $"DELETE FROM {s.DataTable(entity.LogicalName)} WHERE {s.Quote(first.Column)} = @first AND {s.Quote(second.Column)} = @second");
+            $"DELETE FROM {table} WHERE {s.Quote(first.Column)} = @first AND {s.Quote(second.Column)} = @second");
         cmd.AddParameter("@first", DbType.Guid, first.Value);
         cmd.AddParameter("@second", DbType.Guid, second.Value);
         return await cmd.ExecuteNonQueryAsync(ct) > 0;

@@ -2,11 +2,10 @@ using System.Data;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Crm.Sdk.Messages;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Metadata;
-using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Security;
 
 namespace Xrmd.Security;
 
@@ -321,15 +320,15 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
     {
         // Plan 15: System Customizer's privileges and Basic User's Read on the custom API definitions.
         yield return ("customapi-role-privileges",
-            CustomApiTables.All.SelectMany(t => PrivilegeCatalog.NamesOf(store.GetEntity(t)!)).Select(PrivilegeNames.IdOf).ToHashSet());
+            CustomApiTables.All.SelectMany(t => PrivilegeCatalog.NamesOf(store.GetTable(t)!)).Select(PrivilegeNames.IdOf).ToHashSet());
         // Plan 2.15 (ruling D17): System Customizer's privileges on the duplicate detection tables.
         yield return ("duplicate-detection-role-privileges",
             new[] { DuplicateDetectionSchema.Rule, DuplicateDetectionSchema.Condition, DuplicateDetectionSchema.Record }
-                .SelectMany(t => PrivilegeCatalog.NamesOf(store.GetEntity(t)!)).Select(PrivilegeNames.IdOf).ToHashSet());
+                .SelectMany(t => PrivilegeCatalog.NamesOf(store.GetTable(t)!)).Select(PrivilegeNames.IdOf).ToHashSet());
         // Plan 2.14 (ruling W24): System Customizer's privileges on the processes.
         yield return ("workflow-role-privileges",
             new[] { WorkflowSchema.Table, WorkflowSchema.TriggerTable }
-                .SelectMany(t => PrivilegeCatalog.NamesOf(store.GetEntity(t)!)).Select(PrivilegeNames.IdOf).ToHashSet());
+                .SelectMany(t => PrivilegeCatalog.NamesOf(store.GetTable(t)!)).Select(PrivilegeNames.IdOf).ToHashSet());
         // Plan 2.14 (W21): System Customizer's and Basic User's prvWorkflowExecution.
         yield return ("workflow-execution-role-privilege", [PrivilegeNames.IdOf(PrivilegeNames.WorkflowExecution)]);
         // Plan 2.21 (A17): System Customizer's activation privileges (real-time workflows and actions, business rules).
@@ -339,7 +338,7 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
         yield return ("currency-role-privileges", CurrencyGrants().Select(g => PrivilegeNames.IdOf(g.Privilege)).ToHashSet());
         // Plan 3.2: System Customizer's privileges on the service endpoints (AppendTo included).
         yield return ("serviceendpoint-role-privileges",
-            PrivilegeCatalog.NamesOf(store.GetEntity(ServiceEndpointSchema.Table)!).Select(PrivilegeNames.IdOf).ToHashSet());
+            PrivilegeCatalog.NamesOf(store.GetTable(ServiceEndpointSchema.Table)!).Select(PrivilegeNames.IdOf).ToHashSet());
         // Plan 2.11 (A12): Basic User's Activity and Note privileges.
         yield return ("activity-role-privileges", ActivityGrants().Select(g => PrivilegeNames.IdOf(g.Privilege)).ToHashSet());
         // Plan 3.5 UI-1a: Basic User's reads of the apps, their components and roles, site maps and views, and its personal views.
@@ -358,7 +357,7 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
         yield return ("time-zone-definition-privileges", TimeZoneGrants().Select(g => PrivilegeNames.IdOf(g.Privilege)).ToHashSet());
         // #167 (ruling E1): Basic User's Read (Global) and System Customizer's privileges on the environment variables.
         yield return ("environment-variable-role-privileges",
-            EnvironmentVariableTables.SelectMany(t => PrivilegeCatalog.NamesOf(store.GetEntity(t)!)).Select(PrivilegeNames.IdOf).ToHashSet());
+            EnvironmentVariableTables.SelectMany(t => PrivilegeCatalog.NamesOf(store.GetTable(t)!)).Select(PrivilegeNames.IdOf).ToHashSet());
         // Plan 3.5 UI-1d (ruling R1): Basic User's Read (Global) on the custom controls.
         yield return ("customcontrol-role-privileges", CustomControlGrants().Select(g => PrivilegeNames.IdOf(g.Privilege)).ToHashSet());
         // Plan 3.5 UI-1e (ruling E1): Basic User's Read (Global) on the solutions, which the ribbon route reads.
@@ -367,7 +366,7 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
         yield return ("savedqueryvisualization-read", ChartGrants().Select(g => PrivilegeNames.IdOf(g.Privilege)).ToHashSet());
         // Plan 3.5 UI-1f (fix round 1): System Customizer's privileges on the system charts, as on the views.
         yield return ("savedqueryvisualization-customizer-privileges",
-            PrivilegeCatalog.NamesOf(store.GetEntity(ChartSchema.Table)!).Select(PrivilegeNames.IdOf).ToHashSet());
+            PrivilegeCatalog.NamesOf(store.GetTable(ChartSchema.Table)!).Select(PrivilegeNames.IdOf).ToHashSet());
         // Plan 3.5 UI-1g: Basic User's Create, Read and Delete (Global) on the posts.
         yield return ("post-privileges", PostGrants().Select(g => PrivilegeNames.IdOf(g.Privilege)).ToHashSet());
         // Plan 4.1a (from memory, checklist 3): Basic User's Read on the queues and Create, Read, Write and Delete on the queue items.
@@ -379,7 +378,7 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
         // UI-2a: Basic User's Read (Global) and System Customizer's privileges on the environment values of the settings
         // (organizationsetting). Its own top-up: app-setting-role-privileges already ran on an existing organization.
         yield return ("organization-setting-privileges",
-            PrivilegeCatalog.NamesOf(store.GetEntity(AppModuleSchema.OrganizationSetting)!).Select(PrivilegeNames.IdOf).ToHashSet());
+            PrivilegeCatalog.NamesOf(store.GetTable(AppModuleSchema.OrganizationSetting)!).Select(PrivilegeNames.IdOf).ToHashSet());
         // #343.5: System Customizer's prvOverrideCreatedOnCreatedBy (System Administrator holds it by its template).
         yield return ("override-createdon-role-privilege", [PrivilegeNames.IdOf(PrivilegeNames.OverrideCreatedOnCreatedBy)]);
     }
@@ -392,9 +391,9 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
     /// </summary>
     private IEnumerable<(Guid Role, string Privilege, int Depth)> QueueGrants()
     {
-        yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessRights.ReadAccess, store.GetEntity(QueueSchema.Queue)!), Global);
-        var item = store.GetEntity(QueueSchema.QueueItem)!;
-        foreach (var right in new[] { AccessRights.ReadAccess, AccessRights.WriteAccess, AccessRights.CreateAccess, AccessRights.DeleteAccess })
+        yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessMask.ReadAccess, store.GetTable(QueueSchema.Queue)!), Global);
+        var item = store.GetTable(QueueSchema.QueueItem)!;
+        foreach (var right in new[] { AccessMask.ReadAccess, AccessMask.WriteAccess, AccessMask.CreateAccess, AccessMask.DeleteAccess })
             yield return (StandardRoles.BasicUser, PrivilegeNames.For(right, item), Global);
     }
 
@@ -405,8 +404,8 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
     /// </summary>
     private IEnumerable<(Guid Role, string Privilege, int Depth)> MailboxGrants()
     {
-        var mailbox = store.GetEntity(MailSchema.Mailbox)!;
-        foreach (var right in new[] { AccessRights.ReadAccess, AccessRights.WriteAccess })
+        var mailbox = store.GetTable(MailSchema.Mailbox)!;
+        foreach (var right in new[] { AccessMask.ReadAccess, AccessMask.WriteAccess })
             yield return (StandardRoles.BasicUser, PrivilegeNames.For(right, mailbox), Basic);
     }
 
@@ -416,8 +415,8 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
     /// </summary>
     private IEnumerable<(Guid Role, string Privilege, int Depth)> QueueItemAppendGrants()
     {
-        var item = store.GetEntity(QueueSchema.QueueItem)!;
-        foreach (var right in new[] { AccessRights.AppendAccess, AccessRights.AppendToAccess })
+        var item = store.GetTable(QueueSchema.QueueItem)!;
+        foreach (var right in new[] { AccessMask.AppendAccess, AccessMask.AppendToAccess })
             yield return (StandardRoles.BasicUser, PrivilegeNames.For(right, item), Global);
     }
 
@@ -428,8 +427,8 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
     /// </summary>
     private IEnumerable<(Guid Role, string Privilege, int Depth)> PostGrants()
     {
-        var post = store.GetEntity(PostSchema.Post)!;
-        foreach (var right in new[] { AccessRights.CreateAccess, AccessRights.ReadAccess, AccessRights.DeleteAccess })
+        var post = store.GetTable(PostSchema.Post)!;
+        foreach (var right in new[] { AccessMask.CreateAccess, AccessMask.ReadAccess, AccessMask.DeleteAccess })
             yield return (StandardRoles.BasicUser, PrivilegeNames.For(right, post), Global);
     }
 
@@ -439,7 +438,7 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
     /// </summary>
     private IEnumerable<(Guid Role, string Privilege, int Depth)> TimeZoneGrants()
     {
-        yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessRights.ReadAccess, store.GetEntity(TimeZoneSchema.Table)!), Global);
+        yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessMask.ReadAccess, store.GetTable(TimeZoneSchema.Table)!), Global);
     }
 
     /// <summary>
@@ -448,8 +447,8 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
     /// </summary>
     private IEnumerable<(Guid Role, string Privilege, int Depth)> UiSettingsGrants()
     {
-        var settings = store.GetEntity(AppModuleSchema.UserEntityUiSettings)!;
-        foreach (var right in new[] { AccessRights.CreateAccess, AccessRights.ReadAccess, AccessRights.WriteAccess })
+        var settings = store.GetTable(AppModuleSchema.UserEntityUiSettings)!;
+        foreach (var right in new[] { AccessMask.CreateAccess, AccessMask.ReadAccess, AccessMask.WriteAccess })
             yield return (StandardRoles.BasicUser, PrivilegeNames.For(right, settings), Basic);
     }
 
@@ -459,7 +458,7 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
     /// </summary>
     private IEnumerable<(Guid Role, string Privilege, int Depth)> WebResourceGrants()
     {
-        yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessRights.ReadAccess, store.GetEntity("webresource")!), Global);
+        yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessMask.ReadAccess, store.GetTable("webresource")!), Global);
     }
 
     /// <summary>
@@ -468,7 +467,7 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
     /// </summary>
     private IEnumerable<(Guid Role, string Privilege, int Depth)> FormGrants()
     {
-        yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessRights.ReadAccess, store.GetEntity("systemform")!), Global);
+        yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessMask.ReadAccess, store.GetTable("systemform")!), Global);
     }
 
     /// <summary>
@@ -478,7 +477,7 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
     private IEnumerable<(Guid Role, string Privilege, int Depth)> ActivityGrants()
     {
         foreach (var table in new[] { ActivitySchema.Pointer, ActivitySchema.Annotation })
-            foreach (var name in PrivilegeCatalog.NamesOf(store.GetEntity(table)!))
+            foreach (var name in PrivilegeCatalog.NamesOf(store.GetTable(table)!))
                 yield return (StandardRoles.BasicUser, name, Basic);
     }
 
@@ -491,8 +490,8 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
     private IEnumerable<(Guid Role, string Privilege, int Depth)> AppModuleGrants()
     {
         foreach (var table in new[] { "appmodule", AppModuleSchema.Component, "sitemap", "savedquery" })
-            yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessRights.ReadAccess, store.GetEntity(table)!), Global);
-        foreach (var name in PrivilegeCatalog.NamesOf(store.GetEntity(AppModuleSchema.UserQuery)!))
+            yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessMask.ReadAccess, store.GetTable(table)!), Global);
+        foreach (var name in PrivilegeCatalog.NamesOf(store.GetTable(AppModuleSchema.UserQuery)!))
             yield return (StandardRoles.BasicUser, name, Basic);
         foreach (var grant in AppSettingGrants()) yield return grant;
     }
@@ -505,7 +504,7 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
     private IEnumerable<(Guid Role, string Privilege, int Depth)> AppSettingGrants()
     {
         foreach (var table in new[] { AppModuleSchema.SettingDefinition, AppModuleSchema.AppSetting, AppModuleSchema.OrganizationSetting })
-            yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessRights.ReadAccess, store.GetEntity(table)!), Global);
+            yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessMask.ReadAccess, store.GetTable(table)!), Global);
     }
 
     /// <summary>
@@ -515,7 +514,7 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
     private IEnumerable<(Guid Role, string Privilege, int Depth)> AttributeMapGrants()
     {
         foreach (var table in new[] { AttributeMapSchema.EntityMap, AttributeMapSchema.AttributeMap })
-            yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessRights.ReadAccess, store.GetEntity(table)!), Global);
+            yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessMask.ReadAccess, store.GetTable(table)!), Global);
     }
 
     /// <summary>The environment variable tables (#167).</summary>
@@ -528,7 +527,7 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
     private IEnumerable<(Guid Role, string Privilege, int Depth)> EnvironmentVariableGrants()
     {
         foreach (var table in EnvironmentVariableTables)
-            yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessRights.ReadAccess, store.GetEntity(table)!), Global);
+            yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessMask.ReadAccess, store.GetTable(table)!), Global);
     }
 
     /// <summary>
@@ -537,7 +536,7 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
     /// </summary>
     private IEnumerable<(Guid Role, string Privilege, int Depth)> CustomControlGrants()
     {
-        yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessRights.ReadAccess, store.GetEntity(CustomControlSchema.Table)!), Global);
+        yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessMask.ReadAccess, store.GetTable(CustomControlSchema.Table)!), Global);
     }
 
     /// <summary>
@@ -546,7 +545,7 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
     /// </summary>
     private IEnumerable<(Guid Role, string Privilege, int Depth)> ChartGrants()
     {
-        yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessRights.ReadAccess, store.GetEntity(ChartSchema.Table)!), Global);
+        yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessMask.ReadAccess, store.GetTable(ChartSchema.Table)!), Global);
     }
 
     /// <summary>
@@ -555,7 +554,7 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
     /// </summary>
     private IEnumerable<(Guid Role, string Privilege, int Depth)> RibbonSolutionGrants()
     {
-        yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessRights.ReadAccess, store.GetEntity("solution")!), Global);
+        yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessMask.ReadAccess, store.GetTable("solution")!), Global);
     }
 
     /// <summary>
@@ -566,20 +565,20 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
     /// </summary>
     private IEnumerable<(Guid Role, string Privilege, int Depth)> CurrencyGrants()
     {
-        var currency = store.GetEntity(CurrencySchema.Table)!;
-        var settings = store.GetEntity(CurrencySchema.UserSettings)!;
-        yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessRights.ReadAccess, currency), Global);
-        yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessRights.AppendToAccess, currency), Global);
-        yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessRights.ReadAccess, settings), Basic);
-        yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessRights.WriteAccess, settings), Basic);
-        yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessRights.AppendAccess, settings), Basic);
+        var currency = store.GetTable(CurrencySchema.Table)!;
+        var settings = store.GetTable(CurrencySchema.UserSettings)!;
+        yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessMask.ReadAccess, currency), Global);
+        yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessMask.AppendToAccess, currency), Global);
+        yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessMask.ReadAccess, settings), Basic);
+        yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessMask.WriteAccess, settings), Basic);
+        yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessMask.AppendAccess, settings), Basic);
     }
 
     /// <summary>The (role, privilege name, depth) rows of the standard roles; System Administrator has none (recognized by template).</summary>
     private IEnumerable<(Guid Role, string Privilege, int Depth)> Grants()
     {
-        IEnumerable<string> All(string entity) => PrivilegeCatalog.NamesOf(store.GetEntity(entity)!);
-        string Read(string entity) => PrivilegeNames.For(AccessRights.ReadAccess, store.GetEntity(entity)!);
+        IEnumerable<string> All(string entity) => PrivilegeCatalog.NamesOf(store.GetTable(entity)!);
+        string Read(string entity) => PrivilegeNames.For(AccessMask.ReadAccess, store.GetTable(entity)!);
 
         var customizer = StandardRoles.SystemCustomizer;
         foreach (var entity in new[]
@@ -608,7 +607,7 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
             yield return (customizer, Read(entity), Global);
         // AppendTo on what a step references, so that the customizer can register steps (Append/AppendTo of lookups).
         foreach (var entity in new[] { "sdkmessage", "sdkmessagefilter", "systemuser", "pluginassembly", "plugintype", ServiceEndpointSchema.Table })
-            yield return (customizer, PrivilegeNames.For(AccessRights.AppendToAccess, store.GetEntity(entity)!), Global);
+            yield return (customizer, PrivilegeNames.For(AccessMask.AppendToAccess, store.GetTable(entity)!), Global);
         foreach (var name in PrivilegeNames.Metadata) yield return (customizer, name, Global);
         foreach (var name in PrivilegeNames.Solution) yield return (customizer, name, Global);
         // Plan 2.14 (W21): starting a workflow on demand (System Administrator holds it by its template).
@@ -624,12 +623,12 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
         // The custom API definitions (Plan 15) are read by every user: they describe messages anyone may call.
         foreach (var entity in new[] { "organization", "businessunit", "systemuser", "team", "role" }.Concat(CustomApiTables.All))
             yield return (StandardRoles.BasicUser, Read(entity), Global);
-        yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessRights.ReadAccess, store.GetEntity("asyncoperation")!), Basic);
-        yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessRights.DeleteAccess, store.GetEntity("asyncoperation")!), Basic);
+        yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessMask.ReadAccess, store.GetTable("asyncoperation")!), Basic);
+        yield return (StandardRoles.BasicUser, PrivilegeNames.For(AccessMask.DeleteAccess, store.GetTable("asyncoperation")!), Basic);
         // Field shares (Plan 14, F9): Basic User creates, reads, updates and deletes them; the table is organization-owned, so
         // Global is its only depth. The profile and permission privileges stay with System Administrator.
-        foreach (var right in new[] { AccessRights.CreateAccess, AccessRights.ReadAccess, AccessRights.WriteAccess, AccessRights.DeleteAccess })
-            yield return (StandardRoles.BasicUser, PrivilegeNames.For(right, store.GetEntity(FieldSecurityTables.Share)!), Global);
+        foreach (var right in new[] { AccessMask.CreateAccess, AccessMask.ReadAccess, AccessMask.WriteAccess, AccessMask.DeleteAccess })
+            yield return (StandardRoles.BasicUser, PrivilegeNames.For(right, store.GetTable(FieldSecurityTables.Share)!), Global);
 
         foreach (var grant in CurrencyGrants()) yield return grant;
         foreach (var grant in ActivityGrants()) yield return grant;

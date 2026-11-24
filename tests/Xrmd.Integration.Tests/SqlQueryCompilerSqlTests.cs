@@ -8,6 +8,7 @@ using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core;
 using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Metadata;
 using Xrmd.Model.Query;
 using Xrmd.Query;
 using Xrmd.Query.Model;
@@ -200,14 +201,14 @@ public sealed class SqlQueryCompilerSqlTests(XrmdFixture fx) : IAsyncLifetime
 
     private sealed class FixedSecurity(FilterNode filter) : IQuerySecurity
     {
-        public FilterNode? ReadFilter(Microsoft.Xrm.Sdk.Metadata.EntityMetadata entity) => filter;
+        public FilterNode? ReadFilter(TableDefinition entity) => filter;
 
-        public IReadOnlySet<string> UnreadableColumns(Microsoft.Xrm.Sdk.Metadata.EntityMetadata entity) => new HashSet<string>();
+        public IReadOnlySet<string> UnreadableColumns(TableDefinition entity) => new HashSet<string>();
     }
 
     private sealed class FixedHierarchy(params Guid[] ids) : IHierarchyResolver
     {
-        public IReadOnlyCollection<Guid> Expand(string entityName, Guid id, ConditionOperator op) => ids;
+        public IReadOnlyCollection<Guid> Expand(string entityName, Guid id, FilterOperator op) => ids;
 
         public IReadOnlyCollection<Guid> ReportingHierarchy(bool includeTeams) => throw new NotSupportedException();
     }

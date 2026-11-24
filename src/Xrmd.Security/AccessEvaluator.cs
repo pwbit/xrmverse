@@ -1,5 +1,5 @@
-using Microsoft.Crm.Sdk.Messages;
-using Microsoft.Xrm.Sdk.Metadata;
+using Xrmd.Model.Metadata;
+using Xrmd.Model.Security;
 
 namespace Xrmd.Security;
 
@@ -7,7 +7,7 @@ namespace Xrmd.Security;
 public sealed record RecordOwnership(Guid? OwningUser, Guid? OwningTeam, Guid? OwningBusinessUnit);
 
 /// <summary>Whether a privilege depth (or a share) gives a user an access right on one record. Pure: no I/O.</summary>
-public static class AccessEvaluator
+public static partial class AccessEvaluator
 {
     /// <summary>
     /// True when <paramref name="depth"/> covers the record's owner, or when <paramref name="sharedMask"/> contains
@@ -18,11 +18,11 @@ public static class AccessEvaluator
     /// User/team-owned entities: Global covers every record, Deep the records of the user's business unit subtree, Local
     /// those of the user's business unit, Basic those owned by the user or one of its teams; every depth also covers what
     /// Basic covers. Business-owned entities are judged on <c>owningbusinessunit</c>, with Basic as Local.
-    /// Organization-owned entities (and <see cref="OwnershipTypes.None"/>): any depth covers every record.
+    /// Organization-owned entities (and <see cref="TableOwnership.None"/>): any depth covers every record.
     /// </remarks>
     /// <exception cref="InvalidOperationException">Any other ownership type (fails closed).</exception>
-    public static bool HasAccess(SecurityProfile p, BusinessUnitTree tree, EntityMetadata entity, DepthMask depth,
-        RecordOwnership owner, AccessRights right, AccessRights sharedMask)
+    public static bool HasAccess(SecurityProfile p, BusinessUnitTree tree, TableDefinition entity, DepthMask depth,
+        RecordOwnership owner, AccessMask right, AccessMask sharedMask)
     {
         ArgumentNullException.ThrowIfNull(p);
         ArgumentNullException.ThrowIfNull(tree);
@@ -40,12 +40,12 @@ public static class AccessEvaluator
 
         switch (entity.OwnershipType)
         {
-            case OwnershipTypes.UserOwned or OwnershipTypes.TeamOwned:
+            case TableOwnership.UserOwned or TableOwnership.TeamOwned:
                 var own = (owner.OwningUser is { } user && user == p.UserId) || (owner.OwningTeam is { } team && p.TeamIds.Contains(team));
                 return own || inSubtree || (depth.HasFlag(DepthMask.Local) && inUnit);
-            case OwnershipTypes.BusinessOwned:
+            case TableOwnership.BusinessOwned:
                 return inSubtree || inUnit; // depth ≠ None here: Basic and Local both cover the user's unit
-            case OwnershipTypes.OrganizationOwned or OwnershipTypes.None:
+            case TableOwnership.OrganizationOwned or TableOwnership.None:
                 return true;
             default:
                 throw new InvalidOperationException(
@@ -54,8 +54,8 @@ public static class AccessEvaluator
     }
 
     /// <summary>The rights the manager hierarchy can give (plan 2.5, ruling H4): never Create, Delete, Assign or Share.</summary>
-    public const AccessRights HierarchyRights =
-        AccessRights.ReadAccess | AccessRights.WriteAccess | AccessRights.AppendAccess | AccessRights.AppendToAccess;
+    public const AccessMask HierarchyRights =
+        AccessMask.ReadAccess | AccessMask.WriteAccess | AccessMask.AppendAccess | AccessMask.AppendToAccess;
 
     /// <summary>
     /// True when the manager hierarchy (plan 2.5, ruling H4) gives <paramref name="p"/> <paramref name="right"/> on a record of
@@ -64,11 +64,11 @@ public static class AccessEvaluator
     /// reach's principals (<see cref="HierarchyReach.ReadPrincipals"/> for Read, <see cref="HierarchyReach.WritePrincipals"/>
     /// for the other rights), or <paramref name="reportShares"/> contains the right.
     /// </summary>
-    /// <param name="reportShares">The rights shared on the record with the reach: <see cref="AccessRights.ReadAccess"/> from a
+    /// <param name="reportShares">The rights shared on the record with the reach: <see cref="AccessMask.ReadAccess"/> from a
     /// share with any of the <see cref="HierarchyReach.ReadPrincipals"/>, the other rights only from a share with one of the
     /// <see cref="HierarchyReach.WritePrincipals"/> (a manager never gets more than the share gives).</param>
-    public static bool HasHierarchyAccess(SecurityProfile p, EntityMetadata entity, RecordOwnership owner, AccessRights right,
-        AccessRights reportShares)
+    public static bool HasHierarchyAccess(SecurityProfile p, TableDefinition entity, RecordOwnership owner, AccessMask right,
+        AccessMask reportShares)
     {
         ArgumentNullException.ThrowIfNull(p);
         ArgumentNullException.ThrowIfNull(entity);
@@ -78,11 +78,11 @@ public static class AccessEvaluator
         if (p.Hierarchy is not { } reach || !reach.Covers(entity)) return false;
         if (p.DepthOf(PrivilegeNames.For(right, entity)) == DepthMask.None) return false;
 
-        var principals = right == AccessRights.ReadAccess ? reach.ReadPrincipals : reach.WritePrincipals;
+        var principals = right == AccessMask.ReadAccess ? reach.ReadPrincipals : reach.WritePrincipals;
         if ((owner.OwningUser is { } user && principals.Contains(user)) || (owner.OwningTeam is { } team && principals.Contains(team)))
             return true;
         return (reportShares & right) == right;
     }
 
-    private static bool IsSingleRight(AccessRights right) => ((int)right & ((int)right - 1)) == 0;
+    private static bool IsSingleRight(AccessMask right) => ((int)right & ((int)right - 1)) == 0;
 }

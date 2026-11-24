@@ -1,4 +1,4 @@
-using Microsoft.Xrm.Sdk.Metadata;
+using Xrmd.Model.Metadata;
 
 namespace Xrmd.Security;
 
@@ -32,10 +32,10 @@ public sealed record HierarchyReach(IReadOnlySet<Guid> ReadPrincipals, IReadOnly
     /// True when the hierarchy applies to <paramref name="entity"/> (ruling H3): a user- or team-owned table that is not an
     /// intersect table, not <c>fileattachment</c> and not excluded.
     /// </summary>
-    public bool Covers(EntityMetadata entity)
+    public bool Covers(TableDefinition entity)
     {
         ArgumentNullException.ThrowIfNull(entity);
-        return entity.OwnershipType is OwnershipTypes.UserOwned or OwnershipTypes.TeamOwned
+        return entity.OwnershipType is TableOwnership.UserOwned or TableOwnership.TeamOwned
                && entity.IsIntersect != true
                && entity.LogicalName is { } name
                && !string.Equals(name, FileAttachment, StringComparison.OrdinalIgnoreCase)

@@ -1,4 +1,4 @@
-using Microsoft.Crm.Sdk.Messages;
+using Xrmd.Model.Security;
 
 namespace Xrmd.Security;
 
@@ -23,16 +23,16 @@ public enum DepthMask
 }
 
 /// <summary>Conversions of <see cref="DepthMask"/>.</summary>
-public static class DepthMasks
+public static partial class DepthMasks
 {
-    /// <summary>The mask of an SDK depth: Basic 0→1, Local 1→2, Deep 2→4, Global 3→8.</summary>
-    /// <exception cref="ArgumentOutOfRangeException">Not one of the four SDK depths.</exception>
-    public static DepthMask FromSdk(PrivilegeDepth depth) => depth switch
+    /// <summary>The mask of a scope: Basic 0→1, Local 1→2, Deep 2→4, Global 3→8.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Not one of the four depths (RecordFilter and undefined values included).</exception>
+    public static DepthMask From(PrivilegeScope depth) => depth switch
     {
-        PrivilegeDepth.Basic => DepthMask.Basic,
-        PrivilegeDepth.Local => DepthMask.Local,
-        PrivilegeDepth.Deep => DepthMask.Deep,
-        PrivilegeDepth.Global => DepthMask.Global,
+        PrivilegeScope.Basic => DepthMask.Basic,
+        PrivilegeScope.Local => DepthMask.Local,
+        PrivilegeScope.Deep => DepthMask.Deep,
+        PrivilegeScope.Global => DepthMask.Global,
         _ => throw new ArgumentOutOfRangeException(nameof(depth), depth, "Unknown privilege depth."),
     };
 

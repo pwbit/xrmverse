@@ -4,6 +4,7 @@ using FluentAssertions;
 using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Metadata.Computed;
+using Xrmd.Model.Metadata;
 using Xrmd.Model.Query;
 using Xrmd.Query.Model;
 using Xrmd.Query.Sql;
@@ -431,14 +432,14 @@ public sealed class ComputedSqlTests
     {
         public List<string> Requested { get; } = [];
 
-        public FilterNode? ReadFilter(EntityMetadata entity)
+        public FilterNode? ReadFilter(TableDefinition entity)
         {
-            Requested.Add(entity.LogicalName);
+            Requested.Add(entity.LogicalName!);
             var filter = new FilterNode();
             filter.Conditions.Add(new ConditionNode(null, "ownerid", FilterOperator.Equal, [owner]));
             return filter;
         }
 
-        public IReadOnlySet<string> UnreadableColumns(EntityMetadata entity) => new HashSet<string>();
+        public IReadOnlySet<string> UnreadableColumns(TableDefinition entity) => new HashSet<string>();
     }
 }

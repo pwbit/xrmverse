@@ -4,6 +4,7 @@ using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
 
 namespace Xrmd.Security;
 
@@ -52,9 +53,11 @@ public sealed class SecurityCache(IDbConnectionFactory factory) : IEntityDeleted
     {
         ArgumentNullException.ThrowIfNull(entity);
         ArgumentNullException.ThrowIfNull(session);
+        // Only the name is needed: read it from the SDK object, no conversion (the signature moves to the model in S.2e).
+        var logicalName = entity.LogicalName;
         await using (var cmd = session.Command($"DELETE FROM {ExclusionTable} WHERE entity_logical_name = @name"))
         {
-            cmd.AddParameter("@name", DbType.String, entity.LogicalName ?? string.Empty, 128);
+            cmd.AddParameter("@name", DbType.String, logicalName ?? string.Empty, 128);
             await cmd.ExecuteNonQueryAsync(ct);
         }
         session.OnCommitted(Invalidate);

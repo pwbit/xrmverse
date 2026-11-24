@@ -285,6 +285,57 @@ public sealed class ReadSecurityTests
         unknown.Should().Throw<InvalidOperationException>().WithMessage("*'pb_odd'*ownership type*");
     }
 
+    // ---- the filters pinned as strings (S.2d task 3: the callback takes the model, the filters stay the same) ----------------
+
+    private static string Render(FilterNode? f)
+    {
+        if (f is null) return "null";
+        var parts = new List<string>();
+        parts.AddRange(f.Conditions.Select(c =>
+            $"cond({c.EntityAlias ?? "-"}.{c.Attribute} {c.Operator} [{string.Join(",", c.Values.Select(v => v?.ToString() ?? "null"))}]{(c.BinaryCollation ? " bin" : "")})"));
+        parts.AddRange(f.Shared.Select(x =>
+            $"shared({x.UserId} otc={x.ObjectTypeCode} mask={x.AccessMask} principals={(x.Principals is null ? "-" : string.Join(",", x.Principals.OrderBy(g => g)))} type={x.TypeAttribute ?? "-"})"));
+        parts.AddRange(f.Owned.Select(x => $"owned({string.Join(",", x.Principals.OrderBy(g => g))})"));
+        parts.AddRange(f.QueueMembers.Select(x => $"queuemember({x.UserId})"));
+        parts.AddRange(f.Versions.Select(x => $"version({x.AfterExclusive},{x.BeforeExclusive})"));
+        parts.AddRange(f.Parents.Select(x =>
+            $"parent({x.LookupAttribute}: {string.Join("; ", x.Targets.Select(t => $"{t.EntityName} otc={t.ObjectTypeCode?.ToString() ?? "-"} type={t.TypeAttribute ?? "-"} filter={Render(t.ReadFilter)} row={Render(t.RowFilter)}"))})"));
+        parts.AddRange(f.Filters.Select(Render));
+        return $"{f.Operator}{{{string.Join(" | ", parts)}}}";
+    }
+
+    [Fact]
+    public void Read_filters_of_user_owned_organization_owned_and_hierarchy_tables_are_pinned()
+    {
+        var rendered = new[]
+        {
+            "user-basic: " + Render(ReadingProject(DepthMask.Basic).ReadFilter(Project)),
+            "user-local: " + Render(ReadingProject(DepthMask.Local).ReadFilter(Project)),
+            "user-deep: " + Render(ReadingProject(DepthMask.Deep).ReadFilter(Project)),
+            "user-global: " + Render(ReadingProject(DepthMask.Global).ReadFilter(Project)),
+            "business-local: " + Render(For(Profile(Me, A, privileges: ("prvReadTeam", DepthMask.Local))).ReadFilter(Team)),
+            "org-basic: " + Render(For(Profile(Me, A, privileges: ("prvReadpb_Setting", DepthMask.Basic))).ReadFilter(Setting)),
+            "hierarchy-basic: " + Render(For(Manager(DepthMask.Basic)).ReadFilter(Project)),
+            "hierarchy-deep: " + Render(For(Manager(DepthMask.Deep)).ReadFilter(Project)),
+            "hierarchy-excluded: " + Render(For(Manager(DepthMask.Basic, excluded: "pb_project")).ReadFilter(Project)),
+            "impersonation: " + Render(For(Manager(DepthMask.Basic), Profile(Other, B, privileges: ("prvReadpb_Project", DepthMask.Basic))).ReadFilter(Project)),
+        };
+        var expected = new[]
+        {
+            "user-basic: Or{cond(-.ownerid EqualUserOrUserTeams []) | shared(00000000-0000-0000-0000-000000000001 otc=10001 mask=1 principals=- type=-)}",
+            "user-local: Or{cond(-.ownerid EqualUserOrUserTeams []) | cond(-.owningbusinessunit Equal [00000000-0000-0000-0000-0000000000a1]) | shared(00000000-0000-0000-0000-000000000001 otc=10001 mask=1 principals=- type=-)}",
+            "user-deep: Or{cond(-.ownerid EqualUserOrUserTeams []) | cond(-.owningbusinessunit UnderOrEqual [00000000-0000-0000-0000-0000000000a1]) | shared(00000000-0000-0000-0000-000000000001 otc=10001 mask=1 principals=- type=-)}",
+            "user-global: null",
+            "business-local: Or{cond(-.owningbusinessunit Equal [00000000-0000-0000-0000-0000000000a1])}",
+            "org-basic: null",
+            "hierarchy-basic: Or{cond(-.ownerid EqualUserOrUserTeams []) | shared(00000000-0000-0000-0000-000000000001 otc=10001 mask=1 principals=- type=-) | shared(00000000-0000-0000-0000-000000000001 otc=10001 mask=1 principals=00000000-0000-0000-0000-000000000010,00000000-0000-0000-0000-000000000011 type=-) | owned(00000000-0000-0000-0000-000000000010,00000000-0000-0000-0000-000000000011)}",
+            "hierarchy-deep: Or{cond(-.ownerid EqualUserOrUserTeams []) | cond(-.owningbusinessunit UnderOrEqual [00000000-0000-0000-0000-0000000000a1]) | shared(00000000-0000-0000-0000-000000000001 otc=10001 mask=1 principals=- type=-) | shared(00000000-0000-0000-0000-000000000001 otc=10001 mask=1 principals=00000000-0000-0000-0000-000000000010,00000000-0000-0000-0000-000000000011 type=-) | owned(00000000-0000-0000-0000-000000000010,00000000-0000-0000-0000-000000000011)}",
+            "hierarchy-excluded: Or{cond(-.ownerid EqualUserOrUserTeams []) | shared(00000000-0000-0000-0000-000000000001 otc=10001 mask=1 principals=- type=-)}",
+            "impersonation: And{Or{cond(-.ownerid EqualUserOrUserTeams []) | shared(00000000-0000-0000-0000-000000000001 otc=10001 mask=1 principals=- type=-) | shared(00000000-0000-0000-0000-000000000001 otc=10001 mask=1 principals=00000000-0000-0000-0000-000000000010,00000000-0000-0000-0000-000000000011 type=-) | owned(00000000-0000-0000-0000-000000000010,00000000-0000-0000-0000-000000000011)} | Or{cond(-.ownerid In [00000000-0000-0000-0000-000000000002]) | shared(00000000-0000-0000-0000-000000000002 otc=10001 mask=1 principals=- type=-)}}",
+        };
+        rendered.Should().Equal(expected);
+    }
+
     // ---- Expand -----------------------------------------------------------------------------------------------------
 
     [Theory]
@@ -359,4 +410,16 @@ public sealed class ReadSecurityTests
         public Task DeleteRelationshipAsync(DataSession session, string schemaName, CancellationToken ct) =>
             throw new NotSupportedException();
     }
+}
+
+/// <summary>
+/// The fixtures of <see cref="ReadSecurityTests"/> are SDK metadata (their model is what the store gives, converted once per
+/// instance) and Expand cases are written with the SDK operator; these call the model members with the model of the same objects.
+/// </summary>
+internal static class ReadSecurityTestCalls
+{
+    public static FilterNode? ReadFilter(this ReadSecurity security, EntityMetadata entity) => security.ReadFilter(SdkMetadataView.ModelOf(entity));
+
+    public static IReadOnlyCollection<Guid> Expand(this ReadSecurity security, string entityName, Guid id, ConditionOperator op) =>
+        security.Expand(entityName, id, Enum.Parse<FilterOperator>(op.ToString())); // the names are the same (QueryEnumParityTests)
 }

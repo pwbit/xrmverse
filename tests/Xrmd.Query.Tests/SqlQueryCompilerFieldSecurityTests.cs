@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using FluentAssertions;
 using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Core.Errors;
+using Xrmd.Model.Metadata;
 using Xrmd.Model.Query;
 using Xrmd.Query.Model;
 using Xrmd.Query.Sql;
@@ -20,9 +21,9 @@ public class SqlQueryCompilerFieldSecurityTests
     /// <summary><c>pb_project.pb_budget</c>, <c>pb_project.pb_count</c> and <c>systemuser.domainname</c> are unreadable.</summary>
     private sealed class FieldSecurity : IQuerySecurity
     {
-        public FilterNode? ReadFilter(EntityMetadata entity) => null;
+        public FilterNode? ReadFilter(TableDefinition entity) => null;
 
-        public IReadOnlySet<string> UnreadableColumns(EntityMetadata entity) => entity.LogicalName switch
+        public IReadOnlySet<string> UnreadableColumns(TableDefinition entity) => entity.LogicalName switch
         {
             "pb_project" => new HashSet<string>(["pb_budget", "pb_count"], StringComparer.OrdinalIgnoreCase),
             "systemuser" => new HashSet<string>(["domainname"], StringComparer.OrdinalIgnoreCase),
@@ -105,9 +106,9 @@ public class SqlQueryCompilerFieldSecurityTests
     /// <summary>The polymorphic <c>ownerid</c> of <c>pb_project</c> is unreadable.</summary>
     private sealed class OwnerSecurity : IQuerySecurity
     {
-        public FilterNode? ReadFilter(EntityMetadata entity) => null;
+        public FilterNode? ReadFilter(TableDefinition entity) => null;
 
-        public IReadOnlySet<string> UnreadableColumns(EntityMetadata entity) =>
+        public IReadOnlySet<string> UnreadableColumns(TableDefinition entity) =>
             new HashSet<string>(entity.LogicalName == "pb_project" ? ["ownerid"] : [], StringComparer.OrdinalIgnoreCase);
     }
 

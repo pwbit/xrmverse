@@ -1,12 +1,11 @@
 using System.Data;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Xrm.Sdk;
-using Microsoft.Xrm.Sdk.Metadata;
+using Xrmd.Model.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
-using Xrmd.Metadata.Sdk;
 
 namespace Xrmd.Security;
 
@@ -342,7 +341,7 @@ public static class SystemTableRules
                             if (await AccessTeamRules.IsSystemManagedTeamAsync(session, record.Id, ct))
                                 throw AccessTeamRules.UseRecordTeamMessages(record.Id);
                 }
-                else if (store.GetRelationship(relationship.SchemaName ?? "") is OneToManyRelationshipMetadata lookup)
+                else if (store.GetRelationshipDefinition(relationship.SchemaName ?? "") is OneToManyRelationship lookup)
                 {
                     foreach (var update in LookupUpdates(lookup, associated, related, message == "Associate"))
                         await rules.UpdateAsync(message, update, ct);
@@ -510,7 +509,7 @@ public static class SystemTableRules
             case "Associate" or "Disassociate" when target is EntityReference associated
                 && parameters.TryGetValue("Relationship", out var r) && r is Relationship relationship
                 && parameters.TryGetValue("RelatedEntities", out var rel) && rel is EntityReferenceCollection related
-                && store.GetRelationship(relationship.SchemaName ?? "") is OneToManyRelationshipMetadata { ReferencingEntity: FieldSecurityTables.Share } lookup:
+                && store.GetRelationshipDefinition(relationship.SchemaName ?? "") is OneToManyRelationship { ReferencingEntity: FieldSecurityTables.Share } lookup:
                 if (LookupUpdates(lookup, associated, related, message == "Associate").Any())
                     throw XrmdFaultException.InvalidArgument(ShareColumnsFixed);
                 break;
@@ -536,7 +535,7 @@ public static class SystemTableRules
                 throw XrmdFaultException.InvalidArgument($"A field share needs {FieldSecurityTables.ShareObjectId}, the record it applies to.");
             var givenTable = ValueOf(target, FieldSecurityTables.ShareObjectTypeCodeColumn) as string;
             var table = string.IsNullOrEmpty(objectRef.LogicalName) ? givenTable : objectRef.LogicalName;
-            if (string.IsNullOrEmpty(table) || store.GetEntity(table) is not { } entity)
+            if (string.IsNullOrEmpty(table) || store.GetTable(table) is not { } entity)
                 throw XrmdFaultException.InvalidArgument($"The table of the record of a field share ('{table}') was not found.");
             if (!string.IsNullOrEmpty(givenTable) && !string.Equals(givenTable, entity.LogicalName, StringComparison.OrdinalIgnoreCase))
                 throw XrmdFaultException.InvalidArgument(
@@ -558,12 +557,12 @@ public static class SystemTableRules
             target[FieldSecurityTables.ShareUpdateAccess] = update;
             // 3. Once per record, column and principal.
             if (await ShareExistsAsync(recordId, attribute.MetadataId!.Value, principalId, ct))
-                throw XrmdFaultException.ShareDuplicate(attribute.LogicalName, recordId, principalId);
+                throw XrmdFaultException.ShareDuplicate(attribute.LogicalName!, recordId, principalId);
             // The record must exist (the core operation answers a missing principal with its 404); the caller must read the record;
             // then 4. the grant rule.
-            if (!await RecordExistsAsync(entity, recordId, ct)) throw XrmdFaultException.ObjectDoesNotExist(entity.LogicalName, recordId);
+            if (!await RecordExistsAsync(entity, recordId, ct)) throw XrmdFaultException.ObjectDoesNotExist(entity.LogicalName!, recordId);
             await demandRecordRead(new EntityReference(entity.LogicalName, recordId), ct);
-            await DemandCanGrantAsync(entity.LogicalName, recordId, attribute.LogicalName, read, ct);
+            await DemandCanGrantAsync(entity.LogicalName!, recordId, attribute.LogicalName!, read, ct);
         }
 
         public async Task UpdateAsync(Entity target, CancellationToken ct)
@@ -574,7 +573,7 @@ public static class SystemTableRules
                     && name != primaryId && !SystemAttributes.IsReservedName(ShareTable, name)) is not null)
                 throw XrmdFaultException.InvalidArgument(ShareColumnsFixed);
             if (id == Guid.Empty || await StoredAsync(id, ct) is not { } stored) return; // the core operation's 400 or 404
-            if (stored.Table is null || store.GetEntity(stored.Table) is not { } entity) return;
+            if (stored.Table is null || store.GetTable(stored.Table) is not { } entity) return;
 
             // 1. The column must still be secured.
             var attribute = SecuredColumn(entity, stored.Attribute);
@@ -584,28 +583,31 @@ public static class SystemTableRules
             if (!read && !update) throw XrmdFaultException.ShareUpdateWithoutAccess();
             // Read on the record, then 4. the grant rule on the resulting access.
             await demandRecordRead(new EntityReference(entity.LogicalName, stored.Record), ct);
-            await DemandCanGrantAsync(entity.LogicalName, stored.Record, attribute.LogicalName, read, ct);
+            await DemandCanGrantAsync(entity.LogicalName!, stored.Record, attribute.LogicalName!, read, ct);
         }
 
         public async Task DeleteAsync(Guid id, CancellationToken ct)
         {
             if (id == Guid.Empty || await StoredAsync(id, ct) is not { } stored) return; // the core operation's 404
-            if (stored.Table is null || store.GetEntity(stored.Table) is not { } entity) return;
+            if (stored.Table is null || store.GetTable(stored.Table) is not { } entity) return;
             await demandRecordRead(new EntityReference(entity.LogicalName, stored.Record), ct);
-            if (entity.Attributes.FirstOrDefault(a => a.MetadataId == stored.Attribute) is not { IsSecured: true, LogicalName: { } column })
+            // A table without columns fails closed, as SecuredColumn does: it must not skip the grant rule below.
+            var columns = entity.Attributes
+                ?? throw XrmdFaultException.PermissionOnUnsecuredColumn(entity.LogicalName!, stored.Attribute.ToString());
+            if (columns.FirstOrDefault(a => a.MetadataId == stored.Attribute) is not { IsSecured: true, LogicalName: { } column })
                 return; // a share left on a column that is no longer secured grants nothing: who reads the record removes it
             // Revoking needs the rights granting does (R6d).
-            await DemandCanGrantAsync(entity.LogicalName, stored.Record, column, stored.Read, ct);
+            await DemandCanGrantAsync(entity.LogicalName!, stored.Record, column, stored.Read, ct);
         }
 
         /// <summary>The column of <paramref name="entity"/> whose MetadataId is <paramref name="attributeId"/>, which must be secured.</summary>
         /// <exception cref="XrmdFaultException">400 0x8004F50E for an unknown or unsecured column.</exception>
-        private static AttributeMetadata SecuredColumn(EntityMetadata entity, object? attributeId)
+        private static ColumnDefinition SecuredColumn(TableDefinition entity, object? attributeId)
         {
             var id = attributeId switch { Guid g => g, string s when Guid.TryParse(s, out var g) => g, _ => Guid.Empty };
-            var attribute = id == Guid.Empty ? null : entity.Attributes.FirstOrDefault(a => a.MetadataId == id);
+            var attribute = id == Guid.Empty ? null : entity.Attributes?.FirstOrDefault(a => a.MetadataId == id);
             if (attribute is not { IsSecured: true, LogicalName: not null, MetadataId: not null })
-                throw XrmdFaultException.PermissionOnUnsecuredColumn(entity.LogicalName, attribute?.LogicalName ?? id.ToString());
+                throw XrmdFaultException.PermissionOnUnsecuredColumn(entity.LogicalName!, attribute?.LogicalName ?? id.ToString());
             return attribute;
         }
 
@@ -644,10 +646,10 @@ public static class SystemTableRules
             return (int)(await cmd.ExecuteScalarAsync(ct))! == 1;
         }
 
-        private async Task<bool> RecordExistsAsync(EntityMetadata entity, Guid id, CancellationToken ct)
+        private async Task<bool> RecordExistsAsync(TableDefinition entity, Guid id, CancellationToken ct)
         {
             await using var cmd = session.Command(
-                $"SELECT CASE WHEN EXISTS (SELECT 1 FROM {session.DataTable(entity.LogicalName)} " +
+                $"SELECT CASE WHEN EXISTS (SELECT 1 FROM {session.DataTable(entity.LogicalName!)} " +
                 $"WHERE {session.Quote(SystemAttributes.PrimaryIdName(entity))} = {IdParameter}) THEN 1 ELSE 0 END");
             cmd.AddParameter(IdParameter, DbType.Guid, id);
             return (int)(await cmd.ExecuteScalarAsync(ct))! == 1;
@@ -676,7 +678,7 @@ public static class SystemTableRules
     /// referenced record (each related record of the referencing entity is updated) or, failing that, the referencing record
     /// (with exactly one related record). Records the core operation rejects (400) yield nothing.
     /// </summary>
-    internal static IEnumerable<Entity> LookupUpdates(OneToManyRelationshipMetadata lookup, EntityReference target,
+    internal static IEnumerable<Entity> LookupUpdates(OneToManyRelationship lookup, EntityReference target,
         EntityReferenceCollection related, bool associate)
     {
         var attribute = lookup.ReferencingAttribute;
@@ -996,7 +998,7 @@ public static class SystemTableRules
         if (entity == AuditTable.Name)
             throw XrmdFaultException.InvalidArgument(
                 $"{message} is not supported on '{AuditTable.Name}': audit rows are written by the audit writer only, and removed by the audit delete messages and the retention period.");
-        if (NoDirectWrites.Contains(entity) || store.GetEntity(entity)?.IsIntersect == true
+        if (NoDirectWrites.Contains(entity) || store.GetTable(entity)?.IsIntersect == true
             || (alsoTraceLog && entity == PluginTraceLog) || (alsoAsyncOperation && entity == AsyncOperation))
             throw XrmdFaultException.SystemMaintainedTable(message, entity);
     }
@@ -1233,7 +1235,7 @@ public static class SystemTableRules
         if (string.IsNullOrEmpty(entity) || string.IsNullOrEmpty(attribute))
             throw XrmdFaultException.InvalidArgument(
                 $"A {FieldSecurityTables.Permission} row needs both {FieldSecurityTables.EntityName} and {FieldSecurityTables.AttributeLogicalName}.");
-        var column = store.GetEntity(entity)?.Attributes
+        var column = store.GetTable(entity)?.Attributes?
             .FirstOrDefault(a => string.Equals(a.LogicalName, attribute, StringComparison.OrdinalIgnoreCase));
         if (column is null)
             throw new XrmdFaultException(ErrorCodes.ObjectDoesNotExist,
@@ -1516,7 +1518,7 @@ public static class SystemTableRules
     private static async Task DemandNoCustomApiUsesAsync(EntityReference deleted, IMetadataStore store, DataSession session, CancellationToken ct)
     {
         var table = deleted.LogicalName;
-        if (table is not ("plugintype" or "pluginassembly") || store.GetEntity(CustomApiTables.Api) is null) return;
+        if (table is not ("plugintype" or "pluginassembly") || store.GetTable(CustomApiTables.Api) is null) return;
         await using var cmd = session.Command(session.Dialect.Limit(table == "plugintype"
             ? $"SELECT c.uniquename FROM {session.DataTable(CustomApiTables.Api)} AS c WHERE c.{session.Quote(CustomApiTables.PluginTypeId)} = {IdParameter} ORDER BY c.uniquename"
             : $"""

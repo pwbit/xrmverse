@@ -5,6 +5,7 @@ using FluentAssertions;
 using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Core.Errors;
+using Xrmd.Model.Metadata;
 using Xrmd.Model.Query;
 using Xrmd.Query.Cosmos;
 using Xrmd.Query.Model;
@@ -19,9 +20,9 @@ public class JsonPathConditionCompilerTests
 
     private sealed class Unreadable : IQuerySecurity
     {
-        public FilterNode? ReadFilter(EntityMetadata entity) => null;
+        public FilterNode? ReadFilter(TableDefinition entity) => null;
 
-        public IReadOnlySet<string> UnreadableColumns(EntityMetadata entity) => entity.LogicalName == Table
+        public IReadOnlySet<string> UnreadableColumns(TableDefinition entity) => entity.LogicalName == Table
             ? new HashSet<string>(["new_payload"], StringComparer.OrdinalIgnoreCase)
             : new HashSet<string>();
     }

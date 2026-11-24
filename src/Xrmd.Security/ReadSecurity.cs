@@ -1,10 +1,8 @@
-using Microsoft.Crm.Sdk.Messages;
-using Microsoft.Xrm.Sdk.Metadata;
-using Microsoft.Xrm.Sdk.Query;
+using Xrmd.Model.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
-using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Security;
 using Xrmd.Model.Query;
 using Xrmd.Query;
 using Xrmd.Query.Model;
@@ -28,7 +26,7 @@ namespace Xrmd.Security;
 /// loaded when the query uses one of them; null when it does not (<see cref="ReportingHierarchy"/> then fails closed).</param>
 /// <remarks>
 /// The owner condition of the principal whose id is <paramref name="queryUserId"/> uses
-/// <see cref="ConditionOperator.EqualUserOrUserTeams"/>, which the compiler resolves against <see cref="QueryContext.UserId"/>;
+/// <see cref="FilterOperator.EqualUserOrUserTeams"/>, which the compiler resolves against <see cref="QueryContext.UserId"/>;
 /// the other principals' is an explicit <c>ownerid in (principal, its teams)</c>, from its <see cref="SecurityProfile.TeamIds"/>.
 /// </remarks>
 public sealed class ReadSecurity(IReadOnlyList<SecurityProfile> principals, BusinessUnitTree tree, IMetadataStore store, Guid queryUserId,
@@ -63,15 +61,15 @@ public sealed class ReadSecurity(IReadOnlyList<SecurityProfile> principals, Busi
     /// </remarks>
     /// <exception cref="XrmdFaultException">403 PrivilegeDenied when a principal has no <c>prvRead</c> on the entity.</exception>
     /// <exception cref="InvalidOperationException">No principal, or an ownership type without a rule (fails closed).</exception>
-    public FilterNode? ReadFilter(EntityMetadata entity)
+    public FilterNode? ReadFilter(TableDefinition table)
     {
-        ArgumentNullException.ThrowIfNull(entity);
+        ArgumentNullException.ThrowIfNull(table);
         if (principals.Count == 0)
             throw new InvalidOperationException("A read restriction needs at least one principal.");
 
         var filters = new List<FilterNode>();
         foreach (var p in principals)
-            if (PrincipalFilter(p, entity, isQueryUser: p.UserId == queryUserId) is { } filter) filters.Add(filter);
+            if (PrincipalFilter(p, table, isQueryUser: p.UserId == queryUserId) is { } filter) filters.Add(filter);
         if (filters.Count <= 1) return filters.SingleOrDefault();
         var all = new FilterNode { Operator = FilterLogic.And };
         all.Filters.AddRange(filters);
@@ -80,16 +78,16 @@ public sealed class ReadSecurity(IReadOnlyList<SecurityProfile> principals, Busi
 
     /// <inheritdoc />
     /// <exception cref="InvalidOperationException">A table whose permissions were not loaded with the context (fails closed).</exception>
-    public IReadOnlySet<string> UnreadableColumns(EntityMetadata entity)
+    public IReadOnlySet<string> UnreadableColumns(TableDefinition table)
     {
-        ArgumentNullException.ThrowIfNull(entity);
+        ArgumentNullException.ThrowIfNull(table);
         if (unreadable is null) return NoColumns;
-        return unreadable.TryGetValue(entity.LogicalName, out var columns)
+        return unreadable.TryGetValue(table.LogicalName!, out var columns)
             ? columns
-            : throw new InvalidOperationException($"The field permissions on '{entity.LogicalName}' were not loaded for this query.");
+            : throw new InvalidOperationException($"The field permissions on '{table.LogicalName}' were not loaded for this query.");
     }
 
-    private FilterNode? PrincipalFilter(SecurityProfile p, EntityMetadata entity, bool isQueryUser)
+    private FilterNode? PrincipalFilter(SecurityProfile p, TableDefinition entity, bool isQueryUser)
     {
         if (entity.LogicalName == QueueSchema.QueueItem) return QueueItemFilter(p, entity, isQueryUser);
         var filter = OwnershipFilter(p, entity, isQueryUser);
@@ -113,13 +111,13 @@ public sealed class ReadSecurity(IReadOnlyList<SecurityProfile> principals, Busi
     /// where Learn is silent: the Global depth of Read Queue does not lift the privacy, because Basic User holds it. The security guard
     /// checks one queue with this same predicate before an item in it is worked or placed (ruling R23), so the rule is written once.
     /// </summary>
-    private FilterNode QueuePrivacy(SecurityProfile p, EntityMetadata queue, bool isQueryUser)
+    private FilterNode QueuePrivacy(SecurityProfile p, TableDefinition queue, bool isQueryUser)
     {
         var filter = new FilterNode { Operator = FilterLogic.Or };
         filter.Conditions.Add(new ConditionNode(null, QueueViewType, FilterOperator.Equal, [QueueSchema.PublicViewType]));
         filter.Conditions.Add(OwnedBy(p, isQueryUser));
         filter.QueueMembers.Add(new QueueMemberNode(p.UserId));
-        filter.Shared.Add(new SharedRecordsNode(p.UserId, queue.ObjectTypeCode ?? 0, (int)AccessRights.ReadAccess));
+        filter.Shared.Add(new SharedRecordsNode(p.UserId, queue.ObjectTypeCode ?? 0, (int)AccessMask.ReadAccess));
         return filter;
     }
 
@@ -129,64 +127,64 @@ public sealed class ReadSecurity(IReadOnlyList<SecurityProfile> principals, Busi
     /// <c>prvReadQueueItem</c> (PrivilegeDenied without it). A target table the principal has no read privilege on contributes no
     /// row. A System Administrator reads every item.
     /// </summary>
-    private FilterNode? QueueItemFilter(SecurityProfile p, EntityMetadata item, bool isQueryUser)
+    private FilterNode? QueueItemFilter(SecurityProfile p, TableDefinition item, bool isQueryUser)
     {
-        var privilege = PrivilegeNames.For(AccessRights.ReadAccess, item);
+        var privilege = PrivilegeNames.For(AccessMask.ReadAccess, item);
         if (p.DepthOf(privilege) == DepthMask.None)
-            throw XrmdFaultException.PrivilegeDenied(p.UserId, privilege, item.LogicalName, item.ObjectTypeCode ?? 0);
+            throw XrmdFaultException.PrivilegeDenied(p.UserId, privilege, item.LogicalName!, item.ObjectTypeCode ?? 0);
         if (p.IsSystemAdministrator) return null;
-        var queue = store.GetEntity(QueueSchema.Queue)
+        var queue = store.GetTable(QueueSchema.Queue)
                     ?? throw new InvalidOperationException($"The table '{QueueSchema.Queue}' does not exist."); // fail closed
-        var record = (item.Attributes ?? []).OfType<LookupAttributeMetadata>().FirstOrDefault(a => a.LogicalName == QueueSchema.ObjectId)
+        var record = (item.Attributes ?? []).OfType<LookupColumn>().FirstOrDefault(a => a.LogicalName == QueueSchema.ObjectId)
                      ?? throw new InvalidOperationException($"'{item.LogicalName}' has no '{QueueSchema.ObjectId}' lookup."); // fail closed
         var targets = new List<ParentTarget>();
         foreach (var name in record.Targets ?? [])
         {
-            if (store.GetEntity(name) is not { ObjectTypeCode: { } otc } parent) continue;
-            if (p.DepthOf(PrivilegeNames.For(AccessRights.ReadAccess, parent)) == DepthMask.None) continue;
-            targets.Add(new ParentTarget(parent.LogicalName, otc, PrincipalFilter(p, parent, isQueryUser)));
+            if (store.GetTable(name) is not { ObjectTypeCode: { } otc } parent) continue;
+            if (p.DepthOf(PrivilegeNames.For(AccessMask.ReadAccess, parent)) == DepthMask.None) continue;
+            targets.Add(new ParentTarget(parent.LogicalName!, otc, PrincipalFilter(p, parent, isQueryUser)));
         }
         var filter = new FilterNode();
         filter.Parents.Add(new ParentRecordsNode(QueueSchema.QueueIdColumn,
-            [new ParentTarget(queue.LogicalName, queue.ObjectTypeCode, PrincipalFilter(p, queue, isQueryUser))]));
+            [new ParentTarget(queue.LogicalName!, queue.ObjectTypeCode, PrincipalFilter(p, queue, isQueryUser))]));
         filter.Parents.Add(new ParentRecordsNode(QueueSchema.ObjectId, targets));
         return filter;
     }
 
-    private FilterNode? OwnershipFilter(SecurityProfile p, EntityMetadata entity, bool isQueryUser)
+    private FilterNode? OwnershipFilter(SecurityProfile p, TableDefinition entity, bool isQueryUser)
     {
         if (entity.IsIntersect == true) return null; // readable by every member of the organization, no privilege
         if (entity.LogicalName == FileColumns.AttachmentEntity) return AttachmentFilter(p, entity, isQueryUser);
         if (entity.LogicalName == ActivitySchema.Party) return PartyFilter(p, entity, isQueryUser);
         if (entity.LogicalName == MailSchema.Attachment) return MimeAttachmentFilter(p, entity, isQueryUser);
         if (PostSchema.IsPostTable(entity.LogicalName)) return PostFilter(p, entity, isQueryUser);
-        var privilege = PrivilegeNames.For(AccessRights.ReadAccess, entity);
+        var privilege = PrivilegeNames.For(AccessMask.ReadAccess, entity);
         var depth = p.DepthOf(privilege);
         if (depth == DepthMask.None)
-            throw XrmdFaultException.PrivilegeDenied(p.UserId, privilege, entity.LogicalName, entity.ObjectTypeCode ?? 0);
+            throw XrmdFaultException.PrivilegeDenied(p.UserId, privilege, entity.LogicalName!, entity.ObjectTypeCode ?? 0);
         if (p.IsSystemAdministrator || depth == DepthMask.Global) return null;
         // The audit privileges are Global only: a narrower depth (from a hand-made role row) reads nothing.
         if (entity.LogicalName == AuditTable.Name)
-            throw XrmdFaultException.PrivilegeDenied(p.UserId, privilege, entity.LogicalName, entity.ObjectTypeCode ?? 0);
+            throw XrmdFaultException.PrivilegeDenied(p.UserId, privilege, entity.LogicalName!, entity.ObjectTypeCode ?? 0);
 
         var filter = new FilterNode { Operator = FilterLogic.Or };
         switch (entity.OwnershipType)
         {
-            case OwnershipTypes.OrganizationOwned or OwnershipTypes.None:
+            case TableOwnership.OrganizationOwned or TableOwnership.None:
                 return null;
-            case OwnershipTypes.UserOwned or OwnershipTypes.TeamOwned:
+            case TableOwnership.UserOwned or TableOwnership.TeamOwned:
                 filter.Conditions.Add(OwnedBy(p, isQueryUser));
                 if (depth == DepthMask.Deep) filter.Conditions.Add(InSubtree(p));
                 else if (depth == DepthMask.Local) filter.Conditions.Add(InUnit(p));
                 var typeAttribute = SharedTypeAttribute(entity);
-                filter.Shared.Add(new SharedRecordsNode(p.UserId, entity.ObjectTypeCode ?? 0, (int)AccessRights.ReadAccess, TypeAttribute: typeAttribute));
+                filter.Shared.Add(new SharedRecordsNode(p.UserId, entity.ObjectTypeCode ?? 0, (int)AccessMask.ReadAccess, TypeAttribute: typeAttribute));
                 if (p.Hierarchy is { } reach && reach.Covers(entity))
                 {
                     var principals = reach.ReadPrincipals.Order().ToList();
                     var excluded = ExcludedActivityTypes(entity, reach);
                     var hierarchy = excluded is null ? filter : new FilterNode { Operator = FilterLogic.Or };
                     hierarchy.Owned.Add(new OwnedRecordsNode(principals)); // one JSON parameter, like the shared branch
-                    hierarchy.Shared.Add(new SharedRecordsNode(p.UserId, entity.ObjectTypeCode ?? 0, (int)AccessRights.ReadAccess, principals, typeAttribute));
+                    hierarchy.Shared.Add(new SharedRecordsNode(p.UserId, entity.ObjectTypeCode ?? 0, (int)AccessMask.ReadAccess, principals, typeAttribute));
                     if (excluded is not null)
                     {
                         var and = new FilterNode { Operator = FilterLogic.And };
@@ -196,7 +194,7 @@ public sealed class ReadSecurity(IReadOnlyList<SecurityProfile> principals, Busi
                     }
                 }
                 return filter;
-            case OwnershipTypes.BusinessOwned:
+            case TableOwnership.BusinessOwned:
                 filter.Conditions.Add(depth == DepthMask.Deep ? InSubtree(p) : InUnit(p)); // Basic counts as Local
                 return filter;
             default:
@@ -213,21 +211,21 @@ public sealed class ReadSecurity(IReadOnlyList<SecurityProfile> principals, Busi
     /// profiles are left out (<c>regardingfieldname</c> not among them; a row without one is left out too on such a table).
     /// Field shares are not consulted here: the row stays hidden even on a record where a share grants the column.
     /// </summary>
-    private FilterNode? AttachmentFilter(SecurityProfile p, EntityMetadata attachment, bool isQueryUser)
+    private FilterNode? AttachmentFilter(SecurityProfile p, TableDefinition attachment, bool isQueryUser)
     {
         if (p.IsSystemAdministrator) return null;
-        var lookup = (attachment.Attributes ?? []).OfType<LookupAttributeMetadata>().FirstOrDefault(FileColumns.IsAttachmentObjectId)
+        var lookup = (attachment.Attributes ?? []).OfType<LookupColumn>().FirstOrDefault(FileColumns.IsAttachmentObjectId)
                      ?? throw new InvalidOperationException($"'{attachment.LogicalName}' has no '{FileColumns.AttachmentLookup}' lookup."); // fail closed
         var targets = new List<ParentTarget>();
         foreach (var name in lookup.Targets ?? [])
         {
-            if (store.GetEntity(name) is not { ObjectTypeCode: { } otc } parent) continue;
+            if (store.GetTable(name) is not { ObjectTypeCode: { } otc } parent) continue;
             // An email attachment has no privilege of its own: it is read through its email (MimeAttachmentFilter).
-            if (parent.LogicalName != MailSchema.Attachment && p.DepthOf(PrivilegeNames.For(AccessRights.ReadAccess, parent)) == DepthMask.None) continue;
-            targets.Add(new ParentTarget(parent.LogicalName, otc, PrincipalFilter(p, parent, isQueryUser), HiddenFiles(parent)));
+            if (parent.LogicalName != MailSchema.Attachment && p.DepthOf(PrivilegeNames.For(AccessMask.ReadAccess, parent)) == DepthMask.None) continue;
+            targets.Add(new ParentTarget(parent.LogicalName!, otc, PrincipalFilter(p, parent, isQueryUser), HiddenFiles(parent)));
         }
         var filter = new FilterNode();
-        filter.Parents.Add(new ParentRecordsNode(lookup.LogicalName, targets));
+        filter.Parents.Add(new ParentRecordsNode(lookup.LogicalName!, targets));
         return filter;
     }
 
@@ -240,31 +238,31 @@ public sealed class ReadSecurity(IReadOnlyList<SecurityProfile> principals, Busi
     /// RetrieveMultiple and the counts, so no count reveals a record the caller cannot read.
     /// </summary>
     /// <exception cref="XrmdFaultException">403 PrivilegeDenied without <c>prvReadPost</c>.</exception>
-    private FilterNode? PostFilter(SecurityProfile p, EntityMetadata entity, bool isQueryUser)
+    private FilterNode? PostFilter(SecurityProfile p, TableDefinition entity, bool isQueryUser)
     {
-        var privilege = PrivilegeNames.For(AccessRights.ReadAccess, entity);
+        var privilege = PrivilegeNames.For(AccessMask.ReadAccess, entity);
         if (p.DepthOf(privilege) == DepthMask.None)
-            throw XrmdFaultException.PrivilegeDenied(p.UserId, privilege, entity.LogicalName, entity.ObjectTypeCode ?? 0);
+            throw XrmdFaultException.PrivilegeDenied(p.UserId, privilege, entity.LogicalName!, entity.ObjectTypeCode ?? 0);
         if (p.IsSystemAdministrator) return null;
         var filter = new FilterNode();
         if (entity.LogicalName == PostSchema.Comment)
         {
-            var post = store.GetEntity(PostSchema.Post)
+            var post = store.GetTable(PostSchema.Post)
                        ?? throw new InvalidOperationException($"The table '{PostSchema.Post}' does not exist."); // fail closed
             filter.Parents.Add(new ParentRecordsNode(PostSchema.PostId,
-                [new ParentTarget(post.LogicalName, post.ObjectTypeCode, PostFilter(p, post, isQueryUser))]));
+                [new ParentTarget(post.LogicalName!, post.ObjectTypeCode, PostFilter(p, post, isQueryUser))]));
             return filter;
         }
-        var lookup = (entity.Attributes ?? []).OfType<LookupAttributeMetadata>().FirstOrDefault(a => a.LogicalName == ActivitySchema.RegardingObjectId)
+        var lookup = (entity.Attributes ?? []).OfType<LookupColumn>().FirstOrDefault(a => a.LogicalName == ActivitySchema.RegardingObjectId)
                      ?? throw new InvalidOperationException($"'{entity.LogicalName}' has no '{ActivitySchema.RegardingObjectId}' lookup."); // fail closed
         var targets = new List<ParentTarget>();
         foreach (var name in lookup.Targets ?? [])
         {
-            if (store.GetEntity(name) is not { ObjectTypeCode: { } otc } parent) continue;
-            if (p.DepthOf(PrivilegeNames.For(AccessRights.ReadAccess, parent)) == DepthMask.None) continue;
-            targets.Add(new ParentTarget(parent.LogicalName, otc, PrincipalFilter(p, parent, isQueryUser)));
+            if (store.GetTable(name) is not { ObjectTypeCode: { } otc } parent) continue;
+            if (p.DepthOf(PrivilegeNames.For(AccessMask.ReadAccess, parent)) == DepthMask.None) continue;
+            targets.Add(new ParentTarget(parent.LogicalName!, otc, PrincipalFilter(p, parent, isQueryUser)));
         }
-        filter.Parents.Add(new ParentRecordsNode(lookup.LogicalName, targets));
+        filter.Parents.Add(new ParentRecordsNode(lookup.LogicalName!, targets));
         return filter;
     }
 
@@ -274,8 +272,8 @@ public sealed class ReadSecurity(IReadOnlyList<SecurityProfile> principals, Busi
     /// of its table, and the pointer row has the activity's id and that code, so a share of another table's record with the same
     /// id never opens it. Null for any other table. The pointer itself cannot be shared (<c>SystemTableRules</c>).
     /// </summary>
-    private static string? SharedTypeAttribute(EntityMetadata entity) =>
-        entity.LogicalName == ActivitySchema.Pointer ? ActivitySchema.ActivityTypeCode : null;
+    private static string? SharedTypeAttribute(TableDefinition table) =>
+        table.LogicalName == ActivitySchema.Pointer ? ActivitySchema.ActivityTypeCode : null;
 
     /// <summary>
     /// On <c>activitypointer</c>, the condition that keeps the rows of the activity tables the manager hierarchy excludes out of its
@@ -285,10 +283,10 @@ public sealed class ReadSecurity(IReadOnlyList<SecurityProfile> principals, Busi
     /// </summary>
     /// <exception cref="InvalidOperationException">An excluded activity table has no object type code (fail closed, final review
     /// M1: leaving it out of the condition would open its rows through the pointer's hierarchy branches).</exception>
-    private ConditionNode? ExcludedActivityTypes(EntityMetadata entity, HierarchyReach reach)
+    private ConditionNode? ExcludedActivityTypes(TableDefinition entity, HierarchyReach reach)
     {
         if (entity.LogicalName != ActivitySchema.Pointer) return null;
-        var excludedTables = reach.ExcludedTables.Select(store.GetEntity).Where(e => e is not null && ActivitySchema.IsActivityTable(e)).ToList();
+        var excludedTables = reach.ExcludedTables.Select(store.GetTable).Where(e => e is not null && ActivitySchema.IsActivityTable(e)).ToList();
         if (excludedTables.FirstOrDefault(e => e!.ObjectTypeCode is null) is { } untyped)
             throw new InvalidOperationException(
                 $"The activity table '{untyped.LogicalName}' is excluded from hierarchy security but has no object type code: its pointer rows cannot be told apart.");
@@ -304,21 +302,21 @@ public sealed class ReadSecurity(IReadOnlyList<SecurityProfile> principals, Busi
     /// reads every row. The party record itself is not consulted: a party row is part of its activity (ruling Y2 guards the
     /// writes, which never name a record the writer cannot read).
     /// </summary>
-    private FilterNode? PartyFilter(SecurityProfile p, EntityMetadata party, bool isQueryUser)
+    private FilterNode? PartyFilter(SecurityProfile p, TableDefinition party, bool isQueryUser)
     {
         if (p.IsSystemAdministrator) return null;
         var lookup = (party.Attributes ?? []).FirstOrDefault(a => a.LogicalName == ActivitySchema.ActivityId)
                      ?? throw new InvalidOperationException($"'{party.LogicalName}' has no '{ActivitySchema.ActivityId}' lookup."); // fail closed
-        var pointer = store.GetEntity(ActivitySchema.Pointer)
+        var pointer = store.GetTable(ActivitySchema.Pointer)
                       ?? throw new InvalidOperationException($"The table '{ActivitySchema.Pointer}' does not exist."); // fail closed
         var targets = new List<ParentTarget>();
-        var depth = p.DepthOf(PrivilegeNames.For(AccessRights.ReadAccess, pointer));
+        var depth = p.DepthOf(PrivilegeNames.For(AccessMask.ReadAccess, pointer));
         if (depth == DepthMask.Global) return null;
         if (depth != DepthMask.None)
-            targets.Add(new ParentTarget(pointer.LogicalName, ObjectTypeCode: null, PrincipalFilter(p, pointer, isQueryUser),
+            targets.Add(new ParentTarget(pointer.LogicalName!, ObjectTypeCode: null, PrincipalFilter(p, pointer, isQueryUser),
                 TypeAttribute: ActivitySchema.ActivityTypeCode));
         var filter = new FilterNode();
-        filter.Parents.Add(new ParentRecordsNode(lookup.LogicalName, targets));
+        filter.Parents.Add(new ParentRecordsNode(lookup.LogicalName!, targets));
         return filter;
     }
 
@@ -328,18 +326,18 @@ public sealed class ReadSecurity(IReadOnlyList<SecurityProfile> principals, Busi
     /// which has none (its rows follow their email, as <c>activityparty</c> rows follow their activity). Without <c>prvReadActivity</c>
     /// no row is readable (no fault: the table has no privilege to name). A System Administrator reads every row.
     /// </summary>
-    private FilterNode? MimeAttachmentFilter(SecurityProfile p, EntityMetadata attachment, bool isQueryUser)
+    private FilterNode? MimeAttachmentFilter(SecurityProfile p, TableDefinition attachment, bool isQueryUser)
     {
         if (p.IsSystemAdministrator) return null;
         var lookup = (attachment.Attributes ?? []).FirstOrDefault(a => a.LogicalName == ActivitySchema.ObjectId)
                      ?? throw new InvalidOperationException($"'{attachment.LogicalName}' has no '{ActivitySchema.ObjectId}' lookup."); // fail closed
-        var email = store.GetEntity(ActivitySchema.Email)
+        var email = store.GetTable(ActivitySchema.Email)
                     ?? throw new InvalidOperationException($"The table '{ActivitySchema.Email}' does not exist."); // fail closed
         var targets = new List<ParentTarget>();
-        if (p.DepthOf(PrivilegeNames.For(AccessRights.ReadAccess, email)) != DepthMask.None)
-            targets.Add(new ParentTarget(email.LogicalName, email.ObjectTypeCode, PrincipalFilter(p, email, isQueryUser)));
+        if (p.DepthOf(PrivilegeNames.For(AccessMask.ReadAccess, email)) != DepthMask.None)
+            targets.Add(new ParentTarget(email.LogicalName!, email.ObjectTypeCode, PrincipalFilter(p, email, isQueryUser)));
         var filter = new FilterNode();
-        filter.Parents.Add(new ParentRecordsNode(lookup.LogicalName, targets));
+        filter.Parents.Add(new ParentRecordsNode(lookup.LogicalName!, targets));
         return filter;
     }
 
@@ -348,12 +346,12 @@ public sealed class ReadSecurity(IReadOnlyList<SecurityProfile> principals, Busi
     /// columns it cannot read (null when there are none, or field security does not restrict the caller).
     /// </summary>
     /// <exception cref="InvalidOperationException">The field permissions on the table were not loaded (fails closed).</exception>
-    private FilterNode? HiddenFiles(EntityMetadata parent)
+    private FilterNode? HiddenFiles(TableDefinition parent)
     {
         if (unreadable is null) return null;
         var hidden = UnreadableColumns(parent);
-        var columns = (parent.Attributes ?? []).Where(a => FileColumns.IsFileOrImage(a) && hidden.Contains(a.LogicalName))
-            .Select(a => (object?)a.LogicalName).ToList();
+        var columns = (parent.Attributes ?? []).Where(a => FileColumns.IsFileOrImage(a) && hidden.Contains(a.LogicalName!))
+            .Select(a => (object?)a.LogicalName!).ToList();
         if (columns.Count == 0) return null;
         var filter = new FilterNode();
         filter.Conditions.Add(new ConditionNode(null, AttachmentColumn, FilterOperator.NotIn, columns));
@@ -382,7 +380,7 @@ public sealed class ReadSecurity(IReadOnlyList<SecurityProfile> principals, Busi
             throw new InvalidOperationException("The user hierarchy was not loaded for this query.");
         if (!userHierarchy.Enabled)
             throw new XrmdValidationException(
-                $"The operator {(includeTeams ? ConditionOperator.EqualUserOrUserHierarchyAndTeams : ConditionOperator.EqualUserOrUserHierarchy)} " +
+                $"The operator {(includeTeams ? FilterOperator.EqualUserOrUserHierarchyAndTeams : FilterOperator.EqualUserOrUserHierarchy)} " +
                 "needs the hierarchy security model, which is not enabled in this organization.");
         return includeTeams ? userHierarchy.UsersAndTeams : userHierarchy.Users;
     }
@@ -394,17 +392,17 @@ public sealed class ReadSecurity(IReadOnlyList<SecurityProfile> principals, Busi
     /// <paramref name="id"/> itself (the compiler puts them in <c>NOT IN</c>).
     /// </remarks>
     /// <exception cref="XrmdValidationException">An entity other than <c>businessunit</c>, or not a hierarchy operator.</exception>
-    public IReadOnlyCollection<Guid> Expand(string entityName, Guid id, ConditionOperator op)
+    public IReadOnlyCollection<Guid> Expand(string entityName, Guid id, FilterOperator op)
     {
         ArgumentNullException.ThrowIfNull(entityName);
-        if (store.GetEntity(entityName)?.LogicalName is not BusinessUnit)
+        if (store.GetTable(entityName)?.LogicalName is not BusinessUnit)
             throw new XrmdValidationException($"Operator {op}: this resolver expands only the business unit tree, not '{entityName}'.");
         return op switch
         {
-            ConditionOperator.Under => tree.SubtreeOf(id).Where(u => u != id).ToList(),
-            ConditionOperator.UnderOrEqual or ConditionOperator.NotUnder => tree.SubtreeOf(id).ToList(),
-            ConditionOperator.Above => tree.AncestorsOf(id).ToList(),
-            ConditionOperator.AboveOrEqual => [id, .. tree.AncestorsOf(id)],
+            FilterOperator.Under => tree.SubtreeOf(id).Where(u => u != id).ToList(),
+            FilterOperator.UnderOrEqual or FilterOperator.NotUnder => tree.SubtreeOf(id).ToList(),
+            FilterOperator.Above => tree.AncestorsOf(id).ToList(),
+            FilterOperator.AboveOrEqual => [id, .. tree.AncestorsOf(id)],
             _ => throw new XrmdValidationException($"Operator {op} is not a hierarchy operator."),
         };
     }

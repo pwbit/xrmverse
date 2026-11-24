@@ -1,12 +1,11 @@
 using System.Data;
 using Microsoft.Xrm.Sdk;
-using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Computed;
-using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Metadata;
 using static Xrmd.Metadata.DuplicateDetectionSchema;
 
 namespace Xrmd.Security;
@@ -162,7 +161,7 @@ public static class DuplicateRuleRules
             if (isCreate)
             {
                 foreach (var (name, code) in new[] { (BaseEntityName, BaseEntityTypeCode), (MatchingEntityName, MatchingEntityTypeCode) })
-                    if (store.GetEntity(row.GetAttributeValue<string>(name) ?? "")?.ObjectTypeCode is { } otc)
+                    if (store.GetTable(row.GetAttributeValue<string>(name) ?? "")?.ObjectTypeCode is { } otc)
                         row[code] = new OptionSetValue(otc);
                 foreach (var flag in new[] { ExcludeInactiveRecords, IsCaseSensitive })
                     if (!row.Contains(flag) || row[flag] is null) row[flag] = false;
@@ -199,7 +198,7 @@ public static class DuplicateRuleRules
     {
         if (string.IsNullOrEmpty(table))
             throw XrmdFaultException.InvalidArgument($"A duplicate detection rule needs {column}, the logical name of a table.");
-        if (store.GetEntity(table) is null)
+        if (store.GetTable(table) is null)
             throw XrmdFaultException.InvalidArgument($"The {column} '{table}' of the duplicate detection rule names no table.");
         if (!store.DuplicateDetectionTables.Contains(table))
             throw XrmdFaultException.InvalidArgument(
@@ -210,14 +209,14 @@ public static class DuplicateRuleRules
         target.Attributes.TryGetValue(column, out var given) ? given as string : stored;
 
     /// <summary>The column a condition names: it exists on the table and can be compared (not virtual, file, image or multi-select).</summary>
-    private static AttributeMetadata Column(IMetadataStore store, string table, string? attribute, string what)
+    private static ColumnDefinition Column(IMetadataStore store, string table, string? attribute, string what)
     {
         if (string.IsNullOrEmpty(attribute))
             throw XrmdFaultException.InvalidArgument($"A duplicate detection rule condition needs {what}.");
-        var column = store.GetEntity(table)?.Attributes?.FirstOrDefault(a => a.LogicalName == attribute)
+        var column = store.GetTable(table)?.Attributes?.FirstOrDefault(a => a.LogicalName == attribute)
                      ?? throw XrmdFaultException.InvalidArgument($"The {what} '{attribute}' is not a column of the table '{table}'.");
-        if (column.AttributeType is AttributeTypeCode.Virtual or AttributeTypeCode.EntityName or AttributeTypeCode.ManagedProperty
-            || column is FileAttributeMetadata or ImageAttributeMetadata or MultiSelectPicklistAttributeMetadata
+        if (column.AttributeType is ColumnTypeCode.Virtual or ColumnTypeCode.EntityName or ColumnTypeCode.ManagedProperty
+            || column is FileColumn or ImageColumn or MultiChoiceColumn
             || TypeMapping.IsStoredByOtherAttribute(column) || column.AttributeOf is not null)
             throw XrmdFaultException.InvalidArgument(
                 $"The column '{table}.{attribute}' cannot be used by a duplicate detection rule: virtual, file, image and multi-select columns cannot be compared.");
@@ -232,37 +231,37 @@ public static class DuplicateRuleRules
         return column;
     }
 
-    private static bool IsText(AttributeMetadata a) => a.AttributeType is AttributeTypeCode.String or AttributeTypeCode.Memo;
+    private static bool IsText(ColumnDefinition a) => a.AttributeType is ColumnTypeCode.String or ColumnTypeCode.Memo;
 
-    private static bool IsReference(AttributeMetadata a) =>
-        a.AttributeType is AttributeTypeCode.Lookup or AttributeTypeCode.Customer or AttributeTypeCode.Owner;
+    private static bool IsReference(ColumnDefinition a) =>
+        a.AttributeType is ColumnTypeCode.Lookup or ColumnTypeCode.Customer or ColumnTypeCode.Owner;
 
-    private static IEnumerable<string> Targets(AttributeMetadata a) => a switch
+    private static IEnumerable<string> Targets(ColumnDefinition a) => a switch
     {
-        LookupAttributeMetadata lookup when lookup.AttributeType == AttributeTypeCode.Owner && (lookup.Targets ?? []).Length == 0 => ["systemuser", "team"],
-        LookupAttributeMetadata lookup => lookup.Targets ?? [],
+        LookupColumn lookup when lookup.AttributeType == ColumnTypeCode.Owner && (lookup.Targets ?? []).Count == 0 => ["systemuser", "team"],
+        LookupColumn lookup => lookup.Targets ?? [],
         _ => [],
     };
 
-    private static bool Compatible(AttributeMetadata a, AttributeMetadata b) =>
+    private static bool Compatible(ColumnDefinition a, ColumnDefinition b) =>
         (IsText(a) && IsText(b))
         || (IsReference(a) && IsReference(b) && Targets(a).Intersect(Targets(b), StringComparer.Ordinal).Any())
         || (!IsText(a) && !IsReference(a) && a.AttributeType == b.AttributeType);
 
     /// <summary>The operator fits the column's type, and <c>operatorparam</c> is given exactly for 1 and 2 (D6).</summary>
-    private static void DemandOperator(AttributeMetadata column, int? code, object? param)
+    private static void DemandOperator(ColumnDefinition column, int? code, object? param)
     {
         var type = column.AttributeType;
         var fits = code switch
         {
-            (int)DuplicateOperator.ExactMatch => IsText(column) || IsReference(column) || type is AttributeTypeCode.Integer or AttributeTypeCode.BigInt
-                or AttributeTypeCode.Decimal or AttributeTypeCode.Double or AttributeTypeCode.Money or AttributeTypeCode.Boolean
-                or AttributeTypeCode.Picklist or AttributeTypeCode.State or AttributeTypeCode.Status,
+            (int)DuplicateOperator.ExactMatch => IsText(column) || IsReference(column) || type is ColumnTypeCode.Integer or ColumnTypeCode.BigInt
+                or ColumnTypeCode.Decimal or ColumnTypeCode.Double or ColumnTypeCode.Money or ColumnTypeCode.Boolean
+                or ColumnTypeCode.Picklist or ColumnTypeCode.State or ColumnTypeCode.Status,
             (int)DuplicateOperator.SameFirstCharacters or (int)DuplicateOperator.SameLastCharacters => IsText(column),
-            (int)DuplicateOperator.SameDate or (int)DuplicateOperator.SameDateAndTime => type is AttributeTypeCode.DateTime,
+            (int)DuplicateOperator.SameDate or (int)DuplicateOperator.SameDateAndTime => type is ColumnTypeCode.DateTime,
             (int)DuplicateOperator.PickListLabel => throw XrmdFaultException.InvalidArgument(
                 "The operator Exact Match (Pick List Label) (5) is not supported by xrmverse: option labels depend on the language. Use Exact Match (Pick List Value) (6)."),
-            (int)DuplicateOperator.PickListValue => type is AttributeTypeCode.Picklist or AttributeTypeCode.State or AttributeTypeCode.Status,
+            (int)DuplicateOperator.PickListValue => type is ColumnTypeCode.Picklist or ColumnTypeCode.State or ColumnTypeCode.Status,
             null => throw XrmdFaultException.InvalidArgument($"A duplicate detection rule condition needs {OperatorCode}."),
             _ => throw XrmdFaultException.InvalidArgument($"The {OperatorCode} {code} is not an operator of a duplicate detection rule condition."),
         };

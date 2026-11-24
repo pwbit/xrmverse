@@ -42,7 +42,7 @@ public sealed class QueryMetadataTests
     }
 
     [Fact]
-    public void The_security_callback_gets_the_view_the_store_gives_for_every_compilation()
+    public void The_security_callback_gets_the_table_the_store_gives_for_every_compilation()
     {
         var store = new ModelStore(NewTable());
         var security = new RecordingSecurity();
@@ -52,8 +52,9 @@ public sealed class QueryMetadataTests
         var second = compiler.Compile(Select("xrmv_name"), Context with { Security = security });
 
         var view = store.GetEntity(Table)!;
-        security.Filtered.Should().HaveCount(2).And.OnlyContain(e => ReferenceEquals(e, view));
-        security.Unreadable.Should().HaveCount(2).And.OnlyContain(e => ReferenceEquals(e, view));
+        var table = store.GetTable(Table)!;
+        security.Filtered.Should().HaveCount(2).And.OnlyContain(e => ReferenceEquals(e, table));
+        security.Unreadable.Should().HaveCount(2).And.OnlyContain(e => ReferenceEquals(e, table));
         first.Root.Should().BeSameAs(view);
         second.Root.Should().BeSameAs(view);
         view.ToModel().Should().BeSameAs(store.GetTable(Table));
@@ -110,20 +111,20 @@ public sealed class QueryMetadataTests
         return table;
     }
 
-    /// <summary>Records the SDK instances the compiler passes; no restriction.</summary>
+    /// <summary>Records the tables the compiler passes; no restriction.</summary>
     private sealed class RecordingSecurity : IQuerySecurity
     {
-        public List<EntityMetadata> Filtered { get; } = [];
+        public List<TableDefinition> Filtered { get; } = [];
 
-        public List<EntityMetadata> Unreadable { get; } = [];
+        public List<TableDefinition> Unreadable { get; } = [];
 
-        public FilterNode? ReadFilter(EntityMetadata entity)
+        public FilterNode? ReadFilter(TableDefinition entity)
         {
             Filtered.Add(entity);
             return null;
         }
 
-        public IReadOnlySet<string> UnreadableColumns(EntityMetadata entity)
+        public IReadOnlySet<string> UnreadableColumns(TableDefinition entity)
         {
             Unreadable.Add(entity);
             return new HashSet<string>();

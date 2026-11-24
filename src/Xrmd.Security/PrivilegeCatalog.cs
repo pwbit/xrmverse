@@ -2,12 +2,13 @@ using System.Data;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Metadata;
+using Xrmd.Model.Security;
 
 namespace Xrmd.Security;
 
@@ -18,27 +19,27 @@ namespace Xrmd.Security;
 /// </summary>
 public sealed class PrivilegeCatalog(IDbConnectionFactory factory, IMetadataStore store) : IEntityCreatedHandler, IEntityDeletedHandler
 {
-    private static readonly AccessRights[] OrganizationRights =
+    private static readonly AccessMask[] OrganizationRights =
     [
-        AccessRights.CreateAccess, AccessRights.ReadAccess, AccessRights.WriteAccess, AccessRights.DeleteAccess,
-        AccessRights.AppendAccess, AccessRights.AppendToAccess,
+        AccessMask.CreateAccess, AccessMask.ReadAccess, AccessMask.WriteAccess, AccessMask.DeleteAccess,
+        AccessMask.AppendAccess, AccessMask.AppendToAccess,
     ];
 
     /// <summary>The rights of the Post privileges (plan 3.5 UI-1g).</summary>
-    private static readonly AccessRights[] PostRights = [AccessRights.CreateAccess, AccessRights.ReadAccess, AccessRights.DeleteAccess];
+    private static readonly AccessMask[] PostRights = [AccessMask.CreateAccess, AccessMask.ReadAccess, AccessMask.DeleteAccess];
 
     /// <summary>Creates the missing privileges of every known entity and the ones not tied to an entity.</summary>
     public async Task EnsureAsync(CancellationToken ct)
     {
         await using var conn = await factory.OpenAsync(ct);
         await using var tx = await conn.BeginTransactionAsync(ct);
-        await UpsertAsync(new DataSession(conn, tx), store.GetAllEntities(), includeNonEntity: true, ct);
+        await UpsertAsync(new DataSession(conn, tx), store.GetAllTables(), includeNonEntity: true, ct);
         await tx.CommitAsync(ct);
     }
 
     /// <summary>Creates, in the creating session, the privileges of the new entity.</summary>
     public Task OnEntityCreatedAsync(EntityMetadata entity, DataSession session, CancellationToken ct) =>
-        UpsertAsync(session, [entity], includeNonEntity: false, ct);
+        UpsertAsync(session, [entity.ToModel()], includeNonEntity: false, ct);
 
     /// <summary>
     /// Deletes, in the deleting session, the entity's privileges (those it would get now and those linked to it in
@@ -47,14 +48,15 @@ public sealed class PrivilegeCatalog(IDbConnectionFactory factory, IMetadataStor
     /// </summary>
     public async Task OnEntityDeletingAsync(EntityMetadata entity, DataSession session, CancellationToken ct)
     {
-        if (store.GetEntity("privilege") is null || store.GetEntity("privilegeobjecttypecodes") is null) return;
+        if (store.GetTable("privilege") is null || store.GetTable("privilegeobjecttypecodes") is null) return;
+        var table = entity.ToModel();
 
         // Plan 2.7a, Task 5 fix round 1: the T-SQL batch (a table variable, IF … OBJECT_ID) became commands of their own.
         var d = session.Dialect;
-        var ids = RowsOf(entity).Select(r => r.Id).ToHashSet();
+        var ids = RowsOf(table).Select(r => r.Id).ToHashSet();
         await using (var linked = session.Command("SELECT privilegeid FROM data.privilegeobjecttypecodes WHERE objecttypecode = @entity"))
         {
-            linked.AddParameter("@entity", DbType.String, entity.LogicalName);
+            linked.AddParameter("@entity", DbType.String, table.LogicalName);
             await using var rd = await linked.ExecuteReaderAsync(ct);
             while (await rd.ReadAsync(ct))
                 if (!rd.IsDBNull(0)) ids.Add(rd.GetGuid(0));
@@ -68,11 +70,11 @@ public sealed class PrivilegeCatalog(IDbConnectionFactory factory, IMetadataStor
             """))
         {
             cmd.AddParameter("@ids", DbType.String, JsonSerializer.Serialize(ids));
-            cmd.AddParameter("@entity", DbType.String, entity.LogicalName);
+            cmd.AddParameter("@entity", DbType.String, table.LogicalName);
             await cmd.ExecuteNonQueryAsync(ct);
         }
 
-        if (entity.ObjectTypeCode is { } otc && store.GetEntity("principalobjectaccess") is not null)
+        if (table.ObjectTypeCode is { } otc && store.GetTable("principalobjectaccess") is not null)
         {
             await using var shares = session.Command("DELETE FROM data.principalobjectaccess WHERE objecttypecode = @otc");
             shares.AddParameter("@otc", DbType.Int32, otc);
@@ -85,11 +87,11 @@ public sealed class PrivilegeCatalog(IDbConnectionFactory factory, IMetadataStor
         new(MD5.HashData(Encoding.UTF8.GetBytes("xrmd:privilegeobjecttypecode:" + privilegeName.ToLowerInvariant())));
 
     /// <summary>The names of the privileges of an entity (none for an intersect entity).</summary>
-    internal static IEnumerable<string> NamesOf(EntityMetadata e) => RowsOf(e).Select(r => r.Name);
+    internal static IEnumerable<string> NamesOf(TableDefinition e) => RowsOf(e).Select(r => r.Name);
 
     private sealed record Row(Guid Id, string Name, int AccessRight, bool Basic, bool Local, bool Deep, bool Global, string? Entity, Guid? LinkId);
 
-    private static IEnumerable<Row> RowsOf(EntityMetadata e)
+    private static IEnumerable<Row> RowsOf(TableDefinition e)
     {
         // The audit table has no entity privileges: reading it is prvReadAuditSummary, and nothing writes it through a request.
         if (e.IsIntersect == true || e.LogicalName == AuditTable.Name) yield break;
@@ -100,23 +102,24 @@ public sealed class PrivilegeCatalog(IDbConnectionFactory factory, IMetadataStor
         // Read and Delete only (posts and comments are never updated; the names are from memory: acceptance checklist).
         if (e.LogicalName is PostSchema.Comment or PostSchema.Regarding) yield break;
         var post = e.LogicalName == PostSchema.Post;
-        var businessOwned = e.OwnershipType == OwnershipTypes.BusinessOwned;
-        var organizationOwned = e.OwnershipType is not (OwnershipTypes.BusinessOwned or OwnershipTypes.UserOwned or OwnershipTypes.TeamOwned);
-        foreach (var (right, verb) in PrivilegeNames.Verbs)
+        var businessOwned = e.OwnershipType == TableOwnership.BusinessOwned;
+        var organizationOwned = e.OwnershipType is not (TableOwnership.BusinessOwned or TableOwnership.UserOwned or TableOwnership.TeamOwned);
+        var stem = PrivilegeNames.Stem(e);
+        foreach (var (right, verb) in PrivilegeNames.ModelVerbs)
         {
             if ((businessOwned || organizationOwned) && !OrganizationRights.Contains(right)) continue;
             if (post && !PostRights.Contains(right)) continue;
-            var name = "prv" + verb + PrivilegeNames.Stem(e);
+            var name = "prv" + verb + stem;
             yield return new Row(PrivilegeNames.IdOf(name), name, (int)right,
                 Basic: !businessOwned && !organizationOwned, Local: !organizationOwned, Deep: !organizationOwned, Global: true,
                 e.LogicalName, LinkId(name));
         }
     }
 
-    private async Task UpsertAsync(DataSession session, IEnumerable<EntityMetadata> entities, bool includeNonEntity, CancellationToken ct)
+    private async Task UpsertAsync(DataSession session, IEnumerable<TableDefinition> entities, bool includeNonEntity, CancellationToken ct)
     {
         // During the first seed the catalog tables may not exist yet: EnsureAsync runs after the seed.
-        if (store.GetEntity("privilege") is null || store.GetEntity("privilegeobjecttypecodes") is null) return;
+        if (store.GetTable("privilege") is null || store.GetTable("privilegeobjecttypecodes") is null) return;
 
         var rows = entities.SelectMany(RowsOf).ToList();
         if (includeNonEntity)

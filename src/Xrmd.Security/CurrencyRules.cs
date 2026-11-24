@@ -1,11 +1,10 @@
 using System.Data;
 using Microsoft.Xrm.Sdk;
-using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
-using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Metadata;
 
 namespace Xrmd.Security;
 
@@ -80,7 +79,7 @@ public static class CurrencyRules
             case "associate" or "disassociate" when target is EntityReference associated
                 && parameters.TryGetValue("Relationship", out var r) && r is Relationship relationship
                 && parameters.TryGetValue("RelatedEntities", out var rel) && rel is EntityReferenceCollection related
-                && store.GetRelationship(relationship.SchemaName ?? "") is OneToManyRelationshipMetadata { ReferencedEntity: CurrencySchema.Table } lookup:
+                && store.GetRelationshipDefinition(relationship.SchemaName ?? "") is OneToManyRelationship { ReferencedEntity: CurrencySchema.Table } lookup:
                 foreach (var update in SystemTableRules.LookupUpdates(lookup, associated, related,
                              request.RequestName.Equals("associate", StringComparison.OrdinalIgnoreCase)))
                     await WriteAsync(update, isCreate: false, store, session, ct);
@@ -120,7 +119,7 @@ public static class CurrencyRules
     {
         CurrencySchema.Table => CurrencyAsync(target, isCreate, store, session, ct),
         Organization when !isCreate => OrganizationAsync(target, session, ct),
-        CurrencySchema.UserSettings when store.GetEntity(CurrencySchema.UserSettings) is { } settings =>
+        CurrencySchema.UserSettings when store.GetTable(CurrencySchema.UserSettings) is { } settings =>
             UserSettingsAsync(target, SystemAttributes.PrimaryIdName(settings), isCreate, session, ct),
         _ => Task.CompletedTask,
     };
@@ -355,8 +354,8 @@ public static class CurrencyRules
     /// <summary>The state that owns <paramref name="status"/> in the status options of <c>transactioncurrency</c>; null when unknown.</summary>
     private static int? StateOfStatus(IMetadataStore store, int? status) =>
         status is null ? null
-        : (store.GetEntity(CurrencySchema.Table)?.Attributes?.FirstOrDefault(a => a.LogicalName == StatusCode) as StatusAttributeMetadata)
-            ?.OptionSet?.Options.OfType<StatusOptionMetadata>().FirstOrDefault(o => o.Value == status)?.State;
+        : (store.GetTable(CurrencySchema.Table)?.Attributes?.FirstOrDefault(a => a.LogicalName == StatusCode) as StatusColumn)
+            ?.OptionSet?.Options?.OfType<StatusOption>().FirstOrDefault(o => o.Value == status)?.State;
 
     // ---- values -------------------------------------------------------------------------------------------------------------
 

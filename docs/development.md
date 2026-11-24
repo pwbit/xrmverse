@@ -149,8 +149,14 @@ the model of a view without converting again; for an object that is not a view, 
 
 Query (`Xrmd.Query`) is on the model since S.2c: its compilers and translators read `Xrmd.Model.Metadata` types and no longer
 touch the SDK metadata types. Its SDK edge is `src/Xrmd.Query/Sdk/`: the `QueryExpression` reader (SDK query to the model query),
-the SDK condition values, the callback interfaces that other modules implement (`IQuerySecurity`, `IHierarchyResolver`; the
-compilers pass them cached SDK views), and SDK twins of the public helpers that other modules still call.
+the SDK condition values, the callback interfaces that other modules implement (`IQuerySecurity`, `IHierarchyResolver`; model-typed since S.2d), and SDK twins of the public helpers that other modules still call.
+
+Security (`Xrmd.Security`) is on the model since S.2d: privilege and access evaluation, field security and the system-table rules
+read `Xrmd.Model.Metadata` types, and its own types (privileges, access rights, field permissions and so on) live in
+`Xrmd.Model.Security`. The query callbacks `IQuerySecurity` and `IHierarchyResolver` are now typed on the model, so the compilers pass
+model tables and columns, not SDK views. The SDK twins of the public security helpers sit in `src/Xrmd.Security/Sdk/`
+(`SdkSecurityTwins.cs`, `SdkSecurityTypes.cs`) and convert with `ToModel()` before they delegate. Records and messages
+(`Entity`, `EntityReference`, `OrganizationRequest`) stay SDK types in the rules and the guard until S.2e.
 
 The view is transitional. The other modules move to the model in S.2d to S.2h, and S.2i removes the view, the twins and the bridge.
 

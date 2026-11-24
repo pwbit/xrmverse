@@ -11,25 +11,14 @@ using Xrmd.Query.Sql;
 namespace Xrmd.Query.Sdk;
 
 /// <summary>
-/// The calls of the compilers (on the model, S.2c) to the SDK-typed callbacks implemented in other modules: <see cref="IQuerySecurity"/>,
-/// <see cref="IHierarchyResolver"/> and <see cref="IComputedColumns"/>. A table of the store is passed as its cached SDK view
+/// The calls of the compilers (on the model, S.2c) to the SDK-typed callback implemented in another module,
+/// <see cref="IComputedColumns"/>. A table of the store is passed as its cached SDK view
 /// (<see cref="SdkMetadataView.SdkView(TableDefinition)"/>), the instance <c>store.GetEntity(name)</c> returns, so that an
-/// implementation's caches by instance keep working (Review Focus 4); an operator as its SDK enum. Transitional: removed when the
-/// callbacks take the model (Security S.2d, Core S.2e, Workflows S.2h).
+/// implementation's caches by instance keep working (Review Focus 4). Transitional: removed when the
+/// callback takes the model (Core S.2e, Workflows S.2h).
 /// </summary>
 internal static class SdkQueryCallbacks
 {
-    /// <summary><see cref="IQuerySecurity.ReadFilter"/> of the view of <paramref name="table"/>.</summary>
-    public static FilterNode? ReadFilter(this IQuerySecurity security, TableDefinition table) => security.ReadFilter(table.SdkView());
-
-    /// <summary><see cref="IQuerySecurity.UnreadableColumns"/> of the view of <paramref name="table"/>.</summary>
-    public static IReadOnlySet<string> UnreadableColumns(this IQuerySecurity security, TableDefinition table) =>
-        security.UnreadableColumns(table.SdkView());
-
-    /// <summary><see cref="IHierarchyResolver.Expand"/> with the SDK operator.</summary>
-    public static IReadOnlyCollection<Guid> Expand(this IHierarchyResolver resolver, string entityName, Guid id, FilterOperator op) =>
-        resolver.Expand(entityName, id, op.ToSdk());
-
     /// <summary>
     /// Translates the calculated columns of the tables of <paramref name="store"/> (metadata snapshots, never changed once handed
     /// out): each table and column as its cached view, the other tables as <c>store.GetEntity</c> finds them.

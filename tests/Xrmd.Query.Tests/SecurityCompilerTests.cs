@@ -4,6 +4,7 @@ using FluentAssertions;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
+using Xrmd.Model.Metadata;
 using Xrmd.Model.Query;
 using Xrmd.Query.FetchXml;
 using Xrmd.Query.Model;
@@ -37,17 +38,17 @@ public class SecurityCompilerTests
     private static object? Param(CompiledQuery c, string name) => c.Parameters.Single(p => p.ParameterName == name).Value;
 
     /// <summary>Returns a fixed filter per entity (null: no restriction) and records the entities it was asked for.</summary>
-    private sealed class FakeSecurity(Func<EntityMetadata, FilterNode?> filter) : IQuerySecurity
+    private sealed class FakeSecurity(Func<TableDefinition, FilterNode?> filter) : IQuerySecurity
     {
         public List<string> Requested { get; } = [];
 
-        public FilterNode? ReadFilter(EntityMetadata entity)
+        public FilterNode? ReadFilter(TableDefinition entity)
         {
-            Requested.Add(entity.LogicalName);
+            Requested.Add(entity.LogicalName!);
             return filter(entity);
         }
 
-        public IReadOnlySet<string> UnreadableColumns(EntityMetadata entity) => new HashSet<string>();
+        public IReadOnlySet<string> UnreadableColumns(TableDefinition entity) => new HashSet<string>();
     }
 
     /// <summary>Follows the <see cref="IHierarchyResolver"/> contract: business unit hierarchy only.</summary>
@@ -66,9 +67,9 @@ public class SecurityCompilerTests
             return includeTeams ? Reporting.UsersAndTeams : Reporting.Users;
         }
 
-        public IReadOnlyCollection<Guid> Expand(string entityName, Guid id, ConditionOperator op)
+        public IReadOnlyCollection<Guid> Expand(string entityName, Guid id, FilterOperator op)
         {
-            Calls.Add((entityName, id, op));
+            Calls.Add((entityName, id, op.ToSdk()));
             if (entityName != "businessunit")
                 throw new XrmdValidationException($"Operator {op}: this resolver expands only the business unit tree, not '{entityName}'.");
             return ids;
@@ -425,7 +426,7 @@ public class SecurityCompilerTests
 
     private sealed class RefusingHierarchy : IHierarchyResolver
     {
-        public IReadOnlyCollection<Guid> Expand(string entityName, Guid id, ConditionOperator op) => throw new XrmdValidationException("disabled");
+        public IReadOnlyCollection<Guid> Expand(string entityName, Guid id, FilterOperator op) => throw new XrmdValidationException("disabled");
 
         public IReadOnlyCollection<Guid> ReportingHierarchy(bool includeTeams) => throw new XrmdValidationException("disabled");
     }

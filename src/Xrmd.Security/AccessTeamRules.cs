@@ -7,6 +7,8 @@ using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Security;
+using Xrmd.Security.Sdk;
 
 namespace Xrmd.Security;
 
@@ -29,8 +31,8 @@ public static class AccessTeamRules
     public const int MaxTables = AccessTeamSchema.MaxTables;
 
     /// <summary>The rights a template can grant: Read, Write, Append, AppendTo, Delete, Share and Assign (not Create).</summary>
-    public const int TemplateRights = (int)(AccessRights.ReadAccess | AccessRights.WriteAccess | AccessRights.AppendAccess
-        | AccessRights.AppendToAccess | AccessRights.DeleteAccess | AccessRights.ShareAccess | AccessRights.AssignAccess);
+    public const int TemplateRights = (int)(AccessMask.ReadAccess | AccessMask.WriteAccess | AccessMask.AppendAccess
+        | AccessMask.AppendToAccess | AccessMask.DeleteAccess | AccessMask.ShareAccess | AccessMask.AssignAccess);
 
     /// <summary>The team columns only the record team messages write (with <c>teamtype</c>, which no Update changes).</summary>
     public static readonly string[] SystemManagedColumns =
@@ -88,7 +90,7 @@ public static class AccessTeamRules
     /// <summary>The Create part of <see cref="DemandTemplateAsync"/>: the lock, the flag of the stored definition, the count.</summary>
     private static async Task DemandTemplateTableAsync(DataSession session, IMetadataStore store, int code, CancellationToken ct)
     {
-        var table = store.GetEntityByObjectTypeCode(code)?.LogicalName;
+        var table = store.GetTableByObjectTypeCode(code)?.LogicalName;
         await session.KeyLockAsync(AccessTeamSchema.TeamTemplate, code, ct);
         await using var cmd = session.Command($"""
             SELECT COUNT(*) FROM {session.DataTable(AccessTeamSchema.TeamTemplate)}{session.Dialect.LockHint(RowLock.UpdateRange)}
@@ -195,22 +197,22 @@ public static class AccessTeamRules
             mask = rd.IsDBNull(1) ? 0 : rd.GetInt32(1);
         }
 
-        var table = store.GetEntity(record.LogicalName ?? "");
+        var table = store.GetTable(record.LogicalName ?? "");
         if (table?.ObjectTypeCode != code)
             throw XrmdFaultException.InvalidArgument(
                 $"The record is a '{record.LogicalName}', but the access team template {templateId} is for the table " +
-                $"'{store.GetEntityByObjectTypeCode(code)?.LogicalName ?? code.ToString(System.Globalization.CultureInfo.InvariantCulture)}'.");
-        if (!store.AccessTeamTables.Contains(table.LogicalName))
+                $"'{store.GetTableByObjectTypeCode(code)?.LogicalName ?? code.ToString(System.Globalization.CultureInfo.InvariantCulture)}'.");
+        if (!store.AccessTeamTables.Contains(table.LogicalName!))
             throw XrmdFaultException.InvalidArgument($"The table '{table.LogicalName}' does not have AutoCreateAccessTeams.");
 
         Guid? businessUnit;
         await using (var cmd = session.Command(
-                         $"SELECT {session.Quote("owningbusinessunit")} FROM {session.DataTable(table.LogicalName)}{recordHint} " +
+                         $"SELECT {session.Quote("owningbusinessunit")} FROM {session.DataTable(table.LogicalName!)}{recordHint} " +
                          $"WHERE {session.Quote(SystemAttributes.PrimaryIdName(table))} = @_id{recordClause}"))
         {
             cmd.AddParameter("@_id", DbType.Guid, record.Id);
             await using var rd = await cmd.ExecuteReaderAsync(ct);
-            if (!await rd.ReadAsync(ct)) throw XrmdFaultException.ObjectDoesNotExist(table.LogicalName, record.Id);
+            if (!await rd.ReadAsync(ct)) throw XrmdFaultException.ObjectDoesNotExist(table.LogicalName!, record.Id);
             businessUnit = rd.IsDBNull(0) ? null : rd.GetGuid(0);
         }
 
@@ -227,7 +229,7 @@ public static class AccessTeamRules
             }
         }
 
-        return new RecordTeamTarget(table, record.Id, userId, templateId, (AccessRights)mask, businessUnit);
+        return new RecordTeamTarget(table.SdkView(), record.Id, userId, templateId, ((AccessMask)mask).ToSdk(), businessUnit);
     }
 
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<OrganizationRequest, RecordTeamTarget> Checked = new();
@@ -257,7 +259,7 @@ public static class AccessTeamRules
         if (!Checked.TryGetValue(request, out var check))
             throw new XrmdFaultException(ErrorCodes.Unexpected,
                 $"{request.RequestName} reached its core operation without the security check of its caller.", 500);
-        if (check.Table.LogicalName != target.Table.LogicalName || check.RecordId != target.RecordId || check.UserId != target.UserId
+        if (check.Table.LogicalName != target.Table.LogicalName /* SDK read, no conversion; the record signature moves in S.2e */ || check.RecordId != target.RecordId || check.UserId != target.UserId
             || check.TemplateId != target.TemplateId)
             throw XrmdFaultException.InvalidArgument(
                 $"The parameters of {request.RequestName} were changed after its security check (by a plug-in); they cannot be checked again.");
@@ -292,13 +294,13 @@ public static class AccessTeamRules
             """);
         cmd.AddParameter("@_record", DbType.Guid, target.RecordId);
         cmd.AddParameter("@_template", DbType.Guid, target.TemplateId);
-        cmd.AddParameter("@_otc", DbType.Int32, target.Table.ObjectTypeCode ?? 0);
+        cmd.AddParameter("@_otc", DbType.Int32, target.Table.ObjectTypeCode ?? 0 /* SDK read, no conversion; the record signature moves in S.2e */);
         await using var rd = await cmd.ExecuteReaderAsync(ct);
         if (!await rd.ReadAsync(ct)) return null;
         var mask = 0;
         do mask |= rd.GetInt32(1);
         while (await rd.ReadAsync(ct));
-        return (AccessRights)mask;
+        return ((AccessMask)mask).ToSdk();
     }
 
     /// <summary>

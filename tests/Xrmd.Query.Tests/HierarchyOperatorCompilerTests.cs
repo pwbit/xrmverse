@@ -221,7 +221,7 @@ public class HierarchyOperatorCompilerTests
     {
         public List<string> Calls { get; } = [];
 
-        public IReadOnlyCollection<Guid> Expand(string entityName, Guid id, ConditionOperator op)
+        public IReadOnlyCollection<Guid> Expand(string entityName, Guid id, FilterOperator op)
         {
             Calls.Add(entityName);
             return ids;
