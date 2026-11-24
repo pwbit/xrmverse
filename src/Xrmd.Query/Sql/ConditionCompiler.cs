@@ -215,7 +215,7 @@ internal sealed class ConditionCompiler(QueryParameters parameters, QueryContext
         };
         if (n <= 0)
             throw new XrmdValidationException(
-                $"Operator {c.Operator} on attribute '{t.Attribute.LogicalName}' requires a positive integer, got '{c.Values[0]}'.");
+                $"Operator {c.Operator} on attribute '{t.Attribute.LogicalName}' requires a positive integer, got '{ConditionValues.SdkTypeName(c.Values[0]) ?? c.Values[0]}'.");
         return n;
     }
 

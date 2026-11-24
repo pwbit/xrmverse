@@ -1,5 +1,6 @@
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
+using Xrmd.Model.Query;
 using Xrmd.Model.Records;
 
 namespace Xrmd.Abstractions.Sdk;
@@ -9,10 +10,15 @@ namespace Xrmd.Abstractions.Sdk;
 /// copies into new instances; the model and the SDK object never share a mutable collection.
 /// <para>
 /// Known value types, converted recursively both ways: OptionSetValue, OptionSetValueCollection, Money, EntityReference,
-/// Entity, EntityCollection, EntityReferenceCollection, AliasedValue, ColumnSet (only when it has no AttributeExpressions, which the model cannot hold; otherwise it passes through), Relationship and exact arrays of Entity, EntityReference, OptionSetValue,
-/// Money or object (exact array types only; string[], arrays of other types and subtype arrays pass through). Primitives and anything else (for example BooleanManagedProperty, QueryBase, byte[])
+/// Entity, EntityCollection, EntityReferenceCollection, AliasedValue, ColumnSet (with its AttributeExpressions), QueryExpression, QueryByAttribute and FetchExpression (see <see cref="SdkQueries"/>), Relationship and exact arrays of Entity, EntityReference, OptionSetValue,
+/// Money or object (exact array types only; string[], arrays of other types and subtype arrays pass through). Primitives and anything else (for example BooleanManagedProperty, byte[])
 /// pass through unchanged, as the same instance: byte[], string[] and the other pass-through values are shared by reference between the
 /// SDK object and the model object, not copied.
+/// </para>
+/// <para>
+/// Not carried by the ColumnSet conversion: <c>ExtensionData</c> and the lazy-file members (<c>HasLazyFileAttribute</c>,
+/// <c>LazyFileAttributeEntityName</c>, <c>LazyFileAttributeKey</c>, <c>LazyFileAttributeValue</c>,
+/// <c>LazyFileAttributeSizeLimit</c>); they are not part of the data contract.
 /// </para>
 /// </summary>
 public static class SdkRecords
@@ -121,14 +127,17 @@ public static class SdkRecords
     public static ColumnSelection ToModel(this ColumnSet columns)
     {
         ArgumentNullException.ThrowIfNull(columns);
-        return new ColumnSelection { AllColumns = columns.AllColumns, Columns = columns.Columns.ToList() };
+        var result = new ColumnSelection { AllColumns = columns.AllColumns, Columns = columns.Columns.ToList() };
+        foreach (var e in columns.AttributeExpressions) result.Expressions.Add(e?.ToModel()!);
+        return result;
     }
 
     public static ColumnSet ToSdk(this ColumnSelection columns)
     {
         ArgumentNullException.ThrowIfNull(columns);
         var result = new ColumnSet(columns.AllColumns);
-        foreach (var c in columns.Columns) result.Columns.Add(c);
+        foreach (var c in columns.Columns ?? []) result.Columns.Add(c);
+        foreach (var e in columns.Expressions ?? []) result.AttributeExpressions.Add(e?.ToSdk()!);
         return result;
     }
 
@@ -158,7 +167,10 @@ public static class SdkRecords
         Entity e => e.ToModel(),
         EntityCollection c => c.ToModel(),
         EntityReferenceCollection c => c.ToModel(),
-        ColumnSet c when c.AttributeExpressions.Count == 0 => c.ToModel(),
+        ColumnSet c => c.ToModel(),
+        QueryExpression q => q.ToModel(),
+        QueryByAttribute q => q.ToModel(),
+        FetchExpression q => q.ToModel(),
         Relationship r => r.ToModel(),
         AliasedValue a => new AliasedColumnValue(a.EntityLogicalName, a.AttributeLogicalName, ValueToModel(a.Value)),
         Entity[] a when a.GetType() == typeof(Entity[]) => Array.ConvertAll(a, e => e.ToModel()),
@@ -181,6 +193,9 @@ public static class SdkRecords
         RecordCollection c => c.ToSdk(),
         RecordReferenceCollection c => c.ToSdk(),
         ColumnSelection c => c.ToSdk(),
+        RecordQuery q => q.ToSdk(),
+        AttributeQuery q => q.ToSdk(),
+        FetchQuery q => q.ToSdk(),
         RelationshipName r => r.ToSdk(),
         AliasedColumnValue a => new AliasedValue(a.EntityLogicalName, a.AttributeLogicalName, ValueToSdk(a.Value)),
         Record[] a when a.GetType() == typeof(Record[]) => Array.ConvertAll(a, e => e.ToSdk()),

@@ -27,3 +27,12 @@ public enum JoinKind
 {
     Inner = 0, LeftOuter = 1, Natural = 2, MatchFirstRowUsingCrossApply = 3, In = 4, Exists = 5, Any = 6, NotAny = 7, All = 8, NotAll = 9,
 }
+
+/// <summary>Our counterpart of the SDK's public <c>OrderType</c>.</summary>
+public enum SortDirection { Ascending = 0, Descending = 1 }
+
+/// <summary>Our counterpart of the SDK's public <c>XrmAggregateType</c>.</summary>
+public enum ColumnAggregate { None = 0, Count = 1, CountColumn = 2, Sum = 3, Avg = 4, Min = 5, Max = 6 }
+
+/// <summary>Our counterpart of the SDK's public <c>XrmDateTimeGrouping</c>.</summary>
+public enum ColumnDateGrouping { None = 0, Day = 1, Week = 2, Month = 3, Quarter = 4, Year = 5, FiscalPeriod = 6, FiscalYear = 7 }

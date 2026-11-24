@@ -168,6 +168,17 @@ today's code writes it; they are the contract that the own writer of S.2e2 must 
 S.2e1 is the model and the converters, S.2e2 the pipeline, the SDK plug-in adapter and the own serializer, S.2e3 the Core
 operations, and S.2e4 Mail, Elastic, Duplicates, Solutions and Rollups.
 
+Queries in messages follow the same pattern (S.2e2a). `Xrmd.Model.Query` now also holds the query definitions, our counterparts of `QueryExpression`, `QueryByAttribute`,
+`FetchExpression`, `FilterExpression`, `ConditionExpression`, `LinkEntity`, `OrderExpression` and `PagingInfo` (with their own
+names, `RecordQuery`, `AttributeQuery`, `FetchQuery` and so on), and the counterpart of `ColumnSet`, `ColumnSelection`, lives in
+`Xrmd.Model.Records`, and `Xrmd.Abstractions.Sdk.SdkQueries` converts them both ways. The converters carry every public settable member
+except `ExtensionData` and the five lazy-file members of `ColumnSet` (`HasLazyFileAttribute`, `LazyFileAttributeEntityName`,
+`LazyFileAttributeKey`, `LazyFileAttributeValue`, `LazyFileAttributeSizeLimit`), which are not part of the data contract; condition
+values convert like record values, and an undefined enum value survives the round trip. `QueryExpressionReader` now reads the model
+definitions and produces the same `QueryModel` as before, with the same refusals and fault messages for the known value types (money, choice and record references); the SDK overloads in `src/Xrmd.Query/Sdk/` convert and
+delegate, with a nesting guard. The remaining S.2e2 work is split in two: S.2e2b writes our own serializers whose output equals the
+golden files, and S.2e2c moves the pipeline onto the model and adds the SDK plug-in adapter.
+
 The view is transitional. The other modules move to the model in S.2d to S.2h, and S.2i removes the view, the twins and the bridge.
 
 ## Tests on PostgreSQL

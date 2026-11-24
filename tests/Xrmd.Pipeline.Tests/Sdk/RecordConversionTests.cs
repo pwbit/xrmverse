@@ -1,6 +1,7 @@
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions.Sdk;
+using Xrmd.Model.Query;
 using Xrmd.Model.Records;
 
 namespace Xrmd.Pipeline.Tests.Sdk;
@@ -153,13 +154,18 @@ public class RecordConversionTests
     }
 
     [Fact]
-    public void ColumnSet_with_AttributeExpressions_passes_through()
+    public void ColumnSet_with_AttributeExpressions_round_trips()
     {
         var plain = new ColumnSet("name");
         Assert.IsType<ColumnSelection>(SdkRecords.ValueToModel(plain));
         var withExpr = new ColumnSet("name");
         withExpr.AttributeExpressions.Add(new XrmAttributeExpression("revenue", XrmAggregateType.Sum, "total"));
-        Assert.Same(withExpr, SdkRecords.ValueToModel(withExpr));
-        Assert.Same(withExpr, SdkRecords.ValueToSdk(withExpr));
+        var model = Assert.IsType<ColumnSelection>(SdkRecords.ValueToModel(withExpr));
+        var expression = Assert.Single(model.Expressions);
+        Assert.Equal("revenue", expression.AttributeName);
+        Assert.Equal(ColumnAggregate.Sum, expression.Aggregate);
+        var back = Assert.IsType<ColumnSet>(SdkRecords.ValueToSdk(model));
+        Assert.NotSame(withExpr, back);
+        DeepEqual.Assert(withExpr, back);
     }
 }

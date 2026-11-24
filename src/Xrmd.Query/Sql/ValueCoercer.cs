@@ -2,7 +2,6 @@ using System.Data;
 using System.Globalization;
 using Xrmd.Abstractions;
 using Xrmd.Model.Metadata;
-using Xrmd.Query.Sdk;
 
 namespace Xrmd.Query.Sql;
 
@@ -33,7 +32,7 @@ public static partial class ValueCoercer
             BooleanColumn => ToBool(value),
             MultiChoiceColumn => throw new XrmdValidationException(
                 $"Attribute '{a.LogicalName}' of type {a.AttributeType} cannot be compared with this operator."),
-            ChoiceColumnBase => ToInt(SdkConditionValues.Unwrap(value) is int o ? o : value), // OptionSetValue
+            ChoiceColumnBase => ToInt(ConditionValues.Unwrap(value) is int o ? o : value), // OptionSetValue
             DateTimeColumn => ToDateTime(value),
             LookupColumn or UniqueIdentifierColumn => ToGuid(value),
             _ => throw new XrmdValidationException(
@@ -57,7 +56,7 @@ public static partial class ValueCoercer
     };
 
     private static XrmdValidationException Invalid(ColumnDefinition a, object? value) =>
-        new($"Invalid value '{(value is null ? "null" : Convert.ToString(value, Invariant))}' for attribute '{a.LogicalName}' of type {a.AttributeType}.");
+        new($"Invalid value '{ConditionValues.Display(value)}' for attribute '{a.LogicalName}' of type {a.AttributeType}.");
 
     private static string? ToStringValue(object value) => value switch
     {
@@ -90,7 +89,7 @@ public static partial class ValueCoercer
     private static decimal? ToDecimal(object value) => value switch
     {
         decimal d => d,
-        _ when SdkConditionValues.Unwrap(value) is decimal m => m, // Money
+        _ when ConditionValues.Unwrap(value) is decimal m => m, // Money
         int or long or short or byte => Convert.ToDecimal(value, Invariant),
         double or float => double.IsFinite(Convert.ToDouble(value, Invariant))
             && Math.Abs(Convert.ToDouble(value, Invariant)) < (double)decimal.MaxValue ? Convert.ToDecimal(value, Invariant) : null,
@@ -131,7 +130,7 @@ public static partial class ValueCoercer
     private static Guid? ToGuid(object value) => value switch
     {
         Guid g => g,
-        _ when SdkConditionValues.Unwrap(value) is Guid r => r, // EntityReference
+        _ when ConditionValues.Unwrap(value) is Guid r => r, // EntityReference
         string s => Guid.TryParse(s.Trim(), out var r) ? r : null,
         _ => null,
     };

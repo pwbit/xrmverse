@@ -1,116 +1,84 @@
 using Microsoft.Xrm.Sdk.Query;
-using Xrmd.Abstractions;
-using Xrmd.Model.Query;
+using Xrmd.Abstractions.Sdk;
 using Xrmd.Query.Model;
 
 namespace Xrmd.Query;
 
-/// <summary>
-/// Reads <see cref="QueryExpression"/> / <see cref="QueryByAttribute"/> into a <see cref="QueryModel"/>.
-/// </summary>
-/// <remarks>Throws <see cref="XrmdValidationException"/> for features not supported (column comparison conditions,
-/// attribute expressions of a column set) and for filters/link-entities nested beyond <see cref="QueryLimits"/>.</remarks>
-public static class QueryExpressionReader
+/// <summary>The SDK twins of the reader: they check the nesting, then convert to the model.</summary>
+public static partial class QueryExpressionReader
 {
     public static QueryModel Read(QueryExpression query)
     {
         ArgumentNullException.ThrowIfNull(query);
-        var root = new EntityNode { EntityName = query.EntityName };
-        ReadColumns(root, query.ColumnSet);
-        root.Filter = ReadFilter(query.Criteria, depth: 1);
-        ReadOrders(root, query.Orders);
-        ReadLinks(root, query.LinkEntities, depth: 1);
-
-        var model = new QueryModel { Root = root, Top = query.TopCount, Distinct = query.Distinct };
-        ApplyPaging(model, query.PageInfo);
-        return model;
+        SdkNestingGuard.Check(query);
+        return Read(query.ToModel());
     }
 
     public static QueryModel Read(QueryByAttribute query)
     {
         ArgumentNullException.ThrowIfNull(query);
-        var root = new EntityNode { EntityName = query.EntityName };
-        ReadColumns(root, query.ColumnSet);
-        for (var i = 0; i < query.Attributes.Count; i++)
-        {
-            var value = i < query.Values.Count ? query.Values[i] : null;
-            root.Filter.Conditions.Add(new ConditionNode(null, query.Attributes[i], FilterOperator.Equal, new[] { value }));
-        }
-        foreach (var o in query.Orders)
-            root.Orders.Add(new OrderNode(o.AttributeName, o.OrderType == OrderType.Descending));
-
-        var model = new QueryModel { Root = root, Top = query.TopCount };
-        ApplyPaging(model, query.PageInfo);
-        return model;
+        return Read(query.ToModel());
     }
+}
 
-    private static void ApplyPaging(QueryModel model, PagingInfo? page)
+/// <summary>
+/// A bounded walk of an SDK query before it is converted: the conversion recurses without a limit, so a hostile query
+/// nested tens of thousands of levels deep would overflow the stack. The walk follows the reader's order and throws its
+/// refusals, so the first refusal is the same as when the reader walked the SDK query itself. The members the reader ignores
+/// (any/all link of a filter, sub-query) are walked for depth only, within the filter limit.
+/// </summary>
+internal static class SdkNestingGuard
+{
+    internal static void Check(QueryExpression query)
     {
-        if (page == null) return;
-        if (page.Count > 0) model.PageSize = page.Count;
-        if (page.PageNumber > 0) model.PageNumber = page.PageNumber;
-        model.PagingCookie = string.IsNullOrEmpty(page.PagingCookie) ? null : page.PagingCookie;
-        model.ReturnTotalRecordCount = page.ReturnTotalRecordCount;
+        Columns(query.ColumnSet, 0);
+        Filter(query.Criteria, 1, 0);
+        Links(query.LinkEntities, 1, 0);
+        SubQuery(query.SubQueryExpression, 1);
     }
 
-    private static void ReadColumns(EntityNode node, ColumnSet? columns)
+    // ignored > 0: inside a member the reader does not read; only the depth caps apply there.
+    private static void Columns(ColumnSet? columns, int ignored)
     {
-        if (columns == null) return;
-        if (columns.AttributeExpressions is { Count: > 0 })
-            throw new XrmdValidationException("ColumnSet.AttributeExpressions is not supported.");
-        node.AllColumns = columns.AllColumns;
-        foreach (var c in columns.Columns) node.Columns.Add(new ColumnNode(c));
+        if (ignored == 0 && columns?.AttributeExpressions is { Count: > 0 }) throw QueryExpressionReader.ExpressionsRefusal();
     }
 
-    private static void ReadOrders(EntityNode node, IEnumerable<OrderExpression>? orders)
-    {
-        if (orders == null) return;
-        foreach (var o in orders)
-            node.Orders.Add(new OrderNode(o.AttributeName, o.OrderType == OrderType.Descending));
-    }
-
-    private static void ReadLinks(EntityNode parent, IEnumerable<LinkEntity>? links, int depth)
+    private static void Links(IEnumerable<LinkEntity?>? links, int depth, int ignored)
     {
         if (links == null) return;
         foreach (var l in links)
         {
-            if (depth > QueryLimits.MaxLinkDepth)
-                throw new XrmdValidationException($"Link-entities are nested more than {QueryLimits.MaxLinkDepth} levels deep.");
-            var node = new LinkNode
-            {
-                EntityName = l.LinkToEntityName,
-                From = l.LinkToAttributeName,
-                To = l.LinkFromAttributeName,
-                JoinType = (JoinKind)(int)l.JoinOperator, // unchecked: see ReadFilter
-                Alias = string.IsNullOrEmpty(l.EntityAlias) ? null : l.EntityAlias,
-            };
-            ReadColumns(node, l.Columns);
-            node.Filter = ReadFilter(l.LinkCriteria, depth: 1);
-            ReadOrders(node, l.Orders);
-            ReadLinks(node, l.LinkEntities, depth + 1);
-            parent.Links.Add(node);
+            if (ignored == 0 && depth > QueryLimits.MaxLinkDepth) throw QueryExpressionReader.LinkDepthRefusal();
+            if (ignored > 0 && depth > QueryLimits.MaxFilterDepth) throw QueryExpressionReader.FilterDepthRefusal();
+            if (l == null) continue;
+            Columns(l.Columns, ignored);
+            Filter(l.LinkCriteria, 1, ignored);
+            Links(l.LinkEntities, depth + 1, ignored);
         }
     }
 
-    private static FilterNode ReadFilter(FilterExpression? f, int depth)
+    private static void Filter(FilterExpression? f, int depth, int ignored)
     {
-        if (depth > QueryLimits.MaxFilterDepth)
-            throw new XrmdValidationException($"Filters are nested more than {QueryLimits.MaxFilterDepth} levels deep.");
-        var node = new FilterNode();
-        if (f == null) return node;
-        // Unchecked casts, not ToModel(): the numbers are pinned by QueryEnumParityTests, and an undefined value (an
-        // in-process cast) keeps its old behaviour: the compiler refuses an undefined operator (XrmdValidationException)
-        // and treats an undefined logical operator as AND.
-        node.Operator = (FilterLogic)(int)f.FilterOperator;
+        if (depth > QueryLimits.MaxFilterDepth) throw QueryExpressionReader.FilterDepthRefusal();
+        if (f == null) return;
         foreach (var c in f.Conditions)
+            if (ignored == 0 && c is { CompareColumns: true }) throw QueryExpressionReader.CompareColumnsRefusal(c.AttributeName);
+        foreach (var sub in f.Filters) Filter(sub, depth + 1, ignored);
+        if (f.AnyAllFilterLinkEntity is { } link)
         {
-            if (c.CompareColumns)
-                throw new XrmdValidationException($"Condition on '{c.AttributeName}': column comparison (CompareColumns) is not supported.");
-            node.Conditions.Add(new ConditionNode(
-                string.IsNullOrEmpty(c.EntityName) ? null : c.EntityName,
-                c.AttributeName, (FilterOperator)(int)c.Operator, c.Values.ToArray<object?>()));
+            if (ignored + 1 > QueryLimits.MaxFilterDepth) throw QueryExpressionReader.FilterDepthRefusal();
+            Filter(link.LinkCriteria, 1, ignored + 1);
+            Links(link.LinkEntities, 1, ignored + 1);
         }
-        foreach (var sub in f.Filters) node.Filters.Add(ReadFilter(sub, depth + 1));
-        return node;
+    }
+
+    private static void SubQuery(QueryExpression? sub, int ignored)
+    {
+        if (sub == null) return;
+        if (ignored > QueryLimits.MaxFilterDepth) throw QueryExpressionReader.FilterDepthRefusal();
+        Columns(sub.ColumnSet, ignored);
+        Filter(sub.Criteria, 1, ignored);
+        Links(sub.LinkEntities, 1, ignored);
+        SubQuery(sub.SubQueryExpression, ignored + 1);
     }
 }

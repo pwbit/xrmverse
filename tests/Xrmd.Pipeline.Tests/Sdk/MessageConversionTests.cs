@@ -2,6 +2,7 @@ using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions.Sdk;
+using Xrmd.Model.Query;
 using Xrmd.Model.Messages;
 using Xrmd.Model.Records;
 
@@ -10,21 +11,21 @@ namespace Xrmd.Pipeline.Tests.Sdk;
 public class MessageConversionTests
 {
     [Fact]
-    public void Typed_RetrieveMultipleRequest_converts_and_query_passes_through()
+    public void Typed_RetrieveMultipleRequest_converts_and_query_round_trips()
     {
         var query = new QueryExpression("account") { ColumnSet = new ColumnSet("name"), TopCount = 5 };
         var sdk = new RetrieveMultipleRequest { Query = query, RequestId = Guid.NewGuid() };
 
         var model = sdk.ToModel();
         Assert.Equal("RetrieveMultiple", model.Name);
-        Assert.Same(query, model["Query"]);
+        Assert.IsType<RecordQuery>(model["Query"]);
         Assert.Equal(sdk.RequestId, model.RequestId);
 
         var back = model.ToSdk();
         Assert.Equal(typeof(OrganizationRequest), back.GetType());
         Assert.Equal(sdk.RequestName, back.RequestName);
         Assert.Equal(sdk.RequestId, back.RequestId);
-        Assert.Same(query, back["Query"]);
+        DeepEqual.Assert(query, back["Query"]);
         DeepEqual.Assert(sdk.Parameters, back.Parameters);
     }
 

@@ -1,3 +1,5 @@
+using Xrmd.Model.Query;
+
 namespace Xrmd.Model.Records;
 
 /// <summary>Our counterpart of the SDK's public <c>OptionSetValue</c>.</summary>
@@ -18,6 +20,22 @@ public sealed class ColumnSelection
     public bool AllColumns { get; set; }
 
     public IList<string> Columns { get; set; } = new List<string>();
+
+    public List<ColumnExpression> Expressions { get; set; } = new();
+}
+
+/// <summary>Our counterpart of the SDK's public <c>XrmAttributeExpression</c>.</summary>
+public sealed class ColumnExpression
+{
+    public string? AttributeName { get; set; }
+
+    public ColumnAggregate Aggregate { get; set; }
+
+    public string? Alias { get; set; }
+
+    public bool GroupBy { get; set; }
+
+    public ColumnDateGrouping DateGrouping { get; set; }
 }
 
 /// <summary>Our counterpart of the SDK's public <c>Relationship</c> name; value equality so it can key a dictionary.</summary>
