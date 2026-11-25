@@ -147,7 +147,16 @@ public static class TestServices
             sp.GetRequiredService<Xrmd.Pipeline.CustomApis.CustomApiRegistry>(),
             new Xrmd.Pipeline.CustomApis.CustomApiAuthoring(ops, store, sp.GetRequiredService<Xrmd.Metadata.PublisherPrefixRule>(), authoringLogger), store,
             sp.GetRequiredService<Xrmd.Pipeline.Webhooks.WebhookSecrets>(), sp.GetRequiredService<Xrmd.Pipeline.Webhooks.WebhookSender>(), logger,
-            NewWorkflowHook(sp, ops));
+            NewWorkflowHook(sp, ops),
+            // X.12b: the flow notifications, reading through these core operations (as the host's scoped hook reads through its scope's).
+            new Xrmd.WebApi.Connector.FlowSubscriptionHook(new CoreOverride(sp, ops), sp.GetRequiredService<Xrmd.WebApi.Connector.FlowSubscriptionCache>(),
+                sp.GetRequiredService<AsyncOperationQueue>()));
         return (ops, executor);
+    }
+
+    /// <summary>The host's services, with <paramref name="ops"/> as the <see cref="CoreOperations"/>.</summary>
+    private sealed class CoreOverride(IServiceProvider inner, CoreOperations ops) : IServiceProvider
+    {
+        public object? GetService(Type serviceType) => serviceType == typeof(CoreOperations) ? ops : inner.GetService(serviceType);
     }
 }

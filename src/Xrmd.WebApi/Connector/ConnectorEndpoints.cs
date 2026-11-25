@@ -53,6 +53,20 @@ public static class ConnectorEndpoints
             return Results.Json(CustomApiSchemaBuilder.Build(api, request));
         });
 
+        // X.12b: the flow trigger's webhook subscriptions. The callback URL in the body is a secret: never logged or echoed.
+        routes.MapPost("/subscriptions", async (HttpContext http, CallerResolver callers, FlowSubscriptions subscriptions, SubscribeBody body) =>
+        {
+            var id = await subscriptions.SubscribeAsync(await callers.ResolveAsync(http.RequestAborted), body, http.RequestAborted);
+            var location = $"{ODataJson.BaseUrl(http.Request)}{http.Request.Path.Value!.TrimEnd('/')}/{id}";
+            return Results.Created(location, new { id });
+        });
+
+        routes.MapDelete("/subscriptions/{id:guid}", async (HttpContext http, CallerResolver callers, FlowSubscriptions subscriptions, Guid id) =>
+        {
+            await subscriptions.UnsubscribeAsync(await callers.ResolveAsync(http.RequestAborted), id, http.RequestAborted);
+            return Results.NoContent();
+        });
+
         return api;
     }
 }

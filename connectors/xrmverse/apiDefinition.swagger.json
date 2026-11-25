@@ -60,7 +60,7 @@
             "in": "path",
             "required": true,
             "type": "string",
-            "x-ms-summary": "Table name",
+            "x-ms-summary": "Table",
             "description": "The table of the rows, picked from the list or given as its set name.",
             "x-ms-url-encoding": "single",
             "x-ms-dynamic-values": {
@@ -76,7 +76,7 @@
             "in": "query",
             "required": false,
             "type": "string",
-            "x-ms-summary": "Select columns",
+            "x-ms-summary": "Columns to return",
             "description": "The logical names of the columns to return, separated by commas.",
             "x-ms-visibility": "advanced"
           },
@@ -182,7 +182,7 @@
             "in": "path",
             "required": true,
             "type": "string",
-            "x-ms-summary": "Table name",
+            "x-ms-summary": "Table",
             "description": "The table of the rows, picked from the list or given as its set name.",
             "x-ms-url-encoding": "single",
             "x-ms-dynamic-values": {
@@ -254,7 +254,7 @@
             "in": "path",
             "required": true,
             "type": "string",
-            "x-ms-summary": "Table name",
+            "x-ms-summary": "Table",
             "description": "The table of the rows, picked from the list or given as its set name.",
             "x-ms-url-encoding": "single",
             "x-ms-dynamic-values": {
@@ -278,7 +278,7 @@
             "in": "query",
             "required": false,
             "type": "string",
-            "x-ms-summary": "Select columns",
+            "x-ms-summary": "Columns to return",
             "description": "The logical names of the columns to return, separated by commas.",
             "x-ms-visibility": "advanced"
           },
@@ -331,7 +331,7 @@
             "in": "path",
             "required": true,
             "type": "string",
-            "x-ms-summary": "Table name",
+            "x-ms-summary": "Table",
             "description": "The table of the rows, picked from the list or given as its set name.",
             "x-ms-url-encoding": "single",
             "x-ms-dynamic-values": {
@@ -419,7 +419,7 @@
             "in": "path",
             "required": true,
             "type": "string",
-            "x-ms-summary": "Table name",
+            "x-ms-summary": "Table",
             "description": "The table of the rows, picked from the list or given as its set name.",
             "x-ms-url-encoding": "single",
             "x-ms-dynamic-values": {
@@ -565,7 +565,7 @@
             "in": "path",
             "required": true,
             "type": "string",
-            "x-ms-summary": "Table name",
+            "x-ms-summary": "Table",
             "description": "The logical name or the set name of the table."
           },
           {
@@ -663,6 +663,191 @@
             "schema": {
               "type": "object"
             }
+          }
+        }
+      }
+    },
+    "/api/connector/v1/subscriptions": {
+      "post": {
+        "operationId": "OnRowChanged",
+        "summary": "When a row changes",
+        "description": "Starts the flow when a row of the chosen table is created, updated or deleted. The server calls the flow once for each change, after the change is saved.",
+        "x-ms-visibility": "important",
+        "x-ms-trigger": "single",
+        "consumes": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "subscription",
+            "in": "body",
+            "required": true,
+            "x-ms-summary": "Trigger settings",
+            "description": "Which table and which changes start the flow.",
+            "schema": {
+              "type": "object",
+              "required": [
+                "table",
+                "changes",
+                "callbackUrl"
+              ],
+              "properties": {
+                "table": {
+                  "type": "string",
+                  "x-ms-summary": "Table to watch",
+                  "description": "The table to watch, picked from the list or given by its logical name.",
+                  "x-ms-dynamic-values": {
+                    "operationId": "GetTables",
+                    "value-collection": "value",
+                    "value-path": "logicalName",
+                    "value-title": "displayName",
+                    "parameters": {}
+                  }
+                },
+                "changes": {
+                  "type": "string",
+                  "x-ms-summary": "Changes",
+                  "description": "Which changes start the flow.",
+                  "enum": [
+                    "create",
+                    "update",
+                    "delete",
+                    "create,update",
+                    "create,delete",
+                    "update,delete",
+                    "create,update,delete"
+                  ],
+                  "x-ms-enum-values": [
+                    {
+                      "value": "create",
+                      "displayName": "Created"
+                    },
+                    {
+                      "value": "update",
+                      "displayName": "Updated"
+                    },
+                    {
+                      "value": "delete",
+                      "displayName": "Deleted"
+                    },
+                    {
+                      "value": "create,update",
+                      "displayName": "Created or updated"
+                    },
+                    {
+                      "value": "create,delete",
+                      "displayName": "Created or deleted"
+                    },
+                    {
+                      "value": "update,delete",
+                      "displayName": "Updated or deleted"
+                    },
+                    {
+                      "value": "create,update,delete",
+                      "displayName": "Created, updated or deleted"
+                    }
+                  ]
+                },
+                "filteringColumns": {
+                  "type": "string",
+                  "x-ms-summary": "Columns to watch (updates)",
+                  "x-ms-visibility": "advanced",
+                  "description": "The logical names of the columns, separated by commas. An update starts the flow only when one of them changed; empty means any column. Applies to updates only."
+                },
+                "callbackUrl": {
+                  "type": "string",
+                  "x-ms-summary": "Callback URL",
+                  "x-ms-visibility": "internal",
+                  "x-ms-notification-url": true,
+                  "description": "The address the server calls when a row changes. The platform fills it in."
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "The subscription was created.",
+            "headers": {
+              "Location": {
+                "type": "string",
+                "description": "The address that removes the subscription."
+              }
+            },
+            "schema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "The ID of the subscription."
+                }
+              }
+            }
+          }
+        },
+        "x-ms-notification-content": {
+          "description": "The change that happened.",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "change": {
+                "type": "string",
+                "enum": [
+                  "create",
+                  "update",
+                  "delete"
+                ],
+                "x-ms-summary": "Change",
+                "description": "The kind of change: create, update or delete."
+              },
+              "table": {
+                "type": "string",
+                "x-ms-summary": "Table",
+                "description": "The logical name of the table."
+              },
+              "id": {
+                "type": "string",
+                "x-ms-summary": "Row ID",
+                "description": "The ID of the row."
+              },
+              "row": {
+                "type": "object",
+                "x-ms-summary": "Row",
+                "description": "The row as the signed-in user of the trigger reads it. Absent for a delete.",
+                "x-ms-dynamic-schema": {
+                  "operationId": "GetTableSchema",
+                  "parameters": {
+                    "name": {
+                      "parameter": "table"
+                    },
+                    "use": "read"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/connector/v1/subscriptions/{id}": {
+      "delete": {
+        "operationId": "DeleteSubscription",
+        "summary": "Remove a row trigger subscription",
+        "description": "Removes the subscription of a row trigger when the flow is turned off or deleted.",
+        "x-ms-visibility": "internal",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "x-ms-summary": "Subscription ID",
+            "description": "The ID of the subscription."
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The subscription was removed."
           }
         }
       }

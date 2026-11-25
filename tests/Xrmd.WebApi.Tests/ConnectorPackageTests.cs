@@ -15,9 +15,15 @@ public class ConnectorPackageTests
     private static readonly string PropertiesPath = Path.Combine(PackageDir, "apiProperties.json");
 
     private static readonly string[] OperationIds =
-        ["ListRows", "GetRow", "AddRow", "UpdateRow", "DeleteRow", "RunCustomApi", "GetTables", "GetTableSchema", "GetCustomApis", "GetCustomApiSchema"];
+        ["ListRows", "GetRow", "AddRow", "UpdateRow", "DeleteRow", "RunCustomApi", "GetTables", "GetTableSchema", "GetCustomApis", "GetCustomApiSchema", "OnRowChanged", "DeleteSubscription"];
 
     private static readonly string[] DesignTime = ["GetTables", "GetTableSchema", "GetCustomApis", "GetCustomApiSchema"];
+
+    /// <summary>X.12b: the trigger's own operations; the unsubscribe call is hidden, the trigger is not.</summary>
+    private static readonly string[] Hidden = [.. DesignTime, "DeleteSubscription"];
+
+    private static readonly string[] ChangeCombinations =
+        ["create", "update", "delete", "create,update", "create,delete", "update,delete", "create,update,delete"];
 
     private static readonly string[] ProductNames = ["Dataverse", "Power Automate", "Microsoft", "Dynamics"];
 
@@ -78,7 +84,7 @@ public class ConnectorPackageTests
     }
 
     [Fact]
-    public void Every_operation_id_is_one_of_the_ten_names()
+    public void Every_operation_id_is_one_of_the_twelve_names()
     {
         Operations().Select(o => (string?)o.Operation["operationId"]).Should().BeEquivalentTo(OperationIds);
     }
@@ -169,7 +175,7 @@ public class ConnectorPackageTests
     {
         foreach (var id in DesignTime)
             ((string?)Operation(id)["x-ms-visibility"]).Should().Be("internal", id);
-        foreach (var id in OperationIds.Except(DesignTime))
+        foreach (var id in OperationIds.Except(Hidden))
             ((string?)Operation(id)["x-ms-visibility"]).Should().NotBe("internal", id);
     }
 
@@ -196,6 +202,24 @@ public class ConnectorPackageTests
         foreach (var text in texts.Where(t => t is not null))
             foreach (var name in ProductNames)
                 text.Should().NotContainEquivalentOf(name);
+    }
+
+    /// <summary>X.12b final review (I2): the labels are the connector's own, not those of another product's connector.</summary>
+    [Fact]
+    public void No_label_copies_another_connector()
+    {
+        var summaries = Objects(Definition()).Select(o => (string?)o["x-ms-summary"]).OfType<string>().ToList();
+        summaries.Should().NotBeEmpty();
+        summaries.Should().NotContain(["Table name", "Change type", "Select columns"]);
+    }
+
+    [Fact]
+    public void Change_combinations_have_display_names()
+    {
+        var changes = Operation("OnRowChanged")["parameters"]!.AsArray().Single(p => (string?)p!["in"] == "body")!["schema"]!["properties"]!["changes"]!;
+        var values = changes["x-ms-enum-values"]!.AsArray();
+        values.Select(v => (string?)v!["value"]).Should().Equal(changes["enum"]!.AsArray().Select(c => (string?)c));
+        values.Select(v => (string?)v!["displayName"]).Should().OnlyContain(d => !string.IsNullOrWhiteSpace(d)).And.OnlyHaveUniqueItems();
     }
 
     [Fact]
@@ -253,6 +277,52 @@ public class ConnectorPackageTests
             var declared = (operation["parameters"]?.AsArray() ?? []).Where(p => (string?)p!["in"] == "path").Select(p => (string)p!["name"]!);
             declared.Should().BeEquivalentTo(inTemplate, path);
         }
+    }
+
+    [Fact]
+    public void Trigger_is_a_single_webhook_on_subscriptions()
+    {
+        var (path, method, trigger) = Operations().Single(o => (string?)o.Operation["operationId"] == "OnRowChanged");
+        path.Should().Be("/api/connector/v1/subscriptions");
+        method.Should().Be("post");
+        ((string?)trigger["x-ms-trigger"]).Should().Be("single");
+        ((string?)trigger["summary"]).Should().Be("When a row changes");
+        ((string?)trigger["x-ms-visibility"]).Should().NotBe("internal");
+
+        var body = trigger["parameters"]!.AsArray().Single(p => (string?)p!["in"] == "body")!["schema"]!["properties"]!.AsObject();
+        body["callbackUrl"]!["x-ms-notification-url"]!.GetValue<bool>().Should().BeTrue();
+        ((string?)body["callbackUrl"]!["x-ms-visibility"]).Should().Be("internal");
+
+        var values = body["table"]!["x-ms-dynamic-values"]!;
+        ((string?)values["operationId"]).Should().Be("GetTables");
+        ((string?)values["value-path"]).Should().Be("logicalName");
+
+        body["changes"]!["enum"]!.AsArray().Select(c => (string?)c).Should().BeEquivalentTo(ChangeCombinations);
+        body.ContainsKey("filteringColumns").Should().BeTrue();
+
+        var created = trigger["responses"]!["201"]!;
+        created["headers"]!.AsObject().ContainsKey("Location").Should().BeTrue();
+    }
+
+    [Fact]
+    public void Notification_content_has_change_table_id_row()
+    {
+        var trigger = Operation("OnRowChanged");
+        var properties = trigger["x-ms-notification-content"]!["schema"]!["properties"]!.AsObject();
+        properties.Select(p => p.Key).Should().BeEquivalentTo("change", "table", "id", "row");
+        var schema = properties["row"]!["x-ms-dynamic-schema"]!;
+        ((string?)schema["operationId"]).Should().Be("GetTableSchema");
+        ((string?)schema["parameters"]!["use"]).Should().Be("read");
+        ((string?)schema["parameters"]!["name"]!["parameter"]).Should().Be("table");
+    }
+
+    [Fact]
+    public void Unsubscribe_is_internal()
+    {
+        var (path, method, operation) = Operations().Single(o => (string?)o.Operation["operationId"] == "DeleteSubscription");
+        path.Should().Be("/api/connector/v1/subscriptions/{id}");
+        method.Should().Be("delete");
+        ((string?)operation["x-ms-visibility"]).Should().Be("internal");
     }
 
     private static string FindRepoRoot()

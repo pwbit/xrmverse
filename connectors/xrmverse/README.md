@@ -20,6 +20,17 @@ server.
 | Delete a row (`DeleteRow`) | `DELETE /api/data/v9.2/{table}({id})` |
 | Run a custom API (`RunCustomApi`) | `POST /api/data/v9.2/Microsoft.Dynamics.CRM.{customApi}`, a custom API not bound to a table |
 
+## Trigger
+
+| Trigger | Request |
+| --- | --- |
+| When a row changes (`OnRowChanged`) | `POST /api/connector/v1/subscriptions` with `{ table, changes, filteringColumns, callbackUrl }`: answered 201 with a `Location` header and `{ id }`; the platform fills `callbackUrl` in |
+
+The platform removes the subscription when the flow is turned off or deleted, with the hidden operation `DeleteSubscription`
+(`DELETE /api/connector/v1/subscriptions/{id}`, 204). `changes` is a comma-separated subset of `create`, `update` and `delete`.
+The server calls the flow with `{ change, table, id, row }` (no `row` for a delete); the columns of `row` come from `GetTableSchema`
+with `use=read`. See [Cloud flow connector](../../docs/flow-connector.md#the-trigger).
+
 The table and custom API pickers, and the columns and parameters shown for the one picked, come from four hidden operations
 under `/api/connector/v1`: `GetTables`, `GetTableSchema`, `GetCustomApis` and `GetCustomApiSchema`. They list only what the
 signed-in user may read or run.

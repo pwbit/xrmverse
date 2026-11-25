@@ -248,6 +248,9 @@ public static class SystemTableRules
         // Plan 3.5 UI-1a: the components and roles of an app are written by the solution import, never by a request.
         if (caller != Caller.Internal && message is not ("Associate" or "Disassociate" or "AddMembersTeam" or "RemoveMembersTeam"))
             DemandNotAppModuleStore((target as Entity)?.LogicalName ?? (target as EntityReference)?.LogicalName);
+        // Plan X.12b: a flow subscription is written by /api/connector/v1/subscriptions (an internal caller) only.
+        if (caller != Caller.Internal && message is "Create" or "Update" or "Assign" or "Delete")
+            DemandNotFlowSubscription((target as Entity)?.LogicalName ?? (target as EntityReference)?.LogicalName);
 
         switch (message)
         {
@@ -1096,6 +1099,17 @@ public static class SystemTableRules
             throw XrmdFaultException.InvalidArgument(
                 $"{message} is not supported on '{entity}': its rows are kept by the server with each activity " +
                 "(write, assign, change the state of or delete the activity itself).");
+    }
+
+    /// <summary>
+    /// The rows of <c>xrmverse_flowsubscription</c> are created and deleted through <c>/api/connector/v1/subscriptions</c> (an internal
+    /// caller), never by a request of the Web API or the Organization Service (plan X.12b).
+    /// </summary>
+    /// <exception cref="XrmdFaultException">403 PrivilegeDenied.</exception>
+    private static void DemandNotFlowSubscription(string? entity)
+    {
+        if (entity == FlowSubscriptionSchema.Table)
+            throw new XrmdFaultException(ErrorCodes.PrivilegeDenied, FlowSubscriptionSchema.PublicWriteRefused, 403);
     }
 
     /// <summary>

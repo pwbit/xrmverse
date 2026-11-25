@@ -109,7 +109,7 @@ For a feature-by-feature view, see [xrmverse compared with Dataverse](docs/datav
 | **6 — Integrations** (last) | SharePoint document integration (6.1) and analytics export (6.2), formerly items 4.2 and 4.3; after phase 5 | ⏳ |
 | **Migration from Dataverse** (cross-cutting) | One-off move of an application and its data with the same GUIDs: `xrmd migrate export`, encrypted package, server-side import with verification, `xrmd migrate run`, `activate` and MCP tools, accepted on a real Dataverse trial (M1–M6); see [Migrating from Dataverse](docs/migration.md) | ✅ M1–M6 (accepted on a Dataverse trial) |
 | **SDK independence** (cross-cutting) | S.1 bring your own Microsoft SDK (`xrmd sdk install`, no Microsoft DLL in any artifact, see [Installing the Microsoft SDK](docs/microsoft-sdk.md)); S.2 then the SDK only at the edges, so that the Web API, web admin, MCP and CLI run with no Microsoft DLL; extensions without the SDK through webhooks and service endpoints; S.4 a native plug-in SDK of our own (`Xrmd.Plugins`, Apache 2.0) for in-process plug-ins with no Microsoft DLL, after S.2 | 🔄 S.1 ✅, webhooks ✅ |
-| **Cloud flow connector** (X.12) | xrmverse's own custom connector so cloud flows can read and write organization data: row actions and custom APIs with tables and columns picked from the organization (X.12a); the trigger follows in X.12b; see [Cloud flow connector](docs/flow-connector.md) | 🔄 actions done, trigger in X.12b |
+| **Cloud flow connector** (X.12) | xrmverse's own custom connector so cloud flows can read and write organization data: row actions and custom APIs with tables and columns picked from the organization (X.12a), and the trigger *When a row changes* (X.12b); see [Cloud flow connector](docs/flow-connector.md) | ✅ |
 
 ---
 

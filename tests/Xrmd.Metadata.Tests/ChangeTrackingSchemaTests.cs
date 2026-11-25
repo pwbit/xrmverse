@@ -98,6 +98,8 @@ public class ChangeTrackingSchemaTests
         [("MailMessageKeys.cs", "{Table}")] = null,
         // meta.mailbox_sync (plan 4.1c): the incoming sync state of a mailbox, a meta table, not a data table.
         [("MailboxSyncState.cs", "{Table}")] = null,
+        // meta.flow_subscription_callback (plan X.12b): the callback URL of a flow subscription, a meta table, not a data table.
+        [("FlowSubscriptions.cs", "{S.CallbackTable}")] = null,
     };
 
     private const string Intersect = "(intersect)";

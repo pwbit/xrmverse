@@ -453,6 +453,73 @@ public static class EntitySetController
     }
 
     /// <summary>
+    /// X.12b: creates a row of <paramref name="table"/> through the pipeline as <see cref="Caller.Internal"/> in <paramref name="s"/>
+    /// (and its transaction), owned by the user <paramref name="ownerId"/>, also the initiating user: system columns, ownership and commit work run as for any
+    /// write. Lets SDK-free code (the flow subscriptions) write a system table the public API refuses.
+    /// </summary>
+    /// <returns>The id of the new row.</returns>
+    internal static async Task<Guid> CreateInternalRowAsync(IServiceProvider sp, string table, IReadOnlyDictionary<string, object?> values,
+        Guid ownerId, DataSession s, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(sp);
+        ArgumentNullException.ThrowIfNull(values);
+        var target = new Entity(table);
+        foreach (var (name, value) in values) target[name] = value;
+        target["ownerid"] = new EntityReference("systemuser", ownerId);
+        var response = (CreateResponse)await sp.GetRequiredService<Xrmd.Pipeline.PipelineExecutor>().ExecuteAsync(new CreateRequest { Target = target },
+            new Xrmd.Pipeline.InvocationContext(Caller.Internal, ownerId, 1, null, s, Guid.NewGuid()), ct);
+        return response.id;
+    }
+
+    /// <summary>
+    /// X.12b: deletes the row <paramref name="id"/> of <paramref name="table"/> through the pipeline as <see cref="Caller.Internal"/> in
+    /// <paramref name="s"/>, on behalf of <paramref name="actingUserId"/> (the initiating user, as the owner is on a create).
+    /// </summary>
+    internal static async Task DeleteInternalRowAsync(IServiceProvider sp, string table, Guid id, Guid actingUserId, DataSession s, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(sp);
+        await sp.GetRequiredService<Xrmd.Pipeline.PipelineExecutor>().ExecuteAsync(new DeleteRequest { Target = new EntityReference(table, id) },
+            new Xrmd.Pipeline.InvocationContext(Caller.Internal, actingUserId, 1, null, s, Guid.NewGuid()), ct);
+    }
+
+    /// <summary>
+    /// X.12b: the row <paramref name="id"/> of <paramref name="table"/> as <c>GET {entityset}({id})</c> returns it to
+    /// <paramref name="owner"/> (the visible columns, its field security, no formatted values), read in <paramref name="s"/> (and its
+    /// transaction), without <c>@odata.context</c> and <c>@odata.etag</c>. Lets SDK-free code (the flow notifications) snapshot a row.
+    /// </summary>
+    /// <returns>The row; null when the read is refused (403) or finds no row (404).</returns>
+    internal static async Task<System.Text.Json.Nodes.JsonObject?> SnapshotAsync(IServiceProvider sp, Caller owner, string table, Guid id,
+        DataSession s, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(sp);
+        ArgumentNullException.ThrowIfNull(owner);
+        var store = sp.GetRequiredService<IMetadataStore>();
+        if (store.GetEntity(s, table) is not { } m) return null;
+        var columns = WebApiHiddenAttributes.VisibleColumns(m) is { } visible ? new ColumnSet(visible.ToArray()) : new ColumnSet(true);
+        Entity entity;
+        try
+        {
+            entity = await sp.GetRequiredService<CoreOperations>().RetrieveAsync(s, owner, m.LogicalName, id, columns, ct);
+        }
+        catch (XrmdFaultException fault) when (fault.HttpStatus is 403 or 404)
+        {
+            // Raised in C# (privilege, access or a missing row), never by a failed statement: the transaction goes on.
+            return null;
+        }
+        IReadOnlyDictionary<string, IReadOnlySet<string>>? unreadable = null;
+        if (HasNull([entity]))
+        {
+            var set = await sp.GetRequiredService<Xrmd.Security.FieldSecurity>().ForAsync(owner, m.LogicalName, ct);
+            if (!ReferenceEquals(set, Xrmd.Security.FieldPermissionSet.Unrestricted) && set.UnreadableSecured.Count > 0)
+                unreadable = new Dictionary<string, IReadOnlySet<string>>(StringComparer.OrdinalIgnoreCase) { [m.LogicalName] = set.UnreadableSecured };
+        }
+        var json = ODataJson.ToJson(entity, m, "", relationships: store.GetOneToManyRelationships(), unreadable: unreadable);
+        json.Remove("@odata.context");
+        json.Remove("@odata.etag");
+        return json;
+    }
+
+    /// <summary>
     /// The key of an elastic row written as <c>{pk}={guid},partitionid='{p}'</c> (either order; the names in any case; the
     /// partition single-quoted, a quote inside it doubled), or <c>{pk}={guid}</c> alone (a row stored without partition).
     /// </summary>

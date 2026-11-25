@@ -97,6 +97,17 @@ Settings marked "(not in `.env`)" have no `.env` variable of their own.
 | (not in `.env`) | `Rollups:MassCalculationDelay` | how long after a rollup column is created or updated its Mass Calculate Rollup Field job runs, as a time span (default `12:00:00`, Learn's delay; `00:00:00` makes it due at once). A rollup imported by a solution is calculated at once whatever the value. A negative value stops the server at startup. See [Rollup columns](rollup-columns.md#jobs) |
 | (not in `.env`) | `Rollups:TransientRetryDelay` | how long a rollup calculation job waits before it runs again after a transient database failure (a deadlock, a timeout, a lost connection), as a time span (default `00:05:00`, an xrmverse setting). A negative value stops the server at startup. See [Rollup columns](rollup-columns.md#jobs) |
 
+### Cloud flow connector
+
+| `.env` variable | Configuration key | Notes |
+|---|---|---|
+| (not in `.env`) | `Connector:CallbackHosts` | host patterns the address of a flow must match for the trigger *When a row changes* (default `*.logic.azure.com` and `*.environment.api.powerplatform.com`; `*.` matches one or more labels). A list you configure replaces the default. Addresses must be `https` on port 443, with no IP literal and no user info, at most 2048 characters. See [Cloud flow connector](flow-connector.md#the-address-of-the-flow) |
+| (not in `.env`) | `Connector:MaxSubscriptionsPerUser` | the most trigger subscriptions one user may hold (default `50`; one more fails with a 429 error, code `0x80090910`) |
+| (not in `.env`) | `Connector:AllowPrivateCallbacks` | tests and development only (default `false`): allows `http`, any port, loopback and private addresses as flow addresses. Leave it off in production |
+
+Delivery to the flow uses the webhook settings `Pipeline:AsyncMaxRetries`, `Pipeline:AsyncRetryDelay` and `Pipeline:WebhookTimeout`
+(see [Webhooks](webhooks.md#retry-rules)).
+
 ### What happens when settings are missing
 
 Without `ConnectionStrings:Org` the host still starts and serves only `/healthz`. If `Auth:Mode` is set, an invalid

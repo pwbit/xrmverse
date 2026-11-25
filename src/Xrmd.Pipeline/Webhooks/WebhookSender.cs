@@ -97,14 +97,14 @@ public sealed class WebhookSender : IDisposable
                 endpoint.Name, where, WebhookPayload.SizeLimit);
 
         var attempt = await AttemptAsync(endpoint, url, headers, body, trimmed, context, organizationName, ct);
-        if (attempt.Status is HttpStatusCode.BadGateway or HttpStatusCode.ServiceUnavailable or HttpStatusCode.GatewayTimeout)
+        if (DeliveryAttempt.RetryAtOnce(attempt.Status))
         {
-            _logger.LogInformation("Webhook {Endpoint} ({Url}) returned {Status}; trying once more.", endpoint.Name, where, (int)attempt.Status);
+            _logger.LogInformation("Webhook {Endpoint} ({Url}) returned {Status}; trying once more.", endpoint.Name, where, (int)attempt.Status!.Value);
             attempt = await AttemptAsync(endpoint, url, headers, body, trimmed, context, organizationName, ct);
         }
-        // Any 5xx (after the extra attempt for 502, 503 and 504) is retryable; 3xx and 4xx are final.
-        if (attempt.Status is { } status && (int)status >= 500) attempt = attempt with { Retryable = true };
         if (attempt.Reason is null) return;
+        // Any 5xx (after the extra attempt for 502, 503 and 504) and any transport error is retryable; 3xx and 4xx (Gone included) are final.
+        attempt = attempt with { Retryable = DeliveryAttempt.Classify(attempt.Status, attempt.Status is null) == DeliveryOutcome.Retryable };
 
         _logger.LogWarning("Delivery to webhook {Endpoint} ({Url}) failed: {Reason} ({Kind}).", endpoint.Name, where, attempt.Reason,
             attempt.Retryable ? "retryable" : "final");

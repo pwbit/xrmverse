@@ -115,6 +115,16 @@ public sealed class AsyncOperationQueue
     /// </summary>
     public const int MailboxSync = 99013;
 
+    /// <summary>
+    /// <c>asyncoperation.operationtype</c> "Flow Notification": the delivery of one change notification to the callback of a flow
+    /// subscription of the connector trigger (plan X.12b). Dataverse has no such type; the value is xrmverse's own, next to
+    /// <see cref="MailboxSync"/>.
+    /// </summary>
+    public const int FlowNotification = 99014;
+
+    /// <summary>The message name of a <see cref="FlowNotification"/> operation.</summary>
+    public const string FlowNotificationMessage = "FlowNotification";
+
     /// <summary>Object type code of <c>systemuser</c> (the type column of the polymorphic <c>ownerid</c>).</summary>
     private const int SystemUserTypeCode = 8;
 

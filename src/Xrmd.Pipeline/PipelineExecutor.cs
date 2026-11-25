@@ -13,6 +13,7 @@ using Xrmd.Model.Messages;
 using Xrmd.Model.Records;
 using Xrmd.Pipeline.Async;
 using Xrmd.Pipeline.CustomApis;
+using Xrmd.Pipeline.Connector;
 using Xrmd.Pipeline.Merge;
 using Xrmd.Pipeline.Registration;
 using Xrmd.Pipeline.Sandbox;
@@ -90,7 +91,7 @@ public sealed partial class PipelineExecutor(IPipelineCore core, StepRegistry re
     RegistrationValidator validator, SecurityCache security, SecurityGuard guard, PublisherPrefixRule publisherPrefixes,
     AuditSettings auditSettings, CustomApiRegistry customApis, CustomApiAuthoring customApiAuthoring,
     IMetadataStore metadata, WebhookSecrets webhookSecrets, WebhookSender webhookSender, ILogger<PipelineExecutor>? logger = null,
-    IWorkflowPipelineHook? workflows = null)
+    IWorkflowPipelineHook? workflows = null, IRowChangeHook? rowChanges = null)
 {
     /// <summary>The deepest call chain allowed; a call at <c>Depth</c> 9 fails as an infinite loop.</summary>
     public const int MaxDepth = 8;
@@ -247,6 +248,11 @@ public sealed partial class PipelineExecutor(IPipelineCore core, StepRegistry re
                     await RunStageAsync(pre, await RealtimeWorkflowsAsync(trigger, entityName, PreOperation, ct), PreOperation, run,
                         images, execution, ct);
                     await HoldAtCoreAsync(run, ct);
+                    // X.12b (final review I1): a delete is told while the row is there, so its subscribers' access to it is checked;
+                    // in the transaction, so a delete that fails later queues nothing.
+                    if (!run.CustomAction && RowChanges.BeforeCoreOperation(message) && await RowChanges.NotifyAsync(rowChanges, message,
+                            entityName, run.EntityId, () => [], session, ct) && state is not null)
+                        state.Enqueued = true;
                 }
                 if (perStage) state = await CommitStageAsync(session, state!, ct);
 
@@ -278,6 +284,14 @@ public sealed partial class PipelineExecutor(IPipelineCore core, StepRegistry re
                 if (trigger is not null)
                     await LentAsync(context.Clone(context.Stage), run.Mirror, view => _workflows.QueueBackgroundAsync(trigger.Message,
                         entityName, trigger.Columns, trigger.Owner, view, WithoutServerValues(run.Invocation), session, ct));
+
+                // X.12b: the flow subscriptions of the table queue their notifications (a bulk message's inner writes each do; a delete
+                // was told before the core delete).
+                if (!run.CustomAction && !RowChanges.BeforeCoreOperation(message) && await RowChanges.NotifyAsync(rowChanges, message, entityName,
+                        run.EntityId, () => run.Request.Parameters.TryGetValue(Target, out var sent) && sent is Record target ? target.Attributes.Keys.ToList() : [],
+                        session, ct)
+                    && state is not null)
+                    state.Enqueued = true;
 
                 foreach (var entry in postAsync)
                 {

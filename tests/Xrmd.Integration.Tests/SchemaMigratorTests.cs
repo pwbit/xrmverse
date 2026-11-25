@@ -35,7 +35,7 @@ public class SchemaMigratorTests(XrmdFixture fx)
         await migrator.MigrateAsync();
 
         await using var conn = await factory.OpenAsync();
-        (await ScalarAsync(conn, "SELECT COUNT(*) FROM meta.schema_version")).Should().Be(20, "each migration is applied once");
+        (await ScalarAsync(conn, "SELECT COUNT(*) FROM meta.schema_version")).Should().Be(21, "each migration is applied once");
         (await ScalarAsync(conn, "SELECT COUNT(*) FROM meta.filesecret WHERE DATALENGTH(secret) = 32")).Should().Be(1, "0004 writes one secret");
         (await ScalarAsync(conn, "SELECT COUNT(*) FROM meta.version_stamp")).Should().Be(1);
         (await ScalarAsync(conn, "SELECT [current] FROM meta.version_stamp")).Should().Be(0);
@@ -99,7 +99,7 @@ public class SchemaMigratorTests(XrmdFixture fx)
             SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
             WHERE TABLE_SCHEMA = 'meta' AND COLUMN_NAME IN ('solution_settings_xml', 'display_mask')
             """)).Should().Be(0);
-        (await ScalarAsync(check, "SELECT COUNT(*) FROM meta.schema_version")).Should().Be(20);
+        (await ScalarAsync(check, "SELECT COUNT(*) FROM meta.schema_version")).Should().Be(21);
         await migrator.MigrateAsync(); // idempotent once upgraded
     }
 
@@ -137,7 +137,7 @@ public class SchemaMigratorTests(XrmdFixture fx)
         await migrator.MigrateAsync();
 
         await using var check = await factory.OpenAsync();
-        (await ScalarAsync(check, "SELECT COUNT(*) FROM meta.schema_version")).Should().Be(20);
+        (await ScalarAsync(check, "SELECT COUNT(*) FROM meta.schema_version")).Should().Be(21);
         (await ScalarAsync(check, "SELECT COUNT(*) FROM data.principalobjectaccess")).Should().Be(2, "every share is kept");
         (await ScalarAsync(check, """
             SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID('data.principalobjectaccess')

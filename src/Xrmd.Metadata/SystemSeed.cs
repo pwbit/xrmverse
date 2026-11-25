@@ -164,6 +164,8 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
         QueueSchema.Queue, QueueSchema.QueueItem, QueueSchema.QueueMembership,
         // Outgoing email (plan 4.1b): the profile before the mailbox that names it, then the attachments of the emails.
         MailSchema.EmailServerProfile, MailSchema.Mailbox, MailSchema.Attachment,
+        // The webhook subscriptions of the connector trigger (plan X.12b).
+        FlowSubscriptionSchema.Table,
     ];
 
     /// <summary>The seeded tables a custom table must not take the name of (an object type code of 10000 or more).</summary>
@@ -174,6 +176,7 @@ public sealed class SystemSeed(IMetadataStore store, IDbConnectionFactory factor
         PostSchema.Regarding, PostSchema.Post, PostSchema.Comment,
         QueueSchema.Queue, QueueSchema.QueueItem, QueueSchema.QueueMembership,
         MailSchema.EmailServerProfile, MailSchema.Mailbox, MailSchema.Attachment,
+        FlowSubscriptionSchema.Table,
     ];
 
     /// <summary>The id of the system solution <c>Default</c>, which holds every component (Dataverse's well-known id).</summary>

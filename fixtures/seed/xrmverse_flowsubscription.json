@@ -1,0 +1,135 @@
+{
+  "LogicalName": "xrmverse_flowsubscription",
+  "SchemaName": "xrmverse_FlowSubscription",
+  "DisplayName": {
+    "LocalizedLabels": [
+      {
+        "Label": "Flow Subscription",
+        "LanguageCode": 1033
+      }
+    ],
+    "UserLocalizedLabel": {
+      "Label": "Flow Subscription",
+      "LanguageCode": 1033
+    }
+  },
+  "IsAuditEnabled": {
+    "Value": false,
+    "CanBeChanged": false,
+    "ManagedPropertyLogicalName": "canmodifyauditsettings"
+  },
+  "EntitySetName": "xrmverse_flowsubscriptions",
+  "ObjectTypeCode": 9970,
+  "OwnershipType": "UserOwned",
+  "PrimaryIdAttribute": "xrmverse_flowsubscriptionid",
+  "PrimaryNameAttribute": "xrmverse_name",
+  "Attributes": [
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "xrmverse_name",
+      "SchemaName": "xrmverse_Name",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Name",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Name",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 200,
+      "Format": "Text",
+      "RequiredLevel": {
+        "Value": "ApplicationRequired",
+        "CanBeChanged": false
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "xrmverse_table",
+      "SchemaName": "xrmverse_Table",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Table",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Table",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 128,
+      "Format": "Text",
+      "RequiredLevel": {
+        "Value": "ApplicationRequired",
+        "CanBeChanged": false
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+      "LogicalName": "xrmverse_changes",
+      "SchemaName": "xrmverse_Changes",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Changes",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Changes",
+          "LanguageCode": 1033
+        }
+      },
+      "MinValue": 1,
+      "MaxValue": 7,
+      "RequiredLevel": {
+        "Value": "ApplicationRequired",
+        "CanBeChanged": false
+      }
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "xrmverse_filteringcolumns",
+      "SchemaName": "xrmverse_FilteringColumns",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Filtering Columns",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Filtering Columns",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 4000,
+      "Format": "Text"
+    },
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+      "LogicalName": "xrmverse_callbackhost",
+      "SchemaName": "xrmverse_CallbackHost",
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Callback Host",
+            "LanguageCode": 1033
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Callback Host",
+          "LanguageCode": 1033
+        }
+      },
+      "MaxLength": 256,
+      "Format": "Text"
+    }
+  ]
+}

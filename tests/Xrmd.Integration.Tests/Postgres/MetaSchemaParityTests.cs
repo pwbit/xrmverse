@@ -86,8 +86,8 @@ public sealed class MetaSchemaParityTests(MetaSchemaContainers fx) : IClassFixtu
         sqlColumns.Should().HaveCountGreaterThan(190);
         pgColumns.Should().BeEquivalentTo(sqlColumns);
 
-        (await VersionsAsync(postgres)).Should().Equal(Enumerable.Range(1, 20));
-        (await VersionsAsync(sqlServer)).Should().Equal(Enumerable.Range(1, 20));
+        (await VersionsAsync(postgres)).Should().Equal(Enumerable.Range(1, 21));
+        (await VersionsAsync(sqlServer)).Should().Equal(Enumerable.Range(1, 21));
     }
 
     [Fact]
@@ -96,13 +96,13 @@ public sealed class MetaSchemaParityTests(MetaSchemaContainers fx) : IClassFixtu
         var factory = await fx.NewPostgresDatabaseAsync();
         var migrator = new SchemaMigrator(factory, factory.Dialect);
 
-        (await migrator.GetStatusAsync()).Should().Be(new SchemaStatus(0, 3), "an empty database has the baseline, 0019 and 0020 pending");
+        (await migrator.GetStatusAsync()).Should().Be(new SchemaStatus(0, 4), "an empty database has the baseline, 0019, 0020 and 0021 pending");
         await migrator.MigrateAsync();
         await migrator.MigrateAsync();
-        (await migrator.GetStatusAsync()).Should().Be(new SchemaStatus(20, 0));
+        (await migrator.GetStatusAsync()).Should().Be(new SchemaStatus(21, 0));
 
         await using var conn = await factory.OpenAsync();
-        (await ScalarAsync(conn, "SELECT COUNT(*) FROM meta.schema_version")).Should().Be(20);
+        (await ScalarAsync(conn, "SELECT COUNT(*) FROM meta.schema_version")).Should().Be(21);
         (await ScalarAsync(conn, "SELECT COUNT(*) FROM meta.version_stamp")).Should().Be(1);
         (await ScalarAsync(conn, "SELECT \"current\" FROM meta.version_stamp")).Should().Be(0);
         (await ScalarAsync(conn, "SELECT COUNT(*) FROM meta.filesecret WHERE octet_length(secret) = 32")).Should().Be(1);

@@ -184,6 +184,9 @@ public static class XrmdHost
         services.AddScoped<CoreOperations>();
         services.AddScoped<IPipelineCore>(sp => sp.GetRequiredService<CoreOperations>());
 
+        // X.12b: the flow connector's webhook subscriptions (callback host allowlist, per-user limit).
+        services.AddOptions<Xrmd.WebApi.Connector.ConnectorOptions>().Bind(builder.Configuration.GetSection("Connector"));
+
         // Plug-in pipeline: registry, sandbox and trace writer are process-wide; the executor follows the request scope.
         services.AddOptions<PipelineOptions>()
             .Bind(builder.Configuration.GetSection("Pipeline"))
@@ -203,6 +206,14 @@ public static class XrmdHost
         // The custom API authoring rules (plan 3.1) write the API's message through the core operations: scoped like them.
         services.AddScoped<CustomApiAuthoring>();
         services.AddScoped<Xrmd.WebApi.Connector.ConnectorCatalog>();
+        // X.12b: the flow subscriptions, kept in memory for the write pipeline (invalidated by subscribe and unsubscribe).
+        services.AddSingleton<Xrmd.WebApi.Connector.FlowSubscriptionCache>();
+        services.AddScoped<Xrmd.WebApi.Connector.FlowSubscriptions>();
+        // X.12b: the executor's post-operation queues the flow notifications through this hook (it never resolves the executor).
+        services.AddScoped<Xrmd.Pipeline.Connector.IRowChangeHook, Xrmd.WebApi.Connector.FlowSubscriptionHook>();
+        // X.12b: the delivery of those notifications (operationtype 99014) to the flows' callbacks.
+        services.AddSingleton<Xrmd.WebApi.Connector.FlowCallbackSender>();
+        services.AddScoped<IAsyncOperationHandler, Xrmd.WebApi.Connector.FlowNotificationHandler>();
         services.AddSingleton<PluginAssemblyLoader>();
         services.AddSingleton<RegistrationValidator>();
         // The write-only authvalue of the webhook endpoints (plan 3.2): taken at stage 20, read for the delivery.

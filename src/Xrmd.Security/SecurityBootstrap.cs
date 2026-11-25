@@ -375,6 +375,8 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
         yield return ("queue-item-append-privileges", QueueItemAppendGrants().Select(g => PrivilegeNames.IdOf(g.Privilege)).ToHashSet());
         // Plan 4.1b (from memory, checklist 3): Basic User's Read and Write on its own mailbox, nothing on the email server profiles.
         yield return ("mailbox-role-privileges", MailboxGrants().Select(g => PrivilegeNames.IdOf(g.Privilege)).ToHashSet());
+        // Plan X.12b: Basic User's Create and Read on its own flow subscriptions (the connector trigger), nothing else.
+        yield return ("flowsubscription-role-privileges", FlowSubscriptionGrants().Select(g => PrivilegeNames.IdOf(g.Privilege)).ToHashSet());
         // UI-2a: Basic User's Read (Global) and System Customizer's privileges on the environment values of the settings
         // (organizationsetting). Its own top-up: app-setting-role-privileges already ran on an existing organization.
         yield return ("organization-setting-privileges",
@@ -395,6 +397,18 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
         var item = store.GetTable(QueueSchema.QueueItem)!;
         foreach (var right in new[] { AccessMask.ReadAccess, AccessMask.WriteAccess, AccessMask.CreateAccess, AccessMask.DeleteAccess })
             yield return (StandardRoles.BasicUser, PrivilegeNames.For(right, item), Global);
+    }
+
+    /// <summary>
+    /// Basic User's grants on the flow subscriptions (plan X.12b): Create and Read at user (Basic) depth, so that a flow's owner
+    /// subscribes through the connector and reads their own subscriptions. Write and Delete stay with the server: the rows are
+    /// refused to a public Create, Update and Delete (<c>SystemTableRules</c>).
+    /// </summary>
+    private IEnumerable<(Guid Role, string Privilege, int Depth)> FlowSubscriptionGrants()
+    {
+        var table = store.GetTable(FlowSubscriptionSchema.Table)!;
+        foreach (var right in new[] { AccessMask.ReadAccess, AccessMask.CreateAccess })
+            yield return (StandardRoles.BasicUser, PrivilegeNames.For(right, table), Basic);
     }
 
     /// <summary>
@@ -646,6 +660,7 @@ public sealed class SecurityBootstrap(IDbConnectionFactory factory, IMetadataSto
         foreach (var grant in QueueGrants()) yield return grant;
         foreach (var grant in QueueItemAppendGrants()) yield return grant;
         foreach (var grant in MailboxGrants()) yield return grant;
+        foreach (var grant in FlowSubscriptionGrants()) yield return grant;
 
         yield return (StandardRoles.Delegate, PrivilegeNames.ActOnBehalfOfAnotherUser, Global);
     }
