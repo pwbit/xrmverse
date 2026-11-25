@@ -2,6 +2,7 @@ using System.Runtime.Serialization;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Model.Messages;
+using Xrmd.Model.Records;
 using Xrmd.Model.Serialization;
 
 namespace Xrmd.Abstractions.Sdk;
@@ -23,34 +24,8 @@ public static class SdkRemoteContext
     public static RemoteContext ToModel(this RemoteExecutionContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        var result = new RemoteContext
-        {
-            BusinessUnitId = context.BusinessUnitId,
-            CorrelationId = context.CorrelationId,
-            Depth = context.Depth,
-            InitiatingUserAgent = context.InitiatingUserAgent,
-            InitiatingUserAzureActiveDirectoryObjectId = context.InitiatingUserAzureActiveDirectoryObjectId,
-            InitiatingUserId = context.InitiatingUserId,
-            IsExecutingOffline = context.IsExecutingOffline,
-            IsInTransaction = context.IsInTransaction,
-            IsOfflinePlayback = context.IsOfflinePlayback,
-            IsolationMode = context.IsolationMode,
-            MessageName = context.MessageName,
-            Mode = context.Mode,
-            OperationCreatedOn = context.OperationCreatedOn,
-            OperationId = context.OperationId,
-            OrganizationId = context.OrganizationId,
-            OrganizationName = context.OrganizationName,
-            OwningExtension = context.OwningExtension?.ToModel(),
-            ParentContext = context.ParentContext?.ToModel(),
-            PrimaryEntityId = context.PrimaryEntityId,
-            PrimaryEntityName = context.PrimaryEntityName,
-            RequestId = context.RequestId,
-            SecondaryEntityName = context.SecondaryEntityName,
-            Stage = context.Stage,
-            UserAzureActiveDirectoryObjectId = context.UserAzureActiveDirectoryObjectId,
-            UserId = context.UserId,
-        };
+        var result = Scalars(context);
+        result.ParentContext = context.ParentContext?.ToModel();
         foreach (var p in context.InputParameters) result.InputParameters[p.Key] = SdkRecords.ValueToModel(p.Value);
         foreach (var p in context.OutputParameters) result.OutputParameters[p.Key] = SdkRecords.ValueToModel(p.Value);
         foreach (var p in context.SharedVariables) result.SharedVariables[p.Key] = SdkRecords.ValueToModel(p.Value);
@@ -58,6 +33,55 @@ public static class SdkRemoteContext
         foreach (var i in context.PostEntityImages) result.PostEntityImages[i.Key] = i.Value.ToModel();
         return result;
     }
+
+    /// <summary>
+    /// <see cref="ToModel(RemoteExecutionContext)"/> whose parameter values and images are the twins of the SDK ones in
+    /// <paramref name="mirror"/> (paired, so lending the result gives back these same SDK instances, with their CLR types and any
+    /// extension data); the scalars and owning extensions are copied as there.
+    /// </summary>
+    public static RemoteContext ToModel(this RemoteExecutionContext context, SdkMirror mirror)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(mirror);
+        var result = Scalars(context);
+        result.ParentContext = context.ParentContext?.ToModel(mirror);
+        // The collections cross whole, so their values convert by the value rules (an inner request or a paging held as a value is
+        // its own twin, as in ValueToModel).
+        foreach (var p in mirror.In(context.InputParameters)!) result.InputParameters[p.Key] = p.Value;
+        foreach (var p in mirror.In(context.OutputParameters)!) result.OutputParameters[p.Key] = p.Value;
+        foreach (var p in mirror.In(context.SharedVariables)!) result.SharedVariables[p.Key] = p.Value;
+        foreach (var i in context.PreEntityImages) result.PreEntityImages[i.Key] = (Record)mirror.In(i.Value)!;
+        foreach (var i in context.PostEntityImages) result.PostEntityImages[i.Key] = (Record)mirror.In(i.Value)!;
+        return result;
+    }
+
+    private static RemoteContext Scalars(RemoteExecutionContext context) => new()
+    {
+        BusinessUnitId = context.BusinessUnitId,
+        CorrelationId = context.CorrelationId,
+        Depth = context.Depth,
+        InitiatingUserAgent = context.InitiatingUserAgent,
+        InitiatingUserAzureActiveDirectoryObjectId = context.InitiatingUserAzureActiveDirectoryObjectId,
+        InitiatingUserId = context.InitiatingUserId,
+        IsExecutingOffline = context.IsExecutingOffline,
+        IsInTransaction = context.IsInTransaction,
+        IsOfflinePlayback = context.IsOfflinePlayback,
+        IsolationMode = context.IsolationMode,
+        MessageName = context.MessageName,
+        Mode = context.Mode,
+        OperationCreatedOn = context.OperationCreatedOn,
+        OperationId = context.OperationId,
+        OrganizationId = context.OrganizationId,
+        OrganizationName = context.OrganizationName,
+        OwningExtension = context.OwningExtension?.ToModel(),
+        PrimaryEntityId = context.PrimaryEntityId,
+        PrimaryEntityName = context.PrimaryEntityName,
+        RequestId = context.RequestId,
+        SecondaryEntityName = context.SecondaryEntityName,
+        Stage = context.Stage,
+        UserAzureActiveDirectoryObjectId = context.UserAzureActiveDirectoryObjectId,
+        UserId = context.UserId,
+    };
 
     public static RemoteExecutionContext ToSdk(this RemoteContext context)
     {

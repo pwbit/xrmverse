@@ -1,5 +1,6 @@
-using Microsoft.Xrm.Sdk;
 using Xrmd.Metadata;
+using Xrmd.Model.Messages;
+using Xrmd.Model.Records;
 using Xrmd.Pipeline.Bulk;
 using Xrmd.Pipeline.Registration;
 
@@ -31,15 +32,16 @@ internal static class MergedSteps
     /// </summary>
     /// <param name="standardTable">True when <paramref name="entity"/> is a standard (not elastic) table: the merge is not built for
     /// elastic tables (ruling B8, E5 kept).</param>
-    public static async Task<IReadOnlyList<StageStep>> ForStageAsync(StepRegistry registry, OrganizationRequest request, string? entity,
-        int stage, int mode, bool standardTable, CancellationToken ct)
+    /// <param name="bulkInner">True when the request is the per-target run of a bulk message (marked <see cref="InnerKind.Bulk"/>).</param>
+    public static async Task<IReadOnlyList<StageStep>> ForStageAsync(StepRegistry registry, Request request, string? entity,
+        int stage, int mode, bool standardTable, bool bulkInner, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(registry);
         ArgumentNullException.ThrowIfNull(request);
-        var own = (await registry.GetStepsAsync(request.RequestName, entity, stage, mode, ct))
+        var own = (await registry.GetStepsAsync(request.Name!, entity, stage, mode, ct))
             .Where(s => Applies(s, request)).Select(s => new StageStep(s, false));
-        if (!standardTable || entity is null || InnerExecution.KindOf(request) == InnerKind.Bulk
-            || !SdkMessageCatalog.MergePairs.TryGetValue(request.RequestName ?? "", out var bulkMessage))
+        if (!standardTable || entity is null || bulkInner
+            || !SdkMessageCatalog.MergePairs.TryGetValue(request.Name ?? "", out var bulkMessage))
             return own.ToList();
 
         var bulk = (await registry.GetStepsAsync(bulkMessage, entity, stage, mode, ct))
@@ -53,16 +55,16 @@ internal static class MergedSteps
     /// its <c>Target</c> carries one of them; for an UpdateMultiple, when any of its <c>Targets</c> does. A step merged into a
     /// single Update is matched against that Update's target.
     /// </summary>
-    public static bool Applies(PluginStep step, OrganizationRequest request)
+    public static bool Applies(PluginStep step, Request request)
     {
         ArgumentNullException.ThrowIfNull(step);
         ArgumentNullException.ThrowIfNull(request);
         if (step.FilteringAttributes is not { } filter) return true;
-        IEnumerable<Entity?> targets;
-        if (string.Equals(request.RequestName, "Update", StringComparison.OrdinalIgnoreCase))
-            targets = [request.Parameters.TryGetValue(Target, out var t) ? t as Entity : null];
-        else if (string.Equals(request.RequestName, BulkTargets.UpdateMultiple, StringComparison.OrdinalIgnoreCase))
-            targets = request.Parameters.TryGetValue(BulkTargets.TargetsParameter, out var t) && t is EntityCollection c ? c.Entities : [];
+        IEnumerable<Record?> targets;
+        if (string.Equals(request.Name, "Update", StringComparison.OrdinalIgnoreCase))
+            targets = [request.Parameters.TryGetValue(Target, out var t) ? t as Record : null];
+        else if (string.Equals(request.Name, BulkTargets.UpdateMultiple, StringComparison.OrdinalIgnoreCase))
+            targets = request.Parameters.TryGetValue(BulkTargets.TargetsParameter, out var t) && t is RecordCollection c ? c.Records : [];
         else
             return true;
         return targets.Any(e => e is not null && filter.Any(a => e.Attributes.ContainsKey(a)));
@@ -71,28 +73,28 @@ internal static class MergedSteps
     /// <summary>
     /// The context a <c>CreateMultiple</c>/<c>UpdateMultiple</c> step sees on a single Create/Update (ruling B5): a copy of
     /// <paramref name="single"/> named after the bulk message, whose <c>InputParameters</c> are the request's with <c>Target</c>
-    /// replaced by <c>Targets</c>, an <see cref="EntityCollection"/> of the table holding the <b>same</b> <see cref="Entity"/> (a
+    /// replaced by <c>Targets</c>, a <see cref="RecordCollection"/> of the table holding the <b>same</b> <see cref="Record"/> (a
     /// change to it is saved; a replaced item is not carried back), and whose <c>OutputParameters</c> hold <c>Ids</c> = [the new
     /// id] once a Create's stage 30 has run. <c>SharedVariables</c> is the same object as the single-record context's. The images
     /// are left to the caller (one-element collections).
     /// </summary>
-    public static XrmdPluginExecutionContext MultipleView(XrmdPluginExecutionContext single, OrganizationRequest request)
+    public static StepContext MultipleView(StepContext single, Request request)
     {
         ArgumentNullException.ThrowIfNull(single);
         ArgumentNullException.ThrowIfNull(request);
         var view = single.Clone(single.Stage);
-        view.MessageName = SdkMessageCatalog.MergePairs.TryGetValue(single.MessageName, out var bulkMessage)
+        view.MessageName = SdkMessageCatalog.MergePairs.TryGetValue(single.MessageName ?? "", out var bulkMessage)
             ? bulkMessage
             : throw new InvalidOperationException($"'{single.MessageName}' has no bulk message to view it as: only Create and Update merge.");
 
-        var input = new ParameterCollection();
+        var input = new ParameterBag();
         foreach (var (key, value) in request.Parameters)
             if (key != Target) input[key] = value;
-        var target = request.Parameters.TryGetValue(Target, out var t) ? t as Entity : null;
-        input[BulkTargets.TargetsParameter] = new EntityCollection(target is null ? [] : [target]) { EntityName = single.PrimaryEntityName };
+        var target = request.Parameters.TryGetValue(Target, out var t) ? t as Record : null;
+        input[BulkTargets.TargetsParameter] = new RecordCollection { Records = target is null ? [] : [target], EntityName = single.PrimaryEntityName };
         view.InputParameters = input;
 
-        var output = new ParameterCollection();
+        var output = new ParameterBag();
         if (single.OutputParameters.TryGetValue("id", out var id) && id is Guid created) output[Ids] = new[] { created };
         view.OutputParameters = output;
         return view;

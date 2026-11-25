@@ -57,7 +57,7 @@ public sealed class WebhookDeliveryTests(XrmdFixture fx) : IAsyncLifetime
 
     // ---- receiver ----
 
-    internal sealed record Received(string Path, string Query, IReadOnlyDictionary<string, string> Headers, JsonElement Body);
+    internal sealed record Received(string Path, string Query, IReadOnlyDictionary<string, string> Headers, JsonElement Body, string Text);
 
     /// <summary>An <see cref="HttpListener"/> on 127.0.0.1 and a free port; answers <see cref="Status"/> to every POST.</summary>
     internal sealed class Receiver : IDisposable
@@ -103,7 +103,7 @@ public sealed class WebhookDeliveryTests(XrmdFixture fx) : IAsyncLifetime
                         .ToDictionary(k => k!, k => ctx.Request.Headers[k]!, StringComparer.OrdinalIgnoreCase);
                     if (OnRequest is { } callback) await callback();
                     Requests.Enqueue(new Received(ctx.Request.Url!.AbsolutePath, ctx.Request.Url.Query, headers,
-                        JsonDocument.Parse(text).RootElement.Clone()));
+                        JsonDocument.Parse(text).RootElement.Clone(), text));
                     ctx.Response.StatusCode = Status;
                 }
                 catch (Exception ex)
@@ -497,18 +497,19 @@ public sealed class WebhookDeliveryTests(XrmdFixture fx) : IAsyncLifetime
         var stepId = await CreateStepAsync(await CreateEndpointAsync(receiver), "Create", 40, Async);
         var step = (await fx.App.Services.GetRequiredService<Xrmd.Pipeline.Registration.StepRegistry>().GetStepAsync(stepId, default))!;
         var caller = await TestServices.CallerAsync(fx.App.Services, fx.AdminObjectId);
-        var context = new XrmdPluginExecutionContext
+        // The job's model context (S.2e2c): a value of a type the model does not know is its own twin, as in the plug-in view.
+        var context = new Xrmd.Model.Messages.StepContext
         {
             MessageName = "Create", PrimaryEntityName = "account", PrimaryEntityId = Guid.NewGuid(), Stage = 40, Mode = Async,
             UserId = caller.UserId, InitiatingUserId = caller.UserId, BusinessUnitId = caller.BusinessUnitId, OperationId = Guid.NewGuid(),
-            OrganizationName = "org", OwningExtension = new EntityReference("sdkmessageprocessingstep", stepId),
+            OrganizationName = "org", OwningExtension = new Xrmd.Model.Records.RecordReference { LogicalName = "sdkmessageprocessingstep", Id = stepId },
         };
         context.InputParameters["Opaque"] = invalidContract ? new Opaque(value) : new Unlisted { Value = value };
 
         await using var scope = fx.App.Services.CreateAsyncScope();
         await using var conn = await TestProvider.OpenAsync(fx.ConnectionString);
         var act = () => scope.ServiceProvider.GetRequiredService<PipelineExecutor>()
-            .RunAsyncStepAsync(step, context, new Xrmd.Abstractions.DataSession(conn, null), default);
+            .RunAsyncStepAsync(step, context, new Xrmd.Abstractions.Sdk.SdkMirror(), new Xrmd.Abstractions.DataSession(conn, null), default);
 
         var failure = (await act.Should().ThrowAsync<Xrmd.Pipeline.Sandbox.PluginExecutionException>()).Which;
         failure.Unexpected.Should().BeFalse("a context that cannot be serialized will not serialize on a retry");

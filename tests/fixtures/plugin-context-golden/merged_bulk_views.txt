@@ -1,0 +1,569 @@
+=== single create seen by a CreateMultiple step that changes Targets[0] ===
+--- dump CreateMultiple|20|0|1 ---
+Context: @1
+  AuthenticatedUserId: Guid:{user}
+  BusinessUnitId: Guid:{businessunit}
+  CorrelationId: Guid:{id1}
+  Depth: Int32:1
+  EnvironmentId: null
+  InitiatingUserAgent: null
+  InitiatingUserApplicationId: Guid:{empty}
+  InitiatingUserAzureActiveDirectoryObjectId: Guid:{empty}
+  InitiatingUserId: Guid:{user}
+  InputParameters: ParameterCollection[1] @2
+    Targets: EntityCollection @3
+      EntityName: String:"account"
+      Entities: DataCollection[1] @4
+        [0]: Entity(account) @5
+          Id: Guid:{empty}
+          EntityState: null
+          RowVersion: null
+          Attributes: AttributeCollection[1] @6
+            name: String:"gld-bulk-mutated"
+          FormattedValues: FormattedValueCollection[0] @7
+          KeyAttributes: KeyAttributeCollection[0] @8
+          RelatedEntities: RelatedEntityCollection[0] @9
+      MoreRecords: Boolean:False
+      PagingCookie: null
+      TotalRecordCount: Int32:0
+      TotalRecordCountLimitExceeded: Boolean:False
+  IsApplicationUser: Boolean:False
+  IsExecutingOffline: Boolean:False
+  IsInTransaction: Boolean:True
+  IsOfflinePlayback: Boolean:False
+  IsPortalsClientCall: Boolean:False
+  IsolationMode: Int32:2
+  MessageName: String:"CreateMultiple"
+  Mode: Int32:0
+  OperationCreatedOn: DateTime:{date}
+  OperationId: Guid:{id2}
+  OrganizationId: Guid:{organization}
+  OrganizationName: String:"Test Org"
+  OutputParameters: ParameterCollection[0] @10
+  OwningExtension: EntityReference @11
+    LogicalName: String:"sdkmessageprocessingstep"
+    Id: Guid:{id3}
+    Name: String:"CreateMultiple:account:20:1"
+    KeyAttributes: KeyAttributeCollection[0] @12
+    RowVersion: null
+  ParentContext: null
+  PortalsContactId: Guid:{empty}
+  PostEntityImages: EntityImageCollection[0] @13
+  PostEntityImagesCollection: EntityImageCollection[][0] @14
+  PreEntityImages: EntityImageCollection[0] @15
+  PreEntityImagesCollection: EntityImageCollection[][1] @16
+    [0]: EntityImageCollection[0] @17
+  PrimaryEntityId: Guid:{empty}
+  PrimaryEntityName: String:"account"
+  RequestId: Guid:{id4}
+  SecondaryEntityName: String:"none"
+  SharedVariables: ParameterCollection[1] @18
+    dump: Int32:20
+  Stage: Int32:20
+  TenantId: Guid:{empty}
+  UserAzureActiveDirectoryObjectId: Guid:{empty}
+  UserId: Guid:{user}
+--- dump Create|20|0|1 ---
+Context: @19
+  AuthenticatedUserId: Guid:{user}
+  BusinessUnitId: Guid:{businessunit}
+  CorrelationId: Guid:{id1}
+  Depth: Int32:1
+  EnvironmentId: null
+  InitiatingUserAgent: null
+  InitiatingUserApplicationId: Guid:{empty}
+  InitiatingUserAzureActiveDirectoryObjectId: Guid:{empty}
+  InitiatingUserId: Guid:{user}
+  InputParameters: ParameterCollection[1] @20
+    Target: Entity(account) @5
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[1] @6
+        name: String:"gld-bulk-mutated"
+      FormattedValues: FormattedValueCollection[0] @7
+      KeyAttributes: KeyAttributeCollection[0] @8
+      RelatedEntities: RelatedEntityCollection[0] @9
+  IsApplicationUser: Boolean:False
+  IsExecutingOffline: Boolean:False
+  IsInTransaction: Boolean:True
+  IsOfflinePlayback: Boolean:False
+  IsPortalsClientCall: Boolean:False
+  IsolationMode: Int32:2
+  MessageName: String:"Create"
+  Mode: Int32:0
+  OperationCreatedOn: DateTime:{date}
+  OperationId: Guid:{id2}
+  OrganizationId: Guid:{organization}
+  OrganizationName: String:"Test Org"
+  OutputParameters: ParameterCollection[0] @21
+  OwningExtension: EntityReference @22
+    LogicalName: String:"sdkmessageprocessingstep"
+    Id: Guid:{id5}
+    Name: String:"Create:account:20:2"
+    KeyAttributes: KeyAttributeCollection[0] @23
+    RowVersion: null
+  ParentContext: null
+  PortalsContactId: Guid:{empty}
+  PostEntityImages: EntityImageCollection[0] @24
+  PostEntityImagesCollection: EntityImageCollection[][0] @25
+  PreEntityImages: EntityImageCollection[0] @26
+  PreEntityImagesCollection: EntityImageCollection[][0] @27
+  PrimaryEntityId: Guid:{empty}
+  PrimaryEntityName: String:"account"
+  RequestId: Guid:{id4}
+  SecondaryEntityName: String:"none"
+  SharedVariables: ParameterCollection[2] @18
+    dump: Int32:20
+    dumped: String:"20"
+  Stage: Int32:20
+  TenantId: Guid:{empty}
+  UserAzureActiveDirectoryObjectId: Guid:{empty}
+  UserId: Guid:{user}
+--- caller ---
+stored name=gld-bulk-mutated
+=== UpdateMultiple with image collections, a step that changes every target and the inner Update executions ===
+--- dump UpdateMultiple|20|0|1 ---
+Context: @28
+  AuthenticatedUserId: Guid:{user}
+  BusinessUnitId: Guid:{businessunit}
+  CorrelationId: Guid:{id6}
+  Depth: Int32:1
+  EnvironmentId: null
+  InitiatingUserAgent: null
+  InitiatingUserApplicationId: Guid:{empty}
+  InitiatingUserAzureActiveDirectoryObjectId: Guid:{empty}
+  InitiatingUserId: Guid:{user}
+  InputParameters: ParameterCollection[1] @29
+    Targets: EntityCollection @30
+      EntityName: String:"account"
+      Entities: DataCollection[2] @31
+        [0]: Entity(account) @32
+          Id: Guid:{id7}
+          EntityState: null
+          RowVersion: null
+          Attributes: AttributeCollection[1] @33
+            name: String:"gld-bulk-upd"
+          FormattedValues: FormattedValueCollection[0] @34
+          KeyAttributes: KeyAttributeCollection[0] @35
+          RelatedEntities: RelatedEntityCollection[0] @36
+        [1]: Entity(account) @37
+          Id: Guid:{id8}
+          EntityState: null
+          RowVersion: null
+          Attributes: AttributeCollection[1] @38
+            name: String:"gld-bulk-upd"
+          FormattedValues: FormattedValueCollection[0] @39
+          KeyAttributes: KeyAttributeCollection[0] @40
+          RelatedEntities: RelatedEntityCollection[0] @41
+      MoreRecords: Boolean:False
+      PagingCookie: null
+      TotalRecordCount: Int32:0
+      TotalRecordCountLimitExceeded: Boolean:False
+  IsApplicationUser: Boolean:False
+  IsExecutingOffline: Boolean:False
+  IsInTransaction: Boolean:True
+  IsOfflinePlayback: Boolean:False
+  IsPortalsClientCall: Boolean:False
+  IsolationMode: Int32:2
+  MessageName: String:"UpdateMultiple"
+  Mode: Int32:0
+  OperationCreatedOn: DateTime:{date}
+  OperationId: Guid:{id9}
+  OrganizationId: Guid:{organization}
+  OrganizationName: String:"Test Org"
+  OutputParameters: ParameterCollection[0] @42
+  OwningExtension: EntityReference @43
+    LogicalName: String:"sdkmessageprocessingstep"
+    Id: Guid:{id10}
+    Name: String:"UpdateMultiple:account:20:1"
+    KeyAttributes: KeyAttributeCollection[0] @44
+    RowVersion: null
+  ParentContext: null
+  PortalsContactId: Guid:{empty}
+  PostEntityImages: EntityImageCollection[0] @45
+  PostEntityImagesCollection: EntityImageCollection[][0] @46
+  PreEntityImages: EntityImageCollection[0] @47
+  PreEntityImagesCollection: EntityImageCollection[][2] @48
+    [0]: EntityImageCollection[1] @49
+      pre: Entity(account) @50
+        Id: Guid:{id7}
+        EntityState: null
+        RowVersion: null
+        Attributes: AttributeCollection[1] @51
+          name: String:"gld-bulk-old-a"
+        FormattedValues: FormattedValueCollection[0] @52
+        KeyAttributes: KeyAttributeCollection[0] @53
+        RelatedEntities: RelatedEntityCollection[0] @54
+    [1]: EntityImageCollection[1] @55
+      pre: Entity(account) @56
+        Id: Guid:{id8}
+        EntityState: null
+        RowVersion: null
+        Attributes: AttributeCollection[1] @57
+          name: String:"gld-bulk-old-b"
+        FormattedValues: FormattedValueCollection[0] @58
+        KeyAttributes: KeyAttributeCollection[0] @59
+        RelatedEntities: RelatedEntityCollection[0] @60
+  PrimaryEntityId: Guid:{empty}
+  PrimaryEntityName: String:"account"
+  RequestId: Guid:{id11}
+  SecondaryEntityName: String:"none"
+  SharedVariables: ParameterCollection[1] @61
+    dump: Int32:20
+  Stage: Int32:20
+  TenantId: Guid:{empty}
+  UserAzureActiveDirectoryObjectId: Guid:{empty}
+  UserId: Guid:{user}
+--- dump UpdateMultiple|40|0|1 ---
+Context: @62
+  AuthenticatedUserId: Guid:{user}
+  BusinessUnitId: Guid:{businessunit}
+  CorrelationId: Guid:{id6}
+  Depth: Int32:1
+  EnvironmentId: null
+  InitiatingUserAgent: null
+  InitiatingUserApplicationId: Guid:{empty}
+  InitiatingUserAzureActiveDirectoryObjectId: Guid:{empty}
+  InitiatingUserId: Guid:{user}
+  InputParameters: ParameterCollection[1] @29
+    Targets: EntityCollection @30
+      EntityName: String:"account"
+      Entities: DataCollection[2] @31
+        [0]: Entity(account) @32
+          Id: Guid:{id7}
+          EntityState: null
+          RowVersion: null
+          Attributes: AttributeCollection[1] @33
+            name: String:"gld-bulk-upd"
+          FormattedValues: FormattedValueCollection[0] @34
+          KeyAttributes: KeyAttributeCollection[0] @35
+          RelatedEntities: RelatedEntityCollection[0] @36
+        [1]: Entity(account) @37
+          Id: Guid:{id8}
+          EntityState: null
+          RowVersion: null
+          Attributes: AttributeCollection[1] @38
+            name: String:"gld-bulk-upd"
+          FormattedValues: FormattedValueCollection[0] @39
+          KeyAttributes: KeyAttributeCollection[0] @40
+          RelatedEntities: RelatedEntityCollection[0] @41
+      MoreRecords: Boolean:False
+      PagingCookie: null
+      TotalRecordCount: Int32:0
+      TotalRecordCountLimitExceeded: Boolean:False
+  IsApplicationUser: Boolean:False
+  IsExecutingOffline: Boolean:False
+  IsInTransaction: Boolean:True
+  IsOfflinePlayback: Boolean:False
+  IsPortalsClientCall: Boolean:False
+  IsolationMode: Int32:2
+  MessageName: String:"UpdateMultiple"
+  Mode: Int32:0
+  OperationCreatedOn: DateTime:{date}
+  OperationId: Guid:{id9}
+  OrganizationId: Guid:{organization}
+  OrganizationName: String:"Test Org"
+  OutputParameters: ParameterCollection[0] @42
+  OwningExtension: EntityReference @63
+    LogicalName: String:"sdkmessageprocessingstep"
+    Id: Guid:{id12}
+    Name: String:"UpdateMultiple:account:40:1"
+    KeyAttributes: KeyAttributeCollection[0] @64
+    RowVersion: null
+  ParentContext: null
+  PortalsContactId: Guid:{empty}
+  PostEntityImages: EntityImageCollection[0] @65
+  PostEntityImagesCollection: EntityImageCollection[][2] @66
+    [0]: EntityImageCollection[1] @67
+      post: Entity(account) @68
+        Id: Guid:{id7}
+        EntityState: null
+        RowVersion: null
+        Attributes: AttributeCollection[1] @69
+          name: String:"gld-bulk-upd"
+        FormattedValues: FormattedValueCollection[0] @70
+        KeyAttributes: KeyAttributeCollection[0] @71
+        RelatedEntities: RelatedEntityCollection[0] @72
+    [1]: EntityImageCollection[1] @73
+      post: Entity(account) @74
+        Id: Guid:{id8}
+        EntityState: null
+        RowVersion: null
+        Attributes: AttributeCollection[1] @75
+          name: String:"gld-bulk-upd"
+        FormattedValues: FormattedValueCollection[0] @76
+        KeyAttributes: KeyAttributeCollection[0] @77
+        RelatedEntities: RelatedEntityCollection[0] @78
+  PreEntityImages: EntityImageCollection[0] @79
+  PreEntityImagesCollection: EntityImageCollection[][2] @80
+    [0]: EntityImageCollection[0] @81
+    [1]: EntityImageCollection[0] @82
+  PrimaryEntityId: Guid:{empty}
+  PrimaryEntityName: String:"account"
+  RequestId: Guid:{id11}
+  SecondaryEntityName: String:"none"
+  SharedVariables: ParameterCollection[2] @61
+    dump: Int32:40
+    dumped: String:"20"
+  Stage: Int32:40
+  TenantId: Guid:{empty}
+  UserAzureActiveDirectoryObjectId: Guid:{empty}
+  UserId: Guid:{user}
+--- dump Update|20|0|1 ---
+Context: @83
+  AuthenticatedUserId: Guid:{user}
+  BusinessUnitId: Guid:{businessunit}
+  CorrelationId: Guid:{id6}
+  Depth: Int32:1
+  EnvironmentId: null
+  InitiatingUserAgent: null
+  InitiatingUserApplicationId: Guid:{empty}
+  InitiatingUserAzureActiveDirectoryObjectId: Guid:{empty}
+  InitiatingUserId: Guid:{user}
+  InputParameters: ParameterCollection[1] @84
+    Target: Entity(account) @32
+      Id: Guid:{id7}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[1] @33
+        name: String:"gld-bulk-upd"
+      FormattedValues: FormattedValueCollection[0] @34
+      KeyAttributes: KeyAttributeCollection[0] @35
+      RelatedEntities: RelatedEntityCollection[0] @36
+  IsApplicationUser: Boolean:False
+  IsExecutingOffline: Boolean:False
+  IsInTransaction: Boolean:True
+  IsOfflinePlayback: Boolean:False
+  IsPortalsClientCall: Boolean:False
+  IsolationMode: Int32:2
+  MessageName: String:"Update"
+  Mode: Int32:0
+  OperationCreatedOn: DateTime:{date}
+  OperationId: Guid:{id13}
+  OrganizationId: Guid:{organization}
+  OrganizationName: String:"Test Org"
+  OutputParameters: ParameterCollection[0] @85
+  OwningExtension: EntityReference @86
+    LogicalName: String:"sdkmessageprocessingstep"
+    Id: Guid:{id14}
+    Name: String:"Update:account:20:2"
+    KeyAttributes: KeyAttributeCollection[0] @87
+    RowVersion: null
+  ParentContext: Context @88
+    AuthenticatedUserId: Guid:{user}
+    BusinessUnitId: Guid:{businessunit}
+    CorrelationId: Guid:{id6}
+    Depth: Int32:1
+    EnvironmentId: null
+    InitiatingUserAgent: null
+    InitiatingUserApplicationId: Guid:{empty}
+    InitiatingUserAzureActiveDirectoryObjectId: Guid:{empty}
+    InitiatingUserId: Guid:{user}
+    InputParameters: ParameterCollection[1] @29
+      Targets: EntityCollection @30
+        EntityName: String:"account"
+        Entities: DataCollection[2] @31
+          [0]: Entity(account) @32
+            Id: Guid:{id7}
+            EntityState: null
+            RowVersion: null
+            Attributes: AttributeCollection[1] @33
+              name: String:"gld-bulk-upd"
+            FormattedValues: FormattedValueCollection[0] @34
+            KeyAttributes: KeyAttributeCollection[0] @35
+            RelatedEntities: RelatedEntityCollection[0] @36
+          [1]: Entity(account) @37
+            Id: Guid:{id8}
+            EntityState: null
+            RowVersion: null
+            Attributes: AttributeCollection[1] @38
+              name: String:"gld-bulk-upd"
+            FormattedValues: FormattedValueCollection[0] @39
+            KeyAttributes: KeyAttributeCollection[0] @40
+            RelatedEntities: RelatedEntityCollection[0] @41
+        MoreRecords: Boolean:False
+        PagingCookie: null
+        TotalRecordCount: Int32:0
+        TotalRecordCountLimitExceeded: Boolean:False
+    IsApplicationUser: Boolean:False
+    IsExecutingOffline: Boolean:False
+    IsInTransaction: Boolean:False
+    IsOfflinePlayback: Boolean:False
+    IsPortalsClientCall: Boolean:False
+    IsolationMode: Int32:2
+    MessageName: String:"UpdateMultiple"
+    Mode: Int32:0
+    OperationCreatedOn: DateTime:{date}
+    OperationId: Guid:{id9}
+    OrganizationId: Guid:{organization}
+    OrganizationName: String:"Test Org"
+    OutputParameters: ParameterCollection[0] @42
+    OwningExtension: EntityReference @89
+      LogicalName: null
+      Id: Guid:{empty}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0] @90
+      RowVersion: null
+    ParentContext: null
+    PortalsContactId: Guid:{empty}
+    PostEntityImages: EntityImageCollection[0] @91
+    PostEntityImagesCollection: EntityImageCollection[][0] @92
+    PreEntityImages: EntityImageCollection[0] @93
+    PreEntityImagesCollection: EntityImageCollection[][0] @94
+    PrimaryEntityId: Guid:{empty}
+    PrimaryEntityName: String:"account"
+    RequestId: Guid:{id11}
+    SecondaryEntityName: String:"none"
+    SharedVariables: ParameterCollection[2] @61
+      dump: Int32:20
+      dumped: String:"20"
+    Stage: Int32:30
+    TenantId: Guid:{empty}
+    UserAzureActiveDirectoryObjectId: Guid:{empty}
+    UserId: Guid:{user}
+  PortalsContactId: Guid:{empty}
+  PostEntityImages: EntityImageCollection[0] @95
+  PostEntityImagesCollection: EntityImageCollection[][0] @96
+  PreEntityImages: EntityImageCollection[0] @97
+  PreEntityImagesCollection: EntityImageCollection[][0] @98
+  PrimaryEntityId: Guid:{id7}
+  PrimaryEntityName: String:"account"
+  RequestId: Guid:{id15}
+  SecondaryEntityName: String:"none"
+  SharedVariables: ParameterCollection[1] @99
+    dump: Int32:20
+  Stage: Int32:20
+  TenantId: Guid:{empty}
+  UserAzureActiveDirectoryObjectId: Guid:{empty}
+  UserId: Guid:{user}
+--- dump Update|20|0|1 ---
+Context: @100
+  AuthenticatedUserId: Guid:{user}
+  BusinessUnitId: Guid:{businessunit}
+  CorrelationId: Guid:{id6}
+  Depth: Int32:1
+  EnvironmentId: null
+  InitiatingUserAgent: null
+  InitiatingUserApplicationId: Guid:{empty}
+  InitiatingUserAzureActiveDirectoryObjectId: Guid:{empty}
+  InitiatingUserId: Guid:{user}
+  InputParameters: ParameterCollection[1] @101
+    Target: Entity(account) @37
+      Id: Guid:{id8}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[1] @38
+        name: String:"gld-bulk-upd"
+      FormattedValues: FormattedValueCollection[0] @39
+      KeyAttributes: KeyAttributeCollection[0] @40
+      RelatedEntities: RelatedEntityCollection[0] @41
+  IsApplicationUser: Boolean:False
+  IsExecutingOffline: Boolean:False
+  IsInTransaction: Boolean:True
+  IsOfflinePlayback: Boolean:False
+  IsPortalsClientCall: Boolean:False
+  IsolationMode: Int32:2
+  MessageName: String:"Update"
+  Mode: Int32:0
+  OperationCreatedOn: DateTime:{date}
+  OperationId: Guid:{id16}
+  OrganizationId: Guid:{organization}
+  OrganizationName: String:"Test Org"
+  OutputParameters: ParameterCollection[0] @102
+  OwningExtension: EntityReference @103
+    LogicalName: String:"sdkmessageprocessingstep"
+    Id: Guid:{id14}
+    Name: String:"Update:account:20:2"
+    KeyAttributes: KeyAttributeCollection[0] @104
+    RowVersion: null
+  ParentContext: Context @105
+    AuthenticatedUserId: Guid:{user}
+    BusinessUnitId: Guid:{businessunit}
+    CorrelationId: Guid:{id6}
+    Depth: Int32:1
+    EnvironmentId: null
+    InitiatingUserAgent: null
+    InitiatingUserApplicationId: Guid:{empty}
+    InitiatingUserAzureActiveDirectoryObjectId: Guid:{empty}
+    InitiatingUserId: Guid:{user}
+    InputParameters: ParameterCollection[1] @29
+      Targets: EntityCollection @30
+        EntityName: String:"account"
+        Entities: DataCollection[2] @31
+          [0]: Entity(account) @32
+            Id: Guid:{id7}
+            EntityState: null
+            RowVersion: null
+            Attributes: AttributeCollection[1] @33
+              name: String:"gld-bulk-upd"
+            FormattedValues: FormattedValueCollection[0] @34
+            KeyAttributes: KeyAttributeCollection[0] @35
+            RelatedEntities: RelatedEntityCollection[0] @36
+          [1]: Entity(account) @37
+            Id: Guid:{id8}
+            EntityState: null
+            RowVersion: null
+            Attributes: AttributeCollection[1] @38
+              name: String:"gld-bulk-upd"
+            FormattedValues: FormattedValueCollection[0] @39
+            KeyAttributes: KeyAttributeCollection[0] @40
+            RelatedEntities: RelatedEntityCollection[0] @41
+        MoreRecords: Boolean:False
+        PagingCookie: null
+        TotalRecordCount: Int32:0
+        TotalRecordCountLimitExceeded: Boolean:False
+    IsApplicationUser: Boolean:False
+    IsExecutingOffline: Boolean:False
+    IsInTransaction: Boolean:False
+    IsOfflinePlayback: Boolean:False
+    IsPortalsClientCall: Boolean:False
+    IsolationMode: Int32:2
+    MessageName: String:"UpdateMultiple"
+    Mode: Int32:0
+    OperationCreatedOn: DateTime:{date}
+    OperationId: Guid:{id9}
+    OrganizationId: Guid:{organization}
+    OrganizationName: String:"Test Org"
+    OutputParameters: ParameterCollection[0] @42
+    OwningExtension: EntityReference @106
+      LogicalName: null
+      Id: Guid:{empty}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0] @107
+      RowVersion: null
+    ParentContext: null
+    PortalsContactId: Guid:{empty}
+    PostEntityImages: EntityImageCollection[0] @108
+    PostEntityImagesCollection: EntityImageCollection[][0] @109
+    PreEntityImages: EntityImageCollection[0] @110
+    PreEntityImagesCollection: EntityImageCollection[][0] @111
+    PrimaryEntityId: Guid:{empty}
+    PrimaryEntityName: String:"account"
+    RequestId: Guid:{id11}
+    SecondaryEntityName: String:"none"
+    SharedVariables: ParameterCollection[2] @61
+      dump: Int32:20
+      dumped: String:"20"
+    Stage: Int32:30
+    TenantId: Guid:{empty}
+    UserAzureActiveDirectoryObjectId: Guid:{empty}
+    UserId: Guid:{user}
+  PortalsContactId: Guid:{empty}
+  PostEntityImages: EntityImageCollection[0] @112
+  PostEntityImagesCollection: EntityImageCollection[][0] @113
+  PreEntityImages: EntityImageCollection[0] @114
+  PreEntityImagesCollection: EntityImageCollection[][0] @115
+  PrimaryEntityId: Guid:{id8}
+  PrimaryEntityName: String:"account"
+  RequestId: Guid:{id17}
+  SecondaryEntityName: String:"none"
+  SharedVariables: ParameterCollection[1] @116
+    dump: Int32:20
+  Stage: Int32:20
+  TenantId: Guid:{empty}
+  UserAzureActiveDirectoryObjectId: Guid:{empty}
+  UserId: Guid:{user}
+--- caller ---
+stored a=gld-bulk-upd
+stored b=gld-bulk-upd

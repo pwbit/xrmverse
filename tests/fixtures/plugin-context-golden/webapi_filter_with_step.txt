@@ -1,0 +1,177 @@
+=== web api get with $filter and RetrieveMultiple steps at 20 and 40 ===
+--- dump RetrieveMultiple|20|0|1 ---
+Context: @1
+  AuthenticatedUserId: Guid:{user}
+  BusinessUnitId: Guid:{businessunit}
+  CorrelationId: Guid:{id1}
+  Depth: Int32:1
+  EnvironmentId: null
+  InitiatingUserAgent: null
+  InitiatingUserApplicationId: Guid:{empty}
+  InitiatingUserAzureActiveDirectoryObjectId: Guid:{empty}
+  InitiatingUserId: Guid:{user}
+  InputParameters: ParameterCollection[1] @2
+    Query: QueryExpression
+      EntityName: String:"account"
+      ColumnSet: ColumnSet
+        AllColumns: Boolean:False
+        Columns: DataCollection[0] @3
+      Criteria: FilterExpression
+        FilterOperator: LogicalOperator:And
+        Conditions: [0]
+        Filters: [0]
+      Orders: [0]
+      LinkEntities: [0]
+      TopCount: null
+      Distinct: Boolean:False
+      NoLock: Boolean:False
+      PageInfo: PagingInfo
+        Count: Int32:0
+        PageNumber: Int32:0
+        PagingCookie: null
+        ReturnTotalRecordCount: Boolean:False
+  IsApplicationUser: Boolean:False
+  IsExecutingOffline: Boolean:False
+  IsInTransaction: Boolean:True
+  IsOfflinePlayback: Boolean:False
+  IsPortalsClientCall: Boolean:False
+  IsolationMode: Int32:2
+  MessageName: String:"RetrieveMultiple"
+  Mode: Int32:0
+  OperationCreatedOn: DateTime:{date}
+  OperationId: Guid:{id2}
+  OrganizationId: Guid:{organization}
+  OrganizationName: String:"Test Org"
+  OutputParameters: ParameterCollection[0] @4
+  OwningExtension: EntityReference @5
+    LogicalName: String:"sdkmessageprocessingstep"
+    Id: Guid:{id3}
+    Name: String:"RetrieveMultiple:account:20:1"
+    KeyAttributes: KeyAttributeCollection[0] @6
+    RowVersion: null
+  ParentContext: null
+  PortalsContactId: Guid:{empty}
+  PostEntityImages: EntityImageCollection[0] @7
+  PostEntityImagesCollection: EntityImageCollection[][0] @8
+  PreEntityImages: EntityImageCollection[0] @9
+  PreEntityImagesCollection: EntityImageCollection[][0] @10
+  PrimaryEntityId: Guid:{empty}
+  PrimaryEntityName: String:"account"
+  RequestId: Guid:{id4}
+  SecondaryEntityName: String:"none"
+  SharedVariables: ParameterCollection[1] @11
+    dump: Int32:20
+  Stage: Int32:20
+  TenantId: Guid:{empty}
+  UserAzureActiveDirectoryObjectId: Guid:{empty}
+  UserId: Guid:{user}
+--- dump RetrieveMultiple|40|0|1 ---
+Context: @12
+  AuthenticatedUserId: Guid:{user}
+  BusinessUnitId: Guid:{businessunit}
+  CorrelationId: Guid:{id1}
+  Depth: Int32:1
+  EnvironmentId: null
+  InitiatingUserAgent: null
+  InitiatingUserApplicationId: Guid:{empty}
+  InitiatingUserAzureActiveDirectoryObjectId: Guid:{empty}
+  InitiatingUserId: Guid:{user}
+  InputParameters: ParameterCollection[1] @2
+    Query: QueryExpression
+      EntityName: String:"account"
+      ColumnSet: ColumnSet
+        AllColumns: Boolean:False
+        Columns: DataCollection[0] @3
+      Criteria: FilterExpression
+        FilterOperator: LogicalOperator:And
+        Conditions: [0]
+        Filters: [0]
+      Orders: [0]
+      LinkEntities: [0]
+      TopCount: null
+      Distinct: Boolean:False
+      NoLock: Boolean:False
+      PageInfo: PagingInfo
+        Count: Int32:0
+        PageNumber: Int32:0
+        PagingCookie: null
+        ReturnTotalRecordCount: Boolean:False
+  IsApplicationUser: Boolean:False
+  IsExecutingOffline: Boolean:False
+  IsInTransaction: Boolean:True
+  IsOfflinePlayback: Boolean:False
+  IsPortalsClientCall: Boolean:False
+  IsolationMode: Int32:2
+  MessageName: String:"RetrieveMultiple"
+  Mode: Int32:0
+  OperationCreatedOn: DateTime:{date}
+  OperationId: Guid:{id2}
+  OrganizationId: Guid:{organization}
+  OrganizationName: String:"Test Org"
+  OutputParameters: ParameterCollection[1] @4
+    BusinessEntityCollection: EntityCollection @13
+      EntityName: String:"account"
+      Entities: DataCollection[3] @14
+        [0]: Entity(account) @15
+          Id: Guid:{id5}
+          EntityState: null
+          RowVersion: {rowversion}
+          Attributes: AttributeCollection[3] @16
+            accountid: Guid:{id5}
+            name: String:"gld-wf-a"
+            versionnumber: Int64:{rowversion}
+          FormattedValues: FormattedValueCollection[0] @17
+          KeyAttributes: KeyAttributeCollection[0] @18
+          RelatedEntities: RelatedEntityCollection[0] @19
+        [1]: Entity(account) @20
+          Id: Guid:{id6}
+          EntityState: null
+          RowVersion: {rowversion}
+          Attributes: AttributeCollection[3] @21
+            accountid: Guid:{id6}
+            name: String:"gld-wf-b"
+            versionnumber: Int64:{rowversion}
+          FormattedValues: FormattedValueCollection[0] @22
+          KeyAttributes: KeyAttributeCollection[0] @23
+          RelatedEntities: RelatedEntityCollection[0] @24
+        [2]: Entity(account) @25
+          Id: Guid:{id7}
+          EntityState: null
+          RowVersion: {rowversion}
+          Attributes: AttributeCollection[3] @26
+            accountid: Guid:{id7}
+            name: String:"gld-wf-c"
+            versionnumber: Int64:{rowversion}
+          FormattedValues: FormattedValueCollection[0] @27
+          KeyAttributes: KeyAttributeCollection[0] @28
+          RelatedEntities: RelatedEntityCollection[0] @29
+      MoreRecords: Boolean:False
+      PagingCookie: null
+      TotalRecordCount: Int32:-1
+      TotalRecordCountLimitExceeded: Boolean:False
+  OwningExtension: EntityReference @30
+    LogicalName: String:"sdkmessageprocessingstep"
+    Id: Guid:{id8}
+    Name: String:"RetrieveMultiple:account:40:1"
+    KeyAttributes: KeyAttributeCollection[0] @31
+    RowVersion: null
+  ParentContext: null
+  PortalsContactId: Guid:{empty}
+  PostEntityImages: EntityImageCollection[0] @32
+  PostEntityImagesCollection: EntityImageCollection[][0] @33
+  PreEntityImages: EntityImageCollection[0] @34
+  PreEntityImagesCollection: EntityImageCollection[][0] @35
+  PrimaryEntityId: Guid:{empty}
+  PrimaryEntityName: String:"account"
+  RequestId: Guid:{id4}
+  SecondaryEntityName: String:"none"
+  SharedVariables: ParameterCollection[2] @11
+    dump: Int32:40
+    dumped: String:"20"
+  Stage: Int32:40
+  TenantId: Guid:{empty}
+  UserAzureActiveDirectoryObjectId: Guid:{empty}
+  UserId: Guid:{user}
+--- caller ---
+rows without the step=gld-wf-a,gld-wf-b,gld-wf-c
+rows with the step=gld-wf-a,gld-wf-b,gld-wf-c

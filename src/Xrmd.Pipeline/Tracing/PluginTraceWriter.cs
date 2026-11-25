@@ -1,6 +1,7 @@
 using System.Data;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
+using Xrmd.Model.Messages;
 using Xrmd.Pipeline.Registration;
 
 namespace Xrmd.Pipeline.Tracing;
@@ -18,7 +19,7 @@ public sealed class PluginTraceWriter(IDbConnectionFactory factory)
     public const int WorkflowActivityOperation = 2;
 
     /// <summary>Inserts one row for an execution of <paramref name="step"/>; <paramref name="messageBlock"/> is the trace text.</summary>
-    public Task WriteAsync(PluginStep step, XrmdPluginExecutionContext context, string messageBlock, string? exceptionDetails,
+    public Task WriteAsync(PluginStep step, StepContext context, string messageBlock, string? exceptionDetails,
         DateTime startUtc, int durationMs, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(step);
@@ -30,7 +31,7 @@ public sealed class PluginTraceWriter(IDbConnectionFactory factory)
     /// Inserts one row for an execution of the type <paramref name="typeName"/> (<paramref name="operationType"/>: a plug-in or a
     /// workflow activity, which has no step); <paramref name="messageBlock"/> is the trace text.
     /// </summary>
-    public async Task WriteAsync(string typeName, int operationType, Guid? stepId, string? configuration, XrmdPluginExecutionContext context,
+    public async Task WriteAsync(string typeName, int operationType, Guid? stepId, string? configuration, StepContext context,
         string messageBlock, string? exceptionDetails, DateTime startUtc, int durationMs, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(typeName);

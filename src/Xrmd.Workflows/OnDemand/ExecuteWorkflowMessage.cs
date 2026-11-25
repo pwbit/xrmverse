@@ -88,7 +88,7 @@ public sealed class ExecuteWorkflowMessage(WorkflowRegistry registry, WorkflowSt
             // Learn: a workflow run on demand runs as the user who started it, whatever its runas.
             Caller = invocation.Caller,
             // The message's transaction; the steps' requests are nested in the message (its context as their parent).
-            Invocation = invocation with { Session = s, Parent = context },
+            Invocation = invocation with { Session = s, Parent = context.Model! },
             Stage = 30,
             MessageName = PipelineExecutor.ExecuteWorkflowMessage,
         };

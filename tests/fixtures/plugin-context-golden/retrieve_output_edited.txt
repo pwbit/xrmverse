@@ -1,0 +1,135 @@
+=== retrieve ===
+--- dump Retrieve|20|0|1 ---
+Context: @1
+  AuthenticatedUserId: Guid:{user}
+  BusinessUnitId: Guid:{businessunit}
+  CorrelationId: Guid:{id1}
+  Depth: Int32:1
+  EnvironmentId: null
+  InitiatingUserAgent: null
+  InitiatingUserApplicationId: Guid:{empty}
+  InitiatingUserAzureActiveDirectoryObjectId: Guid:{empty}
+  InitiatingUserId: Guid:{user}
+  InputParameters: ParameterCollection[2] @2
+    ColumnSet: ColumnSet
+      AllColumns: Boolean:False
+      Columns: DataCollection[2] @3
+        [0]: String:"pb_name"
+        [1]: String:"pb_count"
+    Target: EntityReference @4
+      LogicalName: String:"pb_pipe"
+      Id: Guid:{id2}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0] @5
+      RowVersion: null
+  IsApplicationUser: Boolean:False
+  IsExecutingOffline: Boolean:False
+  IsInTransaction: Boolean:True
+  IsOfflinePlayback: Boolean:False
+  IsPortalsClientCall: Boolean:False
+  IsolationMode: Int32:2
+  MessageName: String:"Retrieve"
+  Mode: Int32:0
+  OperationCreatedOn: DateTime:{date}
+  OperationId: Guid:{id3}
+  OrganizationId: Guid:{organization}
+  OrganizationName: String:"Test Org"
+  OutputParameters: ParameterCollection[0] @6
+  OwningExtension: EntityReference @7
+    LogicalName: String:"sdkmessageprocessingstep"
+    Id: Guid:{id4}
+    Name: String:"Retrieve:pb_pipe:20:1"
+    KeyAttributes: KeyAttributeCollection[0] @8
+    RowVersion: null
+  ParentContext: null
+  PortalsContactId: Guid:{empty}
+  PostEntityImages: EntityImageCollection[0] @9
+  PostEntityImagesCollection: EntityImageCollection[][0] @10
+  PreEntityImages: EntityImageCollection[0] @11
+  PreEntityImagesCollection: EntityImageCollection[][0] @12
+  PrimaryEntityId: Guid:{id2}
+  PrimaryEntityName: String:"pb_pipe"
+  RequestId: Guid:{id5}
+  SecondaryEntityName: String:"none"
+  SharedVariables: ParameterCollection[1] @13
+    dump: Int32:20
+  Stage: Int32:20
+  TenantId: Guid:{empty}
+  UserAzureActiveDirectoryObjectId: Guid:{empty}
+  UserId: Guid:{user}
+--- dump Retrieve|40|0|1 ---
+Context: @14
+  AuthenticatedUserId: Guid:{user}
+  BusinessUnitId: Guid:{businessunit}
+  CorrelationId: Guid:{id1}
+  Depth: Int32:1
+  EnvironmentId: null
+  InitiatingUserAgent: null
+  InitiatingUserApplicationId: Guid:{empty}
+  InitiatingUserAzureActiveDirectoryObjectId: Guid:{empty}
+  InitiatingUserId: Guid:{user}
+  InputParameters: ParameterCollection[2] @2
+    ColumnSet: ColumnSet
+      AllColumns: Boolean:False
+      Columns: DataCollection[2] @3
+        [0]: String:"pb_name"
+        [1]: String:"pb_count"
+    Target: EntityReference @4
+      LogicalName: String:"pb_pipe"
+      Id: Guid:{id2}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0] @5
+      RowVersion: null
+  IsApplicationUser: Boolean:False
+  IsExecutingOffline: Boolean:False
+  IsInTransaction: Boolean:True
+  IsOfflinePlayback: Boolean:False
+  IsPortalsClientCall: Boolean:False
+  IsolationMode: Int32:2
+  MessageName: String:"Retrieve"
+  Mode: Int32:0
+  OperationCreatedOn: DateTime:{date}
+  OperationId: Guid:{id3}
+  OrganizationId: Guid:{organization}
+  OrganizationName: String:"Test Org"
+  OutputParameters: ParameterCollection[1] @6
+    BusinessEntity: Entity(pb_pipe) @15
+      Id: Guid:{id2}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[3] @16
+        pb_count: Int32:9
+        pb_name: String:"x"
+        pb_pipeid: Guid:{id2}
+      FormattedValues: FormattedValueCollection[1] @17
+        pb_count: String:"9"
+      KeyAttributes: KeyAttributeCollection[0] @18
+      RelatedEntities: RelatedEntityCollection[0] @19
+  OwningExtension: EntityReference @20
+    LogicalName: String:"sdkmessageprocessingstep"
+    Id: Guid:{id6}
+    Name: String:"Retrieve:pb_pipe:40:1"
+    KeyAttributes: KeyAttributeCollection[0] @21
+    RowVersion: null
+  ParentContext: null
+  PortalsContactId: Guid:{empty}
+  PostEntityImages: EntityImageCollection[0] @22
+  PostEntityImagesCollection: EntityImageCollection[][0] @23
+  PreEntityImages: EntityImageCollection[0] @24
+  PreEntityImagesCollection: EntityImageCollection[][0] @25
+  PrimaryEntityId: Guid:{id2}
+  PrimaryEntityName: String:"pb_pipe"
+  RequestId: Guid:{id5}
+  SecondaryEntityName: String:"none"
+  SharedVariables: ParameterCollection[2] @13
+    dump: Int32:40
+    dumped: String:"20"
+  Stage: Int32:40
+  TenantId: Guid:{empty}
+  UserAzureActiveDirectoryObjectId: Guid:{empty}
+  UserId: Guid:{user}
+--- caller ---
+pb_name=x
+pb_count=9
+attributes=pb_count,pb_name,pb_pipeid
+stored pb_name=gld-retrieve

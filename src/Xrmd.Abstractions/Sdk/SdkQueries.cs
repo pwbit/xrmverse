@@ -45,259 +45,338 @@ public static class SdkQueries
     public static RecordQuery ToModel(this QueryExpression query)
     {
         ArgumentNullException.ThrowIfNull(query);
-        var result = new RecordQuery
-        {
-            EntityName = query.EntityName,
-            Columns = query.ColumnSet?.ToModel(),
-            Criteria = query.Criteria?.ToModel(),
-            Distinct = query.Distinct,
-            NoLock = query.NoLock,
-            TopCount = query.TopCount,
-            Paging = query.PageInfo?.ToModel(),
-            QueryHints = query.QueryHints,
-            ForceSeek = query.ForceSeek,
-            DataSource = query.DataSource,
-            SubQuery = query.SubQueryExpression?.ToModel(),
-        };
-        foreach (var o in query.Orders) result.Orders.Add(o?.ToModel()!);
-        foreach (var l in query.LinkEntities) result.Links.Add(l?.ToModel()!);
+        var result = new RecordQuery();
+        Fill(query, result, SdkRecords.ToModelMap);
         return result;
     }
 
     public static QueryExpression ToSdk(this RecordQuery query)
     {
         ArgumentNullException.ThrowIfNull(query);
-        var result = new QueryExpression(query.EntityName)
-        {
-            ColumnSet = query.Columns?.ToSdk()!,
-            Criteria = query.Criteria?.ToSdk()!,
-            Distinct = query.Distinct,
-            NoLock = query.NoLock,
-            TopCount = query.TopCount,
-            PageInfo = query.Paging?.ToSdk()!,
-            QueryHints = query.QueryHints,
-            ForceSeek = query.ForceSeek,
-            DataSource = query.DataSource,
-            SubQueryExpression = query.SubQuery?.ToSdk(),
-        };
-        foreach (var o in query.Orders ?? []) result.Orders.Add(o?.ToSdk()!);
-        foreach (var l in query.Links ?? []) result.LinkEntities.Add(l?.ToSdk()!);
+        var result = new QueryExpression();
+        Fill(query, result, SdkRecords.ToSdkMap);
         return result;
     }
 
     public static AttributeQuery ToModel(this QueryByAttribute query)
     {
         ArgumentNullException.ThrowIfNull(query);
-        var result = new AttributeQuery
-        {
-            EntityName = query.EntityName,
-            Columns = query.ColumnSet?.ToModel(),
-            Paging = query.PageInfo?.ToModel(),
-            TopCount = query.TopCount,
-        };
-        foreach (var a in query.Attributes) result.Attributes.Add(a);
-        foreach (var v in query.Values) result.Values.Add(SdkRecords.ValueToModel(v));
-        foreach (var o in query.Orders) result.Orders.Add(o?.ToModel()!);
+        var result = new AttributeQuery();
+        Fill(query, result, SdkRecords.ToModelMap);
         return result;
     }
 
     public static QueryByAttribute ToSdk(this AttributeQuery query)
     {
         ArgumentNullException.ThrowIfNull(query);
-        var result = new QueryByAttribute(query.EntityName)
-        {
-            ColumnSet = query.Columns?.ToSdk()!,
-            PageInfo = query.Paging?.ToSdk()!,
-            TopCount = query.TopCount,
-        };
-        foreach (var a in query.Attributes ?? []) result.Attributes.Add(a);
-        foreach (var v in query.Values ?? []) result.Values.Add(SdkRecords.ValueToSdk(v));
-        foreach (var o in query.Orders ?? []) result.Orders.Add(o?.ToSdk()!);
+        var result = new QueryByAttribute();
+        Fill(query, result, SdkRecords.ToSdkMap);
         return result;
     }
 
     public static FetchQuery ToModel(this FetchExpression query)
     {
         ArgumentNullException.ThrowIfNull(query);
-        return new FetchQuery { Text = query.Query };
+        var result = new FetchQuery();
+        Fill(query, result, SdkRecords.ToModelMap);
+        return result;
     }
 
     public static FetchExpression ToSdk(this FetchQuery query)
     {
         ArgumentNullException.ThrowIfNull(query);
-        return new FetchExpression(query.Text);
+        var result = new FetchExpression(query.Text);
+        Fill(query, result, SdkRecords.ToSdkMap);
+        return result;
     }
 
     public static QueryFilter ToModel(this FilterExpression filter)
     {
         ArgumentNullException.ThrowIfNull(filter);
-        var result = new QueryFilter
-        {
-            Logic = (FilterLogic)(int)filter.FilterOperator,
-            IsQuickFindFilter = filter.IsQuickFindFilter,
-            FilterHint = filter.FilterHint,
-            AnyAllLink = filter.AnyAllFilterLinkEntity?.ToModel(),
-        };
-        foreach (var c in filter.Conditions) result.Conditions.Add(c?.ToModel()!);
-        foreach (var f in filter.Filters) result.Filters.Add(f?.ToModel()!);
+        var result = new QueryFilter();
+        Fill(filter, result, SdkRecords.ToModelMap);
         return result;
     }
 
     public static FilterExpression ToSdk(this QueryFilter filter)
     {
         ArgumentNullException.ThrowIfNull(filter);
-        var result = new FilterExpression((LogicalOperator)(int)filter.Logic)
-        {
-            IsQuickFindFilter = filter.IsQuickFindFilter,
-            FilterHint = filter.FilterHint,
-            AnyAllFilterLinkEntity = filter.AnyAllLink?.ToSdk(),
-        };
-        foreach (var c in filter.Conditions ?? []) result.Conditions.Add(c?.ToSdk()!);
-        foreach (var f in filter.Filters ?? []) result.Filters.Add(f?.ToSdk()!);
+        var result = new FilterExpression();
+        Fill(filter, result, SdkRecords.ToSdkMap);
         return result;
     }
 
     public static QueryCondition ToModel(this ConditionExpression condition)
     {
         ArgumentNullException.ThrowIfNull(condition);
-        var result = new QueryCondition
-        {
-            EntityName = condition.EntityName,
-            AttributeName = condition.AttributeName,
-            Operator = (FilterOperator)(int)condition.Operator,
-            CompareColumns = condition.CompareColumns,
-        };
-        foreach (var v in condition.Values) result.Values.Add(SdkRecords.ValueToModel(v));
+        var result = new QueryCondition();
+        Fill(condition, result, SdkRecords.ToModelMap);
         return result;
     }
 
     public static ConditionExpression ToSdk(this QueryCondition condition)
     {
         ArgumentNullException.ThrowIfNull(condition);
-        var result = new ConditionExpression
-        {
-            EntityName = condition.EntityName,
-            AttributeName = condition.AttributeName,
-            Operator = (ConditionOperator)(int)condition.Operator,
-            CompareColumns = condition.CompareColumns,
-        };
-        foreach (var v in condition.Values ?? []) result.Values.Add(SdkRecords.ValueToSdk(v));
+        var result = new ConditionExpression();
+        Fill(condition, result, SdkRecords.ToSdkMap);
         return result;
     }
 
     public static QueryLink ToModel(this LinkEntity link)
     {
         ArgumentNullException.ThrowIfNull(link);
-        var result = new QueryLink
-        {
-            FromEntityName = link.LinkFromEntityName,
-            FromAttributeName = link.LinkFromAttributeName,
-            ToEntityName = link.LinkToEntityName,
-            ToAttributeName = link.LinkToAttributeName,
-            Join = (JoinKind)(int)link.JoinOperator,
-            Columns = link.Columns?.ToModel(),
-            Criteria = link.LinkCriteria?.ToModel(),
-            Alias = link.EntityAlias,
-            ForceSeek = link.ForceSeek,
-        };
-        foreach (var l in link.LinkEntities) result.Links.Add(l?.ToModel()!);
-        foreach (var o in link.Orders) result.Orders.Add(o?.ToModel()!);
+        var result = new QueryLink();
+        Fill(link, result, SdkRecords.ToModelMap);
         return result;
     }
 
     public static LinkEntity ToSdk(this QueryLink link)
     {
         ArgumentNullException.ThrowIfNull(link);
-        var result = new LinkEntity
-        {
-            LinkFromEntityName = link.FromEntityName,
-            LinkFromAttributeName = link.FromAttributeName,
-            LinkToEntityName = link.ToEntityName,
-            LinkToAttributeName = link.ToAttributeName,
-            JoinOperator = (JoinOperator)(int)link.Join,
-            Columns = link.Columns?.ToSdk()!,
-            LinkCriteria = link.Criteria?.ToSdk()!,
-            EntityAlias = link.Alias,
-            ForceSeek = link.ForceSeek,
-        };
-        foreach (var l in link.Links ?? []) result.LinkEntities.Add(l?.ToSdk()!);
-        foreach (var o in link.Orders ?? []) result.Orders.Add(o?.ToSdk()!);
+        var result = new LinkEntity();
+        Fill(link, result, SdkRecords.ToSdkMap);
         return result;
     }
 
     public static QueryOrder ToModel(this OrderExpression order)
     {
         ArgumentNullException.ThrowIfNull(order);
-        return new QueryOrder
-        {
-            AttributeName = order.AttributeName,
-            Direction = (SortDirection)(int)order.OrderType,
-            Alias = order.Alias,
-            EntityName = order.EntityName,
-        };
+        var result = new QueryOrder();
+        Fill(order, result);
+        return result;
     }
 
     public static OrderExpression ToSdk(this QueryOrder order)
     {
         ArgumentNullException.ThrowIfNull(order);
-        return new OrderExpression
-        {
-            AttributeName = order.AttributeName,
-            OrderType = (OrderType)(int)order.Direction,
-            Alias = order.Alias,
-            EntityName = order.EntityName,
-        };
+        var result = new OrderExpression();
+        Fill(order, result);
+        return result;
     }
 
     public static QueryPaging ToModel(this PagingInfo paging)
     {
         ArgumentNullException.ThrowIfNull(paging);
-        return new QueryPaging
-        {
-            PageNumber = paging.PageNumber,
-            Count = paging.Count,
-            ReturnTotalRecordCount = paging.ReturnTotalRecordCount,
-            ReturnRecordCountLessThanMarv = paging.ReturnRecordCountLessThanMarv,
-            PagingCookie = paging.PagingCookie,
-        };
+        var result = new QueryPaging();
+        Fill(paging, result);
+        return result;
     }
 
     public static PagingInfo ToSdk(this QueryPaging paging)
     {
         ArgumentNullException.ThrowIfNull(paging);
-        return new PagingInfo
-        {
-            PageNumber = paging.PageNumber,
-            Count = paging.Count,
-            ReturnTotalRecordCount = paging.ReturnTotalRecordCount,
-            ReturnRecordCountLessThanMarv = paging.ReturnRecordCountLessThanMarv,
-            PagingCookie = paging.PagingCookie,
-        };
+        var result = new PagingInfo();
+        Fill(paging, result);
+        return result;
     }
 
     public static ColumnExpression ToModel(this XrmAttributeExpression expression)
     {
         ArgumentNullException.ThrowIfNull(expression);
-        return new ColumnExpression
-        {
-            AttributeName = expression.AttributeName,
-            Aggregate = (ColumnAggregate)(int)expression.AggregateType,
-            Alias = expression.Alias,
-            GroupBy = expression.HasGroupBy,
-            DateGrouping = (ColumnDateGrouping)(int)expression.DateTimeGrouping,
-        };
+        var result = new ColumnExpression();
+        Fill(expression, result);
+        return result;
     }
 
     public static XrmAttributeExpression ToSdk(this ColumnExpression expression)
     {
         ArgumentNullException.ThrowIfNull(expression);
-        return new XrmAttributeExpression
-        {
-            AttributeName = expression.AttributeName,
-            AggregateType = (XrmAggregateType)(int)expression.Aggregate,
-            Alias = expression.Alias,
-            HasGroupBy = expression.GroupBy,
-            DateTimeGrouping = (XrmDateTimeGrouping)(int)expression.DateGrouping,
-        };
+        var result = new XrmAttributeExpression();
+        Fill(expression, result);
+        return result;
+    }
+
+    // Fill: see SdkRecords. Children of a known type go through map; containers are cleared and refilled in source order.
+
+    internal static void Fill(QueryExpression from, RecordQuery into, IFillMap map)
+    {
+        into.EntityName = from.EntityName;
+        into.Columns = (ColumnSelection?)map.Child(from.ColumnSet);
+        into.Criteria = (QueryFilter?)map.Child(from.Criteria);
+        into.Distinct = from.Distinct;
+        into.NoLock = from.NoLock;
+        into.TopCount = from.TopCount;
+        into.Paging = (QueryPaging?)map.Child(from.PageInfo);
+        into.QueryHints = from.QueryHints;
+        into.ForceSeek = from.ForceSeek;
+        into.DataSource = from.DataSource;
+        into.SubQuery = from.SubQueryExpression is { } sub ? (RecordQuery?)map.Child(sub) : null;
+        into.Orders.Clear();
+        foreach (var o in from.Orders) into.Orders.Add((QueryOrder)map.Child(o)!);
+        into.Links.Clear();
+        foreach (var l in from.LinkEntities) into.Links.Add((QueryLink)map.Child(l)!);
+    }
+
+    internal static void Fill(RecordQuery from, QueryExpression into, IFillMap map)
+    {
+        into.EntityName = from.EntityName;
+        into.ColumnSet = (ColumnSet)map.Child(from.Columns)!;
+        into.Criteria = (FilterExpression)map.Child(from.Criteria)!;
+        into.Distinct = from.Distinct;
+        into.NoLock = from.NoLock;
+        into.TopCount = from.TopCount;
+        into.PageInfo = (PagingInfo)map.Child(from.Paging)!;
+        into.QueryHints = from.QueryHints;
+        into.ForceSeek = from.ForceSeek;
+        into.DataSource = from.DataSource;
+        into.SubQueryExpression = from.SubQuery is { } sub ? (QueryExpression?)map.Child(sub) : null;
+        SdkRecords.Refill(into.Orders, [.. (from.Orders ?? []).Select(o => (OrderExpression)map.Child(o)!)]);
+        SdkRecords.Refill(into.LinkEntities, [.. (from.Links ?? []).Select(l => (LinkEntity)map.Child(l)!)]);
+    }
+
+    internal static void Fill(QueryByAttribute from, AttributeQuery into, IFillMap map)
+    {
+        into.EntityName = from.EntityName;
+        into.Columns = (ColumnSelection?)map.Child(from.ColumnSet);
+        into.Paging = (QueryPaging?)map.Child(from.PageInfo);
+        into.TopCount = from.TopCount;
+        into.Attributes.Clear();
+        foreach (var a in from.Attributes) into.Attributes.Add(a);
+        into.Values.Clear();
+        foreach (var v in from.Values) into.Values.Add(map.Value(v, null));
+        into.Orders.Clear();
+        foreach (var o in from.Orders) into.Orders.Add((QueryOrder)map.Child(o)!);
+    }
+
+    internal static void Fill(AttributeQuery from, QueryByAttribute into, IFillMap map)
+    {
+        into.EntityName = from.EntityName;
+        into.ColumnSet = (ColumnSet)map.Child(from.Columns)!;
+        into.PageInfo = (PagingInfo)map.Child(from.Paging)!;
+        into.TopCount = from.TopCount;
+        SdkRecords.Refill(into.Attributes, [.. from.Attributes ?? []]);
+        var old = into.Values.ToArray();
+        SdkRecords.Refill(into.Values, [.. (from.Values ?? []).Select((v, i) => map.Value(v, i < old.Length ? old[i] : null)!)]);
+        SdkRecords.Refill(into.Orders, [.. (from.Orders ?? []).Select(o => (OrderExpression)map.Child(o)!)]);
+    }
+
+    internal static void Fill(FetchExpression from, FetchQuery into, IFillMap map) => into.Text = from.Query;
+
+    internal static void Fill(FetchQuery from, FetchExpression into, IFillMap map) => into.Query = from.Text;
+
+    internal static void Fill(FilterExpression from, QueryFilter into, IFillMap map)
+    {
+        into.Logic = (FilterLogic)(int)from.FilterOperator;
+        into.IsQuickFindFilter = from.IsQuickFindFilter;
+        into.FilterHint = from.FilterHint;
+        into.AnyAllLink = (QueryLink?)map.Child(from.AnyAllFilterLinkEntity);
+        into.Conditions.Clear();
+        foreach (var c in from.Conditions) into.Conditions.Add((QueryCondition)map.Child(c)!);
+        into.Filters.Clear();
+        foreach (var f in from.Filters) into.Filters.Add((QueryFilter)map.Child(f)!);
+    }
+
+    internal static void Fill(QueryFilter from, FilterExpression into, IFillMap map)
+    {
+        into.FilterOperator = (LogicalOperator)(int)from.Logic;
+        into.IsQuickFindFilter = from.IsQuickFindFilter;
+        into.FilterHint = from.FilterHint;
+        into.AnyAllFilterLinkEntity = (LinkEntity?)map.Child(from.AnyAllLink);
+        SdkRecords.Refill(into.Conditions, [.. (from.Conditions ?? []).Select(c => (ConditionExpression)map.Child(c)!)]);
+        SdkRecords.Refill(into.Filters, [.. (from.Filters ?? []).Select(f => (FilterExpression)map.Child(f)!)]);
+    }
+
+    internal static void Fill(ConditionExpression from, QueryCondition into, IFillMap map)
+    {
+        into.EntityName = from.EntityName;
+        into.AttributeName = from.AttributeName;
+        into.Operator = (FilterOperator)(int)from.Operator;
+        into.CompareColumns = from.CompareColumns;
+        into.Values.Clear();
+        foreach (var v in from.Values) into.Values.Add(map.Value(v, null));
+    }
+
+    internal static void Fill(QueryCondition from, ConditionExpression into, IFillMap map)
+    {
+        into.EntityName = from.EntityName;
+        into.AttributeName = from.AttributeName;
+        into.Operator = (ConditionOperator)(int)from.Operator;
+        into.CompareColumns = from.CompareColumns;
+        var old = into.Values.ToArray();
+        SdkRecords.Refill(into.Values, [.. (from.Values ?? []).Select((v, i) => map.Value(v, i < old.Length ? old[i] : null)!)]);
+    }
+
+    internal static void Fill(LinkEntity from, QueryLink into, IFillMap map)
+    {
+        into.FromEntityName = from.LinkFromEntityName;
+        into.FromAttributeName = from.LinkFromAttributeName;
+        into.ToEntityName = from.LinkToEntityName;
+        into.ToAttributeName = from.LinkToAttributeName;
+        into.Join = (JoinKind)(int)from.JoinOperator;
+        into.Columns = (ColumnSelection?)map.Child(from.Columns);
+        into.Criteria = (QueryFilter?)map.Child(from.LinkCriteria);
+        into.Alias = from.EntityAlias;
+        into.ForceSeek = from.ForceSeek;
+        into.Links.Clear();
+        foreach (var l in from.LinkEntities) into.Links.Add((QueryLink)map.Child(l)!);
+        into.Orders.Clear();
+        foreach (var o in from.Orders) into.Orders.Add((QueryOrder)map.Child(o)!);
+    }
+
+    internal static void Fill(QueryLink from, LinkEntity into, IFillMap map)
+    {
+        into.LinkFromEntityName = from.FromEntityName;
+        into.LinkFromAttributeName = from.FromAttributeName;
+        into.LinkToEntityName = from.ToEntityName;
+        into.LinkToAttributeName = from.ToAttributeName;
+        into.JoinOperator = (JoinOperator)(int)from.Join;
+        into.Columns = (ColumnSet)map.Child(from.Columns)!;
+        into.LinkCriteria = (FilterExpression)map.Child(from.Criteria)!;
+        into.EntityAlias = from.Alias;
+        into.ForceSeek = from.ForceSeek;
+        SdkRecords.Refill(into.LinkEntities, [.. (from.Links ?? []).Select(l => (LinkEntity)map.Child(l)!)]);
+        SdkRecords.Refill(into.Orders, [.. (from.Orders ?? []).Select(o => (OrderExpression)map.Child(o)!)]);
+    }
+
+    internal static void Fill(OrderExpression from, QueryOrder into)
+    {
+        into.AttributeName = from.AttributeName;
+        into.Direction = (SortDirection)(int)from.OrderType;
+        into.Alias = from.Alias;
+        into.EntityName = from.EntityName;
+    }
+
+    internal static void Fill(QueryOrder from, OrderExpression into)
+    {
+        into.AttributeName = from.AttributeName;
+        into.OrderType = (OrderType)(int)from.Direction;
+        into.Alias = from.Alias;
+        into.EntityName = from.EntityName;
+    }
+
+    internal static void Fill(PagingInfo from, QueryPaging into)
+    {
+        into.PageNumber = from.PageNumber;
+        into.Count = from.Count;
+        into.ReturnTotalRecordCount = from.ReturnTotalRecordCount;
+        into.ReturnRecordCountLessThanMarv = from.ReturnRecordCountLessThanMarv;
+        into.PagingCookie = from.PagingCookie;
+    }
+
+    internal static void Fill(QueryPaging from, PagingInfo into)
+    {
+        into.PageNumber = from.PageNumber;
+        into.Count = from.Count;
+        into.ReturnTotalRecordCount = from.ReturnTotalRecordCount;
+        into.ReturnRecordCountLessThanMarv = from.ReturnRecordCountLessThanMarv;
+        into.PagingCookie = from.PagingCookie;
+    }
+
+    internal static void Fill(XrmAttributeExpression from, ColumnExpression into)
+    {
+        into.AttributeName = from.AttributeName;
+        into.Aggregate = (ColumnAggregate)(int)from.AggregateType;
+        into.Alias = from.Alias;
+        into.GroupBy = from.HasGroupBy;
+        into.DateGrouping = (ColumnDateGrouping)(int)from.DateTimeGrouping;
+    }
+
+    internal static void Fill(ColumnExpression from, XrmAttributeExpression into)
+    {
+        into.AttributeName = from.AttributeName;
+        into.AggregateType = (XrmAggregateType)(int)from.Aggregate;
+        into.Alias = from.Alias;
+        into.HasGroupBy = from.GroupBy;
+        into.DateTimeGrouping = (XrmDateTimeGrouping)(int)from.DateGrouping;
     }
 }

@@ -269,7 +269,7 @@ public sealed class WorkflowPipelineHook(WorkflowRegistry registry, WorkflowActi
             Target = context.Stage == (int)S.Stage.Pre && context.InputParameters.TryGetValue(Target, out var t) ? t as Entity : null,
             Caller = await CallerAsync(row, invocation.Caller, s, ct),
             // W19: the message's transaction; the steps' requests are nested in the message (its context as their parent).
-            Invocation = invocation with { Session = s, Parent = context },
+            Invocation = invocation with { Session = s, Parent = context.Model! },
             Stage = context.Stage,
             MessageName = context.MessageName,
         };
@@ -327,7 +327,7 @@ public sealed class WorkflowPipelineHook(WorkflowRegistry registry, WorkflowActi
             // Learn (create-actions): "Actions always run in the context of the calling user": runas is ignored for an action.
             Caller = invocation.Caller,
             // W14: the caller's transaction; the steps' requests are nested in the action's message.
-            Invocation = invocation with { Session = s, Parent = context },
+            Invocation = invocation with { Session = s, Parent = context.Model! },
             Stage = 30,
             MessageName = action.Message,
         };

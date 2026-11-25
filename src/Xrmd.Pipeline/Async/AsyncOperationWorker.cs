@@ -7,10 +7,12 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using Microsoft.Xrm.Sdk;
 using Xrmd.Abstractions;
+using Xrmd.Abstractions.Sdk;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
+using Xrmd.Model.Messages;
+using Xrmd.Model.Records;
 using Xrmd.Pipeline.Registration;
 using Xrmd.Pipeline.Sandbox;
 
@@ -371,8 +373,9 @@ public sealed class AsyncOperationWorker(IServiceProvider services, AsyncOperati
         if (string.IsNullOrEmpty(job.Data)) throw new SerializationException("The job has no execution context (data).");
         var initiating = job.CreatedBy ?? owner.UserId;
         var objectIds = await ObjectIdsAsync(session, owner.UserId, initiating, ct);
-        var context = Rebuild(AsyncContextSerializer.Deserialize(job.Data), job, step, owner, initiating, objectIds);
-        await scope.ServiceProvider.GetRequiredService<PipelineExecutor>().RunAsyncStepAsync(step, context, session, ct);
+        var mirror = new SdkMirror();
+        var context = Rebuild(AsyncContextSerializer.DeserializeModel(job.Data, mirror), job, step, owner, initiating, objectIds);
+        await scope.ServiceProvider.GetRequiredService<PipelineExecutor>().RunAsyncStepAsync(step, context, mirror, session, ct);
         return new Outcome(Completed, Succeeded, null, null, Delete: step.AsyncAutoDelete);
     }
 
@@ -460,42 +463,31 @@ public sealed class AsyncOperationWorker(IServiceProvider services, AsyncOperati
     /// (the owner when not set), and their Entra object ids as stored in their <c>systemuser</c> rows
     /// (<paramref name="objectIds"/>). The users, business unit and object ids of the payload are ignored.
     /// </summary>
-    private static XrmdPluginExecutionContext Rebuild(RemoteExecutionContext queued, Job job, PluginStep step, Caller owner,
+    /// <remarks>
+    /// The model context is <see cref="StepContext.FromRemote"/> of the payload read into the model
+    /// (<see cref="AsyncContextSerializer.DeserializeModel(string, SdkMirror)"/>) with exactly the members above overridden; its parent
+    /// levels stand for the deserialized remote contexts (lent as <c>RemoteExecutionContext</c>). A payload only the SDK reader reads
+    /// keeps its deserialized instances as the twins of the values in the job's mirror, so the plug-in sees the objects the payload holds,
+    /// as it did when it was given the deserialized context.
+    /// </remarks>
+    internal static StepContext Rebuild(RemoteContext queued, Job job, PluginStep step, Caller owner,
         Guid initiating, IReadOnlyDictionary<Guid, Guid> objectIds)
     {
-        var context = new XrmdPluginExecutionContext
-        {
-            MessageName = queued.MessageName,
-            InputParameters = queued.InputParameters ?? new ParameterCollection(),
-            OutputParameters = queued.OutputParameters ?? new ParameterCollection(),
-            SharedVariables = queued.SharedVariables ?? new ParameterCollection(),
-            PreEntityImages = queued.PreEntityImages ?? new EntityImageCollection(),
-            PostEntityImages = queued.PostEntityImages ?? new EntityImageCollection(),
-            Stage = PostOperation,
-            Mode = Asynchronous,
-            IsolationMode = queued.IsolationMode,
-            Depth = job.Depth ?? queued.Depth,
-            PrimaryEntityName = queued.PrimaryEntityName,
-            PrimaryEntityId = queued.PrimaryEntityId,
-            SecondaryEntityName = queued.SecondaryEntityName,
-            UserId = owner.UserId,
-            InitiatingUserId = initiating,
-            BusinessUnitId = owner.BusinessUnitId,
-            OrganizationId = queued.OrganizationId,
-            OrganizationName = queued.OrganizationName,
-            CorrelationId = job.CorrelationId ?? queued.CorrelationId,
-            RequestId = queued.RequestId,
-            OperationId = job.Id,
-            OperationCreatedOn = queued.OperationCreatedOn,
-            OwningExtension = new EntityReference("sdkmessageprocessingstep", step.Id) { Name = step.Name },
-            IsInTransaction = false,
-            IsExecutingOffline = queued.IsExecutingOffline,
-            IsOfflinePlayback = queued.IsOfflinePlayback,
-            ParentContext = queued.ParentContext,
-            UserAzureActiveDirectoryObjectId = objectIds.GetValueOrDefault(owner.UserId),
-            InitiatingUserAzureActiveDirectoryObjectId = objectIds.GetValueOrDefault(initiating),
-            InitiatingUserAgent = queued.InitiatingUserAgent,
-        };
+        var context = StepContext.FromRemote(queued);
+        context.Stage = PostOperation;
+        context.Mode = Asynchronous;
+        context.Depth = job.Depth ?? queued.Depth;
+        context.UserId = owner.UserId;
+        context.InitiatingUserId = initiating;
+        context.BusinessUnitId = owner.BusinessUnitId;
+        context.CorrelationId = job.CorrelationId ?? queued.CorrelationId;
+        context.OperationId = job.Id;
+        context.OwningExtension = new RecordReference { LogicalName = "sdkmessageprocessingstep", Id = step.Id, Name = step.Name };
+        context.IsInTransaction = false;
+        // No image collection: the job's plug-in context has one empty array in both members, as the rebuilt context always had.
+        context.PostEntityImagesCollection = context.PreEntityImagesCollection;
+        context.UserAzureActiveDirectoryObjectId = objectIds.GetValueOrDefault(owner.UserId);
+        context.InitiatingUserAzureActiveDirectoryObjectId = objectIds.GetValueOrDefault(initiating);
         // Plan 4.1c: the queued row is written by the server only, so the reserved shared variables it holds (a mailbox delivery's) are
         // the server's: the plug-in may read them, not change them; its own requests never carry them (they start a new invocation).
         ReservedSharedVariables.SnapshotChain(context);
@@ -597,7 +589,7 @@ public sealed class AsyncOperationWorker(IServiceProvider services, AsyncOperati
             if (await cmd.ExecuteScalarAsync(CancellationToken.None) is null) return;
         }
         await scope.ServiceProvider.GetRequiredService<IPipelineCore>().ExecuteCoreAsync(
-            new Microsoft.Xrm.Sdk.Messages.DeleteRequest { Target = new EntityReference("asyncoperation", id) }, Caller.Internal, session,
+            AsyncOperationQueue.DeleteRequest(id), Caller.Internal, session,
             CancellationToken.None);
         await tx.CommitAsync(CancellationToken.None);
         session.Committed();

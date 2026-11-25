@@ -1,0 +1,232 @@
+=== update pb_name only (the pb_data filter does not match) ===
+--- dump Update|40|0|1 ---
+Context: @1
+  AuthenticatedUserId: Guid:{user}
+  BusinessUnitId: Guid:{businessunit}
+  CorrelationId: Guid:{id1}
+  Depth: Int32:1
+  EnvironmentId: null
+  InitiatingUserAgent: null
+  InitiatingUserApplicationId: Guid:{empty}
+  InitiatingUserAzureActiveDirectoryObjectId: Guid:{empty}
+  InitiatingUserId: Guid:{user}
+  InputParameters: ParameterCollection[1] @2
+    Target: Entity(pb_pipe) @3
+      Id: Guid:{id2}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[1] @4
+        pb_name: String:"gld-new"
+      FormattedValues: FormattedValueCollection[0] @5
+      KeyAttributes: KeyAttributeCollection[0] @6
+      RelatedEntities: RelatedEntityCollection[0] @7
+  IsApplicationUser: Boolean:False
+  IsExecutingOffline: Boolean:False
+  IsInTransaction: Boolean:True
+  IsOfflinePlayback: Boolean:False
+  IsPortalsClientCall: Boolean:False
+  IsolationMode: Int32:2
+  MessageName: String:"Update"
+  Mode: Int32:0
+  OperationCreatedOn: DateTime:{date}
+  OperationId: Guid:{id3}
+  OrganizationId: Guid:{organization}
+  OrganizationName: String:"Test Org"
+  OutputParameters: ParameterCollection[0] @8
+  OwningExtension: EntityReference @9
+    LogicalName: String:"sdkmessageprocessingstep"
+    Id: Guid:{id4}
+    Name: String:"Update:pb_pipe:40:1"
+    KeyAttributes: KeyAttributeCollection[0] @10
+    RowVersion: null
+  ParentContext: null
+  PortalsContactId: Guid:{empty}
+  PostEntityImages: EntityImageCollection[1] @11
+    post: Entity(pb_pipe) @12
+      Id: Guid:{id2}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[3] @13
+        pb_count: Int32:1
+        pb_data: String:"old-data"
+        pb_name: String:"gld-new"
+      FormattedValues: FormattedValueCollection[1] @14
+        pb_count: String:"1"
+      KeyAttributes: KeyAttributeCollection[0] @15
+      RelatedEntities: RelatedEntityCollection[0] @16
+  PostEntityImagesCollection: EntityImageCollection[][0] @17
+  PreEntityImages: EntityImageCollection[1] @18
+    pre: Entity(pb_pipe) @19
+      Id: Guid:{id2}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[1] @20
+        pb_name: String:"gld-old"
+      FormattedValues: FormattedValueCollection[0] @21
+      KeyAttributes: KeyAttributeCollection[0] @22
+      RelatedEntities: RelatedEntityCollection[0] @23
+  PreEntityImagesCollection: EntityImageCollection[][0] @24
+  PrimaryEntityId: Guid:{id2}
+  PrimaryEntityName: String:"pb_pipe"
+  RequestId: Guid:{id5}
+  SecondaryEntityName: String:"none"
+  SharedVariables: ParameterCollection[1] @25
+    dump: Int32:40
+  Stage: Int32:40
+  TenantId: Guid:{empty}
+  UserAzureActiveDirectoryObjectId: Guid:{empty}
+  UserId: Guid:{user}
+--- caller ---
+=== update pb_data and pb_count (the filter matches) ===
+--- dump Update|20|0|1 ---
+Context: @26
+  AuthenticatedUserId: Guid:{user}
+  BusinessUnitId: Guid:{businessunit}
+  CorrelationId: Guid:{id6}
+  Depth: Int32:1
+  EnvironmentId: null
+  InitiatingUserAgent: null
+  InitiatingUserApplicationId: Guid:{empty}
+  InitiatingUserAzureActiveDirectoryObjectId: Guid:{empty}
+  InitiatingUserId: Guid:{user}
+  InputParameters: ParameterCollection[1] @27
+    Target: Entity(pb_pipe) @28
+      Id: Guid:{id2}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[2] @29
+        pb_count: Int32:2
+        pb_data: String:"new-data"
+      FormattedValues: FormattedValueCollection[0] @30
+      KeyAttributes: KeyAttributeCollection[0] @31
+      RelatedEntities: RelatedEntityCollection[0] @32
+  IsApplicationUser: Boolean:False
+  IsExecutingOffline: Boolean:False
+  IsInTransaction: Boolean:True
+  IsOfflinePlayback: Boolean:False
+  IsPortalsClientCall: Boolean:False
+  IsolationMode: Int32:2
+  MessageName: String:"Update"
+  Mode: Int32:0
+  OperationCreatedOn: DateTime:{date}
+  OperationId: Guid:{id7}
+  OrganizationId: Guid:{organization}
+  OrganizationName: String:"Test Org"
+  OutputParameters: ParameterCollection[0] @33
+  OwningExtension: EntityReference @34
+    LogicalName: String:"sdkmessageprocessingstep"
+    Id: Guid:{id8}
+    Name: String:"Update:pb_pipe:20:1"
+    KeyAttributes: KeyAttributeCollection[0] @35
+    RowVersion: null
+  ParentContext: null
+  PortalsContactId: Guid:{empty}
+  PostEntityImages: EntityImageCollection[0] @36
+  PostEntityImagesCollection: EntityImageCollection[][0] @37
+  PreEntityImages: EntityImageCollection[1] @38
+    pre: Entity(pb_pipe) @39
+      Id: Guid:{id2}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[3] @40
+        pb_count: Int32:1
+        pb_data: String:"old-data"
+        pb_name: String:"gld-new"
+      FormattedValues: FormattedValueCollection[1] @41
+        pb_count: String:"1"
+      KeyAttributes: KeyAttributeCollection[0] @42
+      RelatedEntities: RelatedEntityCollection[0] @43
+  PreEntityImagesCollection: EntityImageCollection[][0] @44
+  PrimaryEntityId: Guid:{id2}
+  PrimaryEntityName: String:"pb_pipe"
+  RequestId: Guid:{id9}
+  SecondaryEntityName: String:"none"
+  SharedVariables: ParameterCollection[1] @45
+    dump: Int32:20
+  Stage: Int32:20
+  TenantId: Guid:{empty}
+  UserAzureActiveDirectoryObjectId: Guid:{empty}
+  UserId: Guid:{user}
+--- dump Update|40|0|1 ---
+Context: @46
+  AuthenticatedUserId: Guid:{user}
+  BusinessUnitId: Guid:{businessunit}
+  CorrelationId: Guid:{id6}
+  Depth: Int32:1
+  EnvironmentId: null
+  InitiatingUserAgent: null
+  InitiatingUserApplicationId: Guid:{empty}
+  InitiatingUserAzureActiveDirectoryObjectId: Guid:{empty}
+  InitiatingUserId: Guid:{user}
+  InputParameters: ParameterCollection[1] @27
+    Target: Entity(pb_pipe) @28
+      Id: Guid:{id2}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[2] @29
+        pb_count: Int32:2
+        pb_data: String:"new-data"
+      FormattedValues: FormattedValueCollection[0] @30
+      KeyAttributes: KeyAttributeCollection[0] @31
+      RelatedEntities: RelatedEntityCollection[0] @32
+  IsApplicationUser: Boolean:False
+  IsExecutingOffline: Boolean:False
+  IsInTransaction: Boolean:True
+  IsOfflinePlayback: Boolean:False
+  IsPortalsClientCall: Boolean:False
+  IsolationMode: Int32:2
+  MessageName: String:"Update"
+  Mode: Int32:0
+  OperationCreatedOn: DateTime:{date}
+  OperationId: Guid:{id7}
+  OrganizationId: Guid:{organization}
+  OrganizationName: String:"Test Org"
+  OutputParameters: ParameterCollection[0] @33
+  OwningExtension: EntityReference @47
+    LogicalName: String:"sdkmessageprocessingstep"
+    Id: Guid:{id4}
+    Name: String:"Update:pb_pipe:40:1"
+    KeyAttributes: KeyAttributeCollection[0] @48
+    RowVersion: null
+  ParentContext: null
+  PortalsContactId: Guid:{empty}
+  PostEntityImages: EntityImageCollection[1] @49
+    post: Entity(pb_pipe) @50
+      Id: Guid:{id2}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[3] @51
+        pb_count: Int32:2
+        pb_data: String:"new-data"
+        pb_name: String:"gld-new"
+      FormattedValues: FormattedValueCollection[1] @52
+        pb_count: String:"2"
+      KeyAttributes: KeyAttributeCollection[0] @53
+      RelatedEntities: RelatedEntityCollection[0] @54
+  PostEntityImagesCollection: EntityImageCollection[][0] @55
+  PreEntityImages: EntityImageCollection[1] @56
+    pre: Entity(pb_pipe) @57
+      Id: Guid:{id2}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[1] @58
+        pb_name: String:"gld-new"
+      FormattedValues: FormattedValueCollection[0] @59
+      KeyAttributes: KeyAttributeCollection[0] @60
+      RelatedEntities: RelatedEntityCollection[0] @61
+  PreEntityImagesCollection: EntityImageCollection[][0] @62
+  PrimaryEntityId: Guid:{id2}
+  PrimaryEntityName: String:"pb_pipe"
+  RequestId: Guid:{id9}
+  SecondaryEntityName: String:"none"
+  SharedVariables: ParameterCollection[2] @45
+    dump: Int32:40
+    dumped: String:"20"
+  Stage: Int32:40
+  TenantId: Guid:{empty}
+  UserAzureActiveDirectoryObjectId: Guid:{empty}
+  UserId: Guid:{user}
+--- caller ---
+stored pb_name=gld-new
+stored pb_data=new-data
+stored pb_count=2

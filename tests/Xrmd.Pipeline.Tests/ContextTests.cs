@@ -1,6 +1,9 @@
 using FluentAssertions;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
+using Xrmd.Model.Messages;
+using Xrmd.Model.Records;
+using Record = Xrmd.Model.Records.Record;
 using Xrmd.Pipeline;
 using Xrmd.Pipeline.Merge;
 using Xrmd.Pipeline.Registration;
@@ -114,7 +117,7 @@ public class ContextTests
 
     // ---- #76, Task 4: the multiple view of a single-record context (ruling B5) and filtering attributes (B7) ----------
 
-    private static XrmdPluginExecutionContext SingleContext(OrganizationRequest request, string message) => new()
+    private static StepContext SingleContext(Request request, string message) => new()
     {
         MessageName = message,
         Stage = 20,
@@ -122,11 +125,27 @@ public class ContextTests
         InputParameters = request.Parameters,
     };
 
+    private static Request Create(Record target, params (string Key, object? Value)[] parameters)
+    {
+        var request = new Request { Name = "Create", Parameters = { ["Target"] = target } };
+        foreach (var (key, value) in parameters) request.Parameters[key] = value;
+        return request;
+    }
+
+    private static Request Update(Record target) => new() { Name = "Update", Parameters = { ["Target"] = target } };
+
+    private static Record Account(Guid id = default, params (string Name, object? Value)[] values)
+    {
+        var record = new Record("account", id);
+        foreach (var (name, value) in values) record.Attributes[name] = value;
+        return record;
+    }
+
     [Fact]
     public void MultipleView_of_a_create_shares_the_target_and_the_shared_variables()
     {
-        var target = new Entity("account") { ["name"] = "a" };
-        var request = new CreateRequest { Target = target, ["SuppressDuplicateDetection"] = true };
+        var target = Account(values: ("name", "a"));
+        var request = Create(target, ("SuppressDuplicateDetection", true));
         var single = SingleContext(request, "Create");
         single.SharedVariables["k"] = 1;
 
@@ -135,9 +154,9 @@ public class ContextTests
         view.MessageName.Should().Be("CreateMultiple");
         view.InputParameters.Should().NotContainKey("Target");
         view.InputParameters["SuppressDuplicateDetection"].Should().Be(true);
-        var targets = view.InputParameters["Targets"].Should().BeOfType<EntityCollection>().Subject;
+        var targets = view.InputParameters["Targets"].Should().BeOfType<RecordCollection>().Subject;
         targets.EntityName.Should().Be("account");
-        targets.Entities.Should().ContainSingle().Which.Should().BeSameAs(target);
+        targets.Records.Should().ContainSingle().Which.Should().BeSameAs(target);
         view.SharedVariables.Should().BeSameAs(single.SharedVariables);
         view.Stage.Should().Be(20);
         view.PrimaryEntityName.Should().Be("account");
@@ -151,7 +170,7 @@ public class ContextTests
     public void MultipleView_of_a_created_record_has_its_id_in_Ids()
     {
         var id = Guid.NewGuid();
-        var request = new CreateRequest { Target = new Entity("account") };
+        var request = Create(Account());
         var single = SingleContext(request, "Create");
         single.OutputParameters["id"] = id;
 
@@ -164,13 +183,13 @@ public class ContextTests
     [Fact]
     public void MultipleView_of_an_update_is_UpdateMultiple()
     {
-        var target = new Entity("account", Guid.NewGuid()) { ["name"] = "a" };
-        var request = new UpdateRequest { Target = target };
+        var target = Account(Guid.NewGuid(), ("name", "a"));
+        var request = Update(target);
 
         var view = MergedSteps.MultipleView(SingleContext(request, "Update"), request);
 
         view.MessageName.Should().Be("UpdateMultiple");
-        ((EntityCollection)view.InputParameters["Targets"]).Entities.Single().Should().BeSameAs(target);
+        ((RecordCollection)view.InputParameters["Targets"]!).Records.Single().Should().BeSameAs(target);
     }
 
     private static PluginStep Filtered(string message, params string[]? attributes) =>
@@ -179,10 +198,17 @@ public class ContextTests
     [Fact]
     public void Applies_matches_a_filter_on_any_target_of_UpdateMultiple()
     {
-        var request = new UpdateMultipleRequest
+        var request = new Request
         {
-            Targets = new EntityCollection([new Entity("account") { ["emailaddress1"] = "x" }, new Entity("account") { ["name"] = "n" }])
-                { EntityName = "account" },
+            Name = "UpdateMultiple",
+            Parameters =
+            {
+                ["Targets"] = new RecordCollection
+                {
+                    Records = [Account(values: ("emailaddress1", "x")), Account(values: ("name", "n"))],
+                    EntityName = "account",
+                },
+            },
         };
         MergedSteps.Applies(Filtered("UpdateMultiple", "name"), request).Should().BeTrue();
         MergedSteps.Applies(Filtered("UpdateMultiple", "telephone1"), request).Should().BeFalse();
@@ -192,11 +218,11 @@ public class ContextTests
     [Fact]
     public void Applies_matches_a_filter_on_the_single_target_of_Update()
     {
-        var request = new UpdateRequest { Target = new Entity("account") { ["name"] = "n" } };
+        var request = Update(Account(values: ("name", "n")));
         MergedSteps.Applies(Filtered("Update", "name"), request).Should().BeTrue();
         MergedSteps.Applies(Filtered("UpdateMultiple", "name"), request).Should().BeTrue();
         MergedSteps.Applies(Filtered("UpdateMultiple", "telephone1"), request).Should().BeFalse();
         // Filters only apply to updates.
-        MergedSteps.Applies(Filtered("Create", "telephone1"), new CreateRequest { Target = new Entity("account") }).Should().BeTrue();
+        MergedSteps.Applies(Filtered("Create", "telephone1"), Create(Account())).Should().BeTrue();
     }
 }

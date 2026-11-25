@@ -1,9 +1,11 @@
 using System.Data;
 using System.Runtime.Serialization;
 using Xrmd.Abstractions;
+using Xrmd.Abstractions.Sdk;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Microsoft.Xrm.Sdk;
+using Xrmd.Model.Messages;
 using Xrmd.Pipeline.Registration;
 
 namespace Xrmd.Pipeline.Async;
@@ -126,20 +128,28 @@ public sealed class AsyncOperationQueue
     /// snapshot: later changes to the shared parameter collections do not reach the job). The job's id becomes the
     /// context's <c>OperationId</c>, as in Dataverse.
     /// </summary>
+    /// <remarks>
+    /// The context is written by <see cref="AsyncContextSerializer.Serialize(StepContext, SdkMirror)"/>: from the model when the own
+    /// serializer carries it and <paramref name="mirror"/> (the chain's) holds no twin of its values that is not plain, else as the plug-in
+    /// view the mirror lends (an early-bound entity keeps its type, a value of a type the model does not know is written as itself), so the
+    /// payload is the one the plug-in context of today gives. The caller makes sure no level of the chain is held by the core when it
+    /// calls this (the executor's <c>SyncBoundaries</c>): internal for that reason, the executor is its only caller.
+    /// </remarks>
     /// <exception cref="XrmdFaultException">500 when the context cannot be serialized (e.g. a shared variable of a type that
     /// is not a known data contract or is outside the <see cref="Serialization.SdkTypeAllowlist"/>).</exception>
-    public async Task EnqueueAsync(DataSession session, PluginStep step, XrmdPluginExecutionContext context, CancellationToken ct)
+    internal async Task EnqueueAsync(DataSession session, PluginStep step, StepContext context, SdkMirror mirror, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(step);
         ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(mirror);
 
         var id = Guid.NewGuid();
         context.OperationId = id;
         string data;
         try
         {
-            data = AsyncContextSerializer.Serialize(AsyncContextSerializer.ToRemote(context));
+            data = AsyncContextSerializer.Serialize(context, mirror);
         }
         catch (Exception ex) when (ex is SerializationException or InvalidDataContractException)
         {
@@ -361,6 +371,13 @@ public sealed class AsyncOperationQueue
         cmd.AddParameter("@id", DbType.Guid, asyncOperationId);
         return await cmd.ExecuteScalarAsync(ct) as Guid?;
     }
+
+    /// <summary>
+    /// The core request that deletes the job <paramref name="asyncOperationId"/> (the worker's delete of a succeeded job, a record delete
+    /// like any other).
+    /// </summary>
+    internal static OrganizationRequest DeleteRequest(Guid asyncOperationId) =>
+        new Microsoft.Xrm.Sdk.Messages.DeleteRequest { Target = new EntityReference("asyncoperation", asyncOperationId) };
 
     /// <summary>Wakes the worker after a commit that enqueued work (signals coalesce; no-op when one is pending).</summary>
     public void Signal()

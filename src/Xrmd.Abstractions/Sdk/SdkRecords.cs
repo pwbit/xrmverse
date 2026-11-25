@@ -21,92 +21,69 @@ namespace Xrmd.Abstractions.Sdk;
 /// <c>LazyFileAttributeSizeLimit</c>); they are not part of the data contract.
 /// </para>
 /// </summary>
+/// <summary>
+/// How a Fill maps the members of what it writes: <see cref="Child"/> for the parts of a record, query or message (always
+/// converted), <see cref="Value"/> for attribute, parameter and condition values (only the known value types convert, the rest
+/// passes through as itself; <c>current</c> is the SDK value the slot holds before it is refilled). The converters build fresh
+/// objects; <see cref="SdkMirror"/> looks up twins.
+/// </summary>
+internal interface IFillMap
+{
+    object? Child(object? value);
+
+    object? Value(object? value, object? current);
+
+    /// <summary>False for the converters, which reject null elements of collections; the mirror carries them.</summary>
+    bool AllowNullElements { get; }
+}
+
 public static class SdkRecords
 {
     public static Record ToModel(this Entity entity)
     {
         ArgumentNullException.ThrowIfNull(entity);
-        var record = new Record(entity.LogicalName, entity.Id)
-        {
-            RowVersion = entity.RowVersion,
-            State = entity.EntityState is { } state ? (RecordState)(int)state : null,
-        };
-        foreach (var a in entity.Attributes) record.Attributes[a.Key] = ValueToModel(a.Value);
-        foreach (var f in entity.FormattedValues) record.FormattedValues[f.Key] = f.Value;
-        foreach (var k in entity.KeyAttributes) record.KeyAttributes[k.Key] = ValueToModel(k.Value);
-        foreach (var r in entity.RelatedEntities) record.RelatedRecords[r.Key.ToModel()] = r.Value.ToModel();
-        return record;
+        var result = new Record();
+        Fill(entity, result, ToModelMap);
+        return result;
     }
 
     public static Entity ToSdk(this Record record)
     {
         ArgumentNullException.ThrowIfNull(record);
-        var entity = new Entity(record.LogicalName, record.Id) { RowVersion = record.RowVersion };
-        foreach (var a in record.Attributes) entity.Attributes[a.Key] = ValueToSdk(a.Value);
-        foreach (var f in record.FormattedValues) entity.FormattedValues[f.Key] = f.Value;
-        foreach (var k in record.KeyAttributes) entity.KeyAttributes[k.Key] = ValueToSdk(k.Value);
-        foreach (var r in record.RelatedRecords) entity.RelatedEntities[r.Key.ToSdk()] = r.Value.ToSdk();
-        if (record.State is { } state) entity.EntityState = (EntityState)(int)state;
-        return entity;
+        var result = new Entity();
+        Fill(record, result, ToSdkMap);
+        return result;
     }
 
     public static RecordReference ToModel(this EntityReference reference)
     {
         ArgumentNullException.ThrowIfNull(reference);
-        var result = new RecordReference
-        {
-            LogicalName = reference.LogicalName,
-            Id = reference.Id,
-            Name = reference.Name,
-            RowVersion = reference.RowVersion,
-        };
-        foreach (var k in reference.KeyAttributes) result.KeyAttributes[k.Key] = ValueToModel(k.Value);
+        var result = new RecordReference();
+        Fill(reference, result, ToModelMap);
         return result;
     }
 
     public static EntityReference ToSdk(this RecordReference reference)
     {
         ArgumentNullException.ThrowIfNull(reference);
-        var result = new EntityReference(reference.LogicalName, reference.Id)
-        {
-            Name = reference.Name,
-            RowVersion = reference.RowVersion,
-        };
-        foreach (var k in reference.KeyAttributes) result.KeyAttributes[k.Key] = ValueToSdk(k.Value);
+        var result = new EntityReference();
+        Fill(reference, result, ToSdkMap);
         return result;
     }
 
     public static RecordCollection ToModel(this EntityCollection collection)
     {
         ArgumentNullException.ThrowIfNull(collection);
-        var result = new RecordCollection
-        {
-            EntityName = collection.EntityName,
-            MoreRecords = collection.MoreRecords,
-            PagingCookie = collection.PagingCookie,
-            TotalRecordCount = collection.TotalRecordCount,
-            TotalRecordCountLimitExceeded = collection.TotalRecordCountLimitExceeded,
-            MinActiveRowVersion = collection.MinActiveRowVersion,
-            RecordCountLessThanMarv = collection.RecordCountLessThanMarv,
-        };
-        foreach (var e in collection.Entities) result.Records.Add(e.ToModel());
+        var result = new RecordCollection();
+        Fill(collection, result, ToModelMap);
         return result;
     }
 
     public static EntityCollection ToSdk(this RecordCollection collection)
     {
         ArgumentNullException.ThrowIfNull(collection);
-        var result = new EntityCollection
-        {
-            EntityName = collection.EntityName,
-            MoreRecords = collection.MoreRecords,
-            PagingCookie = collection.PagingCookie,
-            TotalRecordCount = collection.TotalRecordCount,
-            TotalRecordCountLimitExceeded = collection.TotalRecordCountLimitExceeded,
-            MinActiveRowVersion = collection.MinActiveRowVersion,
-            RecordCountLessThanMarv = collection.RecordCountLessThanMarv,
-        };
-        foreach (var r in collection.Records) result.Entities.Add(r.ToSdk());
+        var result = new EntityCollection();
+        Fill(collection, result, ToSdkMap);
         return result;
     }
 
@@ -114,7 +91,7 @@ public static class SdkRecords
     {
         ArgumentNullException.ThrowIfNull(collection);
         var result = new RecordReferenceCollection();
-        foreach (var r in collection) result.Add(r.ToModel());
+        Fill(collection, result, ToModelMap);
         return result;
     }
 
@@ -122,24 +99,23 @@ public static class SdkRecords
     {
         ArgumentNullException.ThrowIfNull(collection);
         var result = new EntityReferenceCollection();
-        foreach (var r in collection) result.Add(r.ToSdk());
+        Fill(collection, result, ToSdkMap);
         return result;
     }
 
     public static ColumnSelection ToModel(this ColumnSet columns)
     {
         ArgumentNullException.ThrowIfNull(columns);
-        var result = new ColumnSelection { AllColumns = columns.AllColumns, Columns = columns.Columns.ToList() };
-        foreach (var e in columns.AttributeExpressions) result.Expressions.Add(e?.ToModel()!);
+        var result = new ColumnSelection();
+        Fill(columns, result, ToModelMap);
         return result;
     }
 
     public static ColumnSet ToSdk(this ColumnSelection columns)
     {
         ArgumentNullException.ThrowIfNull(columns);
-        var result = new ColumnSet(columns.AllColumns);
-        foreach (var c in columns.Columns ?? []) result.Columns.Add(c);
-        foreach (var e in columns.Expressions ?? []) result.AttributeExpressions.Add(e?.ToSdk()!);
+        var result = new ColumnSet();
+        Fill(columns, result, ToSdkMap);
         return result;
     }
 
@@ -152,11 +128,232 @@ public static class SdkRecords
     public static Relationship ToSdk(this RelationshipName relationship)
     {
         ArgumentNullException.ThrowIfNull(relationship);
-        return new Relationship(relationship.SchemaName)
-        {
-            PrimaryEntityRole = relationship.PrimaryEntityRole is { } role ? (EntityRole)(int)role : null,
-        };
+        var result = new Relationship();
+        Fill(relationship, result);
+        return result;
     }
+
+    // Fill: write the whole state of the source into an existing target. Containers are cleared and refilled in source
+    // order (SDK containers through Refill, which leaves an unchanged one as it is); members that are objects of a known type go through map (a fresh conversion for ToModel/ToSdk, the mirror's
+    // twin lookup for SdkMirror). The same code builds a new object, so the mirror and the converters cannot drift apart.
+
+    internal static void Fill(Entity from, Record into, IFillMap map)
+    {
+        into.LogicalName = from.LogicalName;
+        into.Id = from.Id;
+        into.RowVersion = from.RowVersion;
+        into.State = from.EntityState is { } state ? (RecordState)(int)state : null;
+        into.Attributes.Clear();
+        foreach (var a in from.Attributes) into.Attributes[a.Key] = map.Value(a.Value, null);
+        into.FormattedValues.Clear();
+        foreach (var f in from.FormattedValues) into.FormattedValues[f.Key] = f.Value;
+        into.KeyAttributes.Clear();
+        foreach (var k in from.KeyAttributes) into.KeyAttributes[k.Key] = map.Value(k.Value, null);
+        var related = from.RelatedEntities.Select(r => (Key: (RelationshipName)map.Child(NotNull(r.Key, map, "relationship"))!, Value: (RecordCollection)map.Child(NotNull(r.Value, map, "collection"))!)).ToList();
+        into.RelatedRecords.Clear();
+        foreach (var r in related) into.RelatedRecords[r.Key] = r.Value;
+    }
+
+    internal static void Fill(Record from, Entity into, IFillMap map)
+    {
+        into.LogicalName = from.LogicalName;
+        if (into.Id != from.Id) into.Id = from.Id;
+        into.RowVersion = from.RowVersion;
+        var oldAttributes = Snapshot(into.Attributes);
+        var oldKeys = Snapshot(into.KeyAttributes);
+        Refill(into.Attributes, [.. from.Attributes.Select(a => Pair(a.Key, map.Value(a.Value, Slot(oldAttributes, a.Key))))]);
+        Refill(into.FormattedValues, [.. from.FormattedValues]);
+        Refill(into.KeyAttributes, [.. from.KeyAttributes.Select(k => Pair(k.Key, map.Value(k.Value, Slot(oldKeys, k.Key))))]);
+        Refill(into.RelatedEntities, [.. from.RelatedRecords.Select(r => KeyValuePair.Create((Relationship)map.Child(NotNull(r.Key, map, "relationship"))!, (EntityCollection)map.Child(NotNull(r.Value, map, "collection"))!))]);
+        into.EntityState = from.State is { } state ? (EntityState)(int)state : null;
+    }
+
+    internal static void Fill(EntityReference from, RecordReference into, IFillMap map)
+    {
+        into.LogicalName = from.LogicalName;
+        into.Id = from.Id;
+        into.Name = from.Name;
+        into.RowVersion = from.RowVersion;
+        into.KeyAttributes.Clear();
+        foreach (var k in from.KeyAttributes) into.KeyAttributes[k.Key] = map.Value(k.Value, null);
+    }
+
+    internal static void Fill(RecordReference from, EntityReference into, IFillMap map)
+    {
+        into.LogicalName = from.LogicalName;
+        into.Id = from.Id;
+        into.Name = from.Name;
+        into.RowVersion = from.RowVersion;
+        var oldKeys = Snapshot(into.KeyAttributes);
+        Refill(into.KeyAttributes, [.. from.KeyAttributes.Select(k => Pair(k.Key, map.Value(k.Value, Slot(oldKeys, k.Key))))]);
+    }
+
+    internal static void Fill(EntityCollection from, RecordCollection into, IFillMap map)
+    {
+        into.EntityName = from.EntityName;
+        into.MoreRecords = from.MoreRecords;
+        into.PagingCookie = from.PagingCookie;
+        into.TotalRecordCount = from.TotalRecordCount;
+        into.TotalRecordCountLimitExceeded = from.TotalRecordCountLimitExceeded;
+        into.MinActiveRowVersion = from.MinActiveRowVersion;
+        into.RecordCountLessThanMarv = from.RecordCountLessThanMarv;
+        into.Records.Clear();
+        foreach (var e in from.Entities) into.Records.Add((Record)map.Child(NotNull(e, map, "entity"))!);
+    }
+
+    internal static void Fill(RecordCollection from, EntityCollection into, IFillMap map)
+    {
+        into.EntityName = from.EntityName;
+        into.MoreRecords = from.MoreRecords;
+        into.PagingCookie = from.PagingCookie;
+        into.TotalRecordCount = from.TotalRecordCount;
+        into.TotalRecordCountLimitExceeded = from.TotalRecordCountLimitExceeded;
+        into.MinActiveRowVersion = from.MinActiveRowVersion;
+        into.RecordCountLessThanMarv = from.RecordCountLessThanMarv;
+        Refill(into.Entities, [.. from.Records.Select(r => (Entity)map.Child(NotNull(r, map, "record"))!)]);
+    }
+
+    internal static void Fill(EntityReferenceCollection from, RecordReferenceCollection into, IFillMap map)
+    {
+        into.Clear();
+        foreach (var r in from) into.Add((RecordReference)map.Child(NotNull(r, map, "reference"))!);
+    }
+
+    internal static void Fill(RecordReferenceCollection from, EntityReferenceCollection into, IFillMap map) =>
+        Refill(into, [.. from.Select(r => (EntityReference)map.Child(NotNull(r, map, "reference"))!)]);
+
+    internal static void Fill(OptionSetValueCollection from, ChoiceValues into, IFillMap map)
+    {
+        into.Clear();
+        foreach (var o in from) into.Add((ChoiceValue)map.Value(o, null)!);
+    }
+
+    internal static void Fill(ChoiceValues from, OptionSetValueCollection into, IFillMap map)
+    {
+        var old = into.ToArray();
+        Refill(into, [.. from.Select((o, i) => (OptionSetValue)map.Value(o, i < old.Length ? old[i] : null)!)]);
+    }
+
+    internal static void Fill(ColumnSet from, ColumnSelection into, IFillMap map)
+    {
+        into.AllColumns = from.AllColumns;
+        into.Columns ??= new List<string>();
+        into.Columns.Clear();
+        foreach (var c in from.Columns) into.Columns.Add(c);
+        into.Expressions.Clear();
+        foreach (var e in from.AttributeExpressions) into.Expressions.Add((ColumnExpression)map.Child(e)!);
+    }
+
+    internal static void Fill(ColumnSelection from, ColumnSet into, IFillMap map)
+    {
+        into.AllColumns = from.AllColumns;
+        Refill(into.Columns, [.. from.Columns ?? []]);
+        Refill(into.AttributeExpressions, [.. (from.Expressions ?? []).Select(e => (XrmAttributeExpression)map.Child(e)!)]);
+    }
+
+    internal static void Fill(RelationshipName from, Relationship into)
+    {
+        into.SchemaName = from.SchemaName;
+        into.PrimaryEntityRole = from.PrimaryEntityRole is { } role ? (EntityRole)(int)role : null;
+    }
+
+    internal static readonly IFillMap ToModelMap = new ConverterMap(true);
+
+    internal static readonly IFillMap ToSdkMap = new ConverterMap(false);
+
+    private sealed class ConverterMap(bool toModel) : IFillMap
+    {
+        public object? Child(object? value) => toModel ? ToModelAny(value) : ToSdkAny(value);
+
+        public object? Value(object? value, object? current) => toModel ? ValueToModel(value) : ValueToSdk(value);
+
+        public bool AllowNullElements => false;
+    }
+
+    private static T NotNull<T>(T? element, IFillMap map, string parameterName) where T : class
+    {
+        if (element is null && !map.AllowNullElements) throw new ArgumentNullException(parameterName);
+        return element!;
+    }
+
+    private static KeyValuePair<string, object?> Pair(string key, object? value) => KeyValuePair.Create(key, value);
+
+    /// <summary>
+    /// Writes <paramref name="values"/> into a keyed SDK container: when it holds exactly these keys in this order only the values are
+    /// set, which keeps valid an enumeration a plug-in has open on it (across a call of its organization service, around which its
+    /// view is read back and written again); otherwise it is cleared and refilled in source order.
+    /// </summary>
+    internal static void Refill<TKey, TValue>(DataCollection<TKey, TValue> into, IReadOnlyList<KeyValuePair<TKey, TValue>> values)
+    {
+        if (!SameKeys(into, values)) into.Clear();
+        foreach (var p in values) into[p.Key] = p.Value;
+    }
+
+    /// <summary>
+    /// Writes <paramref name="values"/> into an SDK list: left untouched when it already holds the same items (the same instances; equal
+    /// values for strings and value types) in the same order, so an open enumeration stays valid; otherwise cleared and refilled.
+    /// </summary>
+    internal static void Refill<T>(ICollection<T> into, IReadOnlyList<T> values)
+    {
+        if (SameItems(into, values)) return;
+        into.Clear();
+        foreach (var v in values) into.Add(v);
+    }
+
+    private static bool SameKeys<TKey, TValue>(DataCollection<TKey, TValue> into, IReadOnlyList<KeyValuePair<TKey, TValue>> values)
+    {
+        if (into.Count != values.Count) return false;
+        var i = 0;
+        foreach (var p in into)
+            if (!EqualityComparer<TKey>.Default.Equals(p.Key, values[i++].Key)) return false;
+        return true;
+    }
+
+    private static bool SameItems<T>(ICollection<T> into, IReadOnlyList<T> values)
+    {
+        if (into.Count != values.Count) return false;
+        var i = 0;
+        foreach (var item in into)
+        {
+            object? current = item, next = values[i++];
+            if (!ReferenceEquals(current, next) && !(current is string or ValueType && Equals(current, next))) return false;
+        }
+        return true;
+    }
+
+    /// <summary>A copy of a container's content taken before it is cleared and refilled; null while it is empty.</summary>
+    internal static Dictionary<string, object?>? Snapshot(IEnumerable<KeyValuePair<string, object?>> source)
+    {
+        Dictionary<string, object?>? result = null;
+        foreach (var p in source) (result ??= new Dictionary<string, object?>(StringComparer.Ordinal))[p.Key] = p.Value;
+        return result;
+    }
+
+    internal static object? Slot(Dictionary<string, object?>? snapshot, string key) => snapshot is not null && snapshot.TryGetValue(key, out var v) ? v : null;
+
+    /// <summary>A fresh conversion of any known SDK object to its model form (value types and query parts included).</summary>
+    internal static object? ToModelAny(object? value) => value switch
+    {
+        FilterExpression f => f.ToModel(),
+        ConditionExpression c => c.ToModel(),
+        LinkEntity l => l.ToModel(),
+        OrderExpression o => o.ToModel(),
+        PagingInfo p => p.ToModel(),
+        XrmAttributeExpression e => e.ToModel(),
+        _ => ValueToModel(value),
+    };
+
+    /// <summary>A fresh conversion of any known model object to its SDK form (value types and query parts included).</summary>
+    internal static object? ToSdkAny(object? value) => value switch
+    {
+        QueryFilter f => f.ToSdk(),
+        QueryCondition c => c.ToSdk(),
+        QueryLink l => l.ToSdk(),
+        QueryOrder o => o.ToSdk(),
+        QueryPaging p => p.ToSdk(),
+        ColumnExpression e => e.ToSdk(),
+        _ => ValueToSdk(value),
+    };
 
     /// <summary>Converts an SDK attribute or parameter value to its model form; see the class remarks for the known types.</summary>
     public static object? ValueToModel(object? value) => value switch

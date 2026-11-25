@@ -123,7 +123,7 @@ public sealed class CustomActivityRunner(PluginAssemblyLoader loader, StepRegist
             try
             {
                 await traces.WriteAsync(typeName, PluginTraceWriter.WorkflowActivityOperation, null, null,
-                    WorkflowContextProxy.Values(run, organization), tracing.Text, failure is null ? null : failure.Detail ?? failure.Message,
+                    WorkflowContextProxy.TraceValues(run, organization), tracing.Text, failure is null ? null : failure.Detail ?? failure.Message,
                     start, (int)Math.Min(int.MaxValue, watch.ElapsedMilliseconds), ct);
             }
             catch (Exception ex) when (ex is DbException or InvalidOperationException)

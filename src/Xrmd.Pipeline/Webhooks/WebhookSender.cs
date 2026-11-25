@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Xrm.Sdk;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
+using Xrmd.Model.Messages;
 using Xrmd.Pipeline.Sandbox;
 
 namespace Xrmd.Pipeline.Webhooks;
@@ -63,6 +64,32 @@ public sealed class WebhookSender : IDisposable
         ArgumentNullException.ThrowIfNull(endpoint);
         ArgumentNullException.ThrowIfNull(context);
         var (body, trimmed) = WebhookPayload.Build(context);
+        await PostAsync(endpoint, body, trimmed, new Headers(context.PrimaryEntityName, context.MessageName, context.CorrelationId),
+            organizationName, ct);
+    }
+
+    /// <summary>
+    /// Posts the model context <paramref name="context"/> to <paramref name="endpoint"/> (the body of
+    /// <see cref="WebhookPayload.Build(RemoteContext, int)"/>, the same headers); returns when the receiver answered 2xx.
+    /// </summary>
+    /// <param name="organizationName">The <c>x-ms-dynamics-organization</c> header.</param>
+    /// <exception cref="PluginExecutionException">The delivery failed (see the class remarks).</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was cancelled.</exception>
+    public async Task SendAsync(WebhookEndpoint endpoint, RemoteContext context, string organizationName, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(endpoint);
+        ArgumentNullException.ThrowIfNull(context);
+        var (body, trimmed) = WebhookPayload.Build(context);
+        await PostAsync(endpoint, body, trimmed, new Headers(context.PrimaryEntityName, context.MessageName, context.CorrelationId),
+            organizationName, ct);
+    }
+
+    /// <summary>The headers taken from the context.</summary>
+    private sealed record Headers(string? EntityName, string? MessageName, Guid CorrelationId);
+
+    private async Task PostAsync(WebhookEndpoint endpoint, byte[] body, bool trimmed, Headers context, string organizationName,
+        CancellationToken ct)
+    {
         var (url, headers) = Authenticate(endpoint);
         var where = SafeUrl(endpoint.Url);
         if (trimmed)
@@ -92,12 +119,12 @@ public sealed class WebhookSender : IDisposable
     private sealed record Attempt(HttpStatusCode? Status, string? Reason, bool Retryable);
 
     private async Task<Attempt> AttemptAsync(WebhookEndpoint endpoint, Uri url, IReadOnlyList<KeyValuePair<string, string>> authHeaders,
-        byte[] body, bool trimmed, RemoteExecutionContext context, string organizationName, CancellationToken ct)
+        byte[] body, bool trimmed, Headers context, string organizationName, CancellationToken ct)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = new ByteArrayContent(body) };
         request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json") { CharSet = "utf-8" };
         request.Headers.TryAddWithoutValidation("x-ms-dynamics-organization", organizationName);
-        request.Headers.TryAddWithoutValidation("x-ms-dynamics-entity-name", context.PrimaryEntityName);
+        request.Headers.TryAddWithoutValidation("x-ms-dynamics-entity-name", context.EntityName);
         request.Headers.TryAddWithoutValidation("x-ms-dynamics-request-name", context.MessageName);
         request.Headers.TryAddWithoutValidation("x-ms-correlation-request-id", context.CorrelationId.ToString());
         if (trimmed) request.Headers.TryAddWithoutValidation("x-ms-dynamics-msg-size-exceeded", "true");

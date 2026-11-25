@@ -185,6 +185,83 @@ The remote context has its own serializers too (S.2e2b). `Xrmd.Model.Serializati
 
 One behaviour changes on purpose: query payloads that contain an `OptionSetValueCollection`, an `EntityReferenceCollection` or a `Relationship` value could not be read by the old reader (it failed with `SerializationException`); they are readable now.
 
+The pipeline runs on the model since S.2e2c. `StepContext` (`Xrmd.Model.Messages`) is the execution context of a step: the 30
+members of the remote context, with a `StepContext` as parent and `OwningExtension` never null, plus the members that only an
+in-process plug-in sees (the per-step image collections, the caller's identity details, the environment). `PipelineExecutor.cs`
+has no Microsoft SDK namespace (it still names the SDK view type `XrmdPluginExecutionContext`, which it lends to the workflow
+hooks, so S.2i touches it too): the stage loop (stages 10, 20 and 40), the transactions, the steps, the real-time workflows and the async
+enqueue work on `StepContext`, `Request` and `Record`.
+
+`SdkMirror` (`src/Xrmd.Abstractions/Sdk/`) connects the two sides. Where `SdkRecords` and `SdkMessages` copy, the mirror gives
+every SDK object one model twin and writes state into the existing twin at each crossing: `Out` writes a model object into its SDK
+twin, `In` the reverse. Object identity and CLR subtypes (typed requests and responses, early-bound entities) therefore survive
+any number of crossings. One mirror serves a whole execution chain, nested calls included. Its rules:
+
+- **In before Out.** An `Out` is authoritative: it overwrites any SDK change that was not read back first, an in-place
+  `OptionSetValue.Value` included. Every boundary therefore reads the SDK side in before it writes the model out.
+- **Identity follows the slot.** Sharing that came from the SDK survives: one SDK value held in several slots (the same
+  `OptionSetValue` in two attributes, or in every row of a CreateMultiple) is one model value and stays one SDK object, as long as
+  each slot still holds the paired SDK instance. A value the model creates, or places in a slot that did not hold its twin (for
+  example in an image), gets a fresh SDK instance, so the model never aliases objects that are separate on the SDK side.
+  Responses follow the SDK pipeline, where the response and the steps' `OutputParameters` hold the same objects: the executor
+  first places, in each result slot, the instance the steps' collection holds for that key, so the response keeps it. One case
+  stays a fresh instance: an immutable value that the core put in a response (an `OptionSetValue`, `Money`, `AliasedValue` or
+  `Relationship` result) is a new object in the view of the first post-operation step, and that object is the one the caller
+  gets. No step has seen the core's instance, so a plug-in could tell only if the core put the same immutable instance both at the
+  top level of a response and inside another result; no core message is known to do that. Keeping the core's instance there would
+  mean pairing the steps' collection before any view exists.
+- **Weak tables.** The pairs are held in `ConditionalWeakTable`s, so the objects of a finished nested call can be collected while
+  the mirror lives.
+
+The SDK plug-in adapter lives in `src/Xrmd.Pipeline/Sdk/`, together with the other files of the Pipeline that still use the SDK
+(the plug-in runner, its organization service and service provider, the tracing service, the assembly loader). Its
+`PluginContextAdapter` lends a step an SDK view of its `StepContext` (`XrmdPluginExecutionContext`, up to
+`IPluginExecutionContext7`) and reads the view back into the model when the step returns; around each service call of a running
+plug-in it reads the view in before the call and writes it out again after. A parent level that came from an async payload is
+lent as a real `RemoteExecutionContext`, as before.
+
+`src/Xrmd.Pipeline/Sdk/PipelineExecutor.Sdk.cs` is the boundary file, a partial of `PipelineExecutor`. It holds the public entry
+on an `OrganizationRequest` and the work that still needs SDK values: the guard, the custom API and action validation, the primary
+entity, the stage-20 checks, stage 30 (core operations, bulk, upsert, actions, `ExecuteWorkflow`, custom APIs), the images the core
+reads, the workflow trigger, the webhook send and the response. The request crosses into the model after the guard and the
+validation, so the guard's own writes to the request are part of what crosses. At the boundary of stages 20 and 30 the model is
+written into the SDK request once, the core works on that request, and the request is read back once.
+
+What stays on the SDK, and the step that moves it:
+
+| Still on the SDK | Moves in |
+|---|---|
+| The core operations and `IPipelineCore`; the async worker still passes an SDK-typed request to `IPipelineCore` | S.2e3 |
+| Mail, Elastic, Duplicates, Solutions and Rollups | S.2e4 |
+| Workflows (`Xrmd.Workflows`), whose hooks the pipeline calls with a lent SDK view | S.2h |
+| The SDK plug-in adapter, which moves to `Xrmd.Sdk.Adapters`, and the SDK overloads, which are removed | S.2i |
+
+The cost of a message is linear in its size:
+
+- The request crosses once at entry (`In`), plus one `Out` and one `In` at the boundary of stages 20 and 30.
+- Each step or hook writes its own parameter bags and images when it is lent, and reads the bags back on return. Around each
+  service call of a running plug-in, the levels it has lent are read back and written again.
+- **Lazy parent lend.** A parent level is lent only when the plug-in first reads `ParentContext`, and then stays lent until the
+  view is lent again. A step that never reads its parent converts nothing of it.
+- **Linear bulk.** The inner executions of a CreateMultiple or UpdateMultiple do not convert the outer request, so a step on the
+  inner message costs the same per target whatever the number of targets.
+- The response is returned unconverted unless something observes it: a post-operation step, an async step, a workflow trigger or
+  a custom API. When it is observed, it crosses in once, its output parameters cross about twice per post-operation step, and
+  it crosses out once at the end.
+- **Residual.** In a bulk request, each inner step that reads `ParentContext` converts the whole outer request once, because the
+  parent level holds all the targets. A step on the inner message of a large bulk request should not read its parent unless it
+  needs to. An inner async step or webhook step of a bulk request also reads the whole held outer request once, before its payload
+  is written. That payload already held the whole parent chain before S.2e2c, so the order of growth does not change.
+
+Async payloads and webhook bodies are written from the model context. The model path (`ContextXml`, `ContextJson`) is taken only
+when the model can carry every value and every value has a plain SDK twin: a twin of exactly the SDK type the mirror creates, with no
+`ExtensionData`. A context that holds an early-bound entity or a value read with extension data serializes the lent SDK view, as
+before, so its bytes do not change. `AsyncOperationQueue.EnqueueAsync` therefore keeps its `SdkMirror` parameter, which the
+twin check needs. It is internal: its caller must first read every level of the chain that the core holds, and the executor is
+its only caller. The async worker rebuilds the job context with `StepContext.FromRemote` and overrides the same members as before;
+it no longer uses the SDK itself, since the `DeleteRequest` it issues is built in `AsyncOperationQueue`. The SDK usage count of
+Pipeline is 30, that move included.
+
 The view is transitional. The other modules move to the model in S.2d to S.2h, and S.2i removes the view, the twins and the bridge.
 
 ## Tests on PostgreSQL

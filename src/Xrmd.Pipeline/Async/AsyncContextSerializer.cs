@@ -4,6 +4,7 @@ using System.Xml;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions.Sdk;
+using Xrmd.Model.Messages;
 using Xrmd.Model.Serialization;
 using Xrmd.Pipeline.Serialization;
 
@@ -81,6 +82,49 @@ public static class AsyncContextSerializer
         return SdkRemoteContext.ModelCanCarry(context) ? ContextXml.Write(context.ToModel()) : SerializeWithSdk(context);
     }
 
+    /// <summary>
+    /// The XML of a model context: <see cref="ContextXml"/> when <see cref="ModelSet.CanCarry(RemoteContext)"/>, else the SDK
+    /// serializer on <c>ToSdk()</c> (which rebuilds plain SDK types; a caller holding the plug-in view of the context uses
+    /// <see cref="Serialize(StepContext, SdkMirror)"/>).
+    /// </summary>
+    /// <exception cref="SerializationException">A value is not a known data contract, or its type is outside the
+    /// <see cref="SdkTypeAllowlist"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="context"/> is null.</exception>
+    internal static string Serialize(RemoteContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        return ModelSet.CanCarry(context) ? ContextXml.Write(context) : SerializeWithSdk(context.ToSdk());
+    }
+
+    /// <summary>
+    /// The <c>asyncoperation.data</c> of a step context and its parent chain, as the plug-in view of today writes it. The model context
+    /// (<see cref="StepContext.ToRemote"/>) is written by <see cref="ContextXml"/> when the model set carries it and no value of it has
+    /// an SDK twin in <paramref name="mirror"/> that is not plain (<see cref="SdkMirror.IsPlainTwin"/>: an early-bound entity, a value
+    /// read with extension data). Otherwise the view <paramref name="mirror"/> lends is serialized as before (<see cref="ToRemote"/>,
+    /// <see cref="Serialize(RemoteExecutionContext)"/>): every value is then the SDK instance the steps of the chain see, never a
+    /// rebuilt plain one.
+    /// </summary>
+    /// <remarks>The caller makes sure no level of the chain is held by the core (the executor's <c>SyncBoundaries</c>), so the model is
+    /// current on both paths.</remarks>
+    /// <exception cref="SerializationException">A value is not a known data contract, or its type is outside the
+    /// <see cref="SdkTypeAllowlist"/>.</exception>
+    internal static string Serialize(StepContext context, SdkMirror mirror)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(mirror);
+        var remote = context.ToRemote();
+        if (ModelSet.CanCarry(remote, mirror.IsPlainTwin)) return ContextXml.Write(remote);
+        var view = PluginContextAdapter.Lend(context, mirror);
+        try
+        {
+            return Serialize(ToRemote(view));
+        }
+        finally
+        {
+            PluginContextAdapter.Return(view, mirror);
+        }
+    }
+
     [ThreadStatic]
     private static long _sdkFallbacks;
 
@@ -119,6 +163,30 @@ public static class AsyncContextSerializer
     {
         ArgumentNullException.ThrowIfNull(xml);
         return ContextXml.TryRead(xml, out var model) ? model!.ToSdk() : DeserializeWithSdk(xml);
+    }
+
+    /// <summary>
+    /// Reads a payload written by <see cref="Serialize(RemoteExecutionContext)"/> into the model: <see cref="ContextXml.TryRead"/>, else
+    /// the SDK reader and <c>ToModel()</c>.
+    /// </summary>
+    /// <exception cref="SerializationException">As <see cref="Deserialize"/>.</exception>
+    internal static RemoteContext DeserializeModel(string xml)
+    {
+        ArgumentNullException.ThrowIfNull(xml);
+        return ContextXml.TryRead(xml, out var model) ? model! : DeserializeWithSdk(xml).ToModel();
+    }
+
+    /// <summary>
+    /// <see cref="DeserializeModel(string)"/> for a job about to run: on the SDK path the values of the result are the twins in
+    /// <paramref name="mirror"/> of the deserialized SDK instances, so the plug-in's view holds those very instances (with any
+    /// extension data they were read with), as when it was given the deserialized context.
+    /// </summary>
+    /// <exception cref="SerializationException">As <see cref="Deserialize"/>.</exception>
+    internal static RemoteContext DeserializeModel(string xml, SdkMirror mirror)
+    {
+        ArgumentNullException.ThrowIfNull(xml);
+        ArgumentNullException.ThrowIfNull(mirror);
+        return ContextXml.TryRead(xml, out var model) ? model! : DeserializeWithSdk(xml).ToModel(mirror);
     }
 
     private static RemoteExecutionContext DeserializeWithSdk(string xml)

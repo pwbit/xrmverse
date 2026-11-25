@@ -93,6 +93,12 @@ public interface IWorkflowPipelineHook
     /// ruling W19). Its steps' requests go through <paramref name="executor"/>, the pipeline running the message, one level deeper
     /// than <paramref name="invocation"/>.
     /// </summary>
+    /// <remarks>
+    /// <paramref name="context"/> is the plug-in view the executor lends of a copy of the stage's model context (S.2e2c): it is read back
+    /// into the model when the call ends. A request of the run names the model context (<see cref="XrmdPluginExecutionContext.Model"/>) as
+    /// its <see cref="InvocationContext.Parent"/> and keeps the <see cref="InvocationContext.Mirror"/> of <paramref name="invocation"/>, so
+    /// the executor reads the view back before it and writes it again after it. The same holds for the other hooks that take a context.
+    /// </remarks>
     /// <exception cref="Xrmd.Core.Errors.XrmdFaultException">A step's fault; the plug-in abort (400, ISVAborted, the step's text) for a
     /// stop step that cancels or a business rule's error (W11, W15); 400 for a process with steps xrmverse cannot run (W20).</exception>
     Task RunRealtimeAsync(PipelineExecutor executor, RealtimeWorkflow w, XrmdPluginExecutionContext context, InvocationContext invocation,

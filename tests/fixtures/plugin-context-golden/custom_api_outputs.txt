@@ -1,0 +1,108 @@
+=== custom api with the echo plug-in as main operation ===
+--- dump xt_GoldenEcho|20|0|1 ---
+Context: @1
+  AuthenticatedUserId: Guid:{user}
+  BusinessUnitId: Guid:{businessunit}
+  CorrelationId: Guid:{id1}
+  Depth: Int32:1
+  EnvironmentId: null
+  InitiatingUserAgent: null
+  InitiatingUserApplicationId: Guid:{empty}
+  InitiatingUserAzureActiveDirectoryObjectId: Guid:{empty}
+  InitiatingUserId: Guid:{user}
+  InputParameters: ParameterCollection[2] @2
+    Count: Int32:5
+    Text: String:"abc"
+  IsApplicationUser: Boolean:False
+  IsExecutingOffline: Boolean:False
+  IsInTransaction: Boolean:True
+  IsOfflinePlayback: Boolean:False
+  IsPortalsClientCall: Boolean:False
+  IsolationMode: Int32:2
+  MessageName: String:"xt_GoldenEcho"
+  Mode: Int32:0
+  OperationCreatedOn: DateTime:{date}
+  OperationId: Guid:{id2}
+  OrganizationId: Guid:{organization}
+  OrganizationName: String:"Test Org"
+  OutputParameters: ParameterCollection[0] @3
+  OwningExtension: EntityReference @4
+    LogicalName: String:"sdkmessageprocessingstep"
+    Id: Guid:{id3}
+    Name: String:"xt_GoldenEcho::20:1"
+    KeyAttributes: KeyAttributeCollection[0] @5
+    RowVersion: null
+  ParentContext: null
+  PortalsContactId: Guid:{empty}
+  PostEntityImages: EntityImageCollection[0] @6
+  PostEntityImagesCollection: EntityImageCollection[][0] @7
+  PreEntityImages: EntityImageCollection[0] @8
+  PreEntityImagesCollection: EntityImageCollection[][0] @9
+  PrimaryEntityId: Guid:{empty}
+  PrimaryEntityName: String:"none"
+  RequestId: Guid:{id4}
+  SecondaryEntityName: String:"none"
+  SharedVariables: ParameterCollection[1] @10
+    dump: Int32:20
+  Stage: Int32:20
+  TenantId: Guid:{empty}
+  UserAzureActiveDirectoryObjectId: Guid:{empty}
+  UserId: Guid:{user}
+--- dump xt_GoldenEcho|40|0|1 ---
+Context: @11
+  AuthenticatedUserId: Guid:{user}
+  BusinessUnitId: Guid:{businessunit}
+  CorrelationId: Guid:{id1}
+  Depth: Int32:1
+  EnvironmentId: null
+  InitiatingUserAgent: null
+  InitiatingUserApplicationId: Guid:{empty}
+  InitiatingUserAzureActiveDirectoryObjectId: Guid:{empty}
+  InitiatingUserId: Guid:{user}
+  InputParameters: ParameterCollection[2] @2
+    Count: Int32:5
+    Text: String:"abc"
+  IsApplicationUser: Boolean:False
+  IsExecutingOffline: Boolean:False
+  IsInTransaction: Boolean:True
+  IsOfflinePlayback: Boolean:False
+  IsPortalsClientCall: Boolean:False
+  IsolationMode: Int32:2
+  MessageName: String:"xt_GoldenEcho"
+  Mode: Int32:0
+  OperationCreatedOn: DateTime:{date}
+  OperationId: Guid:{id2}
+  OrganizationId: Guid:{organization}
+  OrganizationName: String:"Test Org"
+  OutputParameters: ParameterCollection[3] @3
+    Context: String:"Stage=30;PrimaryEntityName=none;PrimaryEntityId={empty};UserId={user};Outputs="
+    CountOut: Int32:5
+    TextOut: String:"abc"
+  OwningExtension: EntityReference @12
+    LogicalName: String:"sdkmessageprocessingstep"
+    Id: Guid:{id5}
+    Name: String:"xt_GoldenEcho::40:1"
+    KeyAttributes: KeyAttributeCollection[0] @13
+    RowVersion: null
+  ParentContext: null
+  PortalsContactId: Guid:{empty}
+  PostEntityImages: EntityImageCollection[0] @14
+  PostEntityImagesCollection: EntityImageCollection[][0] @15
+  PreEntityImages: EntityImageCollection[0] @16
+  PreEntityImagesCollection: EntityImageCollection[][0] @17
+  PrimaryEntityId: Guid:{empty}
+  PrimaryEntityName: String:"none"
+  RequestId: Guid:{id4}
+  SecondaryEntityName: String:"none"
+  SharedVariables: ParameterCollection[2] @10
+    dump: Int32:40
+    dumped: String:"20"
+  Stage: Int32:40
+  TenantId: Guid:{empty}
+  UserAzureActiveDirectoryObjectId: Guid:{empty}
+  UserId: Guid:{user}
+--- caller ---
+ResponseName=xt_GoldenEcho
+Context=Stage=30;PrimaryEntityName=none;PrimaryEntityId={empty};UserId={user};Outputs=
+CountOut=5
+TextOut=abc

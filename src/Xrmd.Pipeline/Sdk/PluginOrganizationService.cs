@@ -3,22 +3,25 @@ using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
+using Xrmd.Abstractions.Sdk;
 using Xrmd.Core.Errors;
+using Xrmd.Model.Messages;
 
 namespace Xrmd.Pipeline;
 
 /// <summary>
 /// The <see cref="IOrganizationServiceFactory"/> handed to one plug-in execution: its services run their messages
 /// through the pipeline with <c>PipelineExecutor.ExecuteAsync(request, new InvocationContext(user, initiating,
-/// parent.Depth + 1, parent, session, parent.CorrelationId))</c> on the plug-in's <see cref="DataSession"/> (same
-/// transaction), synchronously, and turn an <see cref="XrmdFaultException"/> into a
+/// parent.Depth + 1, parent, session, parent.CorrelationId) { Mirror = mirror })</c> on the plug-in's <see cref="DataSession"/> (same
+/// transaction), synchronously (<paramref name="parent"/> is the model context of the calling step, whose view the executor reads
+/// back before the call and writes again after it; <paramref name="mirror"/> is the chain's), and turn an <see cref="XrmdFaultException"/> into a
 /// <see cref="FaultException{OrganizationServiceFault}"/> with its code (any other non-cancellation exception: code
 /// <c>0x80040216</c> and its message). A failed call inside a transaction dooms it: the owning execution then rolls back
 /// and fails with <see cref="PipelineExecutor.NoActiveTransactionMessage"/>, as in Dataverse. Once <paramref name="pluginToken"/> is cancelled (the plug-in
 /// timed out, the request was cancelled or the plug-in returned) every call fails with a <see cref="FaultException"/>
 /// without touching the connection.
 /// </summary>
-public sealed class PluginOrganizationServiceFactory(PipelineExecutor executor, IPipelineCore core, XrmdPluginExecutionContext parent,
+public sealed class PluginOrganizationServiceFactory(PipelineExecutor executor, IPipelineCore core, StepContext parent, SdkMirror mirror,
     DataSession session, CancellationToken pluginToken) : IOrganizationServiceFactory
 {
     private const string RevokedMessage =
@@ -69,7 +72,10 @@ public sealed class PluginOrganizationServiceFactory(PipelineExecutor executor, 
         // for the acting user (the metadata writes are refused: see IPipelineCore.ExecuteNonPipelineAsync).
         if (core.IsNonPipelineMessage(request.RequestName))
             return Call(ct => core.ExecuteNonPipelineAsync(request, caller, session, ct));
-        var invocation = new InvocationContext(caller, parent.InitiatingUserId, parent.Depth + 1, parent, session, parent.CorrelationId);
+        var invocation = new InvocationContext(caller, parent.InitiatingUserId, parent.Depth + 1, parent, session, parent.CorrelationId)
+        {
+            Mirror = mirror,
+        };
         return Call(async ct =>
         {
             try

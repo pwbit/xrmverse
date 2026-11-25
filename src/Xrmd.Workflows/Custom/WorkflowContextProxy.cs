@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Reflection;
 using Microsoft.Xrm.Sdk;
+using Xrmd.Model.Messages;
 using Xrmd.Pipeline;
 using Xrmd.Workflows.Engine;
 
@@ -58,7 +59,8 @@ public static class WorkflowContextProxy
     {
         ArgumentNullException.ThrowIfNull(run);
         var background = run.Stage == 0;
-        var parent = run.Invocation.Parent;
+        // The bags of the parent's plug-in view (lent while the run goes on), as the steps of the run see them.
+        var parent = run.Invocation is { Parent: { } model, Mirror: { } mirror } ? PluginContextAdapter.ViewOf(model, mirror) : null;
         return new XrmdPluginExecutionContext
         {
             Mode = background ? 1 : 0,
@@ -78,6 +80,23 @@ public static class WorkflowContextProxy
             InputParameters = parent?.InputParameters ?? new(),
             OutputParameters = parent?.OutputParameters ?? new(),
             SharedVariables = parent?.SharedVariables ?? new(),
+        };
+    }
+
+    /// <summary>The values of <see cref="Values"/> a <c>plugintracelog</c> row records, on the model context its writer takes.</summary>
+    internal static StepContext TraceValues(WorkflowRun run, (Guid Id, string Name) organization)
+    {
+        var values = Values(run, organization);
+        return new StepContext
+        {
+            MessageName = values.MessageName,
+            PrimaryEntityName = values.PrimaryEntityName,
+            Mode = values.Mode,
+            Depth = values.Depth,
+            CorrelationId = values.CorrelationId,
+            RequestId = values.RequestId,
+            UserId = values.UserId,
+            BusinessUnitId = values.BusinessUnitId,
         };
     }
 

@@ -1,6 +1,8 @@
 using FluentAssertions;
 using Microsoft.Xrm.Sdk;
 using Xrmd.Abstractions;
+using Xrmd.Abstractions.Sdk;
+using Xrmd.Model.Messages;
 using Xrmd.Pipeline;
 using Xrmd.Workflows.Custom;
 using Xrmd.Workflows.Engine;
@@ -30,12 +32,12 @@ public sealed class WorkflowContextProxyTests
     private static readonly Guid UserId = Guid.NewGuid(), UnitId = Guid.NewGuid(), Initiating = Guid.NewGuid(), RecordId = Guid.NewGuid(),
         Correlation = Guid.NewGuid(), WorkflowId = Guid.NewGuid(), OrganizationId = Guid.NewGuid();
 
-    private static WorkflowRun Run(int stage, XrmdPluginExecutionContext? parent = null) => new()
+    private static WorkflowRun Run(int stage, XrmdPluginExecutionContext? parent = null, SdkMirror? mirror = null) => new()
     {
         Workflow = new WorkflowRow { Id = WorkflowId, Name = "Test", Category = 0 },
         Primary = new EntityReference("account", RecordId),
         Caller = new Caller(UserId, UnitId),
-        Invocation = new InvocationContext(new Caller(Initiating, UnitId), Initiating, 2, parent, null, Correlation),
+        Invocation = new InvocationContext(new Caller(Initiating, UnitId), Initiating, 2, parent?.Model, null, Correlation) { Mirror = mirror },
         Stage = stage,
         MessageName = "Update",
     };
@@ -46,10 +48,12 @@ public sealed class WorkflowContextProxyTests
     [Fact]
     public void Real_time_run_context_members_come_from_the_run()
     {
-        var parent = new XrmdPluginExecutionContext();
+        // The hook's view of the message's context, lent while the run goes on (S.2e2c).
+        var mirror = new SdkMirror();
+        var parent = PluginContextAdapter.Lend(new StepContext(), mirror);
         parent.InputParameters["Target"] = new Entity("account", RecordId);
 
-        var context = Create(Run(40, parent));
+        var context = Create(Run(40, parent, mirror));
 
         context.UserId.Should().Be(UserId);
         context.BusinessUnitId.Should().Be(UnitId);

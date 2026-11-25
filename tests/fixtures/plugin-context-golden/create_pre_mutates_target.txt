@@ -1,0 +1,181 @@
+=== create ===
+--- dump Create|10|0|1 ---
+Context: @1
+  AuthenticatedUserId: Guid:{user}
+  BusinessUnitId: Guid:{businessunit}
+  CorrelationId: Guid:{id1}
+  Depth: Int32:1
+  EnvironmentId: null
+  InitiatingUserAgent: null
+  InitiatingUserApplicationId: Guid:{empty}
+  InitiatingUserAzureActiveDirectoryObjectId: Guid:{empty}
+  InitiatingUserId: Guid:{user}
+  InputParameters: ParameterCollection[1] @2
+    Target: Entity(pb_pipe) @3
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[2] @4
+        pb_count: Int32:3
+        pb_name: String:"gld-create"
+      FormattedValues: FormattedValueCollection[0] @5
+      KeyAttributes: KeyAttributeCollection[0] @6
+      RelatedEntities: RelatedEntityCollection[0] @7
+  IsApplicationUser: Boolean:False
+  IsExecutingOffline: Boolean:False
+  IsInTransaction: Boolean:False
+  IsOfflinePlayback: Boolean:False
+  IsPortalsClientCall: Boolean:False
+  IsolationMode: Int32:2
+  MessageName: String:"Create"
+  Mode: Int32:0
+  OperationCreatedOn: DateTime:{date}
+  OperationId: Guid:{id2}
+  OrganizationId: Guid:{organization}
+  OrganizationName: String:"Test Org"
+  OutputParameters: ParameterCollection[0] @8
+  OwningExtension: EntityReference @9
+    LogicalName: String:"sdkmessageprocessingstep"
+    Id: Guid:{id3}
+    Name: String:"Create:pb_pipe:10:1"
+    KeyAttributes: KeyAttributeCollection[0] @10
+    RowVersion: null
+  ParentContext: null
+  PortalsContactId: Guid:{empty}
+  PostEntityImages: EntityImageCollection[0] @11
+  PostEntityImagesCollection: EntityImageCollection[][0] @12
+  PreEntityImages: EntityImageCollection[0] @13
+  PreEntityImagesCollection: EntityImageCollection[][0] @14
+  PrimaryEntityId: Guid:{empty}
+  PrimaryEntityName: String:"pb_pipe"
+  RequestId: Guid:{id4}
+  SecondaryEntityName: String:"none"
+  SharedVariables: ParameterCollection[1] @15
+    dump: Int32:10
+  Stage: Int32:10
+  TenantId: Guid:{empty}
+  UserAzureActiveDirectoryObjectId: Guid:{empty}
+  UserId: Guid:{user}
+--- dump Create|20|0|1 ---
+Context: @16
+  AuthenticatedUserId: Guid:{user}
+  BusinessUnitId: Guid:{businessunit}
+  CorrelationId: Guid:{id1}
+  Depth: Int32:1
+  EnvironmentId: null
+  InitiatingUserAgent: null
+  InitiatingUserApplicationId: Guid:{empty}
+  InitiatingUserAzureActiveDirectoryObjectId: Guid:{empty}
+  InitiatingUserId: Guid:{user}
+  InputParameters: ParameterCollection[1] @2
+    Target: Entity(pb_pipe) @3
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[3] @4
+        pb_count: Int32:3
+        pb_data: String:"set-at-20"
+        pb_name: String:"gld-create"
+      FormattedValues: FormattedValueCollection[0] @5
+      KeyAttributes: KeyAttributeCollection[0] @6
+      RelatedEntities: RelatedEntityCollection[0] @7
+  IsApplicationUser: Boolean:False
+  IsExecutingOffline: Boolean:False
+  IsInTransaction: Boolean:True
+  IsOfflinePlayback: Boolean:False
+  IsPortalsClientCall: Boolean:False
+  IsolationMode: Int32:2
+  MessageName: String:"Create"
+  Mode: Int32:0
+  OperationCreatedOn: DateTime:{date}
+  OperationId: Guid:{id2}
+  OrganizationId: Guid:{organization}
+  OrganizationName: String:"Test Org"
+  OutputParameters: ParameterCollection[0] @8
+  OwningExtension: EntityReference @17
+    LogicalName: String:"sdkmessageprocessingstep"
+    Id: Guid:{id5}
+    Name: String:"Create:pb_pipe:20:2"
+    KeyAttributes: KeyAttributeCollection[0] @18
+    RowVersion: null
+  ParentContext: null
+  PortalsContactId: Guid:{empty}
+  PostEntityImages: EntityImageCollection[0] @19
+  PostEntityImagesCollection: EntityImageCollection[][0] @20
+  PreEntityImages: EntityImageCollection[0] @21
+  PreEntityImagesCollection: EntityImageCollection[][0] @22
+  PrimaryEntityId: Guid:{empty}
+  PrimaryEntityName: String:"pb_pipe"
+  RequestId: Guid:{id4}
+  SecondaryEntityName: String:"none"
+  SharedVariables: ParameterCollection[2] @15
+    dump: Int32:20
+    dumped: String:"10"
+  Stage: Int32:20
+  TenantId: Guid:{empty}
+  UserAzureActiveDirectoryObjectId: Guid:{empty}
+  UserId: Guid:{user}
+--- dump Create|40|0|1 ---
+Context: @23
+  AuthenticatedUserId: Guid:{user}
+  BusinessUnitId: Guid:{businessunit}
+  CorrelationId: Guid:{id1}
+  Depth: Int32:1
+  EnvironmentId: null
+  InitiatingUserAgent: null
+  InitiatingUserApplicationId: Guid:{empty}
+  InitiatingUserAzureActiveDirectoryObjectId: Guid:{empty}
+  InitiatingUserId: Guid:{user}
+  InputParameters: ParameterCollection[1] @2
+    Target: Entity(pb_pipe) @3
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[3] @4
+        pb_count: Int32:3
+        pb_data: String:"set-at-20"
+        pb_name: String:"gld-create"
+      FormattedValues: FormattedValueCollection[0] @5
+      KeyAttributes: KeyAttributeCollection[0] @6
+      RelatedEntities: RelatedEntityCollection[0] @7
+  IsApplicationUser: Boolean:False
+  IsExecutingOffline: Boolean:False
+  IsInTransaction: Boolean:True
+  IsOfflinePlayback: Boolean:False
+  IsPortalsClientCall: Boolean:False
+  IsolationMode: Int32:2
+  MessageName: String:"Create"
+  Mode: Int32:0
+  OperationCreatedOn: DateTime:{date}
+  OperationId: Guid:{id2}
+  OrganizationId: Guid:{organization}
+  OrganizationName: String:"Test Org"
+  OutputParameters: ParameterCollection[1] @8
+    id: Guid:{id6}
+  OwningExtension: EntityReference @24
+    LogicalName: String:"sdkmessageprocessingstep"
+    Id: Guid:{id7}
+    Name: String:"Create:pb_pipe:40:1"
+    KeyAttributes: KeyAttributeCollection[0] @25
+    RowVersion: null
+  ParentContext: null
+  PortalsContactId: Guid:{empty}
+  PostEntityImages: EntityImageCollection[0] @26
+  PostEntityImagesCollection: EntityImageCollection[][0] @27
+  PreEntityImages: EntityImageCollection[0] @28
+  PreEntityImagesCollection: EntityImageCollection[][0] @29
+  PrimaryEntityId: Guid:{id6}
+  PrimaryEntityName: String:"pb_pipe"
+  RequestId: Guid:{id4}
+  SecondaryEntityName: String:"none"
+  SharedVariables: ParameterCollection[2] @15
+    dump: Int32:40
+    dumped: String:"10;20"
+  Stage: Int32:40
+  TenantId: Guid:{empty}
+  UserAzureActiveDirectoryObjectId: Guid:{empty}
+  UserId: Guid:{user}
+--- caller ---
+stored pb_name=gld-create
+stored pb_data=set-at-20
+stored pb_count=3

@@ -1,7 +1,7 @@
 using System.Runtime.CompilerServices;
-using Microsoft.Xrm.Sdk;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
+using Xrmd.Model.Messages;
 
 namespace Xrmd.Pipeline;
 
@@ -16,31 +16,32 @@ internal static class ReservedSharedVariables
     /// <summary>The reserved keys.</summary>
     public static readonly string[] Keys = [MailSchema.MailboxDeliveryVariable];
 
-    private static readonly IReadOnlyDictionary<string, object> None = new Dictionary<string, object>();
+    private static readonly IReadOnlyDictionary<string, object?> None = new Dictionary<string, object?>();
 
-    // Keyed by the collection itself (by reference): the clones of a context share it, and a plug-in cannot reach the table.
-    private static readonly ConditionalWeakTable<ParameterCollection, IReadOnlyDictionary<string, object>> Snapshots = new();
+    // Keyed by the model bag itself (by reference): the clones of a context share it, and a plug-in cannot reach the table. A
+    // plug-in's changes reach the bag when its view is read back (PluginContextAdapter.Return or Sync), before any check.
+    private static readonly ConditionalWeakTable<ParameterBag, IReadOnlyDictionary<string, object?>> Snapshots = new();
 
     /// <summary>
     /// Records the reserved values <paramref name="context"/>'s own <c>SharedVariables</c> hold now (a new execution: its parents
     /// already have theirs).
     /// </summary>
-    public static void Snapshot(IExecutionContext context) => Take(context.SharedVariables);
+    public static void Snapshot(StepContext context) => Take(context.SharedVariables);
 
     /// <summary>
     /// Records the reserved values of <paramref name="context"/> and of every <c>ParentContext</c> above it (a context rebuilt from its
     /// queued row, whose parents are rebuilt with it).
     /// </summary>
-    public static void SnapshotChain(IExecutionContext context)
+    public static void SnapshotChain(StepContext context)
     {
-        for (IExecutionContext? level = context; level is not null; level = (level as IPluginExecutionContext)?.ParentContext)
+        for (var level = context; level is not null; level = level.ParentContext)
             Take(level.SharedVariables);
     }
 
-    private static void Take(ParameterCollection? shared)
+    private static void Take(ParameterBag? shared)
     {
         if (shared is null) return;
-        var values = new Dictionary<string, object>(StringComparer.Ordinal);
+        var values = new Dictionary<string, object?>(StringComparer.Ordinal);
         foreach (var key in Keys)
             if (shared.TryGetValue(key, out var value)) values[key] = value;
         Snapshots.AddOrUpdate(shared, values);
@@ -52,9 +53,9 @@ internal static class ReservedSharedVariables
     /// </summary>
     /// <param name="who">What may have changed it, for the message ("The plug-in step 'x'").</param>
     /// <exception cref="XrmdFaultException">400 <c>InvalidArgument</c> when one was added, changed or removed.</exception>
-    public static void DemandKept(IExecutionContext context, string who)
+    public static void DemandKept(StepContext context, string who)
     {
-        for (IExecutionContext? level = context; level is not null; level = (level as IPluginExecutionContext)?.ParentContext)
+        for (var level = context; level is not null; level = level.ParentContext)
         {
             if (level.SharedVariables is not { } shared) continue;
             var expected = Snapshots.TryGetValue(shared, out var snapshot) ? snapshot : None;

@@ -1,7 +1,10 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Reflection;
+using System.Text;
 using System.ServiceModel;
 using System.Threading;
 using Microsoft.Crm.Sdk.Messages;
@@ -464,6 +467,66 @@ namespace Xrmd.TestPlugins
     }
 
     /// <summary>
+    /// S.2e2c final review I1: a plug-in that executes a request on its own <c>InputParameters</c> collection. Config <c>"{log entity}"</c>.
+    /// Before stage 30 at depth 1 it holds the collection, executes <c>new OrganizationRequest(MessageName) { Parameters = it }</c>,
+    /// writes <c>same={held is the context's collection};key={held has AddedByNested};view={the context's has it}</c> into
+    /// <c>Target["pb_data"]</c> and then adds <c>"Late"</c> to the held collection. At a deeper level before stage 30 it adds
+    /// <c>"AddedByNested"</c>. After stage 30 at depth 1 it creates a <c>{log entity}</c> record named <c>post</c> whose
+    /// <c>pb_data</c> is the sorted keys of its <c>InputParameters</c>.
+    /// </summary>
+    public class ForwardInputsPlugin : IPlugin
+    {
+        private readonly string _log;
+
+        public ForwardInputsPlugin(string unsecure, string secure) { _log = unsecure; }
+
+        public void Execute(IServiceProvider serviceProvider)
+        {
+            var context = (IPluginExecutionContext)serviceProvider.GetService(typeof(IPluginExecutionContext));
+            var factory = (IOrganizationServiceFactory)serviceProvider.GetService(typeof(IOrganizationServiceFactory));
+            var service = factory.CreateOrganizationService(context.UserId);
+            if (context.Stage == 40)
+            {
+                if (context.Depth != 1) return;
+                var keys = context.InputParameters.Keys.OrderBy(k => k, StringComparer.Ordinal).ToArray();
+                var log = new Entity(_log);
+                log["pb_name"] = "post";
+                log["pb_data"] = string.Join(",", keys);
+                service.Create(log);
+                return;
+            }
+            if (context.Depth > 1)
+            {
+                context.InputParameters["AddedByNested"] = 1;
+                return;
+            }
+            var held = context.InputParameters;
+            service.Execute(new OrganizationRequest(context.MessageName) { Parameters = held });
+            ((Entity)held["Target"])["pb_data"] = string.Format(CultureInfo.InvariantCulture, "same={0};key={1};view={2}",
+                ReferenceEquals(held, context.InputParameters), held.Contains("AddedByNested"),
+                context.InputParameters.Contains("AddedByNested"));
+            held["Late"] = 2;
+        }
+    }
+
+    /// <summary>
+    /// S.2e2c final review M1: puts one new <c>OptionSetValue(3)</c> into <c>OutputParameters["Choice"]</c> and into the attribute
+    /// <c>c</c> of a new entity in <c>OutputParameters["Holder"]</c>, so the caller can check that the response holds one instance.
+    /// </summary>
+    public class OutputChoicePlugin : IPlugin
+    {
+        public OutputChoicePlugin(string unsecure, string secure) { }
+
+        public void Execute(IServiceProvider serviceProvider)
+        {
+            var context = (IPluginExecutionContext)serviceProvider.GetService(typeof(IPluginExecutionContext));
+            var choice = new OptionSetValue(3);
+            context.OutputParameters["Choice"] = choice;
+            context.OutputParameters["Holder"] = new Entity("holder") { ["c"] = choice };
+        }
+    }
+
+    /// <summary>
     /// <c>"{message}|{entity}|{attribute}"</c>: issues the bulk message (#76, ruling B12) with one target of the entity whose
     /// attribute is <c>"from plugin"</c> through its organization service, catches the <c>FaultException</c> and sets
     /// <c>Target["pb_data"] = "caught {ErrorCode}|{Message}"</c> (or <c>"ok"</c>).
@@ -871,6 +934,389 @@ namespace Xrmd.TestPlugins
             ((Entity)context.InputParameters["Target"])["pb_data"] = value ?? "(null)";
         }
     }
+
+#nullable disable
+    /// <summary>
+    /// S.2e2c golden dumps. Config <c>"{entity}"</c> or <c>"{entity}|{mutation}"</c>. The mutation (applied to <c>Target</c>, every
+    /// <c>Targets</c> entity, <c>BusinessEntity</c> and every <c>BusinessEntityCollection</c> entity before the dump) is
+    /// <c>attr=value</c> (sets a string), <c>attr=-</c> (removes the attribute), <c>attr=@option:N</c> (sets <c>Value</c> of the
+    /// existing <c>OptionSetValue</c> in place) or <c>Target=replace:marker</c> (puts a new <c>Entity</c> of the same logical name and
+    /// id, the copied attributes and <c>marker="replaced"</c> into <c>InputParameters["Target"]</c>). With entity <c>-</c> nothing
+    /// is dumped (a mutation-only step). Otherwise it sets <c>SharedVariables["dump"]</c> to the stage and creates a record of
+    /// <c>{entity}</c> named <c>Message|Stage|Mode|Depth</c>; its <c>pb_data</c> is <c>Seq: n</c> (the creation order in this
+    /// process) and the canonical dump of every member of <c>IPluginExecutionContext</c> to <c>IPluginExecutionContext7</c> (see
+    /// <see cref="ContextDumpWriter"/>). After the dump it appends the stage to <c>SharedVariables["dumped"]</c>.
+    /// </summary>
+    public class ContextDumpPlugin : IPlugin
+    {
+        private static int _sequence;
+
+        private readonly string _entity;
+        private readonly string _attribute;
+        private readonly string _value;
+
+        public ContextDumpPlugin(string unsecure, string secure)
+        {
+            var parts = unsecure.Split(new[] { '|' }, 2);
+            _entity = parts[0];
+            if (parts.Length > 1)
+            {
+                var i = parts[1].IndexOf('=');
+                _attribute = parts[1].Substring(0, i);
+                _value = parts[1].Substring(i + 1);
+            }
+        }
+
+        public void Execute(IServiceProvider serviceProvider)
+        {
+            var context = (IPluginExecutionContext7)serviceProvider.GetService(typeof(IPluginExecutionContext7));
+            var factory = (IOrganizationServiceFactory)serviceProvider.GetService(typeof(IOrganizationServiceFactory));
+
+            if (_attribute != null) Mutate(context);
+            if (_entity == "-") return;
+            var service = factory.CreateOrganizationService(context.UserId);
+            context.SharedVariables["dump"] = context.Stage;
+
+            var record = new Entity(_entity);
+            record["pb_name"] = string.Format(CultureInfo.InvariantCulture, "{0}|{1}|{2}|{3}",
+                context.MessageName, context.Stage, context.Mode, context.Depth);
+            record["pb_data"] = "Seq: " + System.Threading.Interlocked.Increment(ref _sequence).ToString(CultureInfo.InvariantCulture)
+                + "\n" + new ContextDumpWriter().Dump(context);
+            service.Create(record);
+
+            context.SharedVariables["dumped"] = (context.SharedVariables.Contains("dumped") ? context.SharedVariables["dumped"] + ";" : "")
+                + context.Stage.ToString(CultureInfo.InvariantCulture);
+        }
+
+        private void Mutate(IPluginExecutionContext context)
+        {
+            if (context.InputParameters.Contains("Target") && context.InputParameters["Target"] is Entity)
+            {
+                var target = (Entity)context.InputParameters["Target"];
+                if (_attribute == "Target")
+                {
+                    var replacement = new Entity(target.LogicalName, target.Id);
+                    foreach (var a in target.Attributes) replacement[a.Key] = a.Value;
+                    replacement[_value.Substring("replace:".Length)] = "replaced";
+                    context.InputParameters["Target"] = replacement;
+                    return;
+                }
+                Apply(target);
+            }
+            if (context.InputParameters.Contains("Targets") && context.InputParameters["Targets"] is EntityCollection)
+                foreach (var e in ((EntityCollection)context.InputParameters["Targets"]).Entities) Apply(e);
+            if (context.OutputParameters.Contains("BusinessEntity") && context.OutputParameters["BusinessEntity"] is Entity)
+                Apply((Entity)context.OutputParameters["BusinessEntity"]);
+            if (context.OutputParameters.Contains("BusinessEntityCollection") && context.OutputParameters["BusinessEntityCollection"] is EntityCollection)
+                foreach (var e in ((EntityCollection)context.OutputParameters["BusinessEntityCollection"]).Entities) Apply(e);
+        }
+
+        private void Apply(Entity e)
+        {
+            if (_value == "-") e.Attributes.Remove(_attribute);
+            else if (_value.StartsWith("@option:", StringComparison.Ordinal))
+                ((OptionSetValue)e[_attribute]).Value = int.Parse(_value.Substring("@option:".Length), CultureInfo.InvariantCulture);
+            else e[_attribute] = _value;
+        }
+    }
+
+    /// <summary>
+    /// Writes the canonical dump of <see cref="ContextDumpPlugin"/>: the public properties of the context interfaces in ordinal
+    /// name order, bags by ordinal key, values as <c>Type:value</c>. The known SDK types (entities, references, collections, option
+    /// sets, money, aliased values, column sets, queries, relationships, managed properties) are written by explicit writers that
+    /// name only their public data members; reflection over public properties is the fallback for any other type. Ids are written
+    /// raw, dates as <c>{date}</c>, row versions as <c>{rowversion}</c>; the test names and numbers ids per scenario. Every
+    /// reference object a plug-in can mutate (context, entity, reference, collection, bag, option set, money) is followed by an
+    /// identity token <c>@obj{load}-{n}</c> from a process-wide table, so that the same instance has the same token in every dump of
+    /// a scenario and a copy has a new one; the test renumbers the tokens per scenario.
+    /// </summary>
+    internal sealed class ContextDumpWriter
+    {
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<object, string> Tokens =
+            new System.Runtime.CompilerServices.ConditionalWeakTable<object, string>();
+        private static readonly string LoadId = Guid.NewGuid().ToString("N").Substring(0, 8);
+        private static int _tokenCount;
+
+        private readonly StringBuilder _out = new StringBuilder();
+
+        public string Dump(IPluginExecutionContext7 context)
+        {
+            Line(0, "Context: " + Token(context));
+            Members(1, context, 0);
+            return _out.ToString().TrimEnd('\n');
+        }
+
+        private static string Token(object o)
+        {
+            return "@obj" + LoadId + "-" + Tokens.GetValue(o, _ => System.Threading.Interlocked.Increment(ref _tokenCount).ToString(CultureInfo.InvariantCulture));
+        }
+
+        private void Line(int indent, string text)
+        {
+            _out.Append(' ', indent * 2).Append(text).Append('\n');
+        }
+
+        private static IEnumerable<PropertyInfo> ContextProperties()
+        {
+            var types = new List<Type> { typeof(IPluginExecutionContext7) };
+            types.AddRange(typeof(IPluginExecutionContext7).GetInterfaces());
+            return types.SelectMany(t => t.GetProperties())
+                .GroupBy(p => p.Name).Select(g => g.First()).OrderBy(p => p.Name, StringComparer.Ordinal);
+        }
+
+        private void Members(int indent, IPluginExecutionContext context, int depth)
+        {
+            foreach (var property in ContextProperties())
+            {
+                object value;
+                try { value = property.GetValue(context, null); }
+                catch (Exception ex) { Line(indent, property.Name + ": throws " + (ex.InnerException ?? ex).GetType().Name); continue; }
+                Value(indent, property.Name, value, depth);
+            }
+        }
+
+        private static string Scalar(object v)
+        {
+            if (v is string) return "\"" + ((string)v).Replace("\\", "\\\\").Replace("\r", "\\r").Replace("\n", "\\n") + "\"";
+            if (v is Guid) return ((Guid)v).ToString("D");
+            if (v is DateTime || v is DateTimeOffset) return "{date}";
+            if (v is bool) return (bool)v ? "True" : "False";
+            if (v is Enum) return v.ToString();
+            if (v is byte[]) return BitConverter.ToString((byte[])v);
+            if (v is IFormattable) return ((IFormattable)v).ToString(null, CultureInfo.InvariantCulture);
+            if (v is Type) return ((Type)v).Name;
+            return null;
+        }
+
+        private static string KeyText(object key)
+        {
+            var s = key as string;
+            if (s != null) return s;
+            var r = key as Relationship;
+            if (r != null) return "Relationship:" + r.SchemaName + ":" + r.PrimaryEntityRole;
+            return Convert.ToString(key, CultureInfo.InvariantCulture);
+        }
+
+        private static string TypeName(Type t)
+        {
+            var i = t.Name.IndexOf('`');
+            return i < 0 ? t.Name : t.Name.Substring(0, i);
+        }
+
+        private void Value(int indent, string label, object v, int depth)
+        {
+            if (v == null) { Line(indent, label + ": null"); return; }
+            if (depth > 16) { Line(indent, label + ": <depth limit>"); return; }
+            if (label == "versionnumber" && v is long) { Line(indent, label + ": Int64:{rowversion}"); return; }
+            var scalar = Scalar(v);
+            if (scalar != null) { Line(indent, label + ": " + v.GetType().Name + ":" + scalar); return; }
+            var d = depth + 1;
+            var i = indent + 1;
+
+            var parent = v as IPluginExecutionContext;
+            if (parent != null) { Line(indent, label + ": Context " + Token(v)); Members(i, parent, d); return; }
+
+            var entity = v as Entity;
+            if (entity != null)
+            {
+                Line(indent, label + ": " + TypeName(v.GetType()) + "(" + entity.LogicalName + ") " + Token(v));
+                Value(i, "Id", entity.Id, d);
+                Value(i, "EntityState", entity.EntityState, d);
+                Line(i, "RowVersion: " + (entity.RowVersion == null ? "null" : "{rowversion}"));
+                Value(i, "Attributes", entity.Attributes, d);
+                Value(i, "FormattedValues", entity.FormattedValues, d);
+                Value(i, "KeyAttributes", entity.KeyAttributes, d);
+                Value(i, "RelatedEntities", entity.RelatedEntities, d);
+                return;
+            }
+            var reference = v as EntityReference;
+            if (reference != null)
+            {
+                Line(indent, label + ": EntityReference " + Token(v));
+                Value(i, "LogicalName", reference.LogicalName, d);
+                Value(i, "Id", reference.Id, d);
+                Value(i, "Name", reference.Name, d);
+                Value(i, "KeyAttributes", reference.KeyAttributes, d);
+                Line(i, "RowVersion: " + (reference.RowVersion == null ? "null" : "{rowversion}"));
+                return;
+            }
+            var collection = v as EntityCollection;
+            if (collection != null)
+            {
+                Line(indent, label + ": EntityCollection " + Token(v));
+                Value(i, "EntityName", collection.EntityName, d);
+                Value(i, "Entities", collection.Entities, d);
+                Value(i, "MoreRecords", collection.MoreRecords, d);
+                Value(i, "PagingCookie", collection.PagingCookie, d);
+                Value(i, "TotalRecordCount", collection.TotalRecordCount, d);
+                Value(i, "TotalRecordCountLimitExceeded", collection.TotalRecordCountLimitExceeded, d);
+                return;
+            }
+            var option = v as OptionSetValue;
+            if (option != null) { Line(indent, label + ": OptionSetValue " + Token(v)); Value(i, "Value", option.Value, d); return; }
+            var money = v as Money;
+            if (money != null) { Line(indent, label + ": Money " + Token(v)); Value(i, "Value", money.Value, d); return; }
+            var aliased = v as AliasedValue;
+            if (aliased != null)
+            {
+                Line(indent, label + ": AliasedValue " + Token(v));
+                Value(i, "EntityLogicalName", aliased.EntityLogicalName, d);
+                Value(i, "AttributeLogicalName", aliased.AttributeLogicalName, d);
+                Value(i, "Value", aliased.Value, d);
+                return;
+            }
+            var managed = v as BooleanManagedProperty;
+            if (managed != null)
+            {
+                Line(indent, label + ": BooleanManagedProperty");
+                Value(i, "Value", managed.Value, d);
+                Value(i, "CanBeChanged", managed.CanBeChanged, d);
+                Value(i, "ManagedPropertyLogicalName", managed.ManagedPropertyLogicalName, d);
+                return;
+            }
+            var relationship = v as Relationship;
+            if (relationship != null)
+            {
+                Line(indent, label + ": Relationship");
+                Value(i, "SchemaName", relationship.SchemaName, d);
+                Value(i, "PrimaryEntityRole", relationship.PrimaryEntityRole, d);
+                return;
+            }
+            var columns = v as ColumnSet;
+            if (columns != null)
+            {
+                Line(indent, label + ": ColumnSet");
+                Value(i, "AllColumns", columns.AllColumns, d);
+                Value(i, "Columns", columns.Columns, d);
+                return;
+            }
+            var fetch = v as FetchExpression;
+            if (fetch != null) { Line(indent, label + ": FetchExpression"); Value(i, "Query", fetch.Query, d); return; }
+            var qe = v as QueryExpression;
+            if (qe != null)
+            {
+                Line(indent, label + ": QueryExpression");
+                Value(i, "EntityName", qe.EntityName, d);
+                Value(i, "ColumnSet", qe.ColumnSet, d);
+                Value(i, "Criteria", qe.Criteria, d);
+                Orders(i, qe.Orders, d);
+                Links(i, qe.LinkEntities, d);
+                Value(i, "TopCount", qe.TopCount, d);
+                Value(i, "Distinct", qe.Distinct, d);
+                Value(i, "NoLock", qe.NoLock, d);
+                Value(i, "PageInfo", qe.PageInfo, d);
+                return;
+            }
+            var qba = v as QueryByAttribute;
+            if (qba != null)
+            {
+                Line(indent, label + ": QueryByAttribute");
+                Value(i, "EntityName", qba.EntityName, d);
+                Value(i, "ColumnSet", qba.ColumnSet, d);
+                Value(i, "Attributes", qba.Attributes, d);
+                Value(i, "Values", qba.Values, d);
+                Orders(i, qba.Orders, d);
+                Value(i, "TopCount", qba.TopCount, d);
+                Value(i, "PageInfo", qba.PageInfo, d);
+                return;
+            }
+            var filter = v as FilterExpression;
+            if (filter != null)
+            {
+                Line(indent, label + ": FilterExpression");
+                Value(i, "FilterOperator", filter.FilterOperator, d);
+                Line(i, "Conditions: [" + filter.Conditions.Count + "]");
+                for (var k = 0; k < filter.Conditions.Count; k++)
+                {
+                    var c = filter.Conditions[k];
+                    Line(i + 1, "[" + k + "]: ConditionExpression");
+                    Value(i + 2, "EntityName", c.EntityName, d);
+                    Value(i + 2, "AttributeName", c.AttributeName, d);
+                    Value(i + 2, "Operator", c.Operator, d);
+                    Value(i + 2, "Values", c.Values, d);
+                }
+                Line(i, "Filters: [" + filter.Filters.Count + "]");
+                for (var k = 0; k < filter.Filters.Count; k++) Value(i + 1, "[" + k + "]", filter.Filters[k], d);
+                return;
+            }
+            var paging = v as PagingInfo;
+            if (paging != null)
+            {
+                Line(indent, label + ": PagingInfo");
+                Value(i, "Count", paging.Count, d);
+                Value(i, "PageNumber", paging.PageNumber, d);
+                Value(i, "PagingCookie", paging.PagingCookie, d);
+                Value(i, "ReturnTotalRecordCount", paging.ReturnTotalRecordCount, d);
+                return;
+            }
+
+            var items = v as IEnumerable;
+            if (items != null)
+            {
+                var keyed = new List<KeyValuePair<string, object>>();
+                var listed = new List<object>();
+                foreach (var item in items)
+                {
+                    var t = item == null ? null : item.GetType();
+                    if (t != null && t.IsGenericType && t.GetGenericTypeDefinition() == typeof(KeyValuePair<,>))
+                        keyed.Add(new KeyValuePair<string, object>(KeyText(t.GetProperty("Key").GetValue(item, null)), t.GetProperty("Value").GetValue(item, null)));
+                    else listed.Add(item);
+                }
+                Line(indent, label + ": " + TypeName(v.GetType()) + "[" + (keyed.Count + listed.Count) + "] " + Token(v));
+                foreach (var pair in keyed.OrderBy(p => p.Key, StringComparer.Ordinal)) Value(i, pair.Key, pair.Value, d);
+                for (var k = 0; k < listed.Count; k++) Value(i, "[" + k + "]", listed[k], d);
+                return;
+            }
+
+            // Fallback for a type without an explicit writer: its public properties.
+            var type = v.GetType();
+            Line(indent, label + ": " + TypeName(type) + " " + Token(v));
+            foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance).OrderBy(p => p.Name, StringComparer.Ordinal))
+            {
+                if (property.GetIndexParameters().Length > 0 || property.Name == "ExtensionData" || !property.CanRead) continue;
+                object value;
+                try { value = property.GetValue(v, null); }
+                catch (Exception ex) { Line(i, property.Name + ": throws " + (ex.InnerException ?? ex).GetType().Name); continue; }
+                Value(i, property.Name, value, d);
+            }
+        }
+
+        private void Orders(int indent, IEnumerable<OrderExpression> orders, int depth)
+        {
+            var list = orders.ToList();
+            Line(indent, "Orders: [" + list.Count + "]");
+            for (var k = 0; k < list.Count; k++)
+            {
+                Line(indent + 1, "[" + k + "]: OrderExpression");
+                Value(indent + 2, "AttributeName", list[k].AttributeName, depth);
+                Value(indent + 2, "OrderType", list[k].OrderType, depth);
+            }
+        }
+
+        private void Links(int indent, IEnumerable<LinkEntity> links, int depth)
+        {
+            var list = links.ToList();
+            Line(indent, "LinkEntities: [" + list.Count + "]");
+            for (var k = 0; k < list.Count; k++)
+            {
+                var l = list[k];
+                Line(indent + 1, "[" + k + "]: LinkEntity");
+                var n = indent + 2;
+                Value(n, "LinkFromEntityName", l.LinkFromEntityName, depth);
+                Value(n, "LinkFromAttributeName", l.LinkFromAttributeName, depth);
+                Value(n, "LinkToEntityName", l.LinkToEntityName, depth);
+                Value(n, "LinkToAttributeName", l.LinkToAttributeName, depth);
+                Value(n, "JoinOperator", l.JoinOperator, depth);
+                Value(n, "EntityAlias", l.EntityAlias, depth);
+                Value(n, "Columns", l.Columns, depth);
+                Value(n, "LinkCriteria", l.LinkCriteria, depth);
+                Orders(n, l.Orders, depth);
+                Links(n, l.LinkEntities, depth);
+            }
+        }
+    }
+
+#nullable restore
 
     /// <summary>An abstract plug-in base class (not a plug-in type itself).</summary>
     public abstract class PluginBase : IPlugin

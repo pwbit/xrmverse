@@ -3,6 +3,7 @@ using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using Microsoft.Xrm.Sdk;
 using Xrmd.Abstractions.Sdk;
+using Xrmd.Model.Messages;
 using Xrmd.Model.Serialization;
 using Xrmd.Pipeline.Serialization;
 
@@ -62,6 +63,29 @@ public static class WebhookPayload
         var model = context.ToModel();
         var body = ContextJson.Write(model);
         return body.Length <= limit ? (body, false) : (ContextJson.Write(ContextJson.Trim(model)), true);
+    }
+
+    /// <summary>The JSON of a model context: <see cref="ContextJson"/> when <see cref="ModelSet.CanCarry(RemoteContext)"/>, else the SDK
+    /// serializer on <c>ToSdk()</c>.</summary>
+    /// <exception cref="SerializationException">A value is not a known data contract.</exception>
+    internal static byte[] Serialize(RemoteContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        return ModelSet.CanCarry(context) ? ContextJson.Write(context) : SerializeWithSdk(context.ToSdk());
+    }
+
+    /// <summary>
+    /// <see cref="Build(RemoteExecutionContext, int)"/> of a model context, with the same size rule: the model path trims with
+    /// <see cref="ContextJson.Trim"/>; a context the model set does not carry is built from <c>ToSdk()</c>. <paramref name="context"/>
+    /// is not changed.
+    /// </summary>
+    /// <exception cref="SerializationException">A value is not a known data contract.</exception>
+    public static (byte[] Body, bool Trimmed) Build(RemoteContext context, int limit = SizeLimit)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        if (!ModelSet.CanCarry(context)) return Build(context.ToSdk(), limit);
+        var body = ContextJson.Write(context);
+        return body.Length <= limit ? (body, false) : (ContextJson.Write(ContextJson.Trim(context)), true);
     }
 
     /// <summary>The members of <see cref="RemoteExecutionContext"/> a trimmed body leaves out (or leaves empty).</summary>

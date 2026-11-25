@@ -366,7 +366,7 @@ public class SerializerSwitchTests
     [Fact]
     public void Serialize_null_throws_argument_null()
     {
-        Assert.Throws<ArgumentNullException>(() => AsyncContextSerializer.Serialize(null!));
+        Assert.Throws<ArgumentNullException>(() => AsyncContextSerializer.Serialize((RemoteExecutionContext)null!));
     }
 
     // ---- nesting: over the reader's bound the SDK serializers are used, as on main ---------------------------------------
