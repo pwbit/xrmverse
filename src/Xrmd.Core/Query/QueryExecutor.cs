@@ -84,7 +84,7 @@ public sealed class QueryExecutor(SqlQueryCompiler compiler, IDbConnectionFactor
         var notes = NoteBodyRead.Prepare(query, store);
         query = notes.Query;
         var context = await ContextAsync(caller, query, ct);
-        context = context with { LanguageCode = await LanguageCodeAsync(caller, session, ct) };
+        context = context with { LanguageCode = await UserLanguage.ForAsync(caller, session, ct, store) };
         var compiled = Compile(query, context);
         try
         {
@@ -121,23 +121,6 @@ public sealed class QueryExecutor(SqlQueryCompiler compiler, IDbConnectionFactor
                     throw XrmdFaultException.FieldReadDenied(entity, attribute, caller.UserId);
         }
     }
-
-    /// <summary>
-    /// #109: the caller's UI language (<c>usersettings.uilanguageid</c>), in which choice labels are formatted and choice orders
-    /// sort; <see cref="FormattedValues.English"/> for an internal caller, a caller without settings or an unset language.
-    /// </summary>
-    private async Task<int> LanguageCodeAsync(Caller caller, DataSession session, CancellationToken ct)
-    {
-        if (caller.UserId == Guid.Empty || store.GetEntity(CurrencySchema.UserSettings)?.Attributes?
-                .Any(a => a.LogicalName == UiLanguageId) != true)
-            return FormattedValues.English;
-        await using var cmd = session.Command(
-            $"SELECT {UiLanguageId} FROM {session.DataTable(CurrencySchema.UserSettings)} WHERE systemuserid = @xrmd_user");
-        cmd.AddParameter("@xrmd_user", DbType.Guid, caller.UserId);
-        return await cmd.ExecuteScalarAsync(ct) is int lcid && lcid > 0 ? lcid : FormattedValues.English;
-    }
-
-    private const string UiLanguageId = "uilanguageid";
 
     /// <summary>
     /// The compilation context of <paramref name="caller"/>: the hierarchy resolver always, the read restriction of the user

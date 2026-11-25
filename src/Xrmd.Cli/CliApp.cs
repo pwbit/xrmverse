@@ -45,6 +45,7 @@ public static class CliApp
         SolutionCommands.Build,
         PluginCommands.Build,
         WebhookCommands.Build,
+        ConnectorCommands.Build,
         DataCommands.Build,
         DevCommands.Build,
         ApplyCommands.Build,

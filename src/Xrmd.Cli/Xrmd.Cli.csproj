@@ -37,6 +37,9 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Templates\*" LogicalName="Xrmd.Cli.Templates.%(Filename)%(Extension)" />
+    <!-- Plan X.12a: the custom connector package of connectors/xrmverse, written by `xrmd connector export`. -->
+    <EmbeddedResource Include="..\..\connectors\xrmverse\apiDefinition.swagger.json;..\..\connectors\xrmverse\apiProperties.json;..\..\connectors\xrmverse\icon.png"
+                      LogicalName="connector/%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>

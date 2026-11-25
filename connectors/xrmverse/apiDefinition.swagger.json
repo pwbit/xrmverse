@@ -1,0 +1,671 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "xrmverse",
+    "description": "Read, add, update and delete the rows of the tables of an xrmverse server, and run its custom APIs, from cloud flows and apps.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "xrmverse",
+      "url": "https://xrmverse.com"
+    }
+  },
+  "host": "{{HOST}}",
+  "basePath": "/",
+  "schemes": [
+    "https"
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "securityDefinitions": {
+    "oauth2_auth": {
+      "type": "oauth2",
+      "flow": "accessCode",
+      "authorizationUrl": "https://login.microsoftonline.com/common/oauth2/authorize",
+      "tokenUrl": "https://login.windows.net/common/oauth2/authorize",
+      "scopes": {}
+    }
+  },
+  "security": [
+    {
+      "oauth2_auth": []
+    }
+  ],
+  "x-ms-connector-metadata": [
+    {
+      "propertyName": "Website",
+      "propertyValue": "https://xrmverse.com"
+    },
+    {
+      "propertyName": "Privacy policy",
+      "propertyValue": "https://xrmverse.com/privacy/"
+    }
+  ],
+  "paths": {
+    "/api/data/v9.2/{table}": {
+      "get": {
+        "operationId": "ListRows",
+        "summary": "List rows",
+        "description": "Lists the rows of a table, one page at a time, filtered and sorted by OData query options or by a FetchXML query.",
+        "x-ms-visibility": "important",
+        "x-ms-pageable": {
+          "nextLinkName": "@odata.nextLink"
+        },
+        "parameters": [
+          {
+            "name": "table",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "x-ms-summary": "Table name",
+            "description": "The table of the rows, picked from the list or given as its set name.",
+            "x-ms-url-encoding": "single",
+            "x-ms-dynamic-values": {
+              "operationId": "GetTables",
+              "value-collection": "value",
+              "value-path": "entitySetName",
+              "value-title": "displayName",
+              "parameters": {}
+            }
+          },
+          {
+            "name": "$select",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "x-ms-summary": "Select columns",
+            "description": "The logical names of the columns to return, separated by commas.",
+            "x-ms-visibility": "advanced"
+          },
+          {
+            "name": "$filter",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "x-ms-summary": "Filter rows",
+            "description": "An OData filter expression that the rows must match, for example statecode eq 0.",
+            "x-ms-visibility": "advanced"
+          },
+          {
+            "name": "$orderby",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "x-ms-summary": "Sort by",
+            "description": "The columns to sort the rows by, each followed by asc or desc, separated by commas.",
+            "x-ms-visibility": "advanced"
+          },
+          {
+            "name": "$expand",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "x-ms-summary": "Expand query",
+            "description": "The related rows to return with each row, as OData navigation properties.",
+            "x-ms-visibility": "advanced"
+          },
+          {
+            "name": "$top",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32",
+            "x-ms-summary": "Row count",
+            "description": "The largest number of rows to return.",
+            "x-ms-visibility": "advanced"
+          },
+          {
+            "name": "fetchXml",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "x-ms-summary": "FetchXML query",
+            "description": "A FetchXML query on the table, used in place of the OData query options.",
+            "x-ms-visibility": "advanced"
+          },
+          {
+            "name": "Prefer",
+            "in": "header",
+            "required": true,
+            "type": "string",
+            "default": "odata.include-annotations=\"*\"",
+            "x-ms-summary": "Response preference",
+            "description": "Asks the server for the formatted values and the other annotations of the columns.",
+            "x-ms-visibility": "internal"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The page of rows.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "array",
+                  "x-ms-summary": "Rows",
+                  "description": "The rows of the page.",
+                  "items": {
+                    "type": "object",
+                    "x-ms-dynamic-schema": {
+                      "operationId": "GetTableSchema",
+                      "parameters": {
+                        "name": {
+                          "parameter": "table"
+                        },
+                        "use": "read"
+                      }
+                    }
+                  }
+                },
+                "@odata.nextLink": {
+                  "type": "string",
+                  "x-ms-summary": "Next page link",
+                  "description": "The address of the next page, when there is one.",
+                  "x-ms-visibility": "internal"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "AddRow",
+        "summary": "Add a new row",
+        "description": "Adds a row to a table and returns the row as saved.",
+        "x-ms-visibility": "important",
+        "parameters": [
+          {
+            "name": "table",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "x-ms-summary": "Table name",
+            "description": "The table of the rows, picked from the list or given as its set name.",
+            "x-ms-url-encoding": "single",
+            "x-ms-dynamic-values": {
+              "operationId": "GetTables",
+              "value-collection": "value",
+              "value-path": "entitySetName",
+              "value-title": "displayName",
+              "parameters": {}
+            }
+          },
+          {
+            "name": "Prefer",
+            "in": "header",
+            "required": true,
+            "type": "string",
+            "default": "return=representation",
+            "x-ms-summary": "Return the row",
+            "description": "Asks the server to answer with the row as saved.",
+            "x-ms-visibility": "internal"
+          },
+          {
+            "name": "item",
+            "in": "body",
+            "required": true,
+            "x-ms-summary": "Row",
+            "description": "The columns of the new row.",
+            "schema": {
+              "type": "object",
+              "x-ms-dynamic-schema": {
+                "operationId": "GetTableSchema",
+                "parameters": {
+                  "name": {
+                    "parameter": "table"
+                  },
+                  "use": "create"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "The new row.",
+            "schema": {
+              "type": "object",
+              "x-ms-dynamic-schema": {
+                "operationId": "GetTableSchema",
+                "parameters": {
+                  "name": {
+                    "parameter": "table"
+                  },
+                  "use": "read"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/data/v9.2/{table}({id})": {
+      "get": {
+        "operationId": "GetRow",
+        "summary": "Get a row by ID",
+        "description": "Returns one row of a table, found by its ID.",
+        "x-ms-visibility": "important",
+        "parameters": [
+          {
+            "name": "table",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "x-ms-summary": "Table name",
+            "description": "The table of the rows, picked from the list or given as its set name.",
+            "x-ms-url-encoding": "single",
+            "x-ms-dynamic-values": {
+              "operationId": "GetTables",
+              "value-collection": "value",
+              "value-path": "entitySetName",
+              "value-title": "displayName",
+              "parameters": {}
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "x-ms-summary": "Row ID",
+            "description": "The unique identifier of the row, a GUID."
+          },
+          {
+            "name": "$select",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "x-ms-summary": "Select columns",
+            "description": "The logical names of the columns to return, separated by commas.",
+            "x-ms-visibility": "advanced"
+          },
+          {
+            "name": "$expand",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "x-ms-summary": "Expand query",
+            "description": "The related rows to return with the row, as OData navigation properties.",
+            "x-ms-visibility": "advanced"
+          },
+          {
+            "name": "Prefer",
+            "in": "header",
+            "required": true,
+            "type": "string",
+            "default": "odata.include-annotations=\"*\"",
+            "x-ms-summary": "Response preference",
+            "description": "Asks the server for the formatted values and the other annotations of the columns.",
+            "x-ms-visibility": "internal"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The row.",
+            "schema": {
+              "type": "object",
+              "x-ms-dynamic-schema": {
+                "operationId": "GetTableSchema",
+                "parameters": {
+                  "name": {
+                    "parameter": "table"
+                  },
+                  "use": "read"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "UpdateRow",
+        "summary": "Update a row",
+        "description": "Changes the given columns of an existing row and returns the row as saved. The row must exist.",
+        "x-ms-visibility": "important",
+        "parameters": [
+          {
+            "name": "table",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "x-ms-summary": "Table name",
+            "description": "The table of the rows, picked from the list or given as its set name.",
+            "x-ms-url-encoding": "single",
+            "x-ms-dynamic-values": {
+              "operationId": "GetTables",
+              "value-collection": "value",
+              "value-path": "entitySetName",
+              "value-title": "displayName",
+              "parameters": {}
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "x-ms-summary": "Row ID",
+            "description": "The unique identifier of the row, a GUID."
+          },
+          {
+            "name": "Prefer",
+            "in": "header",
+            "required": true,
+            "type": "string",
+            "default": "return=representation",
+            "x-ms-summary": "Return the row",
+            "description": "Asks the server to answer with the row as saved.",
+            "x-ms-visibility": "internal"
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "type": "string",
+            "default": "*",
+            "x-ms-summary": "Existing row only",
+            "description": "Makes the update fail when the row does not exist, instead of creating it.",
+            "x-ms-visibility": "internal"
+          },
+          {
+            "name": "item",
+            "in": "body",
+            "required": true,
+            "x-ms-summary": "Row",
+            "description": "The columns to change.",
+            "schema": {
+              "type": "object",
+              "x-ms-dynamic-schema": {
+                "operationId": "GetTableSchema",
+                "parameters": {
+                  "name": {
+                    "parameter": "table"
+                  },
+                  "use": "update"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The updated row.",
+            "schema": {
+              "type": "object",
+              "x-ms-dynamic-schema": {
+                "operationId": "GetTableSchema",
+                "parameters": {
+                  "name": {
+                    "parameter": "table"
+                  },
+                  "use": "read"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "DeleteRow",
+        "summary": "Delete a row",
+        "description": "Deletes one row of a table, found by its ID.",
+        "x-ms-visibility": "important",
+        "parameters": [
+          {
+            "name": "table",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "x-ms-summary": "Table name",
+            "description": "The table of the rows, picked from the list or given as its set name.",
+            "x-ms-url-encoding": "single",
+            "x-ms-dynamic-values": {
+              "operationId": "GetTables",
+              "value-collection": "value",
+              "value-path": "entitySetName",
+              "value-title": "displayName",
+              "parameters": {}
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "x-ms-summary": "Row ID",
+            "description": "The unique identifier of the row, a GUID."
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The row was deleted."
+          }
+        }
+      }
+    },
+    "/api/data/v9.2/Microsoft.Dynamics.CRM.{customApi}": {
+      "post": {
+        "operationId": "RunCustomApi",
+        "summary": "Run a custom API",
+        "description": "Runs a custom API of the server that is not bound to a table, with its request parameters, and returns its response properties.",
+        "x-ms-visibility": "important",
+        "parameters": [
+          {
+            "name": "customApi",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "x-ms-summary": "Custom API",
+            "description": "The unique name of the custom API to run.",
+            "x-ms-url-encoding": "single",
+            "x-ms-dynamic-values": {
+              "operationId": "GetCustomApis",
+              "value-collection": "value",
+              "value-path": "uniqueName",
+              "value-title": "displayName",
+              "parameters": {}
+            }
+          },
+          {
+            "name": "parameters",
+            "in": "body",
+            "required": false,
+            "x-ms-summary": "Request parameters",
+            "description": "The request parameters of the custom API.",
+            "schema": {
+              "type": "object",
+              "x-ms-dynamic-schema": {
+                "operationId": "GetCustomApiSchema",
+                "parameters": {
+                  "uniqueName": {
+                    "parameter": "customApi"
+                  },
+                  "part": "request"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The response properties of the custom API.",
+            "schema": {
+              "type": "object",
+              "x-ms-dynamic-schema": {
+                "operationId": "GetCustomApiSchema",
+                "parameters": {
+                  "uniqueName": {
+                    "parameter": "customApi"
+                  },
+                  "part": "response"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "The custom API ran and has no response properties."
+          }
+        }
+      }
+    },
+    "/api/connector/v1/tables": {
+      "get": {
+        "operationId": "GetTables",
+        "summary": "List the tables",
+        "description": "Lists the tables the signed-in user can read, for the table picker of the row actions.",
+        "x-ms-visibility": "internal",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The tables.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "logicalName": {
+                        "type": "string",
+                        "x-ms-summary": "Logical name",
+                        "description": "The logical name of the table."
+                      },
+                      "entitySetName": {
+                        "type": "string",
+                        "x-ms-summary": "Set name",
+                        "description": "The name of the table in the row addresses."
+                      },
+                      "displayName": {
+                        "type": "string",
+                        "x-ms-summary": "Display name",
+                        "description": "The display name of the table."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/connector/v1/tables/{name}/schema": {
+      "get": {
+        "operationId": "GetTableSchema",
+        "summary": "Get the columns of a table",
+        "description": "Returns the JSON Schema of the columns of a table that a row action reads, creates or updates.",
+        "x-ms-visibility": "internal",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "x-ms-summary": "Table name",
+            "description": "The logical name or the set name of the table."
+          },
+          {
+            "name": "use",
+            "in": "query",
+            "required": true,
+            "type": "string",
+            "enum": [
+              "read",
+              "create",
+              "update"
+            ],
+            "x-ms-summary": "Use",
+            "description": "Whether the schema describes a row that is read, created or updated."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The JSON Schema of the row.",
+            "schema": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "/api/connector/v1/customapis": {
+      "get": {
+        "operationId": "GetCustomApis",
+        "summary": "List the custom APIs",
+        "description": "Lists the custom APIs not bound to a table that the signed-in user can run, for the picker of the run action.",
+        "x-ms-visibility": "internal",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The custom APIs.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "uniqueName": {
+                        "type": "string",
+                        "x-ms-summary": "Unique name",
+                        "description": "The unique name of the custom API."
+                      },
+                      "displayName": {
+                        "type": "string",
+                        "x-ms-summary": "Display name",
+                        "description": "The display name of the custom API."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/connector/v1/customapis/{uniqueName}/schema": {
+      "get": {
+        "operationId": "GetCustomApiSchema",
+        "summary": "Get the parameters of a custom API",
+        "description": "Returns the JSON Schema of the request parameters or of the response properties of a custom API.",
+        "x-ms-visibility": "internal",
+        "parameters": [
+          {
+            "name": "uniqueName",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "x-ms-summary": "Unique name",
+            "description": "The unique name of the custom API."
+          },
+          {
+            "name": "part",
+            "in": "query",
+            "required": true,
+            "type": "string",
+            "enum": [
+              "request",
+              "response"
+            ],
+            "x-ms-summary": "Part",
+            "description": "Whether the schema describes the request parameters or the response properties."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The JSON Schema of the part.",
+            "schema": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    }
+  }
+}

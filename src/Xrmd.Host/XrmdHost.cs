@@ -27,6 +27,7 @@ using Xrmd.Solution;
 using Xrmd.Storage.PostgreSql;
 using Xrmd.Tds;
 using Xrmd.WebApi;
+using Xrmd.WebApi.Connector;
 
 namespace Xrmd.Host;
 
@@ -201,6 +202,7 @@ public static class XrmdHost
         services.AddSingleton<CustomApiRegistry>();
         // The custom API authoring rules (plan 3.1) write the API's message through the core operations: scoped like them.
         services.AddScoped<CustomApiAuthoring>();
+        services.AddScoped<Xrmd.WebApi.Connector.ConnectorCatalog>();
         services.AddSingleton<PluginAssemblyLoader>();
         services.AddSingleton<RegistrationValidator>();
         // The write-only authvalue of the webhook endpoints (plan 3.2): taken at stage 20, read for the delivery.
@@ -488,6 +490,9 @@ public static class XrmdHost
             // Fixed routes ($metadata, EntityDefinitions, functions, file properties) take precedence over the generic {entityset} routes.
             api.MapGroup("/data/" + version).MapWebApiEndpoints();
         }
+
+        // X.12a: the custom connector's design-time endpoints (table and custom API pickers and schemas).
+        api.MapGroup("/connector/v1").MapConnectorEndpoints();
 
         // The local identity provider's passthrough endpoints and WebFinger (OpenIddict serves discovery and keys itself).
         if (localIdp) app.MapXrmdIdp();

@@ -691,6 +691,13 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
     }
 
     /// <summary>
+    /// Whether <see cref="DemandPrivilegeAsync"/> would pass: the call is unrestricted, or every principal holds
+    /// <paramref name="privilegeName"/> at some depth.
+    /// </summary>
+    public async Task<bool> HoldsPrivilegeAsync(Caller caller, string privilegeName, CancellationToken ct) =>
+        await FirstWithoutPrivilegeAsync(caller, privilegeName, ct) is null;
+
+    /// <summary>
     /// A privilege that is not of an entity record (e.g. <c>prvCreateEntity</c>): every principal of the call must hold it
     /// at some depth (a System Administrator holds all). No effect for <see cref="Caller.Internal"/> and the SYSTEM user.
     /// </summary>
@@ -698,12 +705,20 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
     /// <exception cref="XrmdFaultException">403 PrivilegeDenied.</exception>
     public async Task DemandPrivilegeAsync(Caller caller, string privilegeName, string entity, CancellationToken ct)
     {
+        if (await FirstWithoutPrivilegeAsync(caller, privilegeName, ct) is { } denied)
+            throw XrmdFaultException.PrivilegeDenied(denied.UserId, privilegeName, entity, 0);
+    }
+
+    /// <summary>The first principal of the call that lacks <paramref name="privilegeName"/> at every depth; null when none (or unrestricted).</summary>
+    private async Task<SecurityProfile?> FirstWithoutPrivilegeAsync(Caller caller, string privilegeName, CancellationToken ct)
+    {
         ArgumentNullException.ThrowIfNull(caller);
         ArgumentException.ThrowIfNullOrEmpty(privilegeName);
-        if (await IsUnrestrictedAsync(caller, ct)) return;
+        if (await IsUnrestrictedAsync(caller, ct)) return null;
         foreach (var p in await PrincipalsAsync(caller, ct))
             if (p.DepthOf(privilegeName) == DepthMask.None)
-                throw XrmdFaultException.PrivilegeDenied(p.UserId, privilegeName, entity, 0);
+                return p;
+        return null;
     }
 
     /// <summary>

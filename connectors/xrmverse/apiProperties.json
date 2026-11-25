@@ -1,0 +1,33 @@
+{
+  "properties": {
+    "connectionParameters": {
+      "token": {
+        "type": "oauthSetting",
+        "oAuthSettings": {
+          "identityProvider": "aad",
+          "clientId": "{{CLIENT_ID}}",
+          "scopes": [],
+          "redirectMode": "GlobalPerConnector",
+          "properties": {
+            "AzureActiveDirectoryResourceId": "{{RESOURCE_URI}}"
+          },
+          "customParameters": {
+            "loginUri": {
+              "value": "https://login.microsoftonline.com"
+            },
+            "tenantId": {
+              "value": "common"
+            },
+            "resourceUri": {
+              "value": "{{RESOURCE_URI}}"
+            }
+          }
+        }
+      }
+    },
+    "iconBrandColor": "#4f46e5",
+    "capabilities": [],
+    "publisher": "Power Builders",
+    "stackOwner": "Power Builders"
+  }
+}

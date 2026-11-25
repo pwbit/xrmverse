@@ -60,6 +60,7 @@ available yet. `packaging/homebrew/xrmd.rb.template` is a formula template, not 
 | `solution` | `create`, `import`, `export`, `list`, `add-component`, `publish`, `delete` |
 | `plugin` | `register`, `list`, `step add [--type\|--webhook]`, `step remove`, `image`, `trace` |
 | `webhook` | `create --name --url --auth key\|header\|query --value`, `list`, `show <name>`, `update <name> [--url] [--auth --value]`, `delete <name> --yes`: webhooks (service endpoints of contract 8) over the Web API; see [Webhooks](webhooks.md) |
+| `connector` | `export --out <dir> --client-id <guid> [--resource <uri>] [--force]`: writes the custom connector package of the organization (host, resource and client id filled in); see [Cloud flow connector](flow-connector.md) |
 | `data` | `query` (FetchXML or OData), `export`, `import` |
 | `migrate` | `export`: read a Dataverse environment into an encrypted package (resumable); `inspect`: verify a package offline; `users`: write the users mapping template; `import`: upload a package, start the run and follow it; `status`, `report` (md, json, csv), `cancel`, `finalize`, `activate`: a run; `run`: export then import in one command; see [Migrating from Dataverse](migration.md) |
 | `customapi` | `list`, `show <uniquename>`, `create --file [--solution]`, `delete <uniquename>`: custom API definitions over the Web API |
@@ -635,5 +636,6 @@ None of these is silent: each is refused with an explicit error or stated here.
 - [Install](install.md)
 - [Admin API](admin-api.md)
 - [MCP](mcp.md)
+- [Cloud flow connector](flow-connector.md)
 - [Web admin](web-admin.md)
 - [Configuration](configuration.md)

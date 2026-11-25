@@ -2,7 +2,7 @@
 
 [← xrmverse documentation](../README.md#documentation)
 
-**As of November 24, 2026.** This page lists, in one place, the known issues of xrmverse, the limitations of the current
+**As of November 25, 2026.** This page lists, in one place, the known issues of xrmverse, the limitations of the current
 version and the deliberate divergences from Dataverse. The Status column says whether each entry is planned to change or whether it stays.
 The topic pages have the details; [xrmverse compared with Dataverse](dataverse-comparison.md) gives the feature-by-feature
 view.
@@ -230,7 +230,11 @@ Dataverse features and neighbouring products that xrmverse does not offer and ha
 
 | Feature | Description | Status |
 |---|---|---|
-| Power Automate | Cloud flows and the Dataverse connector are not available; use classic workflows, [workflow authoring as code](workflow-authoring.md), plug-ins or webhooks. | Stays |
+| Power Automate | The Dataverse connector is not available. xrmverse has its own [cloud flow connector](flow-connector.md) with row actions and custom APIs; the trigger ("when a row is added, modified or deleted") is not available yet. Until then use classic workflows, [workflow authoring as code](workflow-authoring.md), plug-ins or webhooks. | Planned: X.12b (trigger) |
+| Local identity provider organizations and the connector | The [cloud flow connector](flow-connector.md) signs in through Microsoft Entra ID; organizations in Local identity provider mode are not supported, and `xrmd connector export` refuses them. | Planned |
+| On-premises data gateway | Not supported by the [cloud flow connector](flow-connector.md): the organization must be reachable over public https. A gateway cannot carry the server's calls back to a flow. | Not scheduled |
+| Certified connector | The [cloud flow connector](flow-connector.md) is imported by the customer, once per organization; it is not published in the public connector gallery. | Not scheduled |
+| FetchXML paging in the connector | The result of a FetchXML query in the [cloud flow connector](flow-connector.md) is not paged; file, image and party list columns are not offered for writing. | Not scheduled |
 | Canvas apps and custom pages | Not available; model-driven apps are. | Stays |
 | Business Process Flows | Not available. | Stays |
 | Editable grids | Not available. | Stays |
