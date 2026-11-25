@@ -87,6 +87,7 @@ public static class SdkRecords
             TotalRecordCount = collection.TotalRecordCount,
             TotalRecordCountLimitExceeded = collection.TotalRecordCountLimitExceeded,
             MinActiveRowVersion = collection.MinActiveRowVersion,
+            RecordCountLessThanMarv = collection.RecordCountLessThanMarv,
         };
         foreach (var e in collection.Entities) result.Records.Add(e.ToModel());
         return result;
@@ -103,6 +104,7 @@ public static class SdkRecords
             TotalRecordCount = collection.TotalRecordCount,
             TotalRecordCountLimitExceeded = collection.TotalRecordCountLimitExceeded,
             MinActiveRowVersion = collection.MinActiveRowVersion,
+            RecordCountLessThanMarv = collection.RecordCountLessThanMarv,
         };
         foreach (var r in collection.Records) result.Entities.Add(r.ToSdk());
         return result;

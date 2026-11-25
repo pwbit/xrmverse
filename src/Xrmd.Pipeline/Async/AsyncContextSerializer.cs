@@ -3,6 +3,8 @@ using System.Text;
 using System.Xml;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
+using Xrmd.Abstractions.Sdk;
+using Xrmd.Model.Serialization;
 using Xrmd.Pipeline.Serialization;
 
 namespace Xrmd.Pipeline.Async;
@@ -10,7 +12,10 @@ namespace Xrmd.Pipeline.Async;
 /// <summary>
 /// The <c>asyncoperation.data</c> payload: the execution context as a <see cref="RemoteExecutionContext"/> written with a
 /// <see cref="DataContractSerializer"/> and the SDK's <see cref="KnownTypesResolver"/> (as Dataverse does), restricted to
-/// the <see cref="SdkTypeAllowlist"/> on write and on read.
+/// the <see cref="SdkTypeAllowlist"/> on write and on read. A value the own model set carries (see
+/// <see cref="SdkRemoteContext.ModelCanCarry(RemoteExecutionContext)"/>) is written and read by the own serializers
+/// (<see cref="ContextXml"/>, <see cref="QueryXml"/>, byte-identical to the SDK output); anything else, and a payload whose
+/// content the own reader does not know, goes through the SDK serializers below.
 /// </summary>
 public static class AsyncContextSerializer
 {
@@ -69,8 +74,37 @@ public static class AsyncContextSerializer
     /// <summary>The XML of <paramref name="context"/>.</summary>
     /// <exception cref="SerializationException">A value (e.g. a shared variable) is not a known data contract, or its type is
     /// outside the <see cref="SdkTypeAllowlist"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="context"/> is null.</exception>
     public static string Serialize(RemoteExecutionContext context)
     {
+        ArgumentNullException.ThrowIfNull(context);
+        return SdkRemoteContext.ModelCanCarry(context) ? ContextXml.Write(context.ToModel()) : SerializeWithSdk(context);
+    }
+
+    [ThreadStatic]
+    private static long _sdkFallbacks;
+
+    /// <summary>
+    /// How many times a serializer of the SDK (the fallback of this class; the webhook JSON fallback is not counted) has run on the calling thread; lets tests prove a warm-up reaches it.
+    /// Per thread, so tests running in parallel cannot disturb each other's reading.
+    /// </summary>
+    internal static long SdkFallbackCount => _sdkFallbacks;
+
+    /// <summary>
+    /// A round trip through the SDK serializers (the fallback path) of a value outside the own model set. It completes the SDK's
+    /// lazy known-types initialization, which the own serializers never trigger.
+    /// </summary>
+    internal static void WarmUpSdk()
+    {
+        var context = new RemoteExecutionContext { MessageName = "Create" };
+        context.SharedVariables["warmup"] = new BooleanManagedProperty(true);
+        context.InputParameters["Target"] = new Entity("none") { ["value"] = new OptionSetValue(0) };
+        DeserializeWithSdk(SerializeWithSdk(context));
+    }
+
+    private static string SerializeWithSdk(RemoteExecutionContext context)
+    {
+        _sdkFallbacks++;
         var text = new StringBuilder();
         using (var writer = XmlWriter.Create(text, new XmlWriterSettings { OmitXmlDeclaration = true }))
             Serializer.WriteObject(writer, context);
@@ -79,10 +113,17 @@ public static class AsyncContextSerializer
 
     /// <summary>Reads a payload written by <see cref="Serialize"/>.</summary>
     /// <exception cref="SerializationException">The payload is not a valid context, or names a type outside the
-    /// <see cref="SdkTypeAllowlist"/>.</exception>
-    /// <exception cref="XmlException">The payload is not well-formed XML.</exception>
+    /// <see cref="SdkTypeAllowlist"/>, or is not well-formed XML (a <see cref="SerializationException"/> with the
+    /// <see cref="XmlException"/> as inner exception).</exception>
     public static RemoteExecutionContext Deserialize(string xml)
     {
+        ArgumentNullException.ThrowIfNull(xml);
+        return ContextXml.TryRead(xml, out var model) ? model!.ToSdk() : DeserializeWithSdk(xml);
+    }
+
+    private static RemoteExecutionContext DeserializeWithSdk(string xml)
+    {
+        _sdkFallbacks++;
         using var reader = XmlReader.Create(new StringReader(xml),
             new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null });
         return Serializer.ReadObject(reader) as RemoteExecutionContext
@@ -97,6 +138,12 @@ public static class AsyncContextSerializer
     public static string SerializeQuery(QueryBase query)
     {
         ArgumentNullException.ThrowIfNull(query);
+        return SdkRemoteContext.ModelCanCarry(query) ? QueryXml.Write(query.ToModel()) : SerializeQueryWithSdk(query);
+    }
+
+    private static string SerializeQueryWithSdk(QueryBase query)
+    {
+        _sdkFallbacks++;
         var text = new StringBuilder();
         using (var writer = XmlWriter.Create(text, new XmlWriterSettings { OmitXmlDeclaration = true }))
             QuerySerializer.WriteObject(writer, query);
@@ -104,11 +151,17 @@ public static class AsyncContextSerializer
     }
 
     /// <summary>Reads a query written by <see cref="SerializeQuery"/>.</summary>
-    /// <exception cref="SerializationException">The payload is not a query, or names a type outside the <see cref="SdkTypeAllowlist"/>.</exception>
-    /// <exception cref="XmlException">The payload is not well-formed XML.</exception>
+    /// <exception cref="SerializationException">The payload is not a query, or names a type outside the <see cref="SdkTypeAllowlist"/>,
+    /// or is not well-formed XML (the <see cref="XmlException"/> is the inner exception).</exception>
     public static QueryBase DeserializeQuery(string xml)
     {
         ArgumentNullException.ThrowIfNull(xml);
+        return QueryXml.TryRead(xml, out var model) ? model!.ToSdk() : DeserializeQueryWithSdk(xml);
+    }
+
+    private static QueryBase DeserializeQueryWithSdk(string xml)
+    {
+        _sdkFallbacks++;
         using var reader = XmlReader.Create(new StringReader(xml),
             new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null });
         return QuerySerializer.ReadObject(reader) as QueryBase

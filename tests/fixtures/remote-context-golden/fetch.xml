@@ -1,0 +1,1 @@
+<QueryBase xmlns:i="http://www.w3.org/2001/XMLSchema-instance" i:type="FetchExpression" xmlns="http://schemas.microsoft.com/xrm/2011/Contracts"><Query>&lt;fetch top="5"&gt;&lt;entity name="account"&gt;&lt;attribute name="name" /&gt;&lt;/entity&gt;&lt;/fetch&gt;</Query></QueryBase>

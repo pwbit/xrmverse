@@ -67,14 +67,9 @@ public sealed class PluginAssemblyLoader
 
     /// <summary>
     /// Completes the SDK's lazy known-types initialization (the scan of the loaded assemblies and the known value and
-    /// request types) with a serialization round trip of an execution context, as the async queue does.
+    /// request types) with a round trip through the SDK serializers (the own serializers never trigger it).
     /// </summary>
-    private static void WarmUpKnownTypes()
-    {
-        var context = new XrmdPluginExecutionContext { MessageName = "Create" };
-        context.InputParameters["Target"] = new Entity("none") { ["value"] = new OptionSetValue(0) };
-        AsyncContextSerializer.Deserialize(AsyncContextSerializer.Serialize(AsyncContextSerializer.ToRemote(context)));
-    }
+    private static void WarmUpKnownTypes() => AsyncContextSerializer.WarmUpSdk();
 
     /// <summary>Guards <see cref="Entries"/>, <see cref="Copies"/>, <see cref="Released"/> and <see cref="Releasing"/>.</summary>
     private static readonly object Gate = new();

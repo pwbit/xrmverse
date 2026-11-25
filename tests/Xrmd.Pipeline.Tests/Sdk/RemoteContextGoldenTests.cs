@@ -108,10 +108,71 @@ public class RemoteContextGoldenTests
         Assert.Equal(File.ReadAllBytes(path), actual);
     }
 
+    internal static QueryExpression Query()
+    {
+        var anyAll = new LinkEntity("account", "task", "accountid", "regardingobjectid", JoinOperator.Any) { EntityAlias = "t" };
+        anyAll.LinkCriteria.AddCondition("statecode", ConditionOperator.Equal, 0);
+        var nested = new FilterExpression(LogicalOperator.And);
+        nested.AddCondition("a", ConditionOperator.NotNull);
+        var criteria = new FilterExpression(LogicalOperator.Or) { IsQuickFindFilter = true, FilterHint = "hint", AnyAllFilterLinkEntity = anyAll };
+        criteria.Filters.Add(nested);
+        criteria.AddCondition("revenue", ConditionOperator.GreaterThan, new Money(5m));
+        criteria.AddCondition("status", ConditionOperator.Equal, new OptionSetValue(2));
+        criteria.AddCondition("owner", ConditionOperator.Equal, new EntityReference("systemuser", Id4) { Name = "Me" });
+        criteria.AddCondition("id", ConditionOperator.Equal, Id3);
+        criteria.AddCondition("name", ConditionOperator.Like, "Con%");
+        criteria.AddCondition("count", ConditionOperator.Equal, 3);
+        criteria.AddCondition("when", ConditionOperator.On, When);
+        criteria.AddCondition("empty", ConditionOperator.Equal, new object?[] { null });
+        criteria.AddCondition("code", ConditionOperator.In, 1, 2, 3);
+        criteria.AddCondition("mixed", ConditionOperator.In, "s", 5L, 0.5d, 2.25m, true, new byte[] { 1, 2 }, new[] { "a", "b" });
+        criteria.Conditions.Add(new ConditionExpression("contact", "fullname", ConditionOperator.Equal, "x"));
+        criteria.Conditions.Add(new ConditionExpression { AttributeName = "a", Operator = ConditionOperator.Equal, CompareColumns = true });
+        criteria.Conditions[^1].Values.Add("b");
+
+        var link = new LinkEntity("account", "contact", "primarycontactid", "contactid", JoinOperator.LeftOuter)
+        {
+            EntityAlias = "pc", ForceSeek = "ix", Columns = new ColumnSet("fullname"),
+        };
+        link.LinkCriteria.AddCondition("statecode", ConditionOperator.Equal, 0);
+        link.Orders.Add(new OrderExpression("fullname", OrderType.Descending));
+        link.LinkEntities.Add(new LinkEntity("contact", "systemuser", "ownerid", "systemuserid", JoinOperator.Inner));
+
+        var columns = new ColumnSet("name", "revenue");
+        columns.AttributeExpressions.Add(new XrmAttributeExpression("revenue", XrmAggregateType.Sum, "total"));
+        columns.AttributeExpressions.Add(new XrmAttributeExpression("createdon", XrmAggregateType.None, "m") { HasGroupBy = true, DateTimeGrouping = XrmDateTimeGrouping.Month });
+
+        var q = new QueryExpression("account")
+        {
+            ColumnSet = columns, Criteria = criteria, Distinct = true, NoLock = true, TopCount = 7,
+            QueryHints = "hint", ForceSeek = "seek", DataSource = "ds",
+            SubQueryExpression = new QueryExpression("contact") { ColumnSet = new ColumnSet(true) },
+            PageInfo = new PagingInfo { PageNumber = 2, Count = 50, ReturnTotalRecordCount = true, ReturnRecordCountLessThanMarv = true, PagingCookie = "<cookie/>" },
+        };
+        q.Orders.Add(new OrderExpression("name", OrderType.Ascending));
+        q.Orders.Add(new OrderExpression { AttributeName = "x", OrderType = OrderType.Descending, Alias = "al", EntityName = "contact" });
+        q.LinkEntities.Add(link);
+        return q;
+    }
+
+    internal static QueryByAttribute ByAttribute()
+    {
+        var q = new QueryByAttribute("contact") { ColumnSet = new ColumnSet("fullname"), TopCount = 3, PageInfo = new PagingInfo { PageNumber = 1, Count = 10 } };
+        q.Attributes.Add("parentcustomerid");
+        q.Values.Add(new EntityReference("account", Id1) { Name = "Contoso" });
+        q.Orders.Add(new OrderExpression("fullname", OrderType.Ascending));
+        return q;
+    }
+
+    private static byte[] QueryBytes(QueryBase query) => new UTF8Encoding(false).GetBytes(AsyncContextSerializer.SerializeQuery(query));
+
     private static byte[] AsyncBytes() => new UTF8Encoding(false).GetBytes(AsyncContextSerializer.Serialize(Build()));
 
     [Fact] public void Async_context_is_deterministic() => Assert.Equal(AsyncBytes(), AsyncBytes());
     [Fact] public void Webhook_payload_is_deterministic() => Assert.Equal(WebhookPayload.Serialize(Build()), WebhookPayload.Serialize(Build()));
     [Fact] public void Async_context_matches_golden_file() => AssertGolden("async-context.xml", AsyncBytes());
     [Fact] public void Webhook_payload_matches_golden_file() => AssertGolden("webhook.json", WebhookPayload.Serialize(Build()));
+    [Fact] public void Query_expression_matches_golden_file() => AssertGolden("query-expression.xml", QueryBytes(Query()));
+    [Fact] public void Query_by_attribute_matches_golden_file() => AssertGolden("query-by-attribute.xml", QueryBytes(ByAttribute()));
+    [Fact] public void Fetch_expression_matches_golden_file() => AssertGolden("fetch.xml", QueryBytes(new FetchExpression("<fetch top=\"5\"><entity name=\"account\"><attribute name=\"name\" /></entity></fetch>")));
 }

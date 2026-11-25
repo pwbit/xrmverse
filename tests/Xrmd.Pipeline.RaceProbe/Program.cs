@@ -63,9 +63,7 @@ var threads = new[]
     // The SDK's known-types initialization, not through the plug-in loader.
     Run("known-types", () =>
     {
-        var context = new XrmdPluginExecutionContext { MessageName = "Create" };
-        context.InputParameters["Target"] = new Entity("account") { ["industrycode"] = new OptionSetValue(1) };
-        AsyncContextSerializer.Deserialize(AsyncContextSerializer.Serialize(AsyncContextSerializer.ToRemote(context)));
+        AsyncContextSerializer.WarmUpSdk();
     }, knownTypesDone),
     // Plug-in type resolution (PluginLoadContext.Load), once the scan holds the SDK's lock (or is over).
     Run("load", () =>

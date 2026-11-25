@@ -99,6 +99,8 @@ public sealed class RecordCollection
     public bool TotalRecordCountLimitExceeded { get; set; }
 
     public string? MinActiveRowVersion { get; set; }
+
+    public int RecordCountLessThanMarv { get; set; }
 }
 
 /// <summary>Our counterpart of the SDK's public <c>EntityReferenceCollection</c>.</summary>

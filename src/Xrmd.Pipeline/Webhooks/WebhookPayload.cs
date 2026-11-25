@@ -2,6 +2,8 @@ using System.Reflection;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using Microsoft.Xrm.Sdk;
+using Xrmd.Abstractions.Sdk;
+using Xrmd.Model.Serialization;
 using Xrmd.Pipeline.Serialization;
 
 namespace Xrmd.Pipeline.Webhooks;
@@ -33,6 +35,11 @@ public static class WebhookPayload
     public static byte[] Serialize(RemoteExecutionContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
+        return SdkRemoteContext.ModelCanCarry(context) ? ContextJson.Write(context.ToModel()) : SerializeWithSdk(context);
+    }
+
+    private static byte[] SerializeWithSdk(RemoteExecutionContext context)
+    {
         using var stream = new MemoryStream();
         Serializer.WriteObject(stream, context);
         return stream.ToArray();
@@ -41,13 +48,20 @@ public static class WebhookPayload
     /// <summary>
     /// The body to send: the JSON of <paramref name="context"/>, or, when it exceeds <paramref name="limit"/> bytes, the JSON of a
     /// copy without <c>ParentContext</c>, <c>InputParameters</c>, <c>PreEntityImages</c> and <c>PostEntityImages</c>
-    /// (<c>Trimmed</c> true, sent with <c>x-ms-dynamics-msg-size-exceeded: true</c>). <paramref name="context"/> is not changed.
+    /// (trimmed on the model when the own serializer carries the context, else on the SDK object; <c>Trimmed</c> true, sent with <c>x-ms-dynamics-msg-size-exceeded: true</c>). <paramref name="context"/> is not changed.
     /// </summary>
     /// <exception cref="SerializationException">A value is not a known data contract.</exception>
     public static (byte[] Body, bool Trimmed) Build(RemoteExecutionContext context, int limit = SizeLimit)
     {
-        var body = Serialize(context);
-        return body.Length <= limit ? (body, false) : (Serialize(Trim(context)), true);
+        ArgumentNullException.ThrowIfNull(context);
+        if (!SdkRemoteContext.ModelCanCarry(context))
+        {
+            var sdkBody = SerializeWithSdk(context);
+            return sdkBody.Length <= limit ? (sdkBody, false) : (SerializeWithSdk(Trim(context)), true);
+        }
+        var model = context.ToModel();
+        var body = ContextJson.Write(model);
+        return body.Length <= limit ? (body, false) : (ContextJson.Write(ContextJson.Trim(model)), true);
     }
 
     /// <summary>The members of <see cref="RemoteExecutionContext"/> a trimmed body leaves out (or leaves empty).</summary>

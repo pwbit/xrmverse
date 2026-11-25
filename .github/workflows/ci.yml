@@ -138,6 +138,9 @@ jobs:
             dotnet test "$project" --no-build --filter "Category!=Acceptance" || failed=1
           done
           exit $failed
+      # The ambiguous daylight-saving hour in the remote-context JSON/XML tests only exists in a zone with DST (runners use UTC).
+      - name: Test remote-context date handling in a DST zone
+        run: TZ=Europe/Amsterdam dotnet test tests/Xrmd.Pipeline.Tests --no-build --filter "FullyQualifiedName~ContextJsonWriter|FullyQualifiedName~ContextXml|FullyQualifiedName~SerializerSwitch"
       - name: No Microsoft SDK in shipped artifacts
         run: eng/check-no-sdk.sh
 
