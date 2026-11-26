@@ -51,7 +51,7 @@ public static class StandardUpsert
             : Guid.Empty;
 
         bool created;
-        if (id != Guid.Empty && await core.LockExistsAsync(new EntityReference(table.LogicalName, id), session, ct))
+        if (id != Guid.Empty && await core.LockExistsAsync(new Xrmd.Model.Records.RecordReference { LogicalName = table.LogicalName, Id = id }, session, ct))
         {
             if (createOnly)
                 throw new XrmdFaultException(ErrorCodes.DuplicateRecord,

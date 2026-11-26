@@ -1,0 +1,86 @@
+Create: unchanged
+Retrieve: unchanged
+Update: unchanged
+Delete: unchanged
+RetrieveMultiple: unchanged
+Assign: unchanged
+Associate: unchanged
+Disassociate: unchanged
+GrantAccess: unchanged
+ModifyAccess: unchanged
+RevokeAccess: unchanged
+AddPrivilegesRole: unchanged
+ReplacePrivilegesRole: unchanged
+RemovePrivilegeRole: unchanged
+InitializeFileBlocksUpload: unchanged
+UploadBlock: unchanged
+CommitFileBlocksUpload: unchanged
+DeleteFile: unchanged
+InitializeFileBlocksDownload: unchanged
+DownloadBlock: unchanged
+AddUserToRecordTeam: unchanged (fault)
+RemoveUserFromRecordTeam: unchanged (fault)
+RetrieveEntityChanges: unchanged
+PublishDuplicateRule: unchanged
+UnpublishDuplicateRule: unchanged
+RetrieveDuplicates: unchanged
+BulkDetectDuplicates: unchanged
+RetrieveExchangeRate: unchanged
+SendEmail: unchanged
+GetTrackingTokenEmail: unchanged
+AddToQueue: unchanged
+RemoveFromQueue: unchanged
+RouteTo: unchanged
+AddPrincipalToQueue: unchanged
+PickFromQueue: unchanged
+ReleaseToQueue: unchanged
+RetrieveUserQueues: unchanged
+Upsert: unchanged
+ExecuteCosmosSqlQuery: unchanged
+CalculateRollupField: unchanged
+ExecuteWorkflow: unchanged (fault)
+WhoAmI: unchanged
+RetrieveUserPrivileges: unchanged
+RetrieveAppComponents: unchanged
+RetrieveUnpublished: unchanged
+InitializeFrom: unchanged
+RetrieveEntity: unchanged
+RetrieveAttribute: unchanged
+ImportSolution: unchanged (fault)
+RetrieveFormattedImportJobResults: unchanged
+RetrievePrincipalAccess: unchanged
+RetrieveSharedPrincipalsAndAccess: unchanged
+ImportSolutionAsync: unchanged (fault)
+ExecuteAsync: unchanged (fault)
+UninstallSolutionAsync: unchanged (fault)
+StageAndUpgradeAsync: unchanged (fault)
+DeleteAndPromoteAsync: unchanged (fault)
+ExportSolution: unchanged (fault)
+StageAndUpgrade: unchanged (fault)
+DeleteAndPromote: unchanged (fault)
+CreateEntity: unchanged (fault)
+CreateAttribute: unchanged (fault)
+CreateOneToMany: unchanged (fault)
+CreateManyToMany: unchanged (fault)
+CreateCustomerRelationships: unchanged (fault)
+CreateOptionSet: unchanged (fault)
+UpdateEntity: unchanged (fault)
+UpdateAttribute: unchanged (fault)
+UpdateOptionSet: unchanged (fault)
+InsertOptionValue: unchanged (fault)
+UpdateOptionValue: unchanged (fault)
+DeleteEntity: unchanged (fault)
+DeleteAttribute: unchanged (fault)
+DeleteRelationship: unchanged (fault)
+DeleteOptionSet: unchanged (fault)
+PublishXml: unchanged (fault)
+PublishAllXml: unchanged (fault)
+AddSolutionComponent: unchanged (fault)
+RemoveSolutionComponent: unchanged (fault)
+RetrieveRelationship: unchanged
+RetrieveOptionSet: unchanged
+RetrieveAuditDetails: unchanged
+RetrieveRecordChangeHistory: unchanged
+RetrieveAttributeChangeHistory: unchanged
+DeleteRecordChangeHistory: unchanged
+DeleteAuditData: unchanged

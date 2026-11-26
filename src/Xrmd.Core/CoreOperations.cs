@@ -45,7 +45,7 @@ namespace Xrmd.Core;
 /// Create, Update (Assign and SetState with their own action), and Delete write their <c>audit</c> row through the
 /// <see cref="AuditWriter"/> in the same session, so in the operation's transaction (plan 13, ruling A6).
 /// </summary>
-public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExecutor, SecurityAdministration security,
+public sealed partial class CoreOperations(IMetadataStore store, QueryExecutor queryExecutor, SecurityAdministration security,
     SolutionComponentTracker tracker, FileColumnService files, AuditWriter audit, AuditMessages auditMessages,
     DuplicateRulePublisher duplicates, ICurrencyCatalog currencies, AccessMessages accessMessages, ILogger<CoreOperations>? logger = null,
     IRecordWriteObserver? writes = null, Rollups.RollupCalculator? rollups = null) : IPipelineCore
@@ -65,7 +65,7 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
     private const string PrincipalObjectAccess = "principalobjectaccess";
     private const string IdParameter = "@_id"; // logical names start with a letter: never clashes with a column parameter
 
-    /// <summary>The messages <see cref="ExecuteCoreAsync"/> implements.</summary>
+    /// <summary>The messages <see cref="ExecuteCoreSdkAsync"/> implements.</summary>
     private static readonly HashSet<string> CoreMessages = new(StringComparer.OrdinalIgnoreCase)
     {
         "Create", "Retrieve", "Update", "Delete", "RetrieveMultiple", "Assign", "Associate", "Disassociate",
@@ -164,14 +164,14 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
     /// <inheritdoc />
     public bool IsNonPipelineMessage(string messageName) => NonPipelineMessages.Contains(messageName);
 
-    /// <inheritdoc />
+    /// <summary>The SDK handler of <see cref="WrittenEntities(Xrmd.Model.Messages.Request)"/> (S.2e3a: the entry adapter calls it).</summary>
     /// <remarks>
     /// Associate/Disassociate over a security relationship: its intersect (<c>systemuserroles</c>, <c>teamroles</c>,
     /// <c>teammembership</c>, <c>systemuserprofiles</c>, <c>teamprofiles</c>), over a saved many-to-many relationship: its intersect entity; AddPrivilegesRole,
     /// ReplacePrivilegesRole, RemovePrivilegeRole: <c>roleprivileges</c>; AddUserToRecordTeam, RemoveUserFromRecordTeam: <c>team</c>,
     /// <c>teammembership</c> and <c>principalobjectaccess</c> (plan 2.16, ruling A9).
     /// </remarks>
-    public IReadOnlyCollection<string> WrittenEntities(OrganizationRequest request)
+    private IReadOnlyCollection<string> WrittenEntitiesSdk(OrganizationRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
         switch (CoreMessages.TryGetValue(request.RequestName ?? "", out var canonical) ? canonical : request.RequestName)
@@ -193,7 +193,10 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
         }
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// The SDK handler of <see cref="ExecuteNonPipelineAsync(Xrmd.Model.Messages.Request, Caller, DataSession, CancellationToken)"/>
+    /// (S.2e3a: the entry adapter calls it).
+    /// </summary>
     /// <remarks>
     /// RetrieveFormattedImportJobResults is answered (<see cref="RetrieveFormattedImportJobResultsAsync"/>, a read in the plug-in's
     /// session); the audit messages are answered by <see cref="AuditMessages"/> in the plug-in's session (so a delete rolls back
@@ -206,7 +209,7 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
     /// before data in a transaction (the order that keeps the metadata lock and the SQL locks from deadlocking).
     /// </remarks>
     /// <exception cref="NotSupportedException">Any other message.</exception>
-    public async Task<OrganizationResponse> ExecuteNonPipelineAsync(OrganizationRequest request, Caller caller, DataSession session,
+    private async Task<OrganizationResponse> ExecuteNonPipelineSdkAsync(OrganizationRequest request, Caller caller, DataSession session,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -480,25 +483,17 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
     /// </summary>
     /// <exception cref="XrmdFaultException">400 for a missing parameter, plus the faults of the operation.</exception>
     /// <exception cref="NotSupportedException">Any other message.</exception>
-    /// <exception cref="InvalidOperationException">A file message, which needs the pipeline's <see cref="NestedRequest"/>.</exception>
-    public Task<OrganizationResponse> ExecuteCoreAsync(OrganizationRequest request, Caller caller, DataSession session, CancellationToken ct) =>
-        ExecuteCoreAsync(request, caller, session, null, ct);
-
-    /// <inheritdoc cref="ExecuteCoreAsync(OrganizationRequest, Caller, DataSession, CancellationToken)"/>
+    /// <exception cref="InvalidOperationException">A file message without <paramref name="nested"/> (the pipeline's nested request);
+    /// <paramref name="serverSetValues"/> on a message other than Create.</exception>
     /// <remarks>
-    /// The file messages (<see cref="FileColumnService"/>): InitializeFileBlocksUpload, UploadBlock, CommitFileBlocksUpload (which
-    /// writes the record with an Update run through <paramref name="nested"/>, so the Update steps fire and the guard checks it)
-    /// and DeleteFile (the same Update, clearing the column).
+    /// The SDK handler of <see cref="ExecuteCoreAsync(Xrmd.Model.Messages.Request, CoreCall, CancellationToken)"/> (S.2e3a: the entry
+    /// adapter calls it). The file messages (<see cref="FileColumnService"/>): InitializeFileBlocksUpload, UploadBlock,
+    /// CommitFileBlocksUpload (which writes the record with an Update run through <paramref name="nested"/>, so the Update steps fire
+    /// and the guard checks it) and DeleteFile (the same Update, clearing the column).
     /// </remarks>
-    public Task<OrganizationResponse> ExecuteCoreAsync(OrganizationRequest request, Caller caller, DataSession session,
-        NestedRequest? nested, CancellationToken ct) =>
-        ExecuteCoreAsync(request, caller, session, nested, null, ct);
-
-    /// <inheritdoc cref="ExecuteCoreAsync(OrganizationRequest, Caller, DataSession, NestedRequest?, CancellationToken)"/>
     /// <param name="serverSetValues">Plan 4.1c: the columns the server writes on a Create (<see cref="CreateAsync"/>); null otherwise.</param>
-    /// <exception cref="InvalidOperationException"><paramref name="serverSetValues"/> on a message other than Create.</exception>
-    public async Task<OrganizationResponse> ExecuteCoreAsync(OrganizationRequest request, Caller caller, DataSession session,
-        NestedRequest? nested, IReadOnlyDictionary<string, object?>? serverSetValues, CancellationToken ct)
+    private async Task<OrganizationResponse> ExecuteCoreSdkAsync(OrganizationRequest request, Caller caller, DataSession session,
+        SdkNestedRequest? nested, IReadOnlyDictionary<string, object?>? serverSetValues, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
         if (serverSetValues is not null
@@ -1092,8 +1087,8 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
         return (AccessRights)current.Value;
     }
 
-    /// <inheritdoc/>
-    public async Task<bool> LockExistsAsync(EntityReference target, DataSession session, CancellationToken ct)
+    /// <summary>The SDK handler of <see cref="LockExistsAsync(Xrmd.Model.Records.RecordReference, DataSession, CancellationToken)"/>.</summary>
+    private async Task<bool> LockExistsSdkAsync(EntityReference target, DataSession session, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(session);
@@ -1113,7 +1108,7 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
     /// The record with <paramref name="attributes"/> (null: all; names the entity does not have are ignored); null when
     /// it does not exist.
     /// </summary>
-    public async Task<Entity?> RetrieveImageAsync(EntityReference target, string[]? attributes, DataSession session, CancellationToken ct)
+    private async Task<Entity?> RetrieveImageSdkAsync(EntityReference target, string[]? attributes, DataSession session, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(target);
         var m = EntityOf(target.LogicalName);
@@ -1196,7 +1191,7 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
     /// The Update of a record made by a file message, through the pipeline (its steps fire, the guard checks it); on an elastic
     /// table it names the row's stored partition (plan 3.4, <see cref="ElasticRecords.FileUpdateAsync"/>).
     /// </summary>
-    private RecordUpdate RecordUpdate(NestedRequest? nested, OrganizationRequest request, DataSession session) =>
+    private RecordUpdate RecordUpdate(SdkNestedRequest? nested, OrganizationRequest request, DataSession session) =>
         nested is null
             ? throw new InvalidOperationException($"'{request.RequestName}' writes a record through the pipeline: run it through the PipelineExecutor.")
             : async (target, ct) => await nested(await ElasticRecords.FileUpdateAsync(session, EntityOf(target.LogicalName), target, ct), ct);
@@ -2159,7 +2154,7 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
     /// check, plug-in steps and cascades; directly through this method when there is no pipeline), RemoveLink clears their lookup.
     /// A record already being deleted by the same cascade (a cycle, a self-reference) is not deleted twice.
     /// </summary>
-    private async Task DeleteAsync(DataSession s, Caller caller, string entityName, Guid id, NestedRequest? nested, CancellationToken ct)
+    private async Task DeleteAsync(DataSession s, Caller caller, string entityName, Guid id, SdkNestedRequest? nested, CancellationToken ct)
     {
         var m = EntityOf(entityName);
         await DemandRowDeleteAllowedAsync(s, caller, m.LogicalName, id, ct);
@@ -2301,7 +2296,7 @@ public sealed class CoreOperations(IMetadataStore store, QueryExecutor queryExec
     /// nothing is deleted on behalf of a missing record.
     /// </summary>
     private async Task ApplyDeleteCascadesAsync(DataSession s, Caller caller, EntityMetadata m, Guid id, DeleteCascade deleting,
-        NestedRequest? nested, CancellationToken ct)
+        SdkNestedRequest? nested, CancellationToken ct)
     {
         var relationships = store.GetOneToManyRelationships().Where(r => r.ReferencedEntity == m.LogicalName
             && r.CascadeConfiguration?.Delete is CascadeType.Restrict or CascadeType.Cascade).ToList();

@@ -1,0 +1,48 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: InitializeFromRequest
+  RequestName: String:"InitializeFrom"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    EntityMoniker: EntityReference
+      LogicalName: String:"account"
+      Id: Guid:{id1}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+    TargetEntityName: String:"contact"
+    TargetFieldType: TargetFieldType:ValidForCreate
+--- response ---
+Fault: NotSupportedException "Request 'InitializeFrom' is not supported yet."
+=== (b) IPipelineCore.ExecuteNonPipelineAsync ===
+--- request ---
+Request: InitializeFromRequest
+  RequestName: String:"InitializeFrom"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    EntityMoniker: EntityReference
+      LogicalName: String:"account"
+      Id: Guid:{id2}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+    TargetEntityName: String:"contact"
+    TargetFieldType: TargetFieldType:ValidForCreate
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.InitializeFromResponse
+ResponseName: String:"InitializeFrom"
+Results: ParameterCollection[1]
+  Entity: Entity(contact)
+    Id: Guid:{empty}
+    EntityState: null
+    RowVersion: null
+    Attributes: AttributeCollection[1]
+      parentcustomerid: EntityReference
+        LogicalName: String:"account"
+        Id: Guid:{id2}
+        Name: String:"crg account"
+        KeyAttributes: KeyAttributeCollection[0]
+        RowVersion: null
+    FormattedValues: FormattedValueCollection[0]
+    KeyAttributes: KeyAttributeCollection[0]
+    RelatedEntities: RelatedEntityCollection[0]

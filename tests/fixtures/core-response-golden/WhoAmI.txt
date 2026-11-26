@@ -1,0 +1,21 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: WhoAmIRequest
+  RequestName: String:"WhoAmI"
+  RequestId: null
+  Parameters: ParameterCollection[0]
+--- response ---
+Fault: NotSupportedException "Request 'WhoAmI' is not supported yet."
+=== (b) IPipelineCore.ExecuteNonPipelineAsync ===
+--- request ---
+Request: WhoAmIRequest
+  RequestName: String:"WhoAmI"
+  RequestId: null
+  Parameters: ParameterCollection[0]
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.WhoAmIResponse
+ResponseName: String:"WhoAmI"
+Results: ParameterCollection[3]
+  BusinessUnitId: Guid:{businessunit}
+  OrganizationId: Guid:{organization}
+  UserId: Guid:{user}

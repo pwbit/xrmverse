@@ -1,0 +1,94 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: RetrieveEntityChangesRequest
+  RequestName: String:"RetrieveEntityChanges"
+  RequestId: null
+  Parameters: ParameterCollection[4]
+    Columns: ColumnSet
+      AllColumns: Boolean:False
+      AttributeExpressions: DataCollection[0]
+      Columns: DataCollection[1]
+        [0]: String:"new_name"
+      HasLazyFileAttribute: Boolean:False
+      LazyFileAttributeEntityName: null
+      LazyFileAttributeKey: null
+      LazyFileAttributeSizeLimit: Int32:0
+      LazyFileAttributeValue: null
+    DataVersion: null
+    EntityName: String:"new_crgtracked"
+    PageInfo: PagingInfo
+      Count: Int32:50
+      PageNumber: Int32:1
+      PagingCookie: null
+      ReturnRecordCountLessThanMarv: Boolean:False
+      ReturnTotalRecordCount: Boolean:False
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.RetrieveEntityChangesResponse
+ResponseName: String:"RetrieveEntityChanges"
+Results: ParameterCollection[1]
+  EntityChanges: BusinessEntityChanges
+    Changes: BusinessEntityChangesCollection[1]
+      [0]: NewOrUpdatedItem
+        NewOrUpdatedEntity: Entity(new_crgtracked)
+          Id: Guid:{a:tracked}
+          EntityState: null
+          RowVersion: {rowversion}
+          Attributes: AttributeCollection[2]
+            new_crgtrackedid: Guid:{a:tracked}
+            new_name: String:"crg-tracked"
+          FormattedValues: FormattedValueCollection[0]
+          KeyAttributes: KeyAttributeCollection[0]
+          RelatedEntities: RelatedEntityCollection[0]
+        Type: ChangeType:NewOrUpdated
+    DataToken: String:{DataToken}
+    GlobalMetadataVersion: null
+    MoreRecords: Boolean:False
+    PagingCookie: null
+    RecordCountLessThanMarv: Int32:0
+=== (b) IPipelineCore.ExecuteCoreAsync ===
+--- request ---
+Request: RetrieveEntityChangesRequest
+  RequestName: String:"RetrieveEntityChanges"
+  RequestId: null
+  Parameters: ParameterCollection[4]
+    Columns: ColumnSet
+      AllColumns: Boolean:False
+      AttributeExpressions: DataCollection[0]
+      Columns: DataCollection[1]
+        [0]: String:"new_name"
+      HasLazyFileAttribute: Boolean:False
+      LazyFileAttributeEntityName: null
+      LazyFileAttributeKey: null
+      LazyFileAttributeSizeLimit: Int32:0
+      LazyFileAttributeValue: null
+    DataVersion: null
+    EntityName: String:"new_crgtracked"
+    PageInfo: PagingInfo
+      Count: Int32:50
+      PageNumber: Int32:1
+      PagingCookie: null
+      ReturnRecordCountLessThanMarv: Boolean:False
+      ReturnTotalRecordCount: Boolean:False
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.RetrieveEntityChangesResponse
+ResponseName: String:"RetrieveEntityChanges"
+Results: ParameterCollection[1]
+  EntityChanges: BusinessEntityChanges
+    Changes: BusinessEntityChangesCollection[1]
+      [0]: NewOrUpdatedItem
+        NewOrUpdatedEntity: Entity(new_crgtracked)
+          Id: Guid:{b:tracked}
+          EntityState: null
+          RowVersion: {rowversion}
+          Attributes: AttributeCollection[2]
+            new_crgtrackedid: Guid:{b:tracked}
+            new_name: String:"crg-tracked"
+          FormattedValues: FormattedValueCollection[0]
+          KeyAttributes: KeyAttributeCollection[0]
+          RelatedEntities: RelatedEntityCollection[0]
+        Type: ChangeType:NewOrUpdated
+    DataToken: String:{DataToken}
+    GlobalMetadataVersion: null
+    MoreRecords: Boolean:False
+    PagingCookie: null
+    RecordCountLessThanMarv: Int32:0

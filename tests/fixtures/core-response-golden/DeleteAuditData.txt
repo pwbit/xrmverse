@@ -1,0 +1,21 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: DeleteAuditDataRequest
+  RequestName: String:"DeleteAuditData"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    EndDate: DateTime:{date:Utc}
+--- response ---
+Fault: NotSupportedException "Request 'DeleteAuditData' is not supported yet."
+=== (b) IPipelineCore.ExecuteNonPipelineAsync ===
+--- request ---
+Request: DeleteAuditDataRequest
+  RequestName: String:"DeleteAuditData"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    EndDate: DateTime:{date:Utc}
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.DeleteAuditDataResponse
+ResponseName: String:"DeleteAuditData"
+Results: ParameterCollection[1]
+  PartitionsDeleted: Int32:0

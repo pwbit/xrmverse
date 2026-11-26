@@ -1,3 +1,4 @@
 tests/fixtures/remote-context-golden/** -text
 tests/fixtures/plugin-context-golden/** -text
 tests/fixtures/pipeline-payload-golden/** -text
+tests/fixtures/core-response-golden/** -text

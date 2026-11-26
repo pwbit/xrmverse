@@ -382,13 +382,6 @@ public sealed class AsyncOperationQueue
         return await cmd.ExecuteScalarAsync(ct) as Guid?;
     }
 
-    /// <summary>
-    /// The core request that deletes the job <paramref name="asyncOperationId"/> (the worker's delete of a succeeded job, a record delete
-    /// like any other).
-    /// </summary>
-    internal static OrganizationRequest DeleteRequest(Guid asyncOperationId) =>
-        new Microsoft.Xrm.Sdk.Messages.DeleteRequest { Target = new EntityReference("asyncoperation", asyncOperationId) };
-
     /// <summary>Wakes the worker after a commit that enqueued work (signals coalesce; no-op when one is pending).</summary>
     public void Signal()
     {

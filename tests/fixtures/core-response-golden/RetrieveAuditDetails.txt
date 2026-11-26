@@ -1,0 +1,75 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: RetrieveAuditDetailsRequest
+  RequestName: String:"RetrieveAuditDetails"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    AuditId: Guid:{a:audit-update}
+--- response ---
+Fault: NotSupportedException "Request 'RetrieveAuditDetails' is not supported yet."
+=== (b) IPipelineCore.ExecuteNonPipelineAsync ===
+--- request ---
+Request: RetrieveAuditDetailsRequest
+  RequestName: String:"RetrieveAuditDetails"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    AuditId: Guid:{b:audit-update}
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.RetrieveAuditDetailsResponse
+ResponseName: String:"RetrieveAuditDetails"
+Results: ParameterCollection[1]
+  AuditDetail: AttributeAuditDetail
+    AuditRecord: Entity(audit)
+      Id: Guid:{b:audit-update}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[9]
+        auditid: Guid:{b:audit-update}
+        createdon: DateTime:{date:Utc}
+        action: OptionSetValue
+          Value: Int32:2
+        operation: OptionSetValue
+          Value: Int32:2
+        objectid: EntityReference
+          LogicalName: String:"new_crgaudited"
+          Id: Guid:{b:audited}
+          Name: null
+          KeyAttributes: KeyAttributeCollection[0]
+          RowVersion: null
+        objecttypecode: String:"new_crgaudited"
+        userid: EntityReference
+          LogicalName: String:"systemuser"
+          Id: Guid:{user}
+          Name: String:"Test Admin"
+          KeyAttributes: KeyAttributeCollection[0]
+          RowVersion: null
+        changedata: String:"{"v":1,"old":{"new_name":"crg-audited"},"new":{"new_name":"crg-audited-changed"}}"
+        transactionid: Guid:{id1}
+      FormattedValues: FormattedValueCollection[4]
+        createdon: String:"{date}"
+        action: String:"Update"
+        operation: String:"Update"
+        userid: String:"Test Admin"
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+    DeletedAttributes: Dictionary[0]
+    InvalidNewValueAttributes: DataCollection[0]
+    LocLabelLanguageCode: Int32:0
+    NewValue: Entity(new_crgaudited)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[1]
+        new_name: String:"crg-audited-changed"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+    OldValue: Entity(new_crgaudited)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[1]
+        new_name: String:"crg-audited"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]

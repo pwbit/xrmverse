@@ -1,0 +1,38 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: RetrieveUserQueuesRequest
+  RequestName: String:"RetrieveUserQueues"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    IncludePublic: Boolean:False
+    UserId: Guid:{id1}
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.RetrieveUserQueuesResponse
+ResponseName: String:"RetrieveUserQueues"
+Results: ParameterCollection[1]
+  EntityCollection: EntityCollection
+    EntityName: String:"queue"
+    Entities: DataCollection[0]
+    MoreRecords: Boolean:False
+    PagingCookie: null
+    TotalRecordCount: Int32:0
+    TotalRecordCountLimitExceeded: Boolean:False
+=== (b) IPipelineCore.ExecuteCoreAsync ===
+--- request ---
+Request: RetrieveUserQueuesRequest
+  RequestName: String:"RetrieveUserQueues"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    IncludePublic: Boolean:False
+    UserId: Guid:{id2}
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.RetrieveUserQueuesResponse
+ResponseName: String:"RetrieveUserQueues"
+Results: ParameterCollection[1]
+  EntityCollection: EntityCollection
+    EntityName: String:"queue"
+    Entities: DataCollection[0]
+    MoreRecords: Boolean:False
+    PagingCookie: null
+    TotalRecordCount: Int32:0
+    TotalRecordCountLimitExceeded: Boolean:False

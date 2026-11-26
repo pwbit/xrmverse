@@ -1,0 +1,26 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: PickFromQueueRequest
+  RequestName: String:"PickFromQueue"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    QueueItemId: Guid:{id1}
+    RemoveQueueItem: Boolean:False
+    WorkerId: Guid:{user}
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.PickFromQueueResponse
+ResponseName: String:"PickFromQueue"
+Results: ParameterCollection[0]
+=== (b) IPipelineCore.ExecuteCoreAsync ===
+--- request ---
+Request: PickFromQueueRequest
+  RequestName: String:"PickFromQueue"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    QueueItemId: Guid:{id2}
+    RemoveQueueItem: Boolean:False
+    WorkerId: Guid:{user}
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.PickFromQueueResponse
+ResponseName: String:"PickFromQueue"
+Results: ParameterCollection[0]

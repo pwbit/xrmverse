@@ -1,0 +1,28 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: SendEmailRequest
+  RequestName: String:"SendEmail"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    EmailId: Guid:{id1}
+    IssueSend: Boolean:False
+    TrackingToken: String:""
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.SendEmailResponse
+ResponseName: String:"SendEmail"
+Results: ParameterCollection[1]
+  Subject: String:"crg email"
+=== (b) IPipelineCore.ExecuteCoreAsync ===
+--- request ---
+Request: SendEmailRequest
+  RequestName: String:"SendEmail"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    EmailId: Guid:{id2}
+    IssueSend: Boolean:False
+    TrackingToken: String:""
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.SendEmailResponse
+ResponseName: String:"SendEmail"
+Results: ParameterCollection[1]
+  Subject: String:"crg email"

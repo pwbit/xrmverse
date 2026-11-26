@@ -12,6 +12,7 @@ using Xrmd.Core;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Sdk;
+using Xrmd.Pipeline;
 using Xrmd.Security;
 using static Xrmd.Integration.Tests.AuthoringTestHelper;
 using static Xrmd.Integration.Tests.SecurityTestHelper;

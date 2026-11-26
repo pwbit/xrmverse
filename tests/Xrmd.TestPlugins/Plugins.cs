@@ -467,6 +467,38 @@ namespace Xrmd.TestPlugins
     }
 
     /// <summary>
+    /// S.2e3a, Task 4: config <c>"{log entity}"</c>, on a post-operation Create. Reads <c>OutputParameters["id"]</c> of its own view,
+    /// then executes a Create of a <c>{log entity}</c> named <c>typed</c> and a RetrieveMultiple of the rows so named through its service,
+    /// casting the answers to <c>CreateResponse</c> and <c>RetrieveMultipleResponse</c>, and creates a <c>{log entity}</c> named
+    /// <c>typed-result</c> whose <c>pb_data</c> is <c>output={id is the primary id};created={id};rows={count};name={first row's name}</c>.
+    /// </summary>
+    public class TypedResponsesPlugin : IPlugin
+    {
+        private readonly string _log;
+
+        public TypedResponsesPlugin(string unsecure, string secure) { _log = unsecure; }
+
+        public void Execute(IServiceProvider serviceProvider)
+        {
+            var context = (IPluginExecutionContext)serviceProvider.GetService(typeof(IPluginExecutionContext));
+            var factory = (IOrganizationServiceFactory)serviceProvider.GetService(typeof(IOrganizationServiceFactory));
+            var service = factory.CreateOrganizationService(context.UserId);
+            var output = context.OutputParameters.Contains("id") && context.OutputParameters["id"] is Guid id && id == context.PrimaryEntityId;
+            var created = (CreateResponse)service.Execute(new CreateRequest { Target = new Entity(_log) { ["pb_name"] = "typed" } });
+            var query = new QueryExpression(_log) { ColumnSet = new ColumnSet("pb_name") };
+            query.Criteria.AddCondition("pb_name", ConditionOperator.Equal, "typed");
+            var read = (RetrieveMultipleResponse)service.Execute(new RetrieveMultipleRequest { Query = query });
+            var rows = read.EntityCollection.Entities;
+            service.Create(new Entity(_log)
+            {
+                ["pb_name"] = "typed-result",
+                ["pb_data"] = string.Format(CultureInfo.InvariantCulture, "output={0};created={1};rows={2};name={3}", output, created.id,
+                    rows.Count, rows.Count > 0 ? rows[0].GetAttributeValue<string>("pb_name") : ""),
+            });
+        }
+    }
+
+    /// <summary>
     /// S.2e2c final review I1: a plug-in that executes a request on its own <c>InputParameters</c> collection. Config <c>"{log entity}"</c>.
     /// Before stage 30 at depth 1 it holds the collection, executes <c>new OrganizationRequest(MessageName) { Parameters = it }</c>,
     /// writes <c>same={held is the context's collection};key={held has AddedByNested};view={the context's has it}</c> into

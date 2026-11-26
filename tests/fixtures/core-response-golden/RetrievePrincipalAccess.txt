@@ -1,0 +1,43 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: RetrievePrincipalAccessRequest
+  RequestName: String:"RetrievePrincipalAccess"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    Principal: EntityReference
+      LogicalName: String:"systemuser"
+      Id: Guid:{a:principal}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+    Target: EntityReference
+      LogicalName: String:"pb_project"
+      Id: Guid:{id1}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- response ---
+Fault: NotSupportedException "Request 'RetrievePrincipalAccess' is not supported yet."
+=== (b) IPipelineCore.ExecuteNonPipelineAsync ===
+--- request ---
+Request: RetrievePrincipalAccessRequest
+  RequestName: String:"RetrievePrincipalAccess"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    Principal: EntityReference
+      LogicalName: String:"systemuser"
+      Id: Guid:{b:principal}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+    Target: EntityReference
+      LogicalName: String:"pb_project"
+      Id: Guid:{id2}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.RetrievePrincipalAccessResponse
+ResponseName: String:"RetrievePrincipalAccess"
+Results: ParameterCollection[1]
+  AccessRights: AccessRights:ReadAccess

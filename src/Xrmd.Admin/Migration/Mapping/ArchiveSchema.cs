@@ -10,6 +10,7 @@ using Xrmd.Core;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
 using Xrmd.Migration.Mapping;
+using Xrmd.Pipeline;
 
 namespace Xrmd.Admin.Migration.Mapping;
 

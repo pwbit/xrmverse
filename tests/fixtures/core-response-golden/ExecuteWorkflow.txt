@@ -1,0 +1,20 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: ExecuteWorkflowRequest
+  RequestName: String:"ExecuteWorkflow"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    EntityId: Guid:{id1}
+    WorkflowId: Guid:{unknown}
+--- response ---
+Fault: XrmdFaultException 0x80040217 404 "workflow With Id = {unknown} Does Not Exist"
+=== (b) IPipelineCore.ExecuteCoreAsync ===
+--- request ---
+Request: ExecuteWorkflowRequest
+  RequestName: String:"ExecuteWorkflow"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    EntityId: Guid:{id2}
+    WorkflowId: Guid:{unknown}
+--- response ---
+Fault: InvalidOperationException "ExecuteWorkflow runs through the pipeline, which hands it to the classic workflows."

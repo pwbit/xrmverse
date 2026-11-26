@@ -1,0 +1,87 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: RetrieveOptionSetRequest
+  RequestName: String:"RetrieveOptionSet"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    MetadataId: Guid:{empty}
+    Name: String:"new_crgoptions"
+    RetrieveAsIfPublished: Boolean:False
+--- response ---
+Fault: NotSupportedException "Request 'RetrieveOptionSet' is not supported yet."
+=== (b) IPipelineCore.ExecuteNonPipelineAsync ===
+--- request ---
+Request: RetrieveOptionSetRequest
+  RequestName: String:"RetrieveOptionSet"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    MetadataId: Guid:{empty}
+    Name: String:"new_crgoptions"
+    RetrieveAsIfPublished: Boolean:False
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.RetrieveOptionSetResponse
+ResponseName: String:"RetrieveOptionSet"
+Results: ParameterCollection[1]
+  OptionSetMetadata: OptionSetMetadata
+    Description: null
+    DisplayName: Label
+      LocalizedLabels: LocalizedLabelCollection[1]
+        [0]: LocalizedLabel
+          HasChanged: null
+          IsManaged: null
+          Label: String:"Core golden options"
+          LanguageCode: Int32:1033
+          MetadataId: null
+      UserLocalizedLabel: null
+    ExternalTypeName: null
+    HasChanged: null
+    IntroducedVersion: null
+    IsCustomOptionSet: null
+    IsCustomizable: null
+    IsGlobal: Boolean:True
+    IsManaged: null
+    MetadataId: Guid:{id1}
+    Name: String:"new_crgoptions"
+    OptionSetType: OptionSetType:Picklist
+    Options: OptionMetadataCollection[2]
+      [0]: OptionMetadata
+        Color: null
+        Description: null
+        ExternalValue: String:""
+        HasChanged: null
+        IsHidden: Boolean:False
+        IsManaged: null
+        Label: Label
+          LocalizedLabels: LocalizedLabelCollection[1]
+            [0]: LocalizedLabel
+              HasChanged: null
+              IsManaged: null
+              Label: String:"One"
+              LanguageCode: Int32:1033
+              MetadataId: null
+          UserLocalizedLabel: null
+        MetadataId: null
+        ParentValues: null
+        Tag: null
+        Value: Int32:1
+      [1]: OptionMetadata
+        Color: null
+        Description: null
+        ExternalValue: String:""
+        HasChanged: null
+        IsHidden: Boolean:False
+        IsManaged: null
+        Label: Label
+          LocalizedLabels: LocalizedLabelCollection[1]
+            [0]: LocalizedLabel
+              HasChanged: null
+              IsManaged: null
+              Label: String:"Two"
+              LanguageCode: Int32:1033
+              MetadataId: null
+          UserLocalizedLabel: null
+        MetadataId: null
+        ParentValues: null
+        Tag: null
+        Value: Int32:2
+    ParentOptionSetName: null

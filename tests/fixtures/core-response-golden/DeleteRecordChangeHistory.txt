@@ -1,0 +1,31 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: DeleteRecordChangeHistoryRequest
+  RequestName: String:"DeleteRecordChangeHistory"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: EntityReference
+      LogicalName: String:"new_crgaudited"
+      Id: Guid:{a:audited}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- response ---
+Fault: NotSupportedException "Request 'DeleteRecordChangeHistory' is not supported yet."
+=== (b) IPipelineCore.ExecuteNonPipelineAsync ===
+--- request ---
+Request: DeleteRecordChangeHistoryRequest
+  RequestName: String:"DeleteRecordChangeHistory"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: EntityReference
+      LogicalName: String:"new_crgaudited"
+      Id: Guid:{b:audited}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.DeleteRecordChangeHistoryResponse
+ResponseName: String:"DeleteRecordChangeHistory"
+Results: ParameterCollection[1]
+  DeletedEntriesCount: Int32:2

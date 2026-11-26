@@ -1,0 +1,78 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: RetrieveRequest
+  RequestName: String:"Retrieve"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    ColumnSet: ColumnSet
+      AllColumns: Boolean:False
+      AttributeExpressions: DataCollection[0]
+      Columns: DataCollection[2]
+        [0]: String:"pb_name"
+        [1]: String:"pb_count"
+      HasLazyFileAttribute: Boolean:False
+      LazyFileAttributeEntityName: null
+      LazyFileAttributeKey: null
+      LazyFileAttributeSizeLimit: Int32:0
+      LazyFileAttributeValue: null
+    Target: EntityReference
+      LogicalName: String:"pb_pipe"
+      Id: Guid:{id1}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.RetrieveResponse
+ResponseName: String:"Retrieve"
+Results: ParameterCollection[1]
+  Entity: Entity(pb_pipe)
+    Id: Guid:{id1}
+    EntityState: null
+    RowVersion: null
+    Attributes: AttributeCollection[3]
+      pb_pipeid: Guid:{id1}
+      pb_name: String:"crg-retrieve"
+      pb_count: Int32:3
+    FormattedValues: FormattedValueCollection[1]
+      pb_count: String:"3"
+    KeyAttributes: KeyAttributeCollection[0]
+    RelatedEntities: RelatedEntityCollection[0]
+=== (b) IPipelineCore.ExecuteCoreAsync ===
+--- request ---
+Request: RetrieveRequest
+  RequestName: String:"Retrieve"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    ColumnSet: ColumnSet
+      AllColumns: Boolean:False
+      AttributeExpressions: DataCollection[0]
+      Columns: DataCollection[2]
+        [0]: String:"pb_name"
+        [1]: String:"pb_count"
+      HasLazyFileAttribute: Boolean:False
+      LazyFileAttributeEntityName: null
+      LazyFileAttributeKey: null
+      LazyFileAttributeSizeLimit: Int32:0
+      LazyFileAttributeValue: null
+    Target: EntityReference
+      LogicalName: String:"pb_pipe"
+      Id: Guid:{id2}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.RetrieveResponse
+ResponseName: String:"Retrieve"
+Results: ParameterCollection[1]
+  Entity: Entity(pb_pipe)
+    Id: Guid:{id2}
+    EntityState: null
+    RowVersion: null
+    Attributes: AttributeCollection[3]
+      pb_pipeid: Guid:{id2}
+      pb_name: String:"crg-retrieve"
+      pb_count: Int32:3
+    FormattedValues: FormattedValueCollection[1]
+      pb_count: String:"3"
+    KeyAttributes: KeyAttributeCollection[0]
+    RelatedEntities: RelatedEntityCollection[0]

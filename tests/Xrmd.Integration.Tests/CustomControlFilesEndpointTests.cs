@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Xrmd.Abstractions;
 using Xrmd.Core;
 using Xrmd.Metadata;
+using Xrmd.Pipeline;
 using Xrmd.Security;
 using Xrmd.TestSupport;
 using static Xrmd.Integration.Tests.SecurityTestHelper;

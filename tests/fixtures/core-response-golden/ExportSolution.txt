@@ -1,0 +1,16 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: OrganizationRequest
+  RequestName: String:"ExportSolution"
+  RequestId: null
+  Parameters: ParameterCollection[0]
+--- response ---
+Fault: NotSupportedException "Request 'ExportSolution' is not supported yet."
+=== (b) IPipelineCore.ExecuteNonPipelineAsync ===
+--- request ---
+Request: OrganizationRequest
+  RequestName: String:"ExportSolution"
+  RequestId: null
+  Parameters: ParameterCollection[0]
+--- response ---
+Fault: XrmdFaultException 0x80040203 400 "The message 'ExportSolution' cannot be executed from a plug-in in xrmverse."

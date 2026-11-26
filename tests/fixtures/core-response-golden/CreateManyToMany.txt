@@ -1,0 +1,16 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: OrganizationRequest
+  RequestName: String:"CreateManyToMany"
+  RequestId: null
+  Parameters: ParameterCollection[0]
+--- response ---
+Fault: NotSupportedException "Request 'CreateManyToMany' is not supported yet."
+=== (b) IPipelineCore.ExecuteNonPipelineAsync ===
+--- request ---
+Request: OrganizationRequest
+  RequestName: String:"CreateManyToMany"
+  RequestId: null
+  Parameters: ParameterCollection[0]
+--- response ---
+Fault: XrmdFaultException 0x80040203 400 "The metadata message 'CreateManyToMany' cannot be executed from a plug-in."

@@ -1,0 +1,26 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: UploadBlockRequest
+  RequestName: String:"UploadBlock"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    BlockData: Byte[]:030A11181F262D343B424950575E656C737A81888F969DA4ABB2B9C0C7CED5DC
+    BlockId: String:"YmxvY2stMDAwMDAw"
+    FileContinuationToken: String:{FileContinuationToken}
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.UploadBlockResponse
+ResponseName: String:"UploadBlock"
+Results: ParameterCollection[0]
+=== (b) IPipelineCore.ExecuteCoreAsync ===
+--- request ---
+Request: UploadBlockRequest
+  RequestName: String:"UploadBlock"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    BlockData: Byte[]:030A11181F262D343B424950575E656C737A81888F969DA4ABB2B9C0C7CED5DC
+    BlockId: String:"YmxvY2stMDAwMDAw"
+    FileContinuationToken: String:{FileContinuationToken}
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.UploadBlockResponse
+ResponseName: String:"UploadBlock"
+Results: ParameterCollection[0]

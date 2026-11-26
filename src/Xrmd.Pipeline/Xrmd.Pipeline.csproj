@@ -24,6 +24,8 @@
     <InternalsVisibleTo Include="Xrmd.Integration.Tests" />
     <!-- Plan 2.14, W17: a failed call of a custom workflow activity dooms the real-time run's transaction, as a plug-in's does. -->
     <InternalsVisibleTo Include="Xrmd.Workflows" />
+    <!-- S.2e3a: the core's entry adapter reads the request the pipeline holds at the core (CoreHandOff). -->
+    <InternalsVisibleTo Include="Xrmd.Core" />
     <!-- For AsyncContextSerializer.WarmUpSdk, which the race probe calls like the plug-in loader does. -->
     <InternalsVisibleTo Include="Xrmd.Pipeline.RaceProbe" />
   </ItemGroup>

@@ -22,7 +22,7 @@ namespace Xrmd.Core;
 /// depends on the record's status.
 /// </summary>
 /// <remarks>
-/// Run by the pipeline, a message writes its items and memberships through the <see cref="NestedRequest"/> as the Create, Update and
+/// Run by the pipeline, a message writes its items and memberships through the <see cref="SdkNestedRequest"/> as the Create, Update and
 /// Delete of <c>queueitem</c> and the Associate of <c>queuemembership_association</c>: their steps fire one level deeper, with the
 /// queue message as their parent context, and the security guard checks each (decision 4). Without one (the server's own work, such as
 /// the deactivation of a record's items) the same writes go straight to the core operations: no step fires and no privilege is checked.
@@ -54,7 +54,7 @@ public sealed class QueueMessages
         _store = store;
     }
 
-    /// <inheritdoc cref="ExecuteAsync(OrganizationRequest, Caller, DataSession, NestedRequest?, CancellationToken)"/>
+    /// <inheritdoc cref="ExecuteAsync(OrganizationRequest, Caller, DataSession, SdkNestedRequest?, CancellationToken)"/>
     public Task<OrganizationResponse> ExecuteAsync(OrganizationRequest request, Caller caller, DataSession s, CancellationToken ct) =>
         ExecuteAsync(request, caller, s, null, ct);
 
@@ -70,7 +70,7 @@ public sealed class QueueMessages
     /// <exception cref="XrmdFaultException">400 for a missing or wrong parameter, a table that is not queue-enabled, an inactive record,
     /// queue or item, a source queue the record is not in, or a principal of another table; 404 for a missing record, queue, item,
     /// user or team; the faults of the writes.</exception>
-    public async Task<OrganizationResponse> ExecuteAsync(OrganizationRequest request, Caller caller, DataSession s, NestedRequest? nested,
+    public async Task<OrganizationResponse> ExecuteAsync(OrganizationRequest request, Caller caller, DataSession s, SdkNestedRequest? nested,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -497,7 +497,7 @@ public sealed class QueueMessages
     }
 
     /// <summary>The writes of a message: through the pipeline when it runs one (steps fire, the guard checks), else directly.</summary>
-    private sealed class Writer(CoreOperations core, DataSession s, Caller caller, NestedRequest? nested)
+    private sealed class Writer(CoreOperations core, DataSession s, Caller caller, SdkNestedRequest? nested)
     {
         public async Task<Guid> CreateAsync(Entity entity, CancellationToken ct) => nested is null
             ? await core.CreateAsync(s, caller, entity, ct)

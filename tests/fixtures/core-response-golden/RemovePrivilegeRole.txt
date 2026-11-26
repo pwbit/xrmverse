@@ -1,0 +1,24 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: RemovePrivilegeRoleRequest
+  RequestName: String:"RemovePrivilegeRole"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    PrivilegeId: Guid:{prvReadpb_Pipe}
+    RoleId: Guid:{id1}
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.RemovePrivilegeRoleResponse
+ResponseName: String:"RemovePrivilegeRole"
+Results: ParameterCollection[0]
+=== (b) IPipelineCore.ExecuteCoreAsync ===
+--- request ---
+Request: RemovePrivilegeRoleRequest
+  RequestName: String:"RemovePrivilegeRole"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    PrivilegeId: Guid:{prvReadpb_Pipe}
+    RoleId: Guid:{id2}
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.RemovePrivilegeRoleResponse
+ResponseName: String:"RemovePrivilegeRole"
+Results: ParameterCollection[0]

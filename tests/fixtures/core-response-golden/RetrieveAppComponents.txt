@@ -1,0 +1,27 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: RetrieveAppComponentsRequest
+  RequestName: String:"RetrieveAppComponents"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    AppModuleId: Guid:{id1}
+--- response ---
+Fault: NotSupportedException "Request 'RetrieveAppComponents' is not supported yet."
+=== (b) IPipelineCore.ExecuteNonPipelineAsync ===
+--- request ---
+Request: RetrieveAppComponentsRequest
+  RequestName: String:"RetrieveAppComponents"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    AppModuleId: Guid:{id2}
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.RetrieveAppComponentsResponse
+ResponseName: String:"RetrieveAppComponents"
+Results: ParameterCollection[1]
+  AppComponents: EntityCollection
+    EntityName: String:"appmodulecomponent"
+    Entities: DataCollection[0]
+    MoreRecords: Boolean:False
+    PagingCookie: null
+    TotalRecordCount: Int32:-1
+    TotalRecordCountLimitExceeded: Boolean:False

@@ -1,0 +1,34 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: CommitFileBlocksUploadRequest
+  RequestName: String:"CommitFileBlocksUpload"
+  RequestId: null
+  Parameters: ParameterCollection[4]
+    BlockList: String[][1]
+      [0]: String:"YmxvY2stMDAwMDAw"
+    FileContinuationToken: String:{FileContinuationToken}
+    FileName: String:"report.pdf"
+    MimeType: String:"application/pdf"
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.CommitFileBlocksUploadResponse
+ResponseName: String:"CommitFileBlocksUpload"
+Results: ParameterCollection[2]
+  FileId: Guid:{a:file}
+  FileSizeInBytes: Int64:32
+=== (b) IPipelineCore.ExecuteCoreAsync ===
+--- request ---
+Request: CommitFileBlocksUploadRequest
+  RequestName: String:"CommitFileBlocksUpload"
+  RequestId: null
+  Parameters: ParameterCollection[4]
+    BlockList: String[][1]
+      [0]: String:"YmxvY2stMDAwMDAw"
+    FileContinuationToken: String:{FileContinuationToken}
+    FileName: String:"report.pdf"
+    MimeType: String:"application/pdf"
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.CommitFileBlocksUploadResponse
+ResponseName: String:"CommitFileBlocksUpload"
+Results: ParameterCollection[2]
+  FileId: Guid:{b:file}
+  FileSizeInBytes: Int64:32

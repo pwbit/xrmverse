@@ -1,0 +1,44 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: RetrieveRelationshipRequest
+  RequestName: String:"RetrieveRelationship"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    MetadataId: Guid:{empty}
+    Name: String:"new_project_new_tag"
+    RetrieveAsIfPublished: Boolean:False
+--- response ---
+Fault: NotSupportedException "Request 'RetrieveRelationship' is not supported yet."
+=== (b) IPipelineCore.ExecuteNonPipelineAsync ===
+--- request ---
+Request: RetrieveRelationshipRequest
+  RequestName: String:"RetrieveRelationship"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    MetadataId: Guid:{empty}
+    Name: String:"new_project_new_tag"
+    RetrieveAsIfPublished: Boolean:False
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.RetrieveRelationshipResponse
+ResponseName: String:"RetrieveRelationship"
+Results: ParameterCollection[1]
+  RelationshipMetadata: ManyToManyRelationshipMetadata
+    Entity1AssociatedMenuConfiguration: null
+    Entity1IntersectAttribute: String:"pb_projectid"
+    Entity1LogicalName: String:"pb_project"
+    Entity1NavigationPropertyName: String:"new_project_new_tag"
+    Entity2AssociatedMenuConfiguration: null
+    Entity2IntersectAttribute: String:"new_tagid"
+    Entity2LogicalName: String:"new_tag"
+    Entity2NavigationPropertyName: String:"new_project_new_tag"
+    HasChanged: null
+    IntersectEntityName: String:"new_project_new_tag"
+    IntroducedVersion: null
+    IsCustomRelationship: Boolean:True
+    IsCustomizable: null
+    IsManaged: null
+    IsValidForAdvancedFind: null
+    MetadataId: Guid:{id1}
+    RelationshipType: RelationshipType:ManyToManyRelationship
+    SchemaName: String:"new_project_new_tag"
+    SecurityTypes: null

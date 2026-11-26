@@ -589,8 +589,8 @@ public sealed class AsyncOperationWorker(IServiceProvider services, AsyncOperati
             if (await cmd.ExecuteScalarAsync(CancellationToken.None) is null) return;
         }
         await scope.ServiceProvider.GetRequiredService<IPipelineCore>().ExecuteCoreAsync(
-            AsyncOperationQueue.DeleteRequest(id), Caller.Internal, session,
-            CancellationToken.None);
+            new Request { Name = "Delete", Parameters = { ["Target"] = new RecordReference { LogicalName = "asyncoperation", Id = id } } },
+            new CoreCall(Caller.Internal, session), CancellationToken.None);
         await tx.CommitAsync(CancellationToken.None);
         session.Committed();
     }

@@ -1,0 +1,21 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: OrganizationRequest
+  RequestName: String:"RetrieveFormattedImportJobResults"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    ImportJobId: Guid:{a:importjob}
+--- response ---
+Fault: NotSupportedException "Request 'RetrieveFormattedImportJobResults' is not supported yet."
+=== (b) IPipelineCore.ExecuteNonPipelineAsync ===
+--- request ---
+Request: OrganizationRequest
+  RequestName: String:"RetrieveFormattedImportJobResults"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    ImportJobId: Guid:{b:importjob}
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.RetrieveFormattedImportJobResultsResponse
+ResponseName: String:"RetrieveFormattedImportJobResults"
+Results: ParameterCollection[1]
+  FormattedResults: String:"<?xml version="1.0" encoding="utf-8"?><?mso-application progid="Excel.Sheet"?><ss:Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><ss:Worksheet ss:Name="Import results"><ss:Table><ss:Row><ss:Cell><ss:Data ss:Type="String">Type</ss:Data></ss:Cell><ss:Cell><ss:Data ss:Type="String">Name</ss:Data></ss:Cell><ss:Cell><ss:Data ss:Type="String">Id</ss:Data></ss:Cell><ss:Cell><ss:Data ss:Type="String">Result</ss:Data></ss:Cell><ss:Cell><ss:Data ss:Type="String">Error Code</ss:Data></ss:Cell><ss:Cell><ss:Data ss:Type="String">Description</ss:Data></ss:Cell><ss:Cell><ss:Data ss:Type="String">Time</ss:Data></ss:Cell></ss:Row><ss:Row><ss:Cell><ss:Data ss:Type="String">entity</ss:Data></ss:Cell><ss:Cell><ss:Data ss:Type="String">crg table</ss:Data></ss:Cell><ss:Cell><ss:Data ss:Type="String">new_crgtable</ss:Data></ss:Cell><ss:Cell><ss:Data ss:Type="String">success</ss:Data></ss:Cell><ss:Cell><ss:Data ss:Type="String">0</ss:Data></ss:Cell><ss:Cell><ss:Data ss:Type="String"></ss:Data></ss:Cell><ss:Cell><ss:Data ss:Type="String">12:00:00</ss:Data></ss:Cell></ss:Row></ss:Table></ss:Worksheet></ss:Workbook>"

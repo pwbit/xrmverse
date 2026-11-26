@@ -1,0 +1,32 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: DeleteRequest
+  RequestName: String:"Delete"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: EntityReference
+      LogicalName: String:"pb_pipe"
+      Id: Guid:{id1}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.DeleteResponse
+ResponseName: String:"Delete"
+Results: ParameterCollection[0]
+=== (b) IPipelineCore.ExecuteCoreAsync ===
+--- request ---
+Request: DeleteRequest
+  RequestName: String:"Delete"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: EntityReference
+      LogicalName: String:"pb_pipe"
+      Id: Guid:{id2}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.DeleteResponse
+ResponseName: String:"Delete"
+Results: ParameterCollection[0]

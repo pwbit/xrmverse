@@ -1,0 +1,22 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: RemoveFromQueueRequest
+  RequestName: String:"RemoveFromQueue"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    QueueItemId: Guid:{id1}
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.RemoveFromQueueResponse
+ResponseName: String:"RemoveFromQueue"
+Results: ParameterCollection[0]
+=== (b) IPipelineCore.ExecuteCoreAsync ===
+--- request ---
+Request: RemoveFromQueueRequest
+  RequestName: String:"RemoveFromQueue"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    QueueItemId: Guid:{id2}
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.RemoveFromQueueResponse
+ResponseName: String:"RemoveFromQueue"
+Results: ParameterCollection[0]

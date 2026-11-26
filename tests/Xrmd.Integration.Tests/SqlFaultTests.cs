@@ -264,31 +264,28 @@ public sealed class SqlFaultTests(XrmdFixture fx)
 
     private sealed class FailingCore(CoreOperations inner, Exception failure) : IPipelineCore
     {
-        private void Check(OrganizationRequest request)
+        private void Check(Xrmd.Model.Messages.Request request)
         {
-            if (request is CreateRequest create && create.Target.LogicalName == Log) throw failure;
+            if (string.Equals(request.Name, "Create", StringComparison.OrdinalIgnoreCase)
+                && request.Parameters.TryGetValue("Target", out var target) && target is Xrmd.Model.Records.Record { LogicalName: Log })
+                throw failure;
         }
 
-        public Task<OrganizationResponse> ExecuteCoreAsync(OrganizationRequest request, Caller caller, DataSession session, CancellationToken ct)
+        public Task<Xrmd.Model.Messages.Response> ExecuteCoreAsync(Xrmd.Model.Messages.Request request, CoreCall call, CancellationToken ct)
         {
             Check(request);
-            return inner.ExecuteCoreAsync(request, caller, session, ct);
-        }
-
-        public Task<OrganizationResponse> ExecuteCoreAsync(OrganizationRequest request, Caller caller, DataSession session, NestedRequest nested, CancellationToken ct)
-        {
-            Check(request);
-            return inner.ExecuteCoreAsync(request, caller, session, nested, ct);
+            return inner.ExecuteCoreAsync(request, call, ct);
         }
 
         public bool IsCoreMessage(string messageName) => inner.IsCoreMessage(messageName);
-        public IReadOnlyCollection<string> WrittenEntities(OrganizationRequest request) => inner.WrittenEntities(request);
+        public IReadOnlyCollection<string> WrittenEntities(Xrmd.Model.Messages.Request request) => inner.WrittenEntities(request);
         public bool IsNonPipelineMessage(string messageName) => inner.IsNonPipelineMessage(messageName);
-        public Task<OrganizationResponse> ExecuteNonPipelineAsync(OrganizationRequest request, Caller caller, DataSession session, CancellationToken ct) =>
-            inner.ExecuteNonPipelineAsync(request, caller, session, ct);
-        public Task<bool> LockExistsAsync(EntityReference target, DataSession session, CancellationToken ct) =>
+        public Task<Xrmd.Model.Messages.Response> ExecuteNonPipelineAsync(Xrmd.Model.Messages.Request request, Caller caller, DataSession session,
+            CancellationToken ct) => inner.ExecuteNonPipelineAsync(request, caller, session, ct);
+        public Task<bool> LockExistsAsync(Xrmd.Model.Records.RecordReference target, DataSession session, CancellationToken ct) =>
             inner.LockExistsAsync(target, session, ct);
-        public Task<Entity?> RetrieveImageAsync(EntityReference target, string[]? attributes, DataSession session, CancellationToken ct) =>
+        public Task<Xrmd.Model.Records.Record?> RetrieveImageAsync(Xrmd.Model.Records.RecordReference target, string[]? attributes,
+            DataSession session, CancellationToken ct) =>
             inner.RetrieveImageAsync(target, attributes, session, ct);
         public Task<Caller> ResolveUserAsync(Guid systemUserId, DataSession session, CancellationToken ct) => inner.ResolveUserAsync(systemUserId, session, ct);
         public Task<Guid> SystemUserIdAsync(DataSession session, CancellationToken ct) => inner.SystemUserIdAsync(session, ct);

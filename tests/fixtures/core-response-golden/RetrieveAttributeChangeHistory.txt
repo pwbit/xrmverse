@@ -1,0 +1,147 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: RetrieveAttributeChangeHistoryRequest
+  RequestName: String:"RetrieveAttributeChangeHistory"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    AttributeLogicalName: String:"new_name"
+    Target: EntityReference
+      LogicalName: String:"new_crgaudited"
+      Id: Guid:{a:audited}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- response ---
+Fault: NotSupportedException "Request 'RetrieveAttributeChangeHistory' is not supported yet."
+=== (b) IPipelineCore.ExecuteNonPipelineAsync ===
+--- request ---
+Request: RetrieveAttributeChangeHistoryRequest
+  RequestName: String:"RetrieveAttributeChangeHistory"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    AttributeLogicalName: String:"new_name"
+    Target: EntityReference
+      LogicalName: String:"new_crgaudited"
+      Id: Guid:{b:audited}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.RetrieveAttributeChangeHistoryResponse
+ResponseName: String:"RetrieveAttributeChangeHistory"
+Results: ParameterCollection[1]
+  AuditDetailCollection: AuditDetailCollection
+    AuditDetails: DataCollection[2]
+      [0]: AttributeAuditDetail
+        AuditRecord: Entity(audit)
+          Id: Guid:{b:audit-update}
+          EntityState: null
+          RowVersion: null
+          Attributes: AttributeCollection[9]
+            auditid: Guid:{b:audit-update}
+            createdon: DateTime:{date:Utc}
+            action: OptionSetValue
+              Value: Int32:2
+            operation: OptionSetValue
+              Value: Int32:2
+            objectid: EntityReference
+              LogicalName: String:"new_crgaudited"
+              Id: Guid:{b:audited}
+              Name: null
+              KeyAttributes: KeyAttributeCollection[0]
+              RowVersion: null
+            objecttypecode: String:"new_crgaudited"
+            userid: EntityReference
+              LogicalName: String:"systemuser"
+              Id: Guid:{user}
+              Name: String:"Test Admin"
+              KeyAttributes: KeyAttributeCollection[0]
+              RowVersion: null
+            changedata: String:"{"v":1,"old":{"new_name":"crg-audited"},"new":{"new_name":"crg-audited-changed"}}"
+            transactionid: Guid:{id1}
+          FormattedValues: FormattedValueCollection[4]
+            createdon: String:"{date}"
+            action: String:"Update"
+            operation: String:"Update"
+            userid: String:"Test Admin"
+          KeyAttributes: KeyAttributeCollection[0]
+          RelatedEntities: RelatedEntityCollection[0]
+        DeletedAttributes: Dictionary[0]
+        InvalidNewValueAttributes: DataCollection[0]
+        LocLabelLanguageCode: Int32:0
+        NewValue: Entity(new_crgaudited)
+          Id: Guid:{empty}
+          EntityState: null
+          RowVersion: null
+          Attributes: AttributeCollection[1]
+            new_name: String:"crg-audited-changed"
+          FormattedValues: FormattedValueCollection[0]
+          KeyAttributes: KeyAttributeCollection[0]
+          RelatedEntities: RelatedEntityCollection[0]
+        OldValue: Entity(new_crgaudited)
+          Id: Guid:{empty}
+          EntityState: null
+          RowVersion: null
+          Attributes: AttributeCollection[1]
+            new_name: String:"crg-audited"
+          FormattedValues: FormattedValueCollection[0]
+          KeyAttributes: KeyAttributeCollection[0]
+          RelatedEntities: RelatedEntityCollection[0]
+      [1]: AttributeAuditDetail
+        AuditRecord: Entity(audit)
+          Id: Guid:{b:audit-create}
+          EntityState: null
+          RowVersion: null
+          Attributes: AttributeCollection[9]
+            auditid: Guid:{b:audit-create}
+            createdon: DateTime:{date:Utc}
+            action: OptionSetValue
+              Value: Int32:1
+            operation: OptionSetValue
+              Value: Int32:1
+            objectid: EntityReference
+              LogicalName: String:"new_crgaudited"
+              Id: Guid:{b:audited}
+              Name: null
+              KeyAttributes: KeyAttributeCollection[0]
+              RowVersion: null
+            objecttypecode: String:"new_crgaudited"
+            userid: EntityReference
+              LogicalName: String:"systemuser"
+              Id: Guid:{user}
+              Name: String:"Test Admin"
+              KeyAttributes: KeyAttributeCollection[0]
+              RowVersion: null
+            changedata: String:"{"v":1,"old":{},"new":{"new_name":"crg-audited","ownerid":{"$lookup":{"id":"{user}","logicalName":"systemuser","name":"Test Admin"}},"statecode":{"$option":0},"statuscode":{"$option":1}}}"
+            transactionid: Guid:{id2}
+          FormattedValues: FormattedValueCollection[4]
+            createdon: String:"{date}"
+            action: String:"Create"
+            operation: String:"Create"
+            userid: String:"Test Admin"
+          KeyAttributes: KeyAttributeCollection[0]
+          RelatedEntities: RelatedEntityCollection[0]
+        DeletedAttributes: Dictionary[0]
+        InvalidNewValueAttributes: DataCollection[0]
+        LocLabelLanguageCode: Int32:0
+        NewValue: Entity(new_crgaudited)
+          Id: Guid:{empty}
+          EntityState: null
+          RowVersion: null
+          Attributes: AttributeCollection[1]
+            new_name: String:"crg-audited"
+          FormattedValues: FormattedValueCollection[0]
+          KeyAttributes: KeyAttributeCollection[0]
+          RelatedEntities: RelatedEntityCollection[0]
+        OldValue: Entity(new_crgaudited)
+          Id: Guid:{empty}
+          EntityState: null
+          RowVersion: null
+          Attributes: AttributeCollection[0]
+          FormattedValues: FormattedValueCollection[0]
+          KeyAttributes: KeyAttributeCollection[0]
+          RelatedEntities: RelatedEntityCollection[0]
+    Count: Int32:2
+    MoreRecords: Boolean:False
+    PagingCookie: String:"<cookie page="1" />"
+    TotalRecordCount: Int32:-1

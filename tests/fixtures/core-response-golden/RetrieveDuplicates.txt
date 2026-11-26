@@ -1,0 +1,200 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: RetrieveDuplicatesRequest
+  RequestName: String:"RetrieveDuplicates"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    BusinessEntity: Entity(contact)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[1]
+        emailaddress1: String:"crg.duplicate@example.com"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+    MatchingEntityName: String:"contact"
+    PagingInfo: PagingInfo
+      Count: Int32:50
+      PageNumber: Int32:1
+      PagingCookie: null
+      ReturnRecordCountLessThanMarv: Boolean:False
+      ReturnTotalRecordCount: Boolean:False
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.RetrieveDuplicatesResponse
+ResponseName: String:"RetrieveDuplicates"
+Results: ParameterCollection[1]
+  DuplicateCollection: EntityCollection
+    EntityName: String:"contact"
+    Entities: DataCollection[1]
+      [0]: Entity(contact)
+        Id: Guid:{a:duplicate}
+        EntityState: null
+        RowVersion: {rowversion}
+        Attributes: AttributeCollection[16]
+          contactid: Guid:{a:duplicate}
+          createdby: EntityReference
+            LogicalName: String:"systemuser"
+            Id: Guid:{user}
+            Name: String:"Test Admin"
+            KeyAttributes: KeyAttributeCollection[0]
+            RowVersion: null
+          createdon: DateTime:{date:Utc}
+          emailaddress1: String:"crg.duplicate@example.com"
+          exchangerate: Decimal:1.0000000000
+          fullname: String:"crg-duplicate"
+          lastname: String:"crg-duplicate"
+          modifiedby: EntityReference
+            LogicalName: String:"systemuser"
+            Id: Guid:{user}
+            Name: String:"Test Admin"
+            KeyAttributes: KeyAttributeCollection[0]
+            RowVersion: null
+          modifiedon: DateTime:{date:Utc}
+          ownerid: EntityReference
+            LogicalName: String:"systemuser"
+            Id: Guid:{user}
+            Name: String:"Test Admin"
+            KeyAttributes: KeyAttributeCollection[0]
+            RowVersion: null
+          owningbusinessunit: EntityReference
+            LogicalName: String:"businessunit"
+            Id: Guid:{businessunit}
+            Name: String:"Test Org"
+            KeyAttributes: KeyAttributeCollection[0]
+            RowVersion: null
+          owninguser: EntityReference
+            LogicalName: String:"systemuser"
+            Id: Guid:{user}
+            Name: String:"Test Admin"
+            KeyAttributes: KeyAttributeCollection[0]
+            RowVersion: null
+          statecode: OptionSetValue
+            Value: Int32:0
+          statuscode: OptionSetValue
+            Value: Int32:1
+          transactioncurrencyid: EntityReference
+            LogicalName: String:"transactioncurrency"
+            Id: Guid:{id1}
+            Name: String:"Euro"
+            KeyAttributes: KeyAttributeCollection[0]
+            RowVersion: null
+          versionnumber: Int64:{rowversion}
+        FormattedValues: FormattedValueCollection[11]
+          createdby: String:"Test Admin"
+          createdon: String:"{date}"
+          exchangerate: String:"1.0000000000"
+          modifiedby: String:"Test Admin"
+          modifiedon: String:"{date}"
+          ownerid: String:"Test Admin"
+          owningbusinessunit: String:"Test Org"
+          owninguser: String:"Test Admin"
+          statecode: String:"Active"
+          statuscode: String:"Active"
+          transactioncurrencyid: String:"Euro"
+        KeyAttributes: KeyAttributeCollection[0]
+        RelatedEntities: RelatedEntityCollection[0]
+    MoreRecords: Boolean:False
+    PagingCookie: null
+    TotalRecordCount: Int32:0
+    TotalRecordCountLimitExceeded: Boolean:False
+=== (b) IPipelineCore.ExecuteCoreAsync ===
+--- request ---
+Request: RetrieveDuplicatesRequest
+  RequestName: String:"RetrieveDuplicates"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    BusinessEntity: Entity(contact)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[1]
+        emailaddress1: String:"crg.duplicate@example.com"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+    MatchingEntityName: String:"contact"
+    PagingInfo: PagingInfo
+      Count: Int32:50
+      PageNumber: Int32:1
+      PagingCookie: null
+      ReturnRecordCountLessThanMarv: Boolean:False
+      ReturnTotalRecordCount: Boolean:False
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.RetrieveDuplicatesResponse
+ResponseName: String:"RetrieveDuplicates"
+Results: ParameterCollection[1]
+  DuplicateCollection: EntityCollection
+    EntityName: String:"contact"
+    Entities: DataCollection[1]
+      [0]: Entity(contact)
+        Id: Guid:{b:duplicate}
+        EntityState: null
+        RowVersion: {rowversion}
+        Attributes: AttributeCollection[16]
+          contactid: Guid:{b:duplicate}
+          createdby: EntityReference
+            LogicalName: String:"systemuser"
+            Id: Guid:{user}
+            Name: String:"Test Admin"
+            KeyAttributes: KeyAttributeCollection[0]
+            RowVersion: null
+          createdon: DateTime:{date:Utc}
+          emailaddress1: String:"crg.duplicate@example.com"
+          exchangerate: Decimal:1.0000000000
+          fullname: String:"crg-duplicate"
+          lastname: String:"crg-duplicate"
+          modifiedby: EntityReference
+            LogicalName: String:"systemuser"
+            Id: Guid:{user}
+            Name: String:"Test Admin"
+            KeyAttributes: KeyAttributeCollection[0]
+            RowVersion: null
+          modifiedon: DateTime:{date:Utc}
+          ownerid: EntityReference
+            LogicalName: String:"systemuser"
+            Id: Guid:{user}
+            Name: String:"Test Admin"
+            KeyAttributes: KeyAttributeCollection[0]
+            RowVersion: null
+          owningbusinessunit: EntityReference
+            LogicalName: String:"businessunit"
+            Id: Guid:{businessunit}
+            Name: String:"Test Org"
+            KeyAttributes: KeyAttributeCollection[0]
+            RowVersion: null
+          owninguser: EntityReference
+            LogicalName: String:"systemuser"
+            Id: Guid:{user}
+            Name: String:"Test Admin"
+            KeyAttributes: KeyAttributeCollection[0]
+            RowVersion: null
+          statecode: OptionSetValue
+            Value: Int32:0
+          statuscode: OptionSetValue
+            Value: Int32:1
+          transactioncurrencyid: EntityReference
+            LogicalName: String:"transactioncurrency"
+            Id: Guid:{id1}
+            Name: String:"Euro"
+            KeyAttributes: KeyAttributeCollection[0]
+            RowVersion: null
+          versionnumber: Int64:{rowversion}
+        FormattedValues: FormattedValueCollection[11]
+          createdby: String:"Test Admin"
+          createdon: String:"{date}"
+          exchangerate: String:"1.0000000000"
+          modifiedby: String:"Test Admin"
+          modifiedon: String:"{date}"
+          ownerid: String:"Test Admin"
+          owningbusinessunit: String:"Test Org"
+          owninguser: String:"Test Admin"
+          statecode: String:"Active"
+          statuscode: String:"Active"
+          transactioncurrencyid: String:"Euro"
+        KeyAttributes: KeyAttributeCollection[0]
+        RelatedEntities: RelatedEntityCollection[0]
+    MoreRecords: Boolean:False
+    PagingCookie: null
+    TotalRecordCount: Int32:0
+    TotalRecordCountLimitExceeded: Boolean:False

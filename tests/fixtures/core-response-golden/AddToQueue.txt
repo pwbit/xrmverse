@@ -1,0 +1,36 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: AddToQueueRequest
+  RequestName: String:"AddToQueue"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    DestinationQueueId: Guid:{id1}
+    Target: EntityReference
+      LogicalName: String:"email"
+      Id: Guid:{id2}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.AddToQueueResponse
+ResponseName: String:"AddToQueue"
+Results: ParameterCollection[1]
+  QueueItemId: Guid:{a:queueitem}
+=== (b) IPipelineCore.ExecuteCoreAsync ===
+--- request ---
+Request: AddToQueueRequest
+  RequestName: String:"AddToQueue"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    DestinationQueueId: Guid:{id3}
+    Target: EntityReference
+      LogicalName: String:"email"
+      Id: Guid:{id4}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.AddToQueueResponse
+ResponseName: String:"AddToQueue"
+Results: ParameterCollection[1]
+  QueueItemId: Guid:{b:queueitem}

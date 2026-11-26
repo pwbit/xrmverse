@@ -1,0 +1,38 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: AddPrincipalToQueueRequest
+  RequestName: String:"AddPrincipalToQueue"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    Principal: Entity(systemuser)
+      Id: Guid:{id1}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[0]
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+    QueueId: Guid:{id2}
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.AddPrincipalToQueueResponse
+ResponseName: String:"AddPrincipalToQueue"
+Results: ParameterCollection[0]
+=== (b) IPipelineCore.ExecuteCoreAsync ===
+--- request ---
+Request: AddPrincipalToQueueRequest
+  RequestName: String:"AddPrincipalToQueue"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    Principal: Entity(systemuser)
+      Id: Guid:{id3}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[0]
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+    QueueId: Guid:{id4}
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.AddPrincipalToQueueResponse
+ResponseName: String:"AddPrincipalToQueue"
+Results: ParameterCollection[0]

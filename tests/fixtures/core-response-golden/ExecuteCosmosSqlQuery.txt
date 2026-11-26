@@ -1,0 +1,44 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: OrganizationRequest
+  RequestName: String:"ExecuteCosmosSqlQuery"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    EntityLogicalName: String:"new_crgelastic"
+    QueryText: String:"SELECT c.props.new_name AS n FROM c"
+--- response ---
+Type: Microsoft.Xrm.Sdk.OrganizationResponse
+ResponseName: String:"ExecuteCosmosSqlQuery"
+Results: ParameterCollection[1]
+  Result: Entity(expando)
+    Id: Guid:{empty}
+    EntityState: null
+    RowVersion: null
+    Attributes: AttributeCollection[2]
+      HasMore: Boolean:False
+      Result: String:"[{"n":"crg-elastic"}]"
+    FormattedValues: FormattedValueCollection[0]
+    KeyAttributes: KeyAttributeCollection[0]
+    RelatedEntities: RelatedEntityCollection[0]
+=== (b) IPipelineCore.ExecuteCoreAsync ===
+--- request ---
+Request: OrganizationRequest
+  RequestName: String:"ExecuteCosmosSqlQuery"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    EntityLogicalName: String:"new_crgelastic"
+    QueryText: String:"SELECT c.props.new_name AS n FROM c"
+--- response ---
+Type: Microsoft.Xrm.Sdk.OrganizationResponse
+ResponseName: String:"ExecuteCosmosSqlQuery"
+Results: ParameterCollection[1]
+  Result: Entity(expando)
+    Id: Guid:{empty}
+    EntityState: null
+    RowVersion: null
+    Attributes: AttributeCollection[2]
+      HasMore: Boolean:False
+      Result: String:"[{"n":"crg-elastic"}]"
+    FormattedValues: FormattedValueCollection[0]
+    KeyAttributes: KeyAttributeCollection[0]
+    RelatedEntities: RelatedEntityCollection[0]

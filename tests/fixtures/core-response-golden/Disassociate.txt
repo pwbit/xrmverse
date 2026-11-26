@@ -1,0 +1,52 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: DisassociateRequest
+  RequestName: String:"Disassociate"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    RelatedEntities: EntityReferenceCollection[1]
+      [0]: EntityReference
+        LogicalName: String:"new_tag"
+        Id: Guid:{id1}
+        Name: null
+        KeyAttributes: KeyAttributeCollection[0]
+        RowVersion: null
+    Relationship: Relationship
+      SchemaName: String:"new_project_new_tag"
+      PrimaryEntityRole: null
+    Target: EntityReference
+      LogicalName: String:"pb_project"
+      Id: Guid:{id2}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.DisassociateResponse
+ResponseName: String:"Disassociate"
+Results: ParameterCollection[0]
+=== (b) IPipelineCore.ExecuteCoreAsync ===
+--- request ---
+Request: DisassociateRequest
+  RequestName: String:"Disassociate"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    RelatedEntities: EntityReferenceCollection[1]
+      [0]: EntityReference
+        LogicalName: String:"new_tag"
+        Id: Guid:{id3}
+        Name: null
+        KeyAttributes: KeyAttributeCollection[0]
+        RowVersion: null
+    Relationship: Relationship
+      SchemaName: String:"new_project_new_tag"
+      PrimaryEntityRole: null
+    Target: EntityReference
+      LogicalName: String:"pb_project"
+      Id: Guid:{id4}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.DisassociateResponse
+ResponseName: String:"Disassociate"
+Results: ParameterCollection[0]

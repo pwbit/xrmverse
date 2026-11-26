@@ -1,0 +1,42 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(pb_pipe)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[2]
+        pb_name: String:"crg-create"
+        pb_count: Int32:3
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.CreateResponse
+ResponseName: String:"Create"
+Results: ParameterCollection[1]
+  id: Guid:{a:created}
+=== (b) IPipelineCore.ExecuteCoreAsync ===
+--- request ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(pb_pipe)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[2]
+        pb_name: String:"crg-create"
+        pb_count: Int32:3
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.CreateResponse
+ResponseName: String:"Create"
+Results: ParameterCollection[1]
+  id: Guid:{b:created}

@@ -1,0 +1,24 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: GetTrackingTokenEmailRequest
+  RequestName: String:"GetTrackingTokenEmail"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Subject: String:"crg subject"
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.GetTrackingTokenEmailResponse
+ResponseName: String:"GetTrackingTokenEmail"
+Results: ParameterCollection[1]
+  TrackingToken: String:"CRM:0007"
+=== (b) IPipelineCore.ExecuteCoreAsync ===
+--- request ---
+Request: GetTrackingTokenEmailRequest
+  RequestName: String:"GetTrackingTokenEmail"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Subject: String:"crg subject"
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.GetTrackingTokenEmailResponse
+ResponseName: String:"GetTrackingTokenEmail"
+Results: ParameterCollection[1]
+  TrackingToken: String:"CRM:0007"

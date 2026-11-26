@@ -1,0 +1,34 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: RouteToRequest
+  RequestName: String:"RouteTo"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    QueueItemId: Guid:{id1}
+    Target: EntityReference
+      LogicalName: String:"queue"
+      Id: Guid:{id2}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.RouteToResponse
+ResponseName: String:"RouteTo"
+Results: ParameterCollection[0]
+=== (b) IPipelineCore.ExecuteCoreAsync ===
+--- request ---
+Request: RouteToRequest
+  RequestName: String:"RouteTo"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    QueueItemId: Guid:{id3}
+    Target: EntityReference
+      LogicalName: String:"queue"
+      Id: Guid:{id4}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.RouteToResponse
+ResponseName: String:"RouteTo"
+Results: ParameterCollection[0]

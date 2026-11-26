@@ -1,0 +1,56 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: CalculateRollupFieldRequest
+  RequestName: String:"CalculateRollupField"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    FieldName: String:"xrmv_ordertotal"
+    Target: EntityReference
+      LogicalName: String:"account"
+      Id: Guid:{id1}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.CalculateRollupFieldResponse
+ResponseName: String:"CalculateRollupField"
+Results: ParameterCollection[1]
+  Entity: Entity(account)
+    Id: Guid:{id1}
+    EntityState: null
+    RowVersion: null
+    Attributes: AttributeCollection[3]
+      xrmv_ordertotal: Decimal:125.50
+      xrmv_ordertotal_date: DateTime:{date:Utc}
+      xrmv_ordertotal_state: Int32:1
+    FormattedValues: FormattedValueCollection[0]
+    KeyAttributes: KeyAttributeCollection[0]
+    RelatedEntities: RelatedEntityCollection[0]
+=== (b) IPipelineCore.ExecuteCoreAsync ===
+--- request ---
+Request: CalculateRollupFieldRequest
+  RequestName: String:"CalculateRollupField"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    FieldName: String:"xrmv_ordertotal"
+    Target: EntityReference
+      LogicalName: String:"account"
+      Id: Guid:{id2}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.CalculateRollupFieldResponse
+ResponseName: String:"CalculateRollupField"
+Results: ParameterCollection[1]
+  Entity: Entity(account)
+    Id: Guid:{id2}
+    EntityState: null
+    RowVersion: null
+    Attributes: AttributeCollection[3]
+      xrmv_ordertotal: Decimal:125.50
+      xrmv_ordertotal_date: DateTime:{date:Utc}
+      xrmv_ordertotal_state: Int32:1
+    FormattedValues: FormattedValueCollection[0]
+    KeyAttributes: KeyAttributeCollection[0]
+    RelatedEntities: RelatedEntityCollection[0]

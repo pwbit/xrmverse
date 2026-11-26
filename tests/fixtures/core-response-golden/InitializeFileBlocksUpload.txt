@@ -1,0 +1,38 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: InitializeFileBlocksUploadRequest
+  RequestName: String:"InitializeFileBlocksUpload"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    FileAttributeName: String:"new_doc"
+    FileName: String:"report.pdf"
+    Target: EntityReference
+      LogicalName: String:"new_crgfile"
+      Id: Guid:{id1}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.InitializeFileBlocksUploadResponse
+ResponseName: String:"InitializeFileBlocksUpload"
+Results: ParameterCollection[1]
+  FileContinuationToken: String:{FileContinuationToken}
+=== (b) IPipelineCore.ExecuteCoreAsync ===
+--- request ---
+Request: InitializeFileBlocksUploadRequest
+  RequestName: String:"InitializeFileBlocksUpload"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    FileAttributeName: String:"new_doc"
+    FileName: String:"report.pdf"
+    Target: EntityReference
+      LogicalName: String:"new_crgfile"
+      Id: Guid:{id2}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.InitializeFileBlocksUploadResponse
+ResponseName: String:"InitializeFileBlocksUpload"
+Results: ParameterCollection[1]
+  FileContinuationToken: String:{FileContinuationToken}

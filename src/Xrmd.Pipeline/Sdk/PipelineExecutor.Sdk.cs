@@ -84,6 +84,9 @@ public sealed partial class PipelineExecutor
 
         /// <summary>True when this execution registered its bag in <see cref="AtCore"/> (not one sharing its caller's held bag).</summary>
         public bool OwnsAtCore { get; set; }
+
+        /// <summary>True when this execution opened the <see cref="CoreHandOff"/> window of its model request.</summary>
+        public bool OwnsHeld { get; set; }
         public Guid? ApiMessage { get; set; }
         public Guid? WebhookSecret { get; set; }
     }
@@ -244,6 +247,8 @@ public sealed partial class PipelineExecutor
         // after it) change the SDK request.
         var mirror = invocation.Mirror!;
         var model = mirror.In(request)!;
+        // S.2e3a: the model request carries its chain mirror, so the core converts with it (twins and typed responses keep their identity).
+        SdkMirror.Register(model, mirror);
         // The request's own collection is the SDK side of its parameters: every view's InputParameters is that collection. A request
         // built on a collection that already has a twin (a plug-in executing a request on its own InputParameters) shares that bag, as
         // the SDK pipeline shares the collection: pairing it again would take the collection from the caller's level.
@@ -323,6 +328,7 @@ public sealed partial class PipelineExecutor
         run.HeldAtCore = true;
         run.OwnsAtCore = !AtCore.TryGetValue(run.Request.Parameters, out _);
         if (run.OwnsAtCore) AtCore.Add(run.Request.Parameters, run.Sdk.Parameters);
+        run.OwnsHeld = CoreHandOff.Hold(run.Request, run.Sdk);
         if (run.CustomAction) return;
         var request = run.Sdk;
         var caller = run.Invocation.Caller;
@@ -345,6 +351,7 @@ public sealed partial class PipelineExecutor
         if (!run.HeldAtCore) return;
         run.HeldAtCore = false;
         if (run.OwnsAtCore) AtCore.Remove(run.Request.Parameters);
+        CoreHandOff.Release(run.Request, run.OwnsHeld);
         run.Mirror.In(run.Sdk);
     }
 
@@ -406,19 +413,7 @@ public sealed partial class PipelineExecutor
                 upsertTable, core, session,
                 inner => RunInnerAsync(StandardUpsert.CarryParameters(request, inner), InnerKind.Upsert, run, ct),
                 StandardUpsert.IsCreateOnly(request), ct)
-            // A request the core issues (the record Update of CommitFileBlocksUpload) runs as a plug-in-issued request
-            // would: one level deeper, with (a copy of) this message's context as its ParentContext. Plan 4.1c: it keeps the server shared
-            // variables (the queueitem Create of a delivery's AddToQueue carries the delivery's), not the server values.
-            : await core.ExecuteCoreAsync(request, invocation.Caller, session,
-                (nested, c) => ExecuteAsync(nested,
-                    invocation with
-                    {
-                        // A copy of this context (same stage and values, shared bags) per call, as for the inner executions: the view
-                        // of a copy lent once is never lent again with values of a later stage.
-                        Session = session, Parent = context.Clone(context.Stage), Depth = invocation.Depth + 1,
-                        IsCoreCascade = CascadeHint.IsMarked(nested),
-                        ServerSetValues = null,
-                    }, c), invocation.ServerSetValues, ct);
+            : await CoreOperationAsync(run, ct);
         // Plan 2.14 (final review I2): the activation of an assigned definition follows its owner, in the same transaction;
         // so does it after an Update of ownerid, which plan 2.21 (A16) accepts on an Activated definition.
         if (!run.CustomAction && run.EntityName == WorkflowSchema.Table && run.EntityId != Guid.Empty
@@ -428,6 +423,47 @@ public sealed partial class PipelineExecutor
             await _workflows.OnAssignedAsync(session, run.EntityId, ct);
         if (run.ApiMessage is { } deletedApiMessage) await customApiAuthoring.AfterDeleteAsync(deletedApiMessage, session, ct);
         if (run.WebhookSecret is { } endpoint) await webhookSecrets.MarkSetAsync(endpoint, session, ct);
+    }
+
+    /// <summary>
+    /// The core operation on the model (S.2e3a): the core gets the model request, which the pipeline holds (<see cref="CoreHandOff"/>),
+    /// so its handler runs on <see cref="Run.Sdk"/> without a conversion. The answer is an unread shell paired in the chain's mirror; the
+    /// response is its typed SDK twin, the core's own object, which <see cref="ResponseToContext"/> reads in only when it is observed.
+    /// </summary>
+    private async Task<OrganizationResponse> CoreOperationAsync(Run run, CancellationToken ct)
+    {
+        var invocation = run.Invocation;
+        var shell = await core.ExecuteCoreAsync(run.Request,
+            new CoreCall(invocation.Caller, run.Session, (nested, c) => CoreNestedAsync(nested, run, c), invocation.ServerSetValues), ct);
+        return run.Mirror.TryGetSdk(shell, out var twin) && twin is OrganizationResponse response
+            ? response
+            : run.Mirror.Out(shell)!; // a core that answers with a model response of its own
+    }
+
+    /// <summary>
+    /// A request the core issues (the record Update of CommitFileBlocksUpload, a delete cascade) runs as a plug-in-issued request would:
+    /// one level deeper, with (a copy of) this message's context as its ParentContext. Plan 4.1c: it keeps the server shared variables
+    /// (the queueitem Create of a delivery's AddToQueue carries the delivery's), not the server values. The core's adapter has just read
+    /// the request in, so its SDK twin is the core's own request (its type and its marks, such as <see cref="CascadeHint"/>). The answer
+    /// goes back as the model twin of the nested execution's response (an unread shell when nothing converted it), so the core gets
+    /// that SDK response unchanged and filled.
+    /// </summary>
+    private async Task<Response> CoreNestedAsync(Request nested, Run run, CancellationToken ct)
+    {
+        var mirror = run.Mirror;
+        var request = mirror.TryGetSdk(nested, out var twin) && twin is OrganizationRequest held ? held : mirror.Out(nested)!;
+        var response = await ExecuteAsync(request,
+            run.Invocation with
+            {
+                // A copy of this context (same stage and values, shared bags) per call, as for the inner executions: the view
+                // of a copy lent once is never lent again with values of a later stage.
+                Session = run.Session, Parent = run.Context.Clone(run.Context.Stage), Depth = run.Invocation.Depth + 1,
+                IsCoreCascade = CascadeHint.IsMarked(request),
+                ServerSetValues = null,
+            }, ct);
+        // The nested execution answered with its core's typed response (paired with an unread shell in this chain's mirror when nothing
+        // observed it) or with the response it wrote out of its model (FinishResponse), so the pair is current either way.
+        return mirror.TryGetModel(response, out var model) && model is Response paired ? paired : mirror.Shell(response);
     }
 
     /// <summary>
@@ -493,7 +529,7 @@ public sealed partial class PipelineExecutor
     private void AddWrittenEntities(Run run, HashSet<string> written)
     {
         if (run.EntityName is not null) written.Add(run.EntityName);
-        if (!run.CustomAction) written.UnionWith(core.WrittenEntities(run.Sdk));
+        if (!run.CustomAction) written.UnionWith(core.WrittenEntities(run.Request));
     }
 
     /// <summary>
@@ -542,7 +578,7 @@ public sealed partial class PipelineExecutor
                 await customApiAuthoring.BeforeCreateAsync(request, created, session, ct);
                 return null;
             case "update" when target is Entity updated && entityId != Guid.Empty
-                               && await core.RetrieveImageAsync(new EntityReference(entityName, entityId), null, session, ct) is { } existing:
+                               && await SdkImageAsync(entityName, entityId, null, session, ct) is { } existing:
                 await customApiAuthoring.BeforeUpdateAsync(updated, existing, session, ct);
                 return null;
             case "delete" when target is EntityReference deleted:
@@ -568,7 +604,7 @@ public sealed partial class PipelineExecutor
             await validator.ValidateAsync(entityName, target, null, session, ct);
         }
         else if (string.Equals(request.RequestName, "Update", StringComparison.OrdinalIgnoreCase) && entityId != Guid.Empty
-                 && await core.RetrieveImageAsync(new EntityReference(entityName, entityId), null, session, ct) is { } existing)
+                 && await SdkImageAsync(entityName, entityId, null, session, ct) is { } existing)
         {
             await validator.ValidateAsync(entityName, target, existing, session, ct);
         }
@@ -609,7 +645,7 @@ public sealed partial class PipelineExecutor
         if (await ValidateWorkflowWriteAsync(request, caller, entityName, session, ct) != "Update" || entityId == Guid.Empty) return;
         var target = (Entity)request.Parameters[Target];
         if (!target.Contains("statecode") && !target.Contains("statuscode")) return;
-        if (await core.RetrieveImageAsync(new EntityReference(entityName!, entityId), ["statecode", WorkflowSchema.TypeColumn], session, ct)
+        if (await SdkImageAsync(entityName!, entityId, ["statecode", WorkflowSchema.TypeColumn], session, ct)
             is not { } stored) return;
         // Only a definition changes state: a state or status Update of an activation (or any other type) is 400, even when it asks
         // for the state the row already has (final review M5).
@@ -638,7 +674,7 @@ public sealed partial class PipelineExecutor
                 await ServiceEndpointRules.ValidateAsync(created, null, Options.WebhookAllowAnyPort, webhookSecrets, session, ct);
                 return await webhookSecrets.TakeAsync(created, session, ct);
             case "update" when target is Entity updated && entityId != Guid.Empty
-                               && await core.RetrieveImageAsync(new EntityReference(entityName, entityId), null, session, ct) is { } existing:
+                               && await SdkImageAsync(entityName, entityId, null, session, ct) is { } existing:
                 await ServiceEndpointRules.ValidateAsync(updated, existing, Options.WebhookAllowAnyPort, webhookSecrets, session, ct);
                 return await webhookSecrets.TakeAsync(updated, session, ct);
             case "delete" when target is EntityReference deleted:
@@ -753,16 +789,16 @@ public sealed partial class PipelineExecutor
     /// </summary>
     private async Task<StepImages> PreImagesAsync(Run run, IReadOnlyList<StageStep>[] stages, CancellationToken ct)
     {
-        Entity? pre = null;
+        Record? pre = null;
         if (PreImageMessages.Contains(run.Message) && run.EntityName is not null)
-            pre = await ReadImageAsync(run.EntityName, run.EntityId, stages, pre: true, run.Session, ct);
-        Entity?[]? preList = null;
+            pre = await ReadImageAsync(run.EntityName, run.EntityId, stages, pre: true, run, ct);
+        Record?[]? preList = null;
         if (run.BulkTable is { } bulkTable)
         {
             // The SDK request is current: the views of stage 10 returned into it (their bags are its own collections).
-            preList = await ReadImagesAsync(bulkTable.LogicalName, BulkTargets.TargetIds(run.Sdk, bulkTable, null), stages, pre: true, run.Session, ct);
+            preList = await ReadImagesAsync(bulkTable.LogicalName, BulkTargets.TargetIds(run.Sdk, bulkTable, null), stages, pre: true, run, ct);
         }
-        return new StepImages(ToModel(pre, run.Mirror), null, ToModel(preList, run.Mirror), null);
+        return new StepImages(pre, null, preList, null);
     }
 
     /// <summary>
@@ -771,44 +807,65 @@ public sealed partial class PipelineExecutor
     /// </summary>
     private async Task<StepImages> PostImagesAsync(Run run, StepImages images, IReadOnlyList<StageStep>[] stages, CancellationToken ct)
     {
-        Entity? post = null;
+        Record? post = null;
         if (PostImageMessages.Contains(run.Message) && run.EntityName is not null)
-            post = await ReadImageAsync(run.EntityName, run.EntityId, stages, pre: false, run.Session, ct);
+            post = await ReadImageAsync(run.EntityName, run.EntityId, stages, pre: false, run, ct);
         var postList = run.BulkTable is { } bulkTable
-            ? await ReadImagesAsync(bulkTable.LogicalName, BulkTargets.TargetIds(run.Sdk, bulkTable, run.Response), stages, pre: false, run.Session, ct)
+            ? await ReadImagesAsync(bulkTable.LogicalName, BulkTargets.TargetIds(run.Sdk, bulkTable, run.Response), stages, pre: false, run, ct)
             : null;
-        return images with { Post = ToModel(post, run.Mirror), PostList = ToModel(postList, run.Mirror) };
+        return images with { Post = post, PostList = postList };
     }
-
-    private static Record? ToModel(Entity? image, SdkMirror mirror) => image is null ? null : (Record)mirror.In(image)!;
-
-    private static Record?[]? ToModel(Entity?[]? images, SdkMirror mirror) =>
-        images is null ? null : [.. images.Select(e => ToModel(e, mirror))];
 
     /// <summary>
     /// Reads the record once with the union of the attributes the steps' pre (type 0/2) or post (type 1/2) images ask
-    /// for; null when no step wants such an image or the record does not exist.
+    /// for; null when no step wants such an image or the record does not exist. The core converts the image once, into the chain's
+    /// mirror (<see cref="ImageAsync"/>), so the record's SDK twin is the core's own <c>Entity</c>, which <see cref="AddImages"/>
+    /// projects from.
     /// </summary>
-    private async Task<Entity?> ReadImageAsync(string entityName, Guid id, IReadOnlyList<StageStep>[] stages, bool pre,
-        DataSession session, CancellationToken ct)
+    private async Task<Record?> ReadImageAsync(string entityName, Guid id, IReadOnlyList<StageStep>[] stages, bool pre, Run run,
+        CancellationToken ct)
     {
         var images = stages.SelectMany(s => s).SelectMany(s => s.Step.Images).Where(i => Wants(i, pre)).ToList();
         if (images.Count == 0 || id == Guid.Empty) return null;
         var attributes = images.Any(i => i.Attributes is null)
             ? null
             : images.SelectMany(i => i.Attributes!).Distinct(StringComparer.Ordinal).ToArray();
-        return await core.RetrieveImageAsync(new EntityReference(entityName, id), attributes, session, ct);
+        return await ImageAsync(entityName, id, attributes, run.Mirror, run.Session, ct);
+    }
+
+    /// <summary>
+    /// The record <paramref name="entityName"/> <paramref name="id"/> as an image (S.2e3a): read by the core, which converts it once
+    /// into <paramref name="mirror"/> (<see cref="CoreHandOff.ReadImagesWith"/>), so its SDK twin there is the core's own <c>Entity</c>.
+    /// </summary>
+    private async Task<Record?> ImageAsync(string entityName, Guid id, string[]? attributes, SdkMirror mirror, DataSession session,
+        CancellationToken ct)
+    {
+        var target = new RecordReference { LogicalName = entityName, Id = id };
+        CoreHandOff.ReadImagesWith(target, mirror);
+        return await core.RetrieveImageAsync(target, attributes, session, ct);
+    }
+
+    /// <summary>
+    /// The image the internal checks of stage 20 read on the SDK side: the core's own <c>Entity</c>, the twin of the record it converted
+    /// once (<see cref="ImageAsync"/>, in a mirror of this read).
+    /// </summary>
+    private async Task<Entity?> SdkImageAsync(string entityName, Guid id, string[]? attributes, DataSession session, CancellationToken ct)
+    {
+        var mirror = new SdkMirror();
+        return await ImageAsync(entityName, id, attributes, mirror, session, ct) is { } record && mirror.TryGetSdk(record, out var sdk)
+            ? (Entity)sdk!
+            : null;
     }
 
     /// <summary>
     /// The image of each record of <paramref name="ids"/>, in order, for the image collections of a bulk execution (#76, ruling
     /// B6): one read per record (<see cref="ReadImageAsync"/>; none when no step wants such an image).
     /// </summary>
-    private async Task<Entity?[]> ReadImagesAsync(string entityName, Guid[] ids, IReadOnlyList<StageStep>[] stages, bool pre,
-        DataSession session, CancellationToken ct)
+    private async Task<Record?[]> ReadImagesAsync(string entityName, Guid[] ids, IReadOnlyList<StageStep>[] stages, bool pre, Run run,
+        CancellationToken ct)
     {
-        var images = new Entity?[ids.Length];
-        for (var i = 0; i < ids.Length; i++) images[i] = await ReadImageAsync(entityName, ids[i], stages, pre, session, ct);
+        var images = new Record?[ids.Length];
+        for (var i = 0; i < ids.Length; i++) images[i] = await ReadImageAsync(entityName, ids[i], stages, pre, run, ct);
         return images;
     }
 
@@ -912,14 +969,14 @@ public sealed partial class PipelineExecutor
             var owner = target?.GetAttributeValue<EntityReference>("ownerid") ?? new EntityReference("systemuser", caller.UserId);
             if (target?.GetAttributeValue<EntityReference>("owningbusinessunit") is { } unit) return new RecordOwner(owner.Id, unit.Id);
             if (owner.Id == caller.UserId) return new RecordOwner(owner.Id, caller.BusinessUnitId);
-            var principal = await core.RetrieveImageAsync(owner, ["businessunitid"], session, ct);
+            var principal = await SdkImageAsync(owner.LogicalName, owner.Id, ["businessunitid"], session, ct);
             return new RecordOwner(owner.Id, principal?.GetAttributeValue<EntityReference>("businessunitid")?.Id ?? Guid.Empty);
         }
         // No owner can be read (no id, or the record does not exist): the matcher then applies no scope. That is safe: a write of a
         // missing record fails in the core operation (404) and rolls back what a stage 20 workflow did before it; a Create has no id
         // here but takes the branch above.
         if (entityId == Guid.Empty
-            || await core.RetrieveImageAsync(new EntityReference(entityName, entityId), ["ownerid", "owningbusinessunit"], session, ct) is not { } stored
+            || await SdkImageAsync(entityName, entityId, ["ownerid", "owningbusinessunit"], session, ct) is not { } stored
             || stored.GetAttributeValue<EntityReference>("ownerid") is not { } storedOwner) return null;
         return new RecordOwner(storedOwner.Id, stored.GetAttributeValue<EntityReference>("owningbusinessunit")?.Id ?? Guid.Empty);
     }
@@ -976,5 +1033,70 @@ public sealed partial class PipelineExecutor
                    ?? loader.TryResolvePluginType(step.AssemblyId, step.AssemblyVersion,
                        await registry.GetAssemblyContentAsync(step.AssemblyId, ct), step.TypeName)!;
         return runner.CreateInstance(type, step.UnsecureConfiguration, step.SecureConfiguration);
+    }
+}
+
+/// <summary>
+/// S.2e3a: what the pipeline hands the core's entry adapter. While the pipeline holds a model request at the core (between
+/// <c>HoldAtCoreAsync</c> and <c>ReleaseCore</c>, S.2e2c), its SDK request, so the adapter runs the handler on it without converting the
+/// request again; and the mirror an image is read into (<see cref="ReadImagesWith"/>), so the image is converted once, into the chain's
+/// mirror, paired with the core's own <c>Entity</c>. Internal: only the core (<c>InternalsVisibleTo</c>) acts on a held request.
+/// </summary>
+internal static class CoreHandOff
+{
+    /// <summary>The model request of each execution the pipeline holds at the core, with its SDK request.</summary>
+    private static readonly ConditionalWeakTable<Request, OrganizationRequest> Held = new();
+
+    /// <summary>The mirror the core converts the image of a target into (<see cref="ReadImagesWith"/>).</summary>
+    private static readonly ConditionalWeakTable<RecordReference, SdkMirror> ImageMirrors = new();
+
+    /// <summary>
+    /// Test seam: called by the core's entry adapter with the SDK request its handler runs on (early-bound identity tests).
+    /// </summary>
+    internal static readonly AsyncLocal<Action<OrganizationRequest>?> HandlerRequest = new();
+
+    /// <summary>Test seam: called by the core's entry adapter with each image it read and the model record it converted it into.</summary>
+    internal static readonly AsyncLocal<Action<Entity, Record>?> ImageRead = new();
+
+    /// <summary>
+    /// True, with the held SDK request, while the pipeline holds <paramref name="request"/> at the core; the core then works on
+    /// <paramref name="sdk"/> directly and writes nothing back (the pipeline reads it back once). False outside a held window.
+    /// </summary>
+    internal static bool TryGetHeld(Request request, out OrganizationRequest? sdk)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        lock (Held) return Held.TryGetValue(request, out sdk);
+    }
+
+    /// <summary>
+    /// The start of a held window (<c>HoldAtCoreAsync</c>). True when this call opened it; false, leaving the entry as it is, when a run
+    /// already holds <paramref name="request"/> (a run that re-enters on the same model request inside the outer window). Like the
+    /// <c>AtCore</c> entry beside it, the window belongs to the run that opened it.
+    /// </summary>
+    internal static bool Hold(Request request, OrganizationRequest sdk)
+    {
+        lock (Held) return Held.TryAdd(request, sdk);
+    }
+
+    /// <summary>
+    /// The end of a held window (<c>ReleaseCore</c>): only the run that opened it (<paramref name="owns"/>, from <see cref="Hold"/>)
+    /// removes the entry, so an inner run never ends the outer run's window.
+    /// </summary>
+    internal static void Release(Request request, bool owns)
+    {
+        if (!owns) return;
+        lock (Held) Held.Remove(request);
+    }
+
+    /// <summary>Makes the core read the image of <paramref name="target"/> into <paramref name="mirror"/> (see the class remarks).</summary>
+    internal static void ReadImagesWith(RecordReference target, SdkMirror mirror)
+    {
+        lock (ImageMirrors) ImageMirrors.AddOrUpdate(target, mirror);
+    }
+
+    /// <summary>The mirror to read the image of <paramref name="target"/> into, or null (the core then uses a mirror of its own).</summary>
+    internal static SdkMirror? ImageMirror(RecordReference target)
+    {
+        lock (ImageMirrors) return ImageMirrors.TryGetValue(target, out var mirror) ? mirror : null;
     }
 }

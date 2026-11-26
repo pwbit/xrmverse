@@ -1,0 +1,60 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: RetrieveUnpublishedRequest
+  RequestName: String:"RetrieveUnpublished"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    ColumnSet: ColumnSet
+      AllColumns: Boolean:False
+      AttributeExpressions: DataCollection[0]
+      Columns: DataCollection[1]
+        [0]: String:"name"
+      HasLazyFileAttribute: Boolean:False
+      LazyFileAttributeEntityName: null
+      LazyFileAttributeKey: null
+      LazyFileAttributeSizeLimit: Int32:0
+      LazyFileAttributeValue: null
+    Target: EntityReference
+      LogicalName: String:"appmodule"
+      Id: Guid:{id1}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- response ---
+Fault: NotSupportedException "Request 'RetrieveUnpublished' is not supported yet."
+=== (b) IPipelineCore.ExecuteNonPipelineAsync ===
+--- request ---
+Request: RetrieveUnpublishedRequest
+  RequestName: String:"RetrieveUnpublished"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    ColumnSet: ColumnSet
+      AllColumns: Boolean:False
+      AttributeExpressions: DataCollection[0]
+      Columns: DataCollection[1]
+        [0]: String:"name"
+      HasLazyFileAttribute: Boolean:False
+      LazyFileAttributeEntityName: null
+      LazyFileAttributeKey: null
+      LazyFileAttributeSizeLimit: Int32:0
+      LazyFileAttributeValue: null
+    Target: EntityReference
+      LogicalName: String:"appmodule"
+      Id: Guid:{id2}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.RetrieveUnpublishedResponse
+ResponseName: String:"RetrieveUnpublished"
+Results: ParameterCollection[1]
+  Entity: Entity(appmodule)
+    Id: Guid:{id2}
+    EntityState: null
+    RowVersion: null
+    Attributes: AttributeCollection[2]
+      appmoduleid: Guid:{id2}
+      name: String:"crg app"
+    FormattedValues: FormattedValueCollection[0]
+    KeyAttributes: KeyAttributeCollection[0]
+    RelatedEntities: RelatedEntityCollection[0]

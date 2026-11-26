@@ -1,0 +1,38 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: AddPrivilegesRoleRequest
+  RequestName: String:"AddPrivilegesRole"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    Privileges: RolePrivilege[][1]
+      [0]: RolePrivilege
+        BusinessUnitId: Guid:{empty}
+        Depth: PrivilegeDepth:Basic
+        PrivilegeId: Guid:{prvReadpb_Pipe}
+        PrivilegeName: null
+        RecordFilterId: Guid:{empty}
+        RecordFilterUniqueName: null
+    RoleId: Guid:{id1}
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.AddPrivilegesRoleResponse
+ResponseName: String:"AddPrivilegesRole"
+Results: ParameterCollection[0]
+=== (b) IPipelineCore.ExecuteCoreAsync ===
+--- request ---
+Request: AddPrivilegesRoleRequest
+  RequestName: String:"AddPrivilegesRole"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    Privileges: RolePrivilege[][1]
+      [0]: RolePrivilege
+        BusinessUnitId: Guid:{empty}
+        Depth: PrivilegeDepth:Basic
+        PrivilegeId: Guid:{prvReadpb_Pipe}
+        PrivilegeName: null
+        RecordFilterId: Guid:{empty}
+        RecordFilterUniqueName: null
+    RoleId: Guid:{id2}
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.AddPrivilegesRoleResponse
+ResponseName: String:"AddPrivilegesRole"
+Results: ParameterCollection[0]

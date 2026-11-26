@@ -1,0 +1,35 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: RemoveUserFromRecordTeamRequest
+  RequestName: String:"RemoveUserFromRecordTeam"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    Record: EntityReference
+      LogicalName: String:"account"
+      Id: Guid:{id1}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+    SystemUserId: Guid:{id2}
+    TeamTemplateId: Guid:{id3}
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.RemoveUserFromRecordTeamResponse
+ResponseName: String:"RemoveUserFromRecordTeam"
+Results: ParameterCollection[1]
+  AccessTeamId: Guid:{a:accessteam}
+=== (b) IPipelineCore.ExecuteCoreAsync ===
+--- request ---
+Request: RemoveUserFromRecordTeamRequest
+  RequestName: String:"RemoveUserFromRecordTeam"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    Record: EntityReference
+      LogicalName: String:"account"
+      Id: Guid:{id4}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+    SystemUserId: Guid:{id5}
+    TeamTemplateId: Guid:{id6}
+--- response ---
+Fault: XrmdFaultException 0x80040216 500 "RemoveUserFromRecordTeam reached its core operation without the security check of its caller."

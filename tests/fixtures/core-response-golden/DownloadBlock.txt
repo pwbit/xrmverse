@@ -1,0 +1,28 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: DownloadBlockRequest
+  RequestName: String:"DownloadBlock"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    BlockLength: Int64:32
+    FileContinuationToken: String:{FileContinuationToken}
+    Offset: Int64:0
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.DownloadBlockResponse
+ResponseName: String:"DownloadBlock"
+Results: ParameterCollection[1]
+  Data: Byte[]:030A11181F262D343B424950575E656C737A81888F969DA4ABB2B9C0C7CED5DC
+=== (b) IPipelineCore.ExecuteCoreAsync ===
+--- request ---
+Request: DownloadBlockRequest
+  RequestName: String:"DownloadBlock"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    BlockLength: Int64:32
+    FileContinuationToken: String:{FileContinuationToken}
+    Offset: Int64:0
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.DownloadBlockResponse
+ResponseName: String:"DownloadBlock"
+Results: ParameterCollection[1]
+  Data: Byte[]:030A11181F262D343B424950575E656C737A81888F969DA4ABB2B9C0C7CED5DC

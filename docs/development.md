@@ -231,7 +231,8 @@ What stays on the SDK, and the step that moves it:
 
 | Still on the SDK | Moves in |
 |---|---|
-| The core operations and `IPipelineCore`; the async worker still passes an SDK-typed request to `IPipelineCore` | S.2e3 |
+| The CRUD handlers of the core (Create, Retrieve, Update, Delete, RetrieveMultiple, Assign, Associate, Disassociate) and the request marks | S.2e3b |
+| The other core messages, the core entry adapter and the SDK extension methods of `IPipelineCore` | S.2e3c |
 | Mail, Elastic, Duplicates, Solutions and Rollups | S.2e4 |
 | Workflows (`Xrmd.Workflows`), whose hooks the pipeline calls with a lent SDK view | S.2h |
 | The SDK plug-in adapter, which moves to `Xrmd.Sdk.Adapters`, and the SDK overloads, which are removed | S.2i |
@@ -259,8 +260,98 @@ when the model can carry every value and every value has a plain SDK twin: a twi
 before, so its bytes do not change. `AsyncOperationQueue.EnqueueAsync` therefore keeps its `SdkMirror` parameter, which the
 twin check needs. It is internal: its caller must first read every level of the chain that the core holds, and the executor is
 its only caller. The async worker rebuilds the job context with `StepContext.FromRemote` and overrides the same members as before;
-it no longer uses the SDK itself, since the `DeleteRequest` it issues is built in `AsyncOperationQueue`. The SDK usage count of
-Pipeline is 30, that move included.
+it no longer uses the SDK itself: since S.2e3a it sends the core a model `Delete` request (see below). The SDK usage count of
+Pipeline is 30.
+
+The interface between the pipeline and the core is on the model since S.2e3a. S.2e3 is split in three: S.2e3a moves
+`IPipelineCore` (`src/Xrmd.Pipeline/IPipelineCore.cs`), S.2e3b the CRUD handlers and S.2e3c the other core messages. In S.2e3a no
+handler body changes, and every caller sees the same objects, CLR types and in-place changes as before. The response goldens in
+`tests/fixtures/core-response-golden/` and the request-mutation probe pin this, and so do the plug-in context goldens of S.2e2c.
+
+- **The interface.** `IPipelineCore` names no SDK type. `ExecuteCoreAsync(Request, CoreCall, CancellationToken)` replaces the three
+  SDK overloads. `CoreCall` is a record of the caller, the session, the nested delegate and the columns the server writes on a
+  Create. `NestedRequest` takes and returns model messages. `WrittenEntities` takes a `Request`, `LockExistsAsync` and
+  `RetrieveImageAsync` take a `RecordReference`, and `RetrieveImageAsync` returns a `Record`. `ExecuteCoreAsync` and
+  `ExecuteNonPipelineAsync` return a model `Response`.
+- **The core entry adapter.** `src/Xrmd.Core/Sdk/CoreOperations.Sdk.cs` implements the model members over the SDK handlers of
+  `CoreOperations`. It converts with the request's chain mirror, so the handler gets the SDK twin of the request: the same instance
+  the caller or the pipeline holds, with its CLR type, its early-bound values and the marks keyed on it. A request with no chain
+  mirror gets a new mirror for that call, and both directions of the call use it. Such a caller has no mirror to read a shell
+  with, so it gets the response already read in (see the read rule below). S.2e3c removes the adapter.
+- **The SDK extension methods.** The callers outside the pipeline (Workflows, Solution, Admin, Core.Solutions, the custom API
+  authoring, the plug-in organization service and the tests) still hold SDK objects. They call extension methods with the old names
+  and SDK signatures, in `src/Xrmd.Pipeline/Sdk/PipelineCoreSdk.cs` (namespace `Xrmd.Pipeline`, so no `using` changes).
+  `SdkNestedRequest` is the SDK form of the nested delegate. Each method crosses its arguments into the model with a mirror of the
+  call, registers that mirror for the model request, calls the model member and crosses the answer back with the same mirror. The
+  request a caller passes is therefore the twin the core works on, and the response it gets is the core's own typed instance (a
+  `CreateResponse` stays a `CreateResponse`). `RetrieveImageAsync` names the call's mirror for the image
+  (`CoreHandOff.ReadImagesWith`), so the caller gets the core's own `Entity`. `LockExistsAsync` converts only the reference, and
+  `WrittenEntities` only the message name and the `Relationship` parameter, because the answer depends on nothing else. S.2e3c
+  moves these callers to their own boundary and removes the methods.
+
+`SdkMirror` gained a registry and response shells for this:
+
+- **The registry.** `SdkMirror.Register(Request, SdkMirror)` records the chain mirror of a model request, and `SdkMirror.For(Request)`
+  returns it, or null. The table is static and weak: an entry lives as long as its request. Registering the same mirror again does
+  nothing; registering another mirror for the same request throws `InvalidOperationException`. The pipeline registers its chain
+  mirror right after the request crosses into the model.
+- **Unread shells.** `mirror.Shell(OrganizationResponse)` pairs a new model `Response`, which carries only the name, with a typed SDK
+  response, without reading its results and without counting anything in `SyncCount`. `IsUnread` is true until the twin is read in.
+  While a shell is unread, its `Results` are empty and `Out` of it returns the twin unchanged. `In` of the twin fills the shell, and
+  from then on it is an ordinary twin.
+- **The read rule.** A model read of an unread shell cannot be detected; the shell simply reads as empty. Every model read or write
+  of a core response therefore calls `mirror.In(twin)` first. Only a caller that registered the request's mirror gets a shell: when
+  the core had to create the mirror, it returns the response already read in. A model write to an unread shell (a result added, the results replaced
+  by a non-empty bag, or the name changed) cannot reach the twin, so the next `Out` of the shell throws `InvalidOperationException`
+  rather than drop the write.
+
+`CoreHandOff` (`src/Xrmd.Pipeline/Sdk/PipelineExecutor.Sdk.cs`) is `internal`. Only the core sees it, through
+`InternalsVisibleTo Include="Xrmd.Core"` in `Xrmd.Pipeline.csproj`. It holds two weak tables:
+
+- **The held request.** `HoldAtCoreAsync` records the run's model request with the SDK request the pipeline holds, and `ReleaseCore`
+  removes the entry (it runs in a `finally`, so no entry outlives a fault). While the entry exists, `TryGetHeld` gives the adapter that
+  SDK request: the handler runs on it directly, nothing is converted, and the pipeline reads it back once, as in S.2e2c.
+- **The image mirror.** `ReadImagesWith(RecordReference, SdkMirror)` names the mirror into which the adapter converts one image read.
+  The key is the reference instance created for that read, so two reads of the same record never collide. The pipeline passes its
+  chain mirror, so the record's twin there is the core's own `Entity`.
+
+Two `AsyncLocal` test seams, `HandlerRequest` and `ImageRead`, follow the `AsyncOperationWorker.BeforeAutoDelete` precedent. In
+production each costs one null read per call.
+
+The pipeline calls the model members. Stage 30 calls `ExecuteCoreAsync` inside the held window and takes the SDK twin of the
+returned shell, which is the core's typed instance. `ResponseToContext` reads it in only when the response is observed. The nested
+delegate gets the core's nested request as a model request, runs its SDK twin (the request the core built, with `CascadeHint` and the
+other marks), and answers with the model twin of the nested response, so the core gets the filled typed response back.
+`StandardUpsert` locks with a `RecordReference`. The async worker sends a model `Delete` request (`Target` is the `asyncoperation`
+reference) with `CoreCall(Caller.Internal, session)`, which has no nested delegate, so no step sees it, as before.
+
+The cost of a message through the core, measured against the code before S.2e3a (`PipelineModelBoundaryTests` pins the counts):
+
+- **Unobserved responses are free.** A response nobody observes stays an unread shell and is never converted. A RetrieveMultiple of
+  1,000 rows with no observer converts 21 objects, the same as for 1 row. With one post-operation step it converts 50 objects for
+  1 row and 4,046 for 1,000, as before.
+- **Images are converted once.** Each pre- or post-image is converted once, into the chain mirror. An Update with a pre-image and
+  a post-image converts 23 objects, as before.
+- **Core-issued nested requests cost one extra small conversion each.** The adapter reads each nested request in (a small Update or
+  Delete with its reference) before the pipeline's own read after the guard. A delete cascade of an email to 100 attachments converts
+  806 objects instead of 606, or 2 to 3 more per child. The time stays within noise.
+- **The stage-20 SDK image checks cost one conversion each.** The checks on writes of the custom API, plug-in registration, workflow
+  and service endpoint tables, and the owner lookup of real-time workflows, read their image through the model member into a mirror
+  of their own. Each read converts that one row in once, and the checks get the core's `Entity`. S.2e3b or S.2e3c can move these
+  checks to `Record`.
+- **Direct SDK callers pay three conversions of the request.** An extension method converts the request in, and the adapter writes
+  it out and reads it back, so a caller outside a pipeline pays three times the size of its request. That is what a message pays
+  through the pipeline too (one read at entry, one write and one read at the core): an Associate of 5 objects converts 15 there, as
+  before. The response crosses back unconverted as the shell's twin.
+- **Direct SDK image reads convert the image once.** The `RetrieveImageAsync` extension method (used by the workflow store and
+  authoring, `ExecuteWorkflow` and the solution importer) converts the target and then the image once, into the call's mirror, and
+  returns the core's own `Entity`. Before S.2e3a these reads converted nothing; the cost is one conversion of one row.
+
+What moves next: S.2e3b moves the CRUD handlers and what they use (validation, the row mapper, activity parties, audit writes) to
+`Record`, and keys the request marks (`CascadeHint`, `AuditActionHint`, the Web API query model, the `StandardUpsert` and inner
+execution marks, `AccessTeamRules`) on the model request. S.2e3c moves the other core messages and `OrganizationService`, removes the
+core entry adapter and the extension methods, and moves the callers outside the pipeline to their own boundary. The SDK usage count
+of Core is 59 (the adapter's file added) and that of Pipeline stays 30.
 
 The view is transitional. The other modules move to the model in S.2d to S.2h, and S.2i removes the view, the twins and the bridge.
 

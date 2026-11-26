@@ -1,0 +1,39 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: RetrieveSharedPrincipalsAndAccessRequest
+  RequestName: String:"RetrieveSharedPrincipalsAndAccess"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: EntityReference
+      LogicalName: String:"pb_project"
+      Id: Guid:{id1}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- response ---
+Fault: NotSupportedException "Request 'RetrieveSharedPrincipalsAndAccess' is not supported yet."
+=== (b) IPipelineCore.ExecuteNonPipelineAsync ===
+--- request ---
+Request: RetrieveSharedPrincipalsAndAccessRequest
+  RequestName: String:"RetrieveSharedPrincipalsAndAccess"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: EntityReference
+      LogicalName: String:"pb_project"
+      Id: Guid:{id2}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.RetrieveSharedPrincipalsAndAccessResponse
+ResponseName: String:"RetrieveSharedPrincipalsAndAccess"
+Results: ParameterCollection[1]
+  PrincipalAccesses: PrincipalAccess[][1]
+    [0]: PrincipalAccess
+      AccessMask: AccessRights:ReadAccess, WriteAccess
+      Principal: EntityReference
+        LogicalName: String:"systemuser"
+        Id: Guid:{b:principal}
+        Name: null
+        KeyAttributes: KeyAttributeCollection[0]
+        RowVersion: null

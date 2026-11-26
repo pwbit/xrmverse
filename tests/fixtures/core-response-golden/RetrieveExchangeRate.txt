@@ -1,0 +1,24 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: RetrieveExchangeRateRequest
+  RequestName: String:"RetrieveExchangeRate"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    TransactionCurrencyId: Guid:{id1}
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.RetrieveExchangeRateResponse
+ResponseName: String:"RetrieveExchangeRate"
+Results: ParameterCollection[1]
+  ExchangeRate: Decimal:1.000000000000
+=== (b) IPipelineCore.ExecuteCoreAsync ===
+--- request ---
+Request: RetrieveExchangeRateRequest
+  RequestName: String:"RetrieveExchangeRate"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    TransactionCurrencyId: Guid:{id1}
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.RetrieveExchangeRateResponse
+ResponseName: String:"RetrieveExchangeRate"
+Results: ParameterCollection[1]
+  ExchangeRate: Decimal:1.000000000000

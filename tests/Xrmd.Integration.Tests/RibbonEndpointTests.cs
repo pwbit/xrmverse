@@ -12,6 +12,7 @@ using Xrmd.Core;
 using Xrmd.Host.Ui;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Sdk;
+using Xrmd.Pipeline;
 using Xrmd.Security;
 using Xrmd.Solution;
 using Xrmd.TestSupport;

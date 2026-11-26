@@ -1,0 +1,22 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: ReleaseToQueueRequest
+  RequestName: String:"ReleaseToQueue"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    QueueItemId: Guid:{id1}
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.ReleaseToQueueResponse
+ResponseName: String:"ReleaseToQueue"
+Results: ParameterCollection[0]
+=== (b) IPipelineCore.ExecuteCoreAsync ===
+--- request ---
+Request: ReleaseToQueueRequest
+  RequestName: String:"ReleaseToQueue"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    QueueItemId: Guid:{id2}
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.ReleaseToQueueResponse
+ResponseName: String:"ReleaseToQueue"
+Results: ParameterCollection[0]

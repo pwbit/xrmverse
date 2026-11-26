@@ -1,0 +1,24 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: PublishDuplicateRuleRequest
+  RequestName: String:"PublishDuplicateRule"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    DuplicateRuleId: Guid:{id1}
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.PublishDuplicateRuleResponse
+ResponseName: String:"PublishDuplicateRule"
+Results: ParameterCollection[1]
+  JobId: Guid:{a:job}
+=== (b) IPipelineCore.ExecuteCoreAsync ===
+--- request ---
+Request: PublishDuplicateRuleRequest
+  RequestName: String:"PublishDuplicateRule"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    DuplicateRuleId: Guid:{id2}
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.PublishDuplicateRuleResponse
+ResponseName: String:"PublishDuplicateRule"
+Results: ParameterCollection[1]
+  JobId: Guid:{b:job}

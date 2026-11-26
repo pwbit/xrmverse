@@ -1,0 +1,28 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: RetrieveUserPrivilegesRequest
+  RequestName: String:"RetrieveUserPrivileges"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    UserId: Guid:{id1}
+--- response ---
+Fault: NotSupportedException "Request 'RetrieveUserPrivileges' is not supported yet."
+=== (b) IPipelineCore.ExecuteNonPipelineAsync ===
+--- request ---
+Request: RetrieveUserPrivilegesRequest
+  RequestName: String:"RetrieveUserPrivileges"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    UserId: Guid:{id2}
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.RetrieveUserPrivilegesResponse
+ResponseName: String:"RetrieveUserPrivileges"
+Results: ParameterCollection[1]
+  RolePrivileges: RolePrivilege[][1]
+    [0]: RolePrivilege
+      BusinessUnitId: Guid:{businessunit}
+      Depth: PrivilegeDepth:Basic
+      PrivilegeId: Guid:{prvReadpb_Pipe}
+      PrivilegeName: String:"prvReadpb_Pipe"
+      RecordFilterId: Guid:{empty}
+      RecordFilterUniqueName: null

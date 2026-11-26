@@ -364,6 +364,247 @@ public sealed class PipelineModelBoundaryTests(XrmdFixture fx) : IAsyncLifetime
         (await ColumnAsync($"SELECT pb_name FROM data.{PipeLog}")).Should().Equal("early|p|1");
         (await ColumnAsync($"SELECT pb_data FROM data.{PipeLog}")).Should().Equal("set-at-20");
     }
+    // ---- S.2e3a Task 4: the pipeline calls the core on the model ---------------------------------------------------
+
+    // The SyncCount values below were measured with the same scenarios on 8d421c0f, before S.2e3a changed src/ (BASE): the
+    // pipeline path must not convert anything more than BASE did.
+
+    /// <summary>Runs <paramref name="request"/> as the admin with a mirror of its own and returns the objects that mirror wrote.</summary>
+    private async Task<long> CountAsync(OrganizationRequest request)
+    {
+        var mirror = new SdkMirror();
+        await ExecuteAsync(request, mirror);
+        return mirror.SyncCount;
+    }
+
+    /// <summary>The objects one crossing of <paramref name="request"/> writes.</summary>
+    private static long SizeOf(OrganizationRequest request)
+    {
+        var mirror = new SdkMirror();
+        mirror.In(request);
+        return mirror.SyncCount;
+    }
+
+    /// <summary>
+    /// A write with no step crosses its request exactly as at BASE: in at entry, out and in at the boundary (3 times its size, 15 objects
+    /// for this Associate). The core runs on the held request, the response stays an unread shell and <c>WrittenEntities</c> (which
+    /// reads the name and the relationship only) converts nothing.
+    /// </summary>
+    [Fact]
+    public async Task Write_message_converts_only_its_request()
+    {
+        var store = fx.App.Services.GetRequiredService<IMetadataStore>();
+        await TestEntities.EnsureProjectTagAsync(store, fx.ConnectionString);
+        var project = await Admin.CreateAsync(new Entity(TestEntities.Project) { ["pb_name"] = $"bnd-{_run}" });
+        var tag = await Admin.CreateAsync(new Entity(TestEntities.Tag) { ["new_name"] = $"bnd-{_run}" });
+        AssociateRequest Associate() => new()
+        {
+            Target = new EntityReference(TestEntities.Project, project), Relationship = new Relationship(TestEntities.ProjectTag),
+            RelatedEntities = [new EntityReference(TestEntities.Tag, tag)],
+        };
+
+        var count = await CountAsync(Associate());
+
+        count.Should().Be(3 * SizeOf(Associate())).And.Be(15, "BASE wrote 15 objects for this Associate");
+    }
+
+    /// <summary>
+    /// The pre and post images of a step are each read and converted once, into the chain's mirror, where the record's SDK twin is
+    /// the core's own <c>Entity</c> (not a copy); the whole Update writes what BASE wrote (23 objects).
+    /// </summary>
+    [Fact]
+    public async Task Images_are_converted_once_into_the_chain_mirror()
+    {
+        var row = await Admin.CreateAsync(new Entity(Pipe) { ["pb_name"] = "img", ["pb_count"] = 1 });
+        var step = await StepAsync("ThrowOnNamePlugin", "Update", Pipe, 40, "never|x");
+        await PluginTestHelper.RegisterImageAsync(Admin, step, 0, "pre", "pb_name,pb_count");
+        await PluginTestHelper.RegisterImageAsync(Admin, step, 1, "post", "pb_name,pb_count");
+        var reads = new List<(Entity Image, Xrmd.Model.Records.Record Record)>();
+        var mirror = new SdkMirror();
+
+        CoreHandOff.ImageRead.Value = (image, record) => reads.Add((image, record));
+        try
+        {
+            await ExecuteAsync(new UpdateRequest { Target = new Entity(Pipe, row) { ["pb_name"] = "img2", ["pb_count"] = 2 } }, mirror);
+        }
+        finally
+        {
+            CoreHandOff.ImageRead.Value = null;
+        }
+
+        reads.Should().HaveCount(2, "one pre image and one post image, each read once");
+        foreach (var (image, record) in reads)
+        {
+            mirror.TryGetSdk(record, out var twin).Should().BeTrue("the image was converted into the chain's mirror");
+            twin.Should().BeSameAs(image, "the record's twin is the core's own Entity");
+        }
+        reads.Select(r => r.Image.GetAttributeValue<string>("pb_name")).Should().Equal("img", "img2");
+        mirror.SyncCount.Should().Be(23, "BASE wrote 23 objects for this Update");
+    }
+
+    /// <summary>
+    /// A RetrieveMultiple of 1,000 rows that nothing observes after the core converts no response value: it writes what a read of one
+    /// row writes, as at BASE (21). With one post-operation step the response is converted once, as at BASE (50 for one row, 4,046
+    /// for 1,000).
+    /// </summary>
+    [Fact]
+    public async Task Unobserved_retrieve_multiple_converts_no_response()
+    {
+        for (var batch = 0; batch < 10; batch++)
+            await Admin.ExecuteAsync(new CreateMultipleRequest
+            {
+                Targets = new EntityCollection([.. Enumerable.Range(0, 100).Select(i => new Entity(Pipe) { ["pb_name"] = $"bnd1k-{batch * 100 + i:D4}" })])
+                    { EntityName = Pipe },
+            });
+        RetrieveMultipleRequest Read(int top) => new()
+        {
+            Query = new QueryExpression(Pipe)
+            {
+                ColumnSet = new ColumnSet("pb_name"), TopCount = top,
+                Criteria = { Conditions = { new ConditionExpression("pb_name", ConditionOperator.BeginsWith, "bnd1k-") } },
+                Orders = { new OrderExpression("pb_name", OrderType.Ascending) },
+            },
+        };
+
+        (await CountAsync(Read(1))).Should().Be(21, "BASE wrote 21 objects for a read of one row");
+        (await CountAsync(Read(1000))).Should().Be(21, "the response of a read nobody observes is not converted");
+
+        await StepAsync("ThrowOnNamePlugin", "RetrieveMultiple", Pipe, 40, "never|x");
+        (await CountAsync(Read(1))).Should().Be(50, "BASE wrote 50 objects for an observed read of one row");
+        (await CountAsync(Read(1000))).Should().Be(4046, "BASE wrote 4,046 objects for an observed read of 1,000 rows");
+    }
+
+    /// <summary>
+    /// A stage-40 step of a read sees the rows the core read (the shell is read in before the step's view is lent), and its change
+    /// reaches the caller's response.
+    /// </summary>
+    [Fact]
+    public async Task Stage_40_view_of_a_read_sees_the_core_rows()
+    {
+        for (var i = 0; i < 3; i++) await Admin.CreateAsync(new Entity(Pipe) { ["pb_name"] = $"view{i}" });
+        await StepAsync("OutputEditorPlugin", "RetrieveMultiple", Pipe, 40, "pb_data=edited");
+
+        var response = (RetrieveMultipleResponse)await ExecuteAsync(new RetrieveMultipleRequest
+        {
+            Query = new QueryExpression(Pipe) { ColumnSet = new ColumnSet("pb_name") },
+        });
+
+        response.EntityCollection.Entities.Should().HaveCount(3)
+            .And.OnlyContain(e => e.GetAttributeValue<string>("pb_data") == "edited");
+    }
+
+    /// <summary>
+    /// A plug-in's stage-40 view of a Create holds the core's id, and the typed responses its service returns cast as before:
+    /// <c>CreateResponse</c> with the stored row's id and <c>RetrieveMultipleResponse</c> with the row.
+    /// </summary>
+    [Fact]
+    public async Task Plugin_cast_of_typed_responses_still_works()
+    {
+        await StepAsync("TypedResponsesPlugin", "Create", Pipe, 40, PipeLog);
+
+        await Admin.CreateAsync(new Entity(Pipe) { ["pb_name"] = "typed-trigger" });
+
+        var typed = (await ColumnAsync($"SELECT {PipeLog}id FROM data.{PipeLog} WHERE pb_name = 'typed'")).Should().ContainSingle().Subject;
+        (await ColumnAsync($"SELECT pb_data FROM data.{PipeLog} WHERE pb_name = 'typed-result'")).Should()
+            .Equal($"output=True;created={Guid.Parse(typed)};rows=1;name=typed");
+    }
+
+    /// <summary>
+    /// A request the core issues gets its response filled: AddToQueue creates its queue item through the pipeline and answers with the
+    /// item's id, whether nothing observes the nested Create (its response stays an unread shell) or a stage-40 step does.
+    /// </summary>
+    [Fact]
+    public async Task Core_issued_nested_request_gets_a_filled_response()
+    {
+        async Task<(Guid Answered, Guid Stored)> AddAsync()
+        {
+            var queue = await Admin.CreateAsync(new Entity("queue")
+            {
+                ["name"] = $"bnd-{_run}", ["queueviewtype"] = new OptionSetValue(0), ["queuetypecode"] = new OptionSetValue(1),
+            });
+            var email = await Admin.CreateAsync(new Entity("email") { ["subject"] = $"bnd-{_run}" });
+            var response = (AddToQueueResponse)await ExecuteAsync(new AddToQueueRequest
+            {
+                Target = new EntityReference("email", email), DestinationQueueId = queue,
+            });
+            var stored = (await ColumnAsync("SELECT queueitemid FROM data.queueitem WHERE objectid = @id", email)).Should().ContainSingle().Subject;
+            return (response.QueueItemId, Guid.Parse(stored));
+        }
+
+        var unobserved = await AddAsync();
+        unobserved.Answered.Should().Be(unobserved.Stored);
+
+        await StepAsync("ThrowOnNamePlugin", "Create", "queueitem", 40, "never|x");
+        var observed = await AddAsync();
+        observed.Answered.Should().Be(observed.Stored);
+    }
+
+    /// <summary>
+    /// The Delete of an email with an attachment: the core issues the attachment's Delete as a marked cascade, the handler of that Delete
+    /// runs on the core's own <c>DeleteRequest</c> (its mark kept), the child's step sees the email's Delete as its parent, and a shared
+    /// variable the child's step sets on its parent reaches the outer stage 40.
+    /// </summary>
+    [Fact]
+    public async Task Core_cascade_nested_step_sees_the_core_message_as_parent()
+    {
+        const string Attachment = "activitymimeattachment";
+        var email = await Admin.CreateAsync(new Entity("email") { ["subject"] = $"bnd-{_run}" });
+        await Admin.CreateAsync(new Entity(Attachment)
+        {
+            ["objectid"] = new EntityReference("email", email), ["subject"] = "a", ["filename"] = "a.txt",
+            ["body"] = Convert.ToBase64String("bnd"u8.ToArray()),
+        });
+        await StepAsync("ContextRecorderPlugin", "Delete", Attachment, 20, DumpLog);
+        await StepAsync("SharedVariablePlugin", "Delete", Attachment, 40, "setparent|k|v");
+        await StepAsync("SharedVariablePlugin", "Delete", "email", 40, $"record|{PipeLog}|k");
+        var handled = new List<OrganizationRequest>();
+
+        CoreHandOff.HandlerRequest.Value = handled.Add;
+        try
+        {
+            await ExecuteAsync(new DeleteRequest { Target = new EntityReference("email", email) });
+        }
+        finally
+        {
+            CoreHandOff.HandlerRequest.Value = null;
+        }
+
+        var child = handled.OfType<DeleteRequest>().Should().ContainSingle(r => r.Target.LogicalName == Attachment).Subject;
+        CascadeHint.IsMarked(child).Should().BeTrue("the core's cascade reaches its handler as the instance it marked");
+        (await ColumnAsync($"SELECT pb_data FROM data.{DumpLog}")).Should().ContainSingle()
+            .Which.Should().Contain("\nparent=Delete\n");
+        (await ColumnAsync($"SELECT pb_name FROM data.{PipeLog}")).Should().Equal("Delete|40|1|v");
+    }
+
+    /// <summary>
+    /// The early-bound <c>PipeLog</c> that <c>EarlyBoundLogPlugin</c> creates reaches the core's handler as that instance (a stage-20
+    /// step changed it in place), and the stored row is today's.
+    /// </summary>
+    [Fact]
+    public async Task Early_bound_target_reaches_the_core_as_the_same_instance()
+    {
+        await EarlyBoundLogOnPipeCreateAsync();
+        await StepAsync("SetAttributePlugin", "Create", PipeLog, 20, "pb_data=set-at-20");
+        var handled = new List<OrganizationRequest>();
+
+        CoreHandOff.HandlerRequest.Value = handled.Add;
+        try
+        {
+            await Admin.CreateAsync(new Entity(Pipe) { ["pb_name"] = "p" });
+        }
+        finally
+        {
+            CoreHandOff.HandlerRequest.Value = null;
+        }
+
+        var target = handled.Where(r => r.RequestName == "Create").Select(r => (Entity)r.Parameters["Target"])
+            .Should().ContainSingle(e => e.LogicalName == PipeLog).Subject;
+        target.GetType().Name.Should().Be("PipeLog", "the handler runs on the plug-in's early-bound instance");
+        target.GetAttributeValue<string>("pb_data").Should().Be("set-at-20");
+        (await ColumnAsync($"SELECT pb_name FROM data.{PipeLog}")).Should().Equal("early|p|1");
+        (await ColumnAsync($"SELECT pb_data FROM data.{PipeLog}")).Should().Equal("set-at-20");
+    }
+
     // ---- S.2e2c Task 6: payloads of an early-bound Target (review I2 of Task 5) -----------------------------------------
 
     private static readonly System.Text.RegularExpressions.Regex PayloadGuid =

@@ -1,0 +1,116 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: BulkDetectDuplicatesRequest
+  RequestName: String:"BulkDetectDuplicates"
+  RequestId: null
+  Parameters: ParameterCollection[8]
+    CCRecipients: Guid[][0]
+    JobName: String:"crg bulk detection"
+    Query: QueryExpression
+      ColumnSet: ColumnSet
+        AllColumns: Boolean:False
+        AttributeExpressions: DataCollection[0]
+        Columns: DataCollection[0]
+        HasLazyFileAttribute: Boolean:False
+        LazyFileAttributeEntityName: null
+        LazyFileAttributeKey: null
+        LazyFileAttributeSizeLimit: Int32:0
+        LazyFileAttributeValue: null
+      Criteria: FilterExpression
+        AnyAllFilterLinkEntity: null
+        Conditions: DataCollection[1]
+          [0]: ConditionExpression
+            AttributeName: String:"lastname"
+            CompareColumns: Boolean:False
+            EntityName: null
+            Operator: ConditionOperator:Equal
+            Values: DataCollection[1]
+              [0]: String:"crg-duplicate"
+        FilterHint: null
+        FilterOperator: LogicalOperator:And
+        Filters: DataCollection[0]
+        IsQuickFindFilter: Boolean:False
+      DataSource: null
+      Distinct: Boolean:False
+      EntityName: String:"contact"
+      ForceSeek: null
+      LinkEntities: DataCollection[0]
+      NoLock: Boolean:False
+      Orders: DataCollection[0]
+      PageInfo: PagingInfo
+        Count: Int32:0
+        PageNumber: Int32:0
+        PagingCookie: null
+        ReturnRecordCountLessThanMarv: Boolean:False
+        ReturnTotalRecordCount: Boolean:False
+      QueryHints: null
+      SubQueryExpression: null
+      TopCount: null
+    RecurrencePattern: null
+    RecurrenceStartTime: DateTime:{date:Unspecified}
+    SendEmailNotification: Boolean:False
+    TemplateId: Guid:{empty}
+    ToRecipients: Guid[][0]
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.BulkDetectDuplicatesResponse
+ResponseName: String:"BulkDetectDuplicates"
+Results: ParameterCollection[1]
+  JobId: Guid:{a:job}
+=== (b) IPipelineCore.ExecuteCoreAsync ===
+--- request ---
+Request: BulkDetectDuplicatesRequest
+  RequestName: String:"BulkDetectDuplicates"
+  RequestId: null
+  Parameters: ParameterCollection[8]
+    CCRecipients: Guid[][0]
+    JobName: String:"crg bulk detection"
+    Query: QueryExpression
+      ColumnSet: ColumnSet
+        AllColumns: Boolean:False
+        AttributeExpressions: DataCollection[0]
+        Columns: DataCollection[0]
+        HasLazyFileAttribute: Boolean:False
+        LazyFileAttributeEntityName: null
+        LazyFileAttributeKey: null
+        LazyFileAttributeSizeLimit: Int32:0
+        LazyFileAttributeValue: null
+      Criteria: FilterExpression
+        AnyAllFilterLinkEntity: null
+        Conditions: DataCollection[1]
+          [0]: ConditionExpression
+            AttributeName: String:"lastname"
+            CompareColumns: Boolean:False
+            EntityName: null
+            Operator: ConditionOperator:Equal
+            Values: DataCollection[1]
+              [0]: String:"crg-duplicate"
+        FilterHint: null
+        FilterOperator: LogicalOperator:And
+        Filters: DataCollection[0]
+        IsQuickFindFilter: Boolean:False
+      DataSource: null
+      Distinct: Boolean:False
+      EntityName: String:"contact"
+      ForceSeek: null
+      LinkEntities: DataCollection[0]
+      NoLock: Boolean:False
+      Orders: DataCollection[0]
+      PageInfo: PagingInfo
+        Count: Int32:0
+        PageNumber: Int32:0
+        PagingCookie: null
+        ReturnRecordCountLessThanMarv: Boolean:False
+        ReturnTotalRecordCount: Boolean:False
+      QueryHints: null
+      SubQueryExpression: null
+      TopCount: null
+    RecurrencePattern: null
+    RecurrenceStartTime: DateTime:{date:Unspecified}
+    SendEmailNotification: Boolean:False
+    TemplateId: Guid:{empty}
+    ToRecipients: Guid[][0]
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.BulkDetectDuplicatesResponse
+ResponseName: String:"BulkDetectDuplicates"
+Results: ParameterCollection[1]
+  JobId: Guid:{b:job}

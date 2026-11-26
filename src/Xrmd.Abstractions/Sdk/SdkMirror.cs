@@ -47,6 +47,10 @@ namespace Xrmd.Abstractions.Sdk;
 /// (including an in-place <c>OptionSetValue.Value</c>) that was not read back first.
 /// </para>
 /// <para>
+/// A model request can carry its chain mirror (<see cref="Register"/>, <see cref="For"/>), so the core adapter converts with it,
+/// and a typed SDK response the core returns crosses as an unread <see cref="Shell"/> that is converted only when read in.
+/// </para>
+/// <para>
 /// One lock per mirror serializes every crossing. <see cref="SyncCount"/> counts the objects written so far (an object
 /// written twice in two crossings counts twice) and backs the plug-in view's overhead test.
 /// </para>
@@ -56,11 +60,21 @@ public sealed class SdkMirror
     private readonly object _gate = new();
     private readonly ConditionalWeakTable<object, object> _toSdk = new();
     private readonly ConditionalWeakTable<object, object> _toModel = new();
+    private readonly ConditionalWeakTable<Response, object> _unread = new();
     private readonly HashSet<object> _visited = new(ReferenceEqualityComparer.Instance);
     private readonly IFillMap _sdkMap;
     private readonly IFillMap _modelMap;
     private int _depth;
     private long _syncCount;
+
+    /// <summary>The chain mirror of each registered model request (see <see cref="Register"/>); weak, and locked on itself.</summary>
+    private static readonly ConditionalWeakTable<Request, SdkMirror> Registry = new();
+
+    /// <summary>The mark of an unread shell: the name it was made with, which a model write must not have changed.</summary>
+    private sealed class UnreadMark(string? name)
+    {
+        public string? Name { get; } = name;
+    }
 
     public SdkMirror()
     {
@@ -95,15 +109,93 @@ public sealed class SdkMirror
 
     public Response? In(OrganizationResponse? sdk) => (Response?)Cross(sdk, false);
 
-    /// <summary>Registers an existing pair (the adapter's context objects), replacing any pairing of either object.</summary>
+    /// <summary>
+    /// Registers <paramref name="mirror"/> as the chain mirror of a model request, so that the core adapter converts with the
+    /// mirror of the chain the request belongs to and twins, typed requests and typed responses keep their identity across the
+    /// core. The entry is weak: it lives as long as the request. Registering the same mirror again does nothing. A model request
+    /// belongs to one chain: a nested call of the chain registers the same mirror, and a retry or a call in another chain converts
+    /// the SDK request again, which gives a new model request, so one model request is never run in two chains.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The request is already registered with another mirror.</exception>
+    public static void Register(Request request, SdkMirror mirror)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(mirror);
+        lock (Registry)
+        {
+            if (Registry.TryGetValue(request, out var existing))
+            {
+                if (!ReferenceEquals(existing, mirror))
+                    throw new InvalidOperationException($"The request '{request.Name}' is already registered with another mirror.");
+                return;
+            }
+            Registry.Add(request, mirror);
+        }
+    }
+
+    /// <summary>The mirror registered for a model request with <see cref="Register"/>, or null.</summary>
+    public static SdkMirror? For(Request request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        lock (Registry) return Registry.TryGetValue(request, out var mirror) ? mirror : null;
+    }
+
+    /// <summary>
+    /// The model response of a typed SDK response, without reading its results. When <paramref name="sdk"/> already has a model
+    /// twin, that twin is returned. Otherwise a new <see cref="Response"/> carrying only the name is paired with it and marked
+    /// unread (a <em>shell</em>), and nothing is counted in <see cref="SyncCount"/>.
+    /// <para>
+    /// While a shell is unread, its <see cref="Response.Results"/> are empty and <see cref="Out(Response?)"/> returns its twin
+    /// unchanged, without writing it or counting it, so a response nobody observes is never converted. A model write to an unread
+    /// shell (a result added, the results replaced by a non-empty bag, or the name changed from the one the shell was made with)
+    /// cannot reach the twin, so <see cref="Out(Response?)"/> then throws <see cref="InvalidOperationException"/> instead of
+    /// dropping it. A read cannot be detected: an unread shell reads as empty. <see cref="In(OrganizationResponse?)"/> of the twin
+    /// fills the shell and clears the mark, after which it is an ordinary twin. Every model read or write of a core response therefore calls
+    /// <c>mirror.In(twin)</c> first.
+    /// </para>
+    /// </summary>
+    public Response Shell(OrganizationResponse sdk)
+    {
+        ArgumentNullException.ThrowIfNull(sdk);
+        lock (_gate)
+        {
+            if (_toModel.TryGetValue(sdk, out var existing)) return (Response)existing;
+            var shell = new Response { Name = sdk.ResponseName };
+            _toSdk.AddOrUpdate(shell, sdk);
+            _toModel.AddOrUpdate(sdk, shell);
+            _unread.AddOrUpdate(shell, new UnreadMark(shell.Name));
+            return shell;
+        }
+    }
+
+    /// <summary>True while <paramref name="response"/> is a shell (see <see cref="Shell"/>) whose twin has not been read in.</summary>
+    public bool IsUnread(Response response)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+        lock (_gate) return _unread.TryGetValue(response, out _);
+    }
+
+    /// <summary>
+    /// Registers an existing pair (the adapter's context objects), replacing any pairing of either object. Registering a pair that
+    /// already exists changes nothing; when the pairing changes, a shell either object was paired with stops being unread.
+    /// </summary>
     public void Pair(object model, object sdk)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(sdk);
         lock (_gate)
         {
-            if (_toSdk.TryGetValue(model, out var oldSdk)) _toModel.Remove(oldSdk);
-            if (_toModel.TryGetValue(sdk, out var oldModel)) _toSdk.Remove(oldModel);
+            if (_toSdk.TryGetValue(model, out var oldSdk))
+            {
+                if (ReferenceEquals(oldSdk, sdk)) return; // the same pair: nothing changes, an unread shell stays unread
+                _toModel.Remove(oldSdk);
+            }
+            if (_toModel.TryGetValue(sdk, out var oldModel))
+            {
+                _toSdk.Remove(oldModel);
+                if (oldModel is Response oldResponse) _unread.Remove(oldResponse);
+            }
+            if (model is Response response) _unread.Remove(response);
             _toSdk.AddOrUpdate(model, sdk);
             _toModel.AddOrUpdate(sdk, model);
         }
@@ -199,6 +291,7 @@ public sealed class SdkMirror
     {
         ParameterBag b => Twin(b, _toSdk, _toModel, () => new ParameterCollection(), SdkMessages.Fill, _sdkMap),
         Request r => Twin(r, _toSdk, _toModel, () => new OrganizationRequest(), SdkMessages.Fill, _sdkMap),
+        Response r when _unread.TryGetValue(r, out var mark) => UnreadTwin(r, (UnreadMark)mark),
         Response r => Twin(r, _toSdk, _toModel, () => new OrganizationResponse(), SdkMessages.Fill, _sdkMap),
         _ => ToSdkChild(value),
     };
@@ -207,9 +300,32 @@ public sealed class SdkMirror
     {
         ParameterCollection b => Twin(b, _toModel, _toSdk, () => new ParameterBag(), SdkMessages.Fill, _modelMap),
         OrganizationRequest r => Twin(r, _toModel, _toSdk, () => new Request(), SdkMessages.Fill, _modelMap),
-        OrganizationResponse r => Twin(r, _toModel, _toSdk, () => new Response(), SdkMessages.Fill, _modelMap),
+        OrganizationResponse r => ReadResponse(Twin(r, _toModel, _toSdk, () => new Response(), SdkMessages.Fill, _modelMap)),
         _ => ToModelChild(value),
     };
+
+    /// <summary>
+    /// The twin of an unread shell, returned as it is: nothing is written and nothing is counted. A shell that was written on the
+    /// model side (results added or replaced, or the name changed from the one it was made with) is refused, so the write is never
+    /// dropped silently. The name is compared with the one recorded by <see cref="Shell"/>, so SDK code that renames the twin
+    /// afterwards does not make an untouched shell look written.
+    /// </summary>
+    private object UnreadTwin(Response shell, UnreadMark mark)
+    {
+        if (!_toSdk.TryGetValue(shell, out var twin)) throw new InvalidOperationException("An unread shell has no SDK twin.");
+        if (shell.Results is not { Count: 0 } || shell.Name != mark.Name)
+            throw new InvalidOperationException(
+                $"The response '{shell.Name}' was written on the model side while unread: a core response must be read in "
+                + "(mirror.In(twin)) before it is written.");
+        return twin;
+    }
+
+    /// <summary>A response that has been read in is no longer an unread shell.</summary>
+    private Response ReadResponse(Response response)
+    {
+        _unread.Remove(response);
+        return response;
+    }
 
     // Members of a record, query or message: the query parts first, then the value types (no slot).
     private object? ToSdkChild(object? value) => value switch

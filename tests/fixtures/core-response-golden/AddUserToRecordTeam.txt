@@ -1,0 +1,35 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: AddUserToRecordTeamRequest
+  RequestName: String:"AddUserToRecordTeam"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    Record: EntityReference
+      LogicalName: String:"account"
+      Id: Guid:{id1}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+    SystemUserId: Guid:{id2}
+    TeamTemplateId: Guid:{id3}
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.AddUserToRecordTeamResponse
+ResponseName: String:"AddUserToRecordTeam"
+Results: ParameterCollection[1]
+  AccessTeamId: Guid:{a:accessteam}
+=== (b) IPipelineCore.ExecuteCoreAsync ===
+--- request ---
+Request: AddUserToRecordTeamRequest
+  RequestName: String:"AddUserToRecordTeam"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    Record: EntityReference
+      LogicalName: String:"account"
+      Id: Guid:{id4}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+    SystemUserId: Guid:{id5}
+    TeamTemplateId: Guid:{id6}
+--- response ---
+Fault: XrmdFaultException 0x80040216 500 "AddUserToRecordTeam reached its core operation without the security check of its caller."
