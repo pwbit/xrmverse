@@ -57,7 +57,7 @@ available yet. `packaging/homebrew/xrmd.rb.template` is a formula template, not 
 | `publisher` | `create`, `list`: the publishers whose prefixes custom names start with (see [Publishers and the prefix rule](#publishers-and-the-prefix-rule)) |
 | `logs` | the server's recent log entries (`--since`, `--level`, `--category`, `--take`, `-f`) |
 | `table` | `create` (`--activity`, `--notes`, `--activities`), `list`, `describe`, `set <table> --notes\|--activities`, `delete`, `column`, `relationship`, `choice` |
-| `solution` | `create`, `import`, `export`, `list`, `add-component`, `publish`, `delete` |
+| `solution` | `create`, `import`, `export`, `list`, `add-component`, `publish`, `delete`, `uninstall`, `promote`, `layers`; `unpack <zip> --folder`, `pack <folder> --out`, `diff <name> --folder [--zip]` (exit 9 on differences), `sync <name> --folder [--dry-run]`: a solution kept as source files, see [Keeping a solution in source control](solutions.md#keeping-a-solution-in-source-control) |
 | `plugin` | `register`, `list`, `step add [--type\|--webhook]`, `step remove`, `image`, `trace` |
 | `webhook` | `create --name --url --auth key\|header\|query --value`, `list`, `show <name>`, `update <name> [--url] [--auth --value]`, `delete <name> --yes`: webhooks (service endpoints of contract 8) over the Web API; see [Webhooks](webhooks.md) |
 | `connector` | `export --out <dir> --client-id <guid> [--resource <uri>] [--force]`: writes the custom connector package of the organization (host, resource and client id filled in); see [Cloud flow connector](flow-connector.md) |

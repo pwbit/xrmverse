@@ -2,7 +2,7 @@
 
 [← xrmverse documentation](../README.md#documentation)
 
-**As of November 25, 2026.** This page lists, in one place, the known issues of xrmverse, the limitations of the current
+**As of November 26, 2026.** This page lists, in one place, the known issues of xrmverse, the limitations of the current
 version and the deliberate divergences from Dataverse. The Status column says whether each entry is planned to change or whether it stays.
 The topic pages have the details; [xrmverse compared with Dataverse](dataverse-comparison.md) gives the feature-by-feature
 view.
@@ -50,6 +50,7 @@ Behaviour that is wrong today and will be fixed.
 | Reopening and sending again an email whose send is in progress can deliver it twice | When an email that is Pending Send is reopened and sent again while its first send job is handing it to the server, both jobs can send it, and the email is marked Sent. See [Email and queues](email-and-queues.md#known-limits). | To be fixed |
 | Graceful stop during a send leaves the email Pending Send | When the server stops gracefully while a send job prepares the message, before the message is handed to the mail server, the job ends as interrupted and is not run again: the email stays Pending Send although nothing was sent. Reopen the email, then send it again. See [Email and queues](email-and-queues.md#known-limits). | To be fixed |
 | `xrmd envvar list` with long values (#177) | Long JSON values make the table output hard to read; use `--output json`. | To be fixed |
+| Folder from Dataverse differs until the first `sync` | A source folder created by Dataverse's tools from a Dataverse environment reports differences in `xrmd solution diff` against the same solution imported into xrmverse, because xrmverse's export carries some columns, relationships and empty sections differently. After the first `xrmd solution sync` from xrmverse the diffs are clean. See [Solutions](solutions.md#keeping-a-solution-in-source-control). | To be fixed |
 
 ## Limitations
 
@@ -91,6 +92,15 @@ Features that are missing or partial today. Each one fails explicitly where it i
 
 | Limitation | Description | Status |
 |---|---|---|
+| Solution source folders: managed solutions | `xrmd solution unpack`, `pack`, `diff` and `sync` work on unmanaged solutions only; a managed zip is refused. See [Solutions](solutions.md#keeping-a-solution-in-source-control). | Not scheduled |
+| Solution source folders: YAML layout | The YAML layout of Dataverse's Git integration is not read or written; the folders are the unpacked XML layout. | Not scheduled |
+| Solution source folders: components the layout cannot carry | Canvas apps, Copilot Studio components without a folder in the layout, `.resx` resources and any component type with no reference folder are refused (exit 5), and nothing is written. | Not scheduled |
+| Solution source folders: global choices, classic workflows, business rules | Refused (exit 5) for now. | Planned |
+| Solution source folders: files outside the layout | Files outside the layout's component folders (for example a `README.md`, `.git/` or `.github/` beside `Other/`) are ignored by `diff` and `pack` and kept by `unpack` and `sync`; a file inside a component folder that has no place in a solution is refused by `pack` (exit 2). | Stays |
+| Solution source folders: names Windows cannot hold | A component whose name cannot be a file name on Windows (characters such as `*` or `?`, a trailing dot or space, device names such as `CON`) is refused with an error that names it, before anything is written. | Stays |
+| Solution source folders: attributes on form and view groups | A table whose group of forms carries an attribute other than its type, or whose group of views carries any attribute, is refused (exit 5) instead of losing it. | Not scheduled |
+| Solution source folders: components added by hand | `pack` copies `Other/Solution.xml` as it is and does not check that each component in the folder is a root component there; a component added by hand must also be listed in its root components to be imported. | Not scheduled |
+| Solution source folders: unknown solution | `diff` and `sync` exit 4 when the server answers "not found" for the solution; another server may answer differently. | Stays |
 | Solution patches | A patch is refused at import, and `CloneAsPatch` and `CloneAsSolution` always return 400. See [Solutions](solutions.md). | Not scheduled |
 | Export of a managed solution | `ExportSolution` exports unmanaged solutions only; asking for a managed export is a 400. Managed solutions can be imported, upgraded and uninstalled. | Not scheduled |
 | Export into Dataverse not yet verified (#20) | A solution exported by xrmverse is checked against its own import, not yet against an import into a real Dataverse environment. | Not scheduled |

@@ -1,6 +1,6 @@
 ---
 name: xrmd-solutions
-description: Package and move customizations between xrmverse organizations with xrmd solution commands - create unmanaged solutions, add components, export, import (update, upgrade, stage and promote), publish, uninstall managed solutions, delete solutions and inspect component layers. Use this whenever someone wants to import a Dataverse/Power Apps solution zip into xrmverse, export or deploy a solution from dev to test or prod, upgrade a managed solution, find out which solution owns a component or why a customization is not showing, or remove a solution, even if they just say "deploy my solution" or "bring this zip over".
+description: Package and move customizations between xrmverse organizations with xrmd solution commands - create unmanaged solutions, add components, export, import (update, upgrade, stage and promote), publish, uninstall managed solutions, delete solutions and inspect component layers. Use this whenever someone wants to import a Dataverse/Power Apps solution zip into xrmverse, export or deploy a solution from dev to test or prod, upgrade a managed solution, find out which solution owns a component or why a customization is not showing, or remove a solution, keep a solution in git as source files, check that a repository folder matches an organization, or pull an organization's changes into a folder (unpack, pack, diff, sync), even if they just say "deploy my solution" or "bring this zip over".
 ---
 
 # xrmd: solutions
@@ -76,6 +76,35 @@ xrmd solution layers --type entity --id <MetadataId>           # the stack of on
 ```
 
 Use `layers` when "my change does not show": an unmanaged layer or a higher managed layer usually sits on top.
+
+## Source control: unpack, pack, diff, sync
+
+A solution kept in git as unpacked XML files (`Other/Solution.xml`, `Entities/<table>/Entity.xml`, `WebResources/`, ...), in
+the layout Dataverse's own tools write. Unmanaged only.
+
+```bash
+xrmd solution unpack ./AcmeCore.zip --folder ./src/AcmeCore        # zip -> folder (offline)
+xrmd solution pack ./src/AcmeCore --out ./AcmeCore.zip             # folder -> zip (offline), then solution import
+xrmd solution diff AcmeCore --folder ./src/AcmeCore                # folder against the organization; exit 9 when they differ
+xrmd solution diff AcmeCore --folder ./src/AcmeCore --zip ./a.zip  # against a zip instead, no server
+xrmd solution sync AcmeCore --folder ./src/AcmeCore --dry-run      # preview, then without --dry-run to write
+```
+
+| Situation | Command |
+|---|---|
+| Put an existing zip into git | `unpack` |
+| Deploy what is in git | `pack`, then `import` |
+| Is the organization still what the repository says? (CI gate before an import) | `diff`: exit 0 same, 9 differs |
+| Someone changed the organization; record it in git | `sync`, review `git diff`, commit |
+
+`diff` prints one line per component: changed, missing (only in the folder) or new (only in the organization); `-o json`
+gives an array. `sync` writes changed files and removes those of components the solution no longer holds; it keeps files
+outside the component folders. Run `sync --dry-run` first when the folder has uncommitted work.
+
+Exit codes here: 9 differences (`diff` only), 5 the solution has a component the layout cannot carry (canvas apps,
+global choices, classic workflows, business rules, `.resx` and others; nothing is written), 2 a managed zip or
+a bad folder, 4 solution not found, 3 not allowed, 6 unreachable. A folder first written by Dataverse's tools shows
+differences until one `sync`; run it once after the first import and commit the result.
 
 ## Remove
 

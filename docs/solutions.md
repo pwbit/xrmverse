@@ -37,6 +37,7 @@ limits.
 | Uninstall a managed solution | `xrmd solution uninstall`, Admin API, web admin | [Uninstall](#uninstall) |
 | See the layers of a component | `xrmd solution layers` | [Where to manage them](#where-to-manage-them) |
 | Change tables and columns | metadata messages | [Metadata messages](#metadata-messages) |
+| Keep a solution in source control | `xrmd solution unpack`, `pack`, `diff`, `sync` | [Keeping a solution in source control](#keeping-a-solution-in-source-control) |
 | Delete a solution | `DELETE solutions(id)` | [Deleting a solution](#deleting-a-solution) |
 
 ### Microsoft first-party solutions
@@ -557,6 +558,179 @@ What a solution file provides and xrmverse does not model is not silently lost.
   `CustomizationLevel`, order of keyed sets, name case, empty labels, …).
 - An entity that the file carries only as a "shell" (not contained, or behavior 2) does not overwrite the preserved settings;
   the log flags it with a warning naming the component.
+
+## Keeping a solution in source control
+
+### Introduction
+
+A solution zip is one opaque file: git cannot show what changed inside it. `xrmd solution` can therefore split an
+unmanaged solution into a **source folder** of small XML files, one set of files per component, that you keep in git, and
+put the folder back together into a zip. Two more commands tie the folder to an organization: `diff` tells whether the
+folder and the organization's solution are the same, and `sync` brings the folder up to date from the organization.
+
+The folder layout matches the one that Dataverse's own tools write for an unpacked solution, and the two are
+interchangeable: a folder written by `xrmd` can be read by those tools, and the reverse, subject to the limits below.
+
+```text
+MySolution/
+  Other/Solution.xml            the solution's manifest: name, version, publisher, root components
+  Other/Customizations.xml      what is left of the customizations once the components are split out
+  Entities/<table>/Entity.xml   one folder per table, with its forms, views and relationships beside it
+  WebResources/                 web resources, each with its data file
+  Workflows/  PluginAssemblies/  SdkMessageProcessingSteps/  Dashboards/  Roles/
+  AppModules/  AppModuleSiteMaps/  Controls/  customapis/  environmentvariabledefinitions/  ...
+```
+
+A folder created by `xrmd solution unpack` is a normal git folder: commit it, review changes as text diffs, branch and
+merge it. Only **unmanaged** solutions are handled: a managed zip is refused (xrmverse cannot produce managed files; see
+[Known limits](#known-limits)).
+
+### Compared with Dataverse
+
+| Topic | Dataverse | xrmverse |
+|---|---|---|
+| Folder layout | Written by Dataverse's own command-line and Git tools | The same layout, so a folder moves between them and `xrmd`; the YAML layout of Dataverse's Git integration is not read |
+| Where the solution comes from | A zip exported from an environment | `unpack` reads a zip; `diff` and `sync` export the organization's solution (unmanaged) for you |
+| Comparing a folder with an environment | Compare the exported zip yourself | `xrmd solution diff` lists the components that differ and exits 9 when there are any |
+| Pulling changes back from the environment | Export, then unpack over the folder | `xrmd solution sync` writes the changed files and removes those of components the solution no longer holds |
+| Pack | Build a zip from the folder | `xrmd solution pack`, offline; unmanaged only |
+
+`unpack`, `pack` and `diff --zip` need no server. `diff` and `sync` call `ExportSolution` on the organization of the
+profile (or `--url`), so they need the same privileges as `xrmd solution export`.
+
+### Tasks
+
+**Split a solution zip into a folder** (the folder is created when missing; unpacking again into the same folder brings it
+up to date, and files of components the zip no longer holds are removed):
+
+```bash
+xrmd solution export MySolution --out MySolution.zip
+xrmd solution unpack MySolution.zip --folder ./src/MySolution
+git add src/MySolution && git commit -m "MySolution as of today"
+```
+
+`unpack` refuses a folder that is not empty and holds no earlier unpack, or that holds the unpack of a solution with
+another unique name (exit 2), so it never writes into an unrelated directory. Unpacking again writes and removes files only
+in the component folders (see **Pull the organization's state into the folder** below): a `README.md`, a `.git/` folder or
+CI files beside them are kept, so the folder can be the root of a repository.
+
+**Build a zip from a folder** (an existing zip at `--out` is replaced; `<folder>` can also be a folder with a `.cdsproj`
+that holds the files under `src/`):
+
+```bash
+xrmd solution pack ./src/MySolution --out MySolution.zip
+xrmd solution import MySolution.zip
+```
+
+`pack` reads the component folders only, so a `README.md` or `.git/` beside them is left out of the zip. It checks that the
+files belong together: a file that is missing, is not valid XML, has the wrong root element or names a data file that is not
+beside it is refused (exit 2), as is a file inside a component folder that has no place in a solution.
+
+**Compare the folder with the organization:**
+
+```bash
+xrmd solution diff MySolution --folder ./src/MySolution
+```
+
+```text
+changed  table        ac_project       Entities/ac_project/Entity.xml
+    Entities/ac_project/Entity.xml
+new      view         Active Projects  Entities/ac_project/SavedQueries/{6f1c4a52-9d0e-4b7a-8c3e-2a5d7e9b1f04}.xml
+missing  webresource  ac_/app.js       WebResources/ac_/app.js
+
+3 component(s) differ: 1 changed, 1 missing, 1 new.
+```
+
+The three statuses are **changed** (in both, with different files; the files are listed under it), **missing** (only in the
+folder) and **new** (only in the organization). Lines are sorted by path, and the columns are padded to the longest value.
+The comparison is per component, so a column added to a table shows as that table changed. Two kinds of value are not
+compared, because an export changes them by itself: the solution's `<Version>` in `Other/Solution.xml` (raised at every
+release), and the stamps the server writes on the root element of `Other/Solution.xml` and `Other/Customizations.xml` (the
+format version, product name and build of the exporting server). With `-o json` the output is a JSON array of
+`{ status, type, name, path, files }` and nothing else. Files outside the component folders (see below) and files that end
+in `_managed.xml` are not compared. `--zip <file>` compares a zip you already have instead of the organization's export,
+and calls no server; the zip must hold the solution named on the command line (ignoring case), otherwise `diff` exits 2.
+
+**Pull the organization's state into the folder:**
+
+```bash
+xrmd solution sync MySolution --folder ./src/MySolution --dry-run   # list what would be written and removed
+xrmd solution sync MySolution --folder ./src/MySolution
+git diff
+```
+
+`sync` writes the changed and new files and removes the files of components the solution no longer holds. An empty or new
+folder receives a first copy. Files ending in `_managed.xml`, a `.cdsproj` and everything outside the component folders
+(`Other/`, `Entities/`, `WebResources/`, `Workflows/`, `PluginAssemblies/`, `SdkMessageProcessingSteps/`, `Dashboards/`,
+`Roles/`, `AppModules/`, `AppModuleSiteMaps/`, `Controls/`, `bots/`, `botcomponents/`, `skills/`, `customapis/`,
+`environmentvariabledefinitions/`, `appactions/`, `Assets/`, matched with this exact case) are left alone, so a `README.md`,
+`.git/` or `.github/` beside `Other/` stays; a folder whose name starts with a dot is skipped inside the component folders
+too. `unpack`, `pack` and `diff` use the same rule. Like `unpack`, `sync` refuses (exit 2) a non-empty folder that holds no
+solution or holds a solution with another unique name. Names that cannot be files on Windows (characters such as `*` or
+`?`, a trailing dot or space, device names such as `CON` or `NUL`) are refused before anything is written, so a folder
+stays usable on every system.
+
+`Workflows/` holds the processes that are stored as JSON (cloud flows): each JSON file is copied byte for byte, with its
+definition beside it in `<file>.data.xml`. Classic workflows, business rules, actions and business process flows are refused
+for now (exit 5; see [Known limits](#known-limits)).
+
+**Moving a repository to xrmverse.** If the folder was created by Dataverse's tools from a Dataverse environment, run
+`xrmd solution sync` once after the first import into xrmverse and commit the result. Until then `diff` reports
+differences that are only a matter of how the two servers export (some columns, relationships and empty sections); after
+that sync, `diff` is clean.
+
+**Check a folder before an import in a pipeline.** `diff` exits 9 when the folder and the organization differ, so a step can
+stop a deployment that would overwrite changes made directly on the server:
+
+```yaml
+# GitHub Actions: stop when the test organization has drifted from the repository
+- name: Folder and organization must match
+  run: xrmd solution diff MySolution --folder ./src/MySolution --profile test
+- name: Pack and import
+  run: |
+    xrmd solution pack ./src/MySolution --out MySolution.zip
+    xrmd solution import MySolution.zip --profile test
+```
+
+In any shell: `xrmd solution diff MySolution --folder src/MySolution || { echo "drift"; exit 1; }`. To tell a difference
+from a failure, test the exit code: 9 is a difference, anything else non-zero is an error.
+
+**Exit codes of these commands**
+
+| Code | Meaning |
+|---|---|
+| 0 | Done; for `diff`, no differences |
+| 9 | `diff` only: the folder and the solution differ |
+| 1 | Unexpected error, including an export from the organization that cannot be read |
+| 2 | Usage: a bad option, a folder that is not a solution folder, an unreadable or invalid file, `unpack` or `sync` into an unrelated non-empty folder or the folder of another solution, `diff --zip` with the zip of another solution, a managed zip |
+| 3 | Not signed in, or not allowed to export |
+| 4 | The solution is not found in the organization |
+| 5 | The solution holds a component the layout cannot carry (see below); nothing is written |
+| 6 | The server cannot be reached |
+
+### Known limits
+
+Each of these is refused explicitly (exit 5 or 2) or stated here; [Known issues and limitations](known-issues.md) lists
+them with their outlook.
+
+- **Components the layout cannot carry are refused (exit 5)** and the message names the first one: canvas apps,
+  attributes on a table's group of forms (other than its type) or of views, Copilot Studio components the layout has no folder for, `.resx` resources, global choices (option sets),
+  classic workflows and business rules (these three for now), and any other component type that the reference folders
+  of Dataverse's tools hold nothing for. `unpack` and `sync` write nothing in that case; `diff` reports the
+  same refusal.
+- **Managed solutions** are not unpacked, packed, compared or synced: a managed zip is refused (exit 2).
+- **The YAML layout** that Dataverse's Git integration writes is not the layout used here and is not read.
+- **Files outside the component folders** (a `README.md`, `.git/`, CI files) are ignored by `diff` and `pack` and kept by
+  `unpack` and `sync`.
+- **Components added by hand** to the folder must also be listed among the root components of `Other/Solution.xml` to be
+  part of the solution on import. `pack` copies `Solution.xml` as it is and does not check that every component in the
+  folder is listed there.
+- **Not found** is exit 4 when the server answers "not found" for an unknown solution; another server may answer
+  differently.
+- A folder written by Dataverse's tools differs from xrmverse's export until the first `sync`, as described above.
+
+**See also:** [CLI](cli.md), [Export](#export), [Import](#import),
+[Known issues and limitations](known-issues.md#solutions-and-metadata).
 
 ## Deleting a solution
 

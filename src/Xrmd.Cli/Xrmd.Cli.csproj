@@ -16,6 +16,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Xrmd.Schema\Xrmd.Schema.csproj" />
     <ProjectReference Include="..\Xrmd.Migration\Xrmd.Migration.csproj" />
+    <ProjectReference Include="..\Xrmd.SolutionSource\Xrmd.SolutionSource.csproj" />
     <!-- Plan 2.7b, ruling Q7: the direct restore of `org restore` on PostgreSQL (PgTools and the server-level SQL of PostgresDatabases). -->
     <ProjectReference Include="..\Xrmd.Storage.PostgreSql\Xrmd.Storage.PostgreSql.csproj" />
   </ItemGroup>

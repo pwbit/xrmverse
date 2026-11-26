@@ -4,3 +4,4 @@ tests/fixtures/pipeline-payload-golden/** -text
 tests/fixtures/core-response-golden/** -text
 tests/fixtures/core-row-golden/** -text
 tests/fixtures/row-parameters-golden/** -text
+tests/fixtures/solutions/SourceLayout/** -text

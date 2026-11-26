@@ -266,6 +266,16 @@ public static class ErrorCodes
 
     /// <summary>The behavior of a date column a rollup reads cannot change (400).</summary>
     public const int AttributeBehaviorCanNotBeUpdatedForRollupField = unchecked((int)0x80097214);
+
+    // ---- solution source folders (plan X.13) ---------------------------------------------------------------------------
+    // Unpacking a solution zip into a source folder runs in the CLI only and has no Dataverse counterpart, so these two codes
+    // are xrmd's own: the customer bit (0x20000000) is set, which no Dataverse code uses.
+
+    /// <summary>A managed solution zip given to unpack, which handles unmanaged solutions only (400).</summary>
+    public const int ManagedNotSupported = unchecked((int)0xA0D10001);
+
+    /// <summary>A solution zip holds a component that has no place in the source folder layout xrmd knows (400).</summary>
+    public const int UnsupportedComponent = unchecked((int)0xA0D10002);
 }
 
 /// <summary>
@@ -502,4 +512,17 @@ public sealed class XrmdFaultException(int errorCode, string message, int httpSt
     /// <summary>403 <see cref="ErrorCodes.UserDisabled"/>: the user is disabled (<c>isdisabled = 1</c>).</summary>
     public static XrmdFaultException UserDisabled(Guid userId) =>
         new(ErrorCodes.UserDisabled, $"User {userId} is disabled.", 403);
+
+    /// <summary>400 <see cref="ErrorCodes.ManagedNotSupported"/>: unpack takes unmanaged solution zips only.</summary>
+    public static XrmdFaultException ManagedNotSupported(string solution) =>
+        new(ErrorCodes.ManagedNotSupported,
+            $"The solution '{solution}' is managed; unpack works on unmanaged solutions only. Export it as unmanaged and unpack that.", 400);
+
+    /// <summary>
+    /// 400 <see cref="ErrorCodes.UnsupportedComponent"/>: the solution holds a <paramref name="kind"/> named
+    /// <paramref name="name"/> for which the source folder layout has no known place, so it cannot be unpacked without loss.
+    /// </summary>
+    public static XrmdFaultException UnsupportedComponent(string kind, string name) =>
+        new(ErrorCodes.UnsupportedComponent,
+            $"The solution holds a component that unpack cannot place in a source folder yet: {kind} '{name}'. Nothing was written.", 400);
 }

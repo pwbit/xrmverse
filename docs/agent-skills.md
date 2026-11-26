@@ -49,7 +49,7 @@ request matches them: you do not have to name them.
 | `xrmd-server` | `server`, `auth`, `sdk`, `logs`, `mcp` | install, start, upgrade and troubleshoot a server, add organizations, sign in with profiles, install the Microsoft SDK, connect MCP clients |
 | `xrmd-security` | `user`, `role`, `idp`, `fieldsecurity`, `hierarchy-security`, `access-team`, `audit` | add users, assign roles, set passwords and TOTP, create integration clients, secure columns, set up hierarchy security and access teams, switch on and read auditing |
 | `xrmd-schema` | `publisher`, `table`, `apply`, `currency`, `envvar`, `change-tracking`, `duplicate-detection` | design the data model: publishers and prefixes, tables, columns, lookups, choices, schema YAML files; currencies, environment variables, change tracking and duplicate detection |
-| `xrmd-solutions` | `solution` | create solutions, add components, export, import (update, upgrade, stage and promote), publish, uninstall, delete and inspect layers |
+| `xrmd-solutions` | `solution` | create solutions, add components, export, import (update, upgrade, stage and promote), publish, uninstall, delete, inspect layers, and keep a solution in git (unpack, pack, diff, sync) |
 | `xrmd-extensions` | `plugin`, `webhook`, `customapi`, `workflow` | register plug-ins, steps and images, read traces, register webhooks, create custom APIs, author workflows and business rules as YAML |
 | `xrmd-data` | `data`, `dev seed`, `org` | query records, import and export CSV or JSON, seed sample data, create, back up and restore organizations |
 | `xrmd-migrate` | `migrate` | move an application from Dataverse: export, inspect, map users, import, follow the run, read the report, finalize and switch business logic back on |

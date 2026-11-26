@@ -28,7 +28,7 @@ stated on the feature's page, never silently run differently (see [Philosophy](p
 | APIs | Web API and SDK, metadata, FetchXML and OData |
 | Business logic | Plug-ins and pipeline, classic workflows, Custom APIs, webhooks |
 | Security | Roles, business units, teams, sharing, field and hierarchy security, access teams |
-| Application lifecycle | Managed and unmanaged solutions |
+| Application lifecycle | Managed and unmanaged solutions; an unmanaged solution kept in git as unpacked files, compared with an organization and synced back (`xrmd solution unpack`, `pack`, `diff`, `sync`) |
 | Data features | Auditing; file, image, calculated, rollup and formula columns; currencies; activities and notes; duplicate detection; change tracking |
 | Access | A read-only SQL (TDS) endpoint (with the differences below) |
 | User interface | Existing model-driven apps |

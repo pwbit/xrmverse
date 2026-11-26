@@ -1,8 +1,11 @@
 using System.CommandLine;
 using System.Globalization;
 using System.Text.Json;
+using System.Xml;
 using System.Xml.Linq;
 using Xrmd.Cli.Http;
+using Xrmd.Core.Errors;
+using Xrmd.Solution.SourceLayout;
 
 namespace Xrmd.Cli.Commands;
 
@@ -42,7 +45,7 @@ public static class SolutionCommands
         ("customapi", 9990), ("environmentvariabledefinition", 380), ("customcontrol", 66), ("savedqueryvisualization", 59),
     ];
 
-    public static Command Build(CliContext ctx) => new("solution", "Create, import (update, upgrade or stage), export, list, uninstall, promote and delete solutions, and list component layers.")
+    public static Command Build(CliContext ctx) => new("solution", "Create, import (update, upgrade or stage), export, list, uninstall, promote and delete solutions, list component layers, unpack or pack solution source folders, and compare or sync a source folder with the organization.")
     {
         Create(ctx),
         Import(ctx),
@@ -54,6 +57,10 @@ public static class SolutionCommands
         Uninstall(ctx),
         Promote(ctx),
         Layers(ctx),
+        Unpack(ctx),
+        Pack(ctx),
+        Diff(ctx),
+        Sync(ctx),
     };
 
     private static string SolutionPath(string uniqueName) => $"solutions?$select=solutionid,uniquename&$filter=uniquename eq {UserRoleLookup.Literal(uniqueName)}";
@@ -342,6 +349,226 @@ public static class SolutionCommands
         return lines.Count > 0 ? string.Join(Environment.NewLine, lines) : "  (the log lists no failure)";
     }
 
+    // ---- unpack / pack (offline) ----------------------------------------------------------------------------------------
+
+    private static Command Unpack(CliContext ctx)
+    {
+        var file = new Argument<FileInfo>("file") { Description = "The unmanaged solution zip to split into source files." };
+        var folder = new Option<DirectoryInfo>("--folder") { Description = "Folder to write the source files to (created if missing; an earlier unpack there is brought up to date).", Required = true };
+        var command = new Command("unpack",
+            "Split an unmanaged solution zip into a folder of source files. Only the layout's component folders (Other/, Entities/, "
+            + "WebResources/ …) are written and cleaned up; anything else in the folder, such as a README or .git/, is left alone.") { file, folder };
+        command.SetAction(async (parse, ct) =>
+        {
+            var zip = parse.GetValue(file)!;
+            var dir = parse.GetValue(folder)!.FullName;
+            var wanted = await LocalSource(zip.FullName, async () => SolutionUnpacker.Unpack(await File.ReadAllBytesAsync(zip.FullName, ct)));
+            var uniqueName = SolutionName(wanted);
+            var plan = await LocalSource(dir, () =>
+            {
+                RefuseUnrelatedFolder(dir, uniqueName);
+                var p = SourceFolder.Plan(dir, wanted);
+                SourceFolder.Apply(dir, p, wanted);
+                return Task.FromResult(p);
+            });
+            ctx.WriteResult(new { solution = uniqueName, folder = dir, written = plan.Write, removed = plan.Remove },
+                $"Unpacked '{uniqueName}' into {dir}: {plan.Write.Count} written, {plan.Remove.Count} removed.");
+            return ExitCodes.Ok;
+        });
+        return command;
+    }
+
+    private static Command Pack(CliContext ctx)
+    {
+        var folder = new Argument<DirectoryInfo>("folder") { Description = "Folder with the source files (or a .cdsproj folder holding src/)." };
+        var output = new Option<FileInfo>("--out") { Description = "Zip file to write (replaced when it exists).", Required = true };
+        var command = new Command("pack",
+            "Build an unmanaged solution zip from a folder of source files. Only the layout's component folders are read; "
+            + "a file inside them that has no place in a solution is refused.") { folder, output };
+        command.SetAction(async (parse, ct) =>
+        {
+            var dir = parse.GetValue(folder)!.FullName;
+            var target = parse.GetValue(output)!;
+            var bytes = await LocalSource(dir, () => Task.FromResult(SolutionPacker.Pack(SourceFolder.Read(dir))));
+            await LocalSource(target.FullName, async () => { await File.WriteAllBytesAsync(target.FullName, bytes, ct); return 0; });
+            ctx.WriteResult(new { folder = dir, file = target.FullName, bytes = bytes.LongLength },
+                $"Packed {dir} into {target.FullName} ({bytes.Length} bytes).");
+            return ExitCodes.Ok;
+        });
+        return command;
+    }
+
+    // ---- diff / sync (organization against a source folder) -----------------------------------------------------------
+
+    private static Command Diff(CliContext ctx)
+    {
+        var name = new Argument<string>("uniquename") { Description = "Unique name of the solution in the organization." };
+        var folder = new Option<DirectoryInfo>("--folder") { Description = "Source folder to compare (or a .cdsproj folder holding src/).", Required = true };
+        var zip = new Option<FileInfo?>("--zip") { Description = "Compare this unmanaged solution zip instead of the organization's export; no server is called." };
+        var command = new Command("diff",
+            "Compare the organization's solution (exported unmanaged) or a zip with a source folder, component by component. "
+            + "Prints one line per component that is changed, missing (only in the folder) or new (only in the organization); "
+            + "files outside the layout's component folders and files ending in _managed.xml are not compared. "
+            + "Exit code 0 when they match, 9 when they differ.") { name, folder, zip };
+        command.SetAction(async (parse, ct) =>
+        {
+            var uniqueName = parse.GetValue(name)!;
+            var dir = parse.GetValue(folder)!.FullName;
+            var local = await LocalSource(dir, () => Task.FromResult(SourceFolder.Read(dir)));
+            SourceFiles organization;
+            if (parse.GetValue(zip) is { } file)
+            {
+                organization = await LocalSource(file.FullName, async () => SolutionUnpacker.Unpack(await File.ReadAllBytesAsync(file.FullName, ct)));
+                var inZip = SolutionName(organization);
+                if (!string.Equals(inZip, uniqueName, StringComparison.OrdinalIgnoreCase))
+                    throw new CliException(ExitCodes.Usage, $"The zip '{file.FullName}' holds the solution '{inZip}', not '{uniqueName}'.");
+            }
+            else
+                organization = await OrganizationSourceAsync(ctx, uniqueName, ct);
+
+            var diff = SourceComparer.Compare(organization, local);
+            if (ctx.Format == Output.OutputFormat.Json)
+                ctx.Write(diff.Items.Select(i => new { status = i.Status, type = i.Type, name = i.Name, path = i.Path, files = i.Files }).ToList());
+            else
+                WriteDiff(ctx.Env.Out, diff, uniqueName, dir);
+            return diff.Any ? ExitCodes.Differences : ExitCodes.Ok;
+        });
+        return command;
+    }
+
+    private static void WriteDiff(TextWriter writer, SourceDiff diff, string uniqueName, string dir)
+    {
+        if (!diff.Any)
+        {
+            writer.WriteLine($"No differences between '{uniqueName}' and {dir}.");
+            return;
+        }
+        var statusWidth = diff.Items.Max(i => i.Status.Length);
+        var typeWidth = diff.Items.Max(i => i.Type.Length);
+        var nameWidth = diff.Items.Max(i => i.Name.Length);
+        foreach (var item in diff.Items)
+        {
+            writer.WriteLine($"{item.Status.PadRight(statusWidth)}  {item.Type.PadRight(typeWidth)}  {item.Name.PadRight(nameWidth)}  {item.Path}");
+            if (item.Status != "changed") continue;
+            foreach (var file in item.Files) writer.WriteLine($"    {file}");
+        }
+        writer.WriteLine();
+        writer.WriteLine($"{diff.Items.Count} component(s) differ: {Count("changed")} changed, {Count("missing")} missing, {Count("new")} new.");
+
+        int Count(string status) => diff.Items.Count(i => i.Status == status);
+    }
+
+    private static Command Sync(CliContext ctx)
+    {
+        var name = new Argument<string>("uniquename") { Description = "Unique name of the solution in the organization." };
+        var folder = new Option<DirectoryInfo>("--folder")
+        {
+            Description = "Source folder to bring up to date (or a .cdsproj folder holding src/); an empty or new folder receives a first copy.",
+            Required = true,
+        };
+        var dryRun = new Option<bool>("--dry-run") { Description = "Only list the files that would be written and removed; change nothing." };
+        var command = new Command("sync",
+            "Bring a source folder in line with the organization's solution (exported unmanaged): write changed and new files and remove "
+            + "the files of components the solution no longer holds. Files ending in _managed.xml, the .cdsproj and anything outside "
+            + "the layout's component folders are left alone.") { name, folder, dryRun };
+        command.SetAction(async (parse, ct) =>
+        {
+            var uniqueName = parse.GetValue(name)!;
+            var dir = parse.GetValue(folder)!.FullName;
+            var dry = parse.GetValue(dryRun);
+            var wanted = await OrganizationSourceAsync(ctx, uniqueName, ct);
+            var plan = await LocalSource(dir, () =>
+            {
+                RefuseUnrelatedFolder(dir, uniqueName);
+                var p = SourceFolder.Plan(dir, wanted);
+                if (!dry) SourceFolder.Apply(dir, p, wanted);
+                return Task.FromResult(p);
+            });
+            if (ctx.Format == Output.OutputFormat.Json)
+            {
+                ctx.Write(new { solution = uniqueName, folder = dir, dryRun = dry, written = plan.Write, removed = plan.Remove });
+            }
+            else if (dry)
+            {
+                var writer = ctx.Env.Out;
+                writer.WriteLine($"Dry run: syncing '{uniqueName}' into {dir} would write {plan.Write.Count} and remove {plan.Remove.Count} file(s).");
+                foreach (var path in plan.Write) writer.WriteLine($"  write   {path}");
+                foreach (var path in plan.Remove) writer.WriteLine($"  remove  {path}");
+            }
+            else
+            {
+                ctx.Env.Out.WriteLine($"Synced '{uniqueName}' into {dir}: {plan.Write.Count} written, {plan.Remove.Count} removed.");
+            }
+            return ExitCodes.Ok;
+        });
+        return command;
+    }
+
+    /// <summary>
+    /// The organization's solution as source files: exported unmanaged, unpacked in memory. A component unpack cannot place
+    /// exits 5 as for a zip; any other fault in the export is the server's, not the caller's, and exits 1.
+    /// </summary>
+    private static async Task<SourceFiles> OrganizationSourceAsync(CliContext ctx, string uniqueName, CancellationToken ct)
+    {
+        var zip = await ExportUnmanagedAsync(ctx, uniqueName, ct);
+        try { return SolutionUnpacker.Unpack(zip); }
+        catch (XrmdFaultException ex) when (ex.ErrorCode == ErrorCodes.UnsupportedComponent) { throw new CliException(ExitCodes.Rejected, ex.Message, ex); }
+        catch (XrmdFaultException ex)
+        {
+            throw new CliException(ExitCodes.Unexpected, $"The export of '{uniqueName}' from the organization cannot be read: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Never write into a folder that is not empty and is not an earlier unpack of <paramref name="uniqueName"/> (compared
+    /// ignoring case): a folder with no solution, or with the solution of another name, is refused with exit 2.
+    /// </summary>
+    private static void RefuseUnrelatedFolder(string dir, string uniqueName)
+    {
+        string resolved;
+        try { resolved = SourceFolder.Resolve(dir); }
+        catch (XrmdFaultException)
+        {
+            var root = SourceFolder.ResolveForWrite(dir);
+            if (Directory.Exists(root) && Directory.EnumerateFileSystemEntries(root).Any())
+                throw new CliException(ExitCodes.Usage, $"'{dir}' is not empty and holds no unpacked solution; choose an empty or new folder.");
+            return;
+        }
+        var path = Path.Combine(resolved, "Other", "Solution.xml");
+        var inFolder = SolutionName(File.ReadAllBytes(path), path);
+        if (!string.Equals(inFolder, uniqueName, StringComparison.OrdinalIgnoreCase))
+            throw new CliException(ExitCodes.Usage, $"'{dir}' holds the solution '{inFolder}', not '{uniqueName}'; choose its own folder or an empty one.");
+    }
+
+    private static string SolutionName(SourceFiles files) =>
+        files.TryGetValue("Other/Solution.xml", out var bytes) ? SolutionName(bytes, "Other/Solution.xml") : "(unnamed)";
+
+    /// <summary>The unique name in the manifest of a <c>Solution.xml</c> (read with no DTD and no external resources).</summary>
+    private static string SolutionName(byte[] bytes, string path)
+    {
+        try
+        {
+            using var reader = XmlReader.Create(new MemoryStream(bytes, writable: false), new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null });
+            return XDocument.Load(reader).Root?.Element("SolutionManifest")?.Element("UniqueName")?.Value ?? "(unnamed)";
+        }
+        catch (XmlException ex)
+        {
+            throw new CliException(ExitCodes.Usage, $"The file {path} is not valid XML: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>Runs a local file operation; maps solution faults and IO errors to the exit codes of the offline commands.</summary>
+    private static async Task<T> LocalSource<T>(string path, Func<Task<T>> action)
+    {
+        try { return await action(); }
+        catch (XrmdFaultException ex) when (ex.ErrorCode == ErrorCodes.UnsupportedComponent) { throw new CliException(ExitCodes.Rejected, ex.Message, ex); }
+        catch (XrmdFaultException ex) when (ex.HttpStatus == 400) { throw new CliException(ExitCodes.Usage, ex.Message, ex); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new CliException(ExitCodes.Usage, $"Cannot access '{path}': {ex.Message}", ex);
+        }
+    }
+
     // ---- export / list ------------------------------------------------------------------------------------------------
 
     private static Command Export(CliContext ctx)
@@ -353,17 +580,31 @@ public static class SolutionCommands
         {
             var uniqueName = parse.GetValue(name)!;
             var target = parse.GetValue(output)!;
-            var response = await ctx.CreateClient().SendJsonAsync(HttpMethod.Post, "ExportSolution",
-                new Dictionary<string, object?> { ["SolutionName"] = uniqueName, ["Managed"] = false }, cancellationToken: ct);
-            var file = response.Json is { } json && Str(json, "ExportSolutionFile") is { } base64
-                ? Convert.FromBase64String(base64)
-                : throw new CliException(ExitCodes.Unexpected, "The server returned no ExportSolutionFile.");
+            var file = await ExportUnmanagedAsync(ctx, uniqueName, ct);
             await File.WriteAllBytesAsync(target.FullName, file, ct);
             ctx.WriteResult(new { solution = uniqueName, file = target.FullName, bytes = file.LongLength },
                 $"Exported '{uniqueName}' to {target.FullName} ({file.Length} bytes).");
             return ExitCodes.Ok;
         });
         return command;
+    }
+
+    /// <summary>The unmanaged zip of <paramref name="uniqueName"/> through <c>ExportSolution</c>; an unknown solution is exit 4.</summary>
+    private static async Task<byte[]> ExportUnmanagedAsync(CliContext ctx, string uniqueName, CancellationToken ct)
+    {
+        XrmdResponse response;
+        try
+        {
+            response = await ctx.CreateClient().SendJsonAsync(HttpMethod.Post, "ExportSolution",
+                new Dictionary<string, object?> { ["SolutionName"] = uniqueName, ["Managed"] = false }, cancellationToken: ct);
+        }
+        catch (CliException ex) when (ex.ExitCode == ExitCodes.NotFound)
+        {
+            throw new CliException(ExitCodes.NotFound, $"Solution '{uniqueName}' not found: {ex.Message}", ex) { HttpStatus = ex.HttpStatus, ResponseBody = ex.ResponseBody };
+        }
+        return response.Json is { } json && Str(json, "ExportSolutionFile") is { } base64
+            ? Convert.FromBase64String(base64)
+            : throw new CliException(ExitCodes.Unexpected, "The server returned no ExportSolutionFile.");
     }
 
     private static Command List(CliContext ctx)

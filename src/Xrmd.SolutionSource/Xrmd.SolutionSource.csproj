@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Xrmd.Abstractions\Xrmd.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Xrmd.Solution" />
+    <InternalsVisibleTo Include="Xrmd.Solution.Tests" />
+    <InternalsVisibleTo Include="Xrmd.Integration.Tests" />
+  </ItemGroup>
+
+</Project>

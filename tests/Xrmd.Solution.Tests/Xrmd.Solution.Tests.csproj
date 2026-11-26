@@ -32,6 +32,7 @@
   <ItemGroup>
     <Compile Include="..\Shared\SolutionFixtureZip.cs" Link="Shared\SolutionFixtureZip.cs" />
     <Compile Include="..\Shared\PrivateFixtures.cs" Link="Shared\PrivateFixtures.cs" />
+    <Compile Include="..\Shared\SourceLayoutFixtures.cs" Link="Shared\SourceLayoutFixtures.cs" />
     <Compile Include="..\Xrmd.Integration.Tests\ManagedTestSolution.cs" Link="Shared\ManagedTestSolution.cs" />
     <None Include="..\fixtures\solutions\**\*" LinkBase="fixtures\solutions" CopyToOutputDirectory="PreserveNewest" />
     <!-- Plan 2.14: the solution builder of classic processes and their XAML fixtures. -->

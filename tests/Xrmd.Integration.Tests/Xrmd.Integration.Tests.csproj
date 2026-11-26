@@ -41,6 +41,7 @@
 
   <ItemGroup>
     <Compile Include="..\Shared\SolutionFixtureZip.cs" Link="Shared\SolutionFixtureZip.cs" />
+    <Compile Include="..\Shared\SourceLayoutFixtures.cs" Link="Shared\SourceLayoutFixtures.cs" />
     <Compile Include="..\Shared\PrivateFixtures.cs" Link="Shared\PrivateFixtures.cs" />
     <Compile Include="..\Shared\PublishedApps.cs" Link="Shared\PublishedApps.cs" />
     <Compile Include="..\Shared\FakeComputedColumns.cs" Link="Shared\FakeComputedColumns.cs" />

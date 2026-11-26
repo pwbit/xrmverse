@@ -20,6 +20,8 @@ public static class ExitCodes
     public const int FilesIncomplete = 7;
     /// <summary>A migration package that cannot be read or trusted: not a package, unknown format, or an entry that fails verification.</summary>
     public const int PackageInvalid = 8;
+    /// <summary>A comparison (<c>solution diff</c>) finished and found differences.</summary>
+    public const int Differences = 9;
 }
 
 /// <summary>

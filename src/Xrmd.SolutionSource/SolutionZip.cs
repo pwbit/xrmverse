@@ -52,6 +52,17 @@ public static class SolutionZip
         return (solution, customizations, entries);
     }
 
+    /// <summary>
+    /// Every entry of the archive with its bytes as stored, <c>solution.xml</c> and <c>customizations.xml</c> included, keyed
+    /// as <see cref="Read"/> keys them. The same checks apply (paths, duplicates, size cap); the XML is not parsed here.
+    /// </summary>
+    /// <exception cref="XrmdFaultException">400 InvalidArgument as for <see cref="Read"/>, except for the XML checks.</exception>
+    internal static Dictionary<string, byte[]> ReadRaw(byte[] zip)
+    {
+        ArgumentNullException.ThrowIfNull(zip);
+        return ReadEntries(zip);
+    }
+
     private static Dictionary<string, byte[]> ReadEntries(byte[] zip)
     {
         ZipArchive archive;

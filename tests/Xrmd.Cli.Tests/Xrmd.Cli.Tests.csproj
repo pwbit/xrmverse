@@ -33,11 +33,14 @@
     <Compile Include="..\Xrmd.Migration.Tests\Source\FakeDataverse.cs" Link="Shared\FakeDataverse.cs" />
     <Compile Include="..\Xrmd.Migration.Tests\Source\FakeEnvironment.cs" Link="Shared\FakeEnvironment.cs" />
     <Compile Include="..\Xrmd.Migration.Tests\Source\SolutionZip.cs" Link="Shared\SolutionZip.cs" />
+    <Compile Include="..\Shared\PrivateFixtures.cs" Link="Shared\PrivateFixtures.cs" />
+    <Compile Include="..\Shared\SourceLayoutFixtures.cs" Link="Shared\SourceLayoutFixtures.cs" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- Renderings of the CLI before host routing (Review Focus 1); never regenerate them from the current renderer. -->
     <None Include="Golden\**" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\fixtures\solutions\**\*" LinkBase="fixtures\solutions" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\Xrmd.Migration.Tests\Mapping\sales-like.yaml" Link="Mapping\sales-like.yaml" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

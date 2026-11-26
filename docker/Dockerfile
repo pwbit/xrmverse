@@ -23,6 +23,7 @@ COPY src/Xrmd.Security/*.csproj src/Xrmd.Security/
 COPY src/Xrmd.Pipeline/*.csproj src/Xrmd.Pipeline/
 COPY src/Xrmd.Core/*.csproj src/Xrmd.Core/
 COPY src/Xrmd.Solution/*.csproj src/Xrmd.Solution/
+COPY src/Xrmd.SolutionSource/*.csproj src/Xrmd.SolutionSource/
 COPY src/Xrmd.Schema/*.csproj src/Xrmd.Schema/
 COPY src/Xrmd.Admin/*.csproj src/Xrmd.Admin/
 COPY src/Xrmd.WebApi/*.csproj src/Xrmd.WebApi/
