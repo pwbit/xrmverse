@@ -29,6 +29,15 @@ public sealed class MigrateCommandsTests : IDisposable
     }
 
     [Fact]
+    public async Task Inspect_lists_the_maps()
+    {
+        var file = SyntheticPackage.BuildFile(_root, withMaps: true);
+        using var cli = Cli();
+        (await cli.RunAsync("migrate", "inspect", file)).Should().Be(0, cli.Err.ToString());
+        cli.Out.ToString().Should().Contain("Maps: map/1-sales-like.yaml");
+    }
+
+    [Fact]
     public async Task Inspect_json_contains_manifest_and_verification()
     {
         var file = SyntheticPackage.BuildFile(_root);

@@ -34,6 +34,7 @@ public sealed class RecordsPhase : IMigrationPhase
         var tables = DataTables(manifest).ToDictionary(t => t.LogicalName, StringComparer.Ordinal);
 
         var present = new List<string>();
+        var candidates = context.Package.RawManifest.ArchiveCandidates.Select(c => c.LogicalName).ToHashSet(StringComparer.Ordinal);
         foreach (var table in tables.Values.OrderBy(t => t.LogicalName, StringComparer.Ordinal))
         {
             if (metadata.GetEntity(table.LogicalName) is not null)
@@ -43,7 +44,10 @@ public sealed class RecordsPhase : IMigrationPhase
             }
             if (await context.Store.IsChunkDoneAsync(context.RunId, $"records/{table.LogicalName}#missing", ct)) continue;
             await ledger.IssueAsync(new MigrationIssue(PhaseOrder, MigrationIssue.Warning, "table-missing", table.LogicalName, null, null,
-                $"The table '{table.LogicalName}' does not exist in the organization: its {table.Records} records are not imported."), ct);
+                $"The table '{table.LogicalName}' does not exist in the organization: its {table.Records} records are not imported." +
+                (candidates.Contains(table.LogicalName)
+                    ? $" It is an archive candidate of the package: a map entry '{{ source: {table.LogicalName}, archive: true }}' keeps its records in an archive table."
+                    : "")), ct);
             await using var conn = await factory.OpenAsync(ct);
             await context.Store.MarkChunkAsync(context.RunId, PhaseOrder, $"records/{table.LogicalName}#missing", 0, 0, new DataSession(conn, null), ct);
         }

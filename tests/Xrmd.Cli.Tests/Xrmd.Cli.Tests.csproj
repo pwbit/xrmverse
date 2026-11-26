@@ -38,6 +38,7 @@
   <ItemGroup>
     <!-- Renderings of the CLI before host routing (Review Focus 1); never regenerate them from the current renderer. -->
     <None Include="Golden\**" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\Xrmd.Migration.Tests\Mapping\sales-like.yaml" Link="Mapping\sales-like.yaml" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <Import Project="..\TestPlugins.props" />

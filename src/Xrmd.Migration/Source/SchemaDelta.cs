@@ -18,7 +18,10 @@ public sealed record UnsupportedItem(string Kind, string Name, string Reason);
 public sealed record SchemaDeltaPlan(IReadOnlyList<string> Tables, IReadOnlyList<DeltaColumn> Columns, IReadOnlyList<string> Relationships,
     IReadOnlyList<SourceOption> OptionValues, IReadOnlyList<SourceOption> StatusValues, IReadOnlyList<UnsupportedItem> Unsupported);
 
-/// <summary>Customizations outside solutions (spec decision 12): data schema only.</summary>
+/// <summary>
+/// Customizations outside solutions (spec decision 12): data schema only. A <c>forced</c> table (a mapped source table that is renamed in
+/// the target) never creates a table, but all its custom columns and custom N:N relationships go to the delta whether or not a solution carries them.
+/// </summary>
 public static class SchemaDelta
 {
     public const string DeltaPath = "schema/delta.json";
@@ -37,22 +40,26 @@ public static class SchemaDelta
     /// <summary>The reason a formula column (Power Fx, plan 2.12c) no exported solution carries is not migrated.</summary>
     public const string FormulaOutsideSolutions = "formula column outside the exported solutions: import it with its solution";
 
+    /// <summary>The reason a rollup or formula column of a table mapped to another table is not migrated, covered by a solution or not.</summary>
+    public const string ComputedOfMappedTable = "rollup or formula column of a table mapped to another table: not carried, its value is calculated in the source only";
+
     private static readonly Dictionary<int, string> UnsupportedSourceTypes = new()
     {
         [4] = "prompt column: not supported by xrmverse",
     };
 
     public static SchemaDeltaPlan Compute(IReadOnlyList<SourceTable> tables, IReadOnlyList<SourceRelationship> nn, IReadOnlyList<SourceOption> options,
-        IEnumerable<Stream> solutionZips)
+        IEnumerable<Stream> solutionZips, IReadOnlySet<string>? forcedTables = null)
     {
         var covered = new SolutionCoverage();
         foreach (var zip in solutionZips) covered.Add(zip);
-        return Compute(tables, nn, options, covered);
+        return Compute(tables, nn, options, covered, forcedTables);
     }
 
     public static SchemaDeltaPlan Compute(IReadOnlyList<SourceTable> tables, IReadOnlyList<SourceRelationship> nn, IReadOnlyList<SourceOption> options,
-        SolutionCoverage covered)
+        SolutionCoverage covered, IReadOnlySet<string>? forcedTables = null)
     {
+        var forced = forcedTables ?? new HashSet<string>();
         var deltaTables = new List<string>();
         var columns = new List<DeltaColumn>();
         var unsupported = new List<UnsupportedItem>();
@@ -67,24 +74,29 @@ public static class SchemaDelta
             // Managed components come from a managed solution: an exported one (it carries them) or a Microsoft one (not carried).
             // First-party (msdyn_ …) tables and columns are never rebuilt from metadata.
             if (table.IsCustom && ExclusionCatalog.IsFirstParty(table.LogicalName)) continue;
-            var tableCovered = !table.IsCustom || table.IsManaged || covered.Tables.Contains(table.LogicalName);
+            var isForced = forced.Contains(table.LogicalName);
+            var tableCovered = isForced || !table.IsCustom || table.IsManaged || covered.Tables.Contains(table.LogicalName);
             if (!tableCovered) deltaTables.Add(table.LogicalName);
             foreach (var column in table.Columns.Where(c => c.IsCustom && !c.IsManaged && !ExclusionCatalog.IsFirstParty(c.LogicalName)))
             {
                 var name = $"{table.LogicalName}.{column.LogicalName}";
                 var columnCovered = tableCovered && covered.Columns.Contains(name);
+                var createColumn = !columnCovered || isForced;
                 // A rollup column (its definition and jobs, plan 2.12b) or a formula column (its Power Fx file, plan 2.12c) comes with
                 // the solution that carries it; outside the exported solutions it cannot be rebuilt as a simple column.
                 if (column.SourceType is RollupSourceType or FormulaSourceType)
                 {
-                    if (!columnCovered)
+                    // A forced table is renamed in the target: its solution's entity node does not apply there, so a covered column is lost too.
+                    if (isForced)
+                        unsupported.Add(new("column", name, ComputedOfMappedTable));
+                    else if (!columnCovered)
                         unsupported.Add(new("column", name, column.SourceType == RollupSourceType ? RollupOutsideSolutions : FormulaOutsideSolutions));
                 }
                 else if (UnsupportedSourceTypes.TryGetValue(column.SourceType, out var reason))
                     unsupported.Add(new("column", name, reason));
                 else if (column.AttributeType == "Lookup" && column.Targets.Count > 1 && column.LogicalName != "regardingobjectid")
                     unsupported.Add(new("column", name, "multi-table lookup: only Customer, Owner and regarding lookups can point to several tables"));
-                else if (!columnCovered)
+                else if (createColumn)
                     columns.Add(new DeltaColumn(table.LogicalName, column.LogicalName, column.AttributeType));
             }
         }
@@ -111,7 +123,8 @@ public static class SchemaDelta
             }
         }
 
-        var relationships = nn.Where(r => r.IsCustom && !r.IsManaged && !covered.Relationships.Contains(r.SchemaName)).Select(r => r.SchemaName).ToList();
+        var relationships = nn.Where(r => r.IsCustom && !r.IsManaged
+                && (!covered.Relationships.Contains(r.SchemaName) || forced.Contains(r.Entity1) || forced.Contains(r.Entity2))).Select(r => r.SchemaName).ToList();
         return new SchemaDeltaPlan(deltaTables, columns, relationships, optionValues, statusValues, unsupported);
     }
 

@@ -54,6 +54,7 @@ public sealed class MigrationRelationshipsPhaseTests(XrmdFixture fx) : IDisposab
             [
                 Record(Guid.NewGuid(), (r.Entity1IntersectAttribute!, new GuidValue(account)), (r.Entity2IntersectAttribute!, new GuidValue(contact))),
                 Record(Guid.NewGuid(), (r.Entity1IntersectAttribute!, new GuidValue(account)), (r.Entity2IntersectAttribute!, new GuidValue(stranger))),
+                Record(Guid.NewGuid(), (r.Entity1IntersectAttribute!, new GuidValue(account))), // an end that cannot be read
             ])
             .Relationship("new_invented_nn", []));
         await h.RunAsync(package, null, AllPhases);
@@ -65,6 +66,8 @@ public sealed class MigrationRelationshipsPhaseTests(XrmdFixture fx) : IDisposab
         var issues = await h.IssuesAsync();
         issues.Should().ContainSingle(i => i.Code == "nn-record-missing");
         issues.Should().ContainSingle(i => i.Code == "relationship-missing" && i.Column == "new_invented_nn");
+        issues.Should().ContainSingle(i => i.Code == "nn-pair-unreadable", "counted once, though the phase ran twice")
+            .Which.Should().Be(new MigrationIssue(RelationshipsPhase.PhaseOrder, MigrationIssue.Warning, "nn-pair-unreadable", r.IntersectEntityName, null, schema, "1 row(s)"));
         issues.Should().NotContain(i => i.Severity == MigrationIssue.Error);
     }
 

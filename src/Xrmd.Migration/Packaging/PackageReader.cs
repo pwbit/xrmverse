@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
+using Xrmd.Migration.Mapping;
 
 namespace Xrmd.Migration.Packaging;
 
@@ -10,6 +11,8 @@ public sealed class PackageReader : IDisposable
     private readonly ZipArchive? _zip;
     private readonly string? _folder;
     private readonly PackageKeys _keys;
+    private IPackageTranslator? _translator;
+    private PackageManifest _manifest;
 
     private PackageReader(ZipArchive? zip, string? folder, PackageHeader header, PackageKeys keys)
     {
@@ -17,12 +20,28 @@ public sealed class PackageReader : IDisposable
         _folder = folder;
         Header = header;
         _keys = keys;
-        Manifest = ReadManifest();
+        RawManifest = ReadManifest();
+        _manifest = RawManifest;
     }
 
     public PackageHeader Header { get; }
 
-    public PackageManifest Manifest { get; }
+    /// <summary>The manifest as exported; entries, hashes and chunk paths are always the ones of this manifest.</summary>
+    public PackageManifest RawManifest { get; }
+
+    /// <summary>The manifest under the target names when a <see cref="Translator"/> is set, else <see cref="RawManifest"/>.</summary>
+    public PackageManifest Manifest => _manifest;
+
+    /// <summary>Shows the package under the names of the target; setting it (or null) recomputes <see cref="Manifest"/>.</summary>
+    public IPackageTranslator? Translator
+    {
+        get => _translator;
+        set
+        {
+            _translator = value;
+            _manifest = value?.TranslateManifest(RawManifest) ?? RawManifest;
+        }
+    }
 
     /// <exception cref="PackageFormatException">Not a package, an unknown format version, or an export that is not complete.</exception>
     /// <exception cref="PackagePassphraseException">The passphrase is wrong for this package.</exception>
@@ -90,7 +109,7 @@ public sealed class PackageReader : IDisposable
         var problems = new List<PackageEntryProblem>();
         long bytes = 0;
         var buffer = new byte[81920];
-        foreach (var entry in Manifest.Entries)
+        foreach (var entry in RawManifest.Entries)
         {
             ct.ThrowIfCancellationRequested();
             var blob = OpenBlob(_keys.EntryName(entry.Path));
@@ -121,7 +140,7 @@ public sealed class PackageReader : IDisposable
             else if (Convert.ToHexStringLower(hash.GetHashAndReset()) != entry.Sha256) problems.Add(new PackageEntryProblem(entry.Path, "sha256"));
             progress?.Report(entry);
         }
-        return new PackageVerification(Manifest.Entries.Count, bytes, problems);
+        return new PackageVerification(RawManifest.Entries.Count, bytes, problems);
     }
 
     public void Dispose() => _zip?.Dispose();
@@ -132,8 +151,7 @@ public sealed class PackageReader : IDisposable
         using var plain = EntryCipher.OpenRead(blob, _keys, PackageWriter.ManifestPath);
         var manifest = JsonSerializer.Deserialize<PackageManifest>(plain, PackageJson.Options)
             ?? throw new PackageFormatException("The package manifest is empty.");
-        if (manifest.FormatVersion != PackageHeader.CurrentVersion)
-            throw new PackageFormatException($"Package format version {manifest.FormatVersion} is not supported (this xrmd reads version {PackageHeader.CurrentVersion}).");
+        if (!PackageHeader.SupportedVersions.Contains(manifest.FormatVersion)) throw PackageHeader.UnsupportedVersion(manifest.FormatVersion);
         return manifest;
     }
 

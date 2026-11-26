@@ -377,7 +377,7 @@ public static class XrmdHost
         // A run left running by a stopped process lost its passphrase with it: it fails with the message to resume it.
         if (await migrationRuns.GetOpenRunAsync(CancellationToken.None) is { State: Xrmd.Admin.Migration.MigrationRunStates.Running } stranded)
             await migrationRuns.SetStateAsync(stranded.RunId, Xrmd.Admin.Migration.MigrationRunStates.Failed,
-                Xrmd.Admin.Migration.MigrationImportJob.ResumeMessage(stranded.RunId), CancellationToken.None);
+                Xrmd.Admin.Migration.MigrationImportJob.InterruptedMessage(stranded), CancellationToken.None);
         if (migrationLock.ActiveRunId is { } run)
             app.Logger.LogWarning("The organization is locked by the migration run {RunId}: writes are refused until it is finalized.", run);
     }

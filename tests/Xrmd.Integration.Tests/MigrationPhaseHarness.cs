@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Xrmd.Abstractions;
 using Xrmd.Admin.Migration;
 using Xrmd.Admin.Migration.Import;
+using Xrmd.Admin.Migration.Mapping;
 using Xrmd.Core;
 using Xrmd.Migration.Packaging;
 
@@ -41,10 +42,11 @@ internal sealed class MigrationPhaseHarness(WebApplicationFactory<Program> app, 
         await using (var conn = await factory.OpenAsync(default))
             caller = await scope.ServiceProvider.GetRequiredService<CoreOperations>().ResolveUserAsync(admin, new DataSession(conn, null), default);
         using var package = PackageReader.Open(packageFile, MigrationTestPackage.Passphrase);
+        options ??= new Dictionary<string, string>();
+        await MigrationMaps.AttachAsync(package, options, scope.ServiceProvider, default);
         foreach (var phase in phases)
             using (MigrationScope.Enter())
-                await phase.RunAsync(new MigrationPhaseContext(RunId, package, caller, store, options ?? new Dictionary<string, string>(),
-                    new Progress<string>(), Ledger, scope.ServiceProvider), default);
+                await phase.RunAsync(new MigrationPhaseContext(RunId, package, caller, store, options, new Progress<string>(), Ledger, scope.ServiceProvider), default);
     }
 
     public Task<object?> ScalarAsync(string sql, params (string Name, object? Value)[] parameters) =>

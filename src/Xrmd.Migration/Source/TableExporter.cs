@@ -66,7 +66,10 @@ public sealed class TableExporter(DataverseClient client, PackageWriter writer, 
     /// <summary>Lookup columns pointing to tables the migration leaves out, with how many values do (the values are kept).</summary>
     public IReadOnlyDictionary<string, long> LookupTargetsOutsideScope => _outside;
 
-    public async Task<TableProgress> ExportAsync(SourceTable table, string prefix, TableProgress? resume, Action<TableProgress> checkpoint, CancellationToken ct)
+    /// <param name="keepFirstParty">First-party-prefixed columns of this table to export anyway (the ones a mapping file names).</param>
+    /// <param name="lookupNames">A table an archive may be made from: each lookup also gets its name (see <see cref="ValueMapper.Map"/>).</param>
+    public async Task<TableProgress> ExportAsync(SourceTable table, string prefix, TableProgress? resume, Action<TableProgress> checkpoint, CancellationToken ct,
+        IReadOnlySet<string>? keepFirstParty = null, bool lookupNames = false)
     {
         _skipped.Clear();
         _firstParty.Clear();
@@ -75,7 +78,7 @@ public sealed class TableExporter(DataverseClient client, PackageWriter writer, 
         _missing.Clear();
         _invalid.Clear();
         foreach (var c in table.Columns.Where(c => !ValueMapper.IsSupported(c.AttributeType))) _skipped.Add(c.LogicalName);
-        foreach (var c in table.Columns.Where(c => ExclusionCatalog.IsFirstParty(c.LogicalName))) _firstParty.Add(c.LogicalName);
+        foreach (var c in table.Columns.Where(c => ExclusionCatalog.IsFirstParty(c.LogicalName) && keepFirstParty?.Contains(c.LogicalName) != true)) _firstParty.Add(c.LogicalName);
         Load(_outside, resume?.LookupsOutsideScope);
         Load(_unresolved, resume?.UnresolvedLookups);
         Load(_missing, resume?.MissingFiles);
@@ -115,7 +118,7 @@ public sealed class TableExporter(DataverseClient client, PackageWriter writer, 
                             downloaded[column.LogicalName] = await FileAsync(table, column, id, row, ct);
                     var record = ValueMapper.Map(table, row, (c, _) => downloaded.GetValueOrDefault(c.LogicalName),
                         column => _unresolved[column] = _unresolved.GetValueOrDefault(column) + 1,
-                        column => _invalid[column] = _invalid.GetValueOrDefault(column) + 1, tableOfCode);
+                        column => _invalid[column] = _invalid.GetValueOrDefault(column) + 1, tableOfCode, lookupNames);
                     if (noteBody is not null) record = WithNoteBody(record, await NoteBodyAsync(table, noteBody, id, row, ct));
                     Count(record);
                     chunk.Add(record);

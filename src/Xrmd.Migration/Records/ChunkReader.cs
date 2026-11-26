@@ -9,6 +9,7 @@ public static class ChunkReader
 {
     public static async IAsyncEnumerable<MigrationRecord> ReadAsync(PackageReader reader, IEnumerable<string> chunks, [EnumeratorCancellation] CancellationToken ct)
     {
+        var translator = reader.Translator;
         foreach (var chunk in chunks)
         {
             await using var entry = reader.OpenEntry(chunk);
@@ -17,7 +18,8 @@ public static class ChunkReader
             while (await text.ReadLineAsync(ct) is { } line)
             {
                 if (line.Length == 0) continue;
-                yield return RecordLineCodec.Read(line);
+                var record = RecordLineCodec.Read(line);
+                yield return translator is null ? record : translator.Translate(chunk, record);
             }
         }
     }

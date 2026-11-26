@@ -187,4 +187,43 @@ public sealed class SchemaDeltaTests : IDisposable
         plan.Columns.Select(c => c.Column).Should().Equal("xv_mine");
         plan.OptionValues.Should().BeEmpty();
     }
+
+    [Fact]
+    public void Forced_table_columns_go_to_the_delta_even_when_a_solution_covers_them()
+    {
+        var lead = new SourceTable("lead", "leads", "leadid", false, false, false,
+        [
+            Col("leadid", "Uniqueidentifier", false), Col("subject", "String", false), Col("new_score", "Integer"), Col("new_total", "Money", true, 2), Col("msdyn_x", "String"),
+        ]);
+        var tag = new SourceRelationship("new_lead_new_tag", "new_lead_new_tag", "leadid", "new_tagid", "lead", "new_tag", IsCustom: true);
+        var covered = new SolutionCoverage();
+        covered.Add(Zip("""
+            <ImportExportXml>
+              <Entities><Entity><Name>Lead</Name><EntityInfo><entity Name="Lead"><attributes>
+                <attribute PhysicalName="new_Score"><LogicalName>new_score</LogicalName></attribute>
+                <attribute PhysicalName="new_Total"><LogicalName>new_total</LogicalName></attribute>
+              </attributes></entity></EntityInfo></Entity></Entities>
+              <EntityRelationships><EntityRelationship Name="new_lead_new_tag"/></EntityRelationships>
+            </ImportExportXml>
+            """));
+
+        var plain = SchemaDelta.Compute([lead], [tag], [], covered);
+        plain.Columns.Should().BeEmpty();
+        plain.Relationships.Should().BeEmpty();
+
+        var forced = SchemaDelta.Compute([lead], [tag], [], covered, new HashSet<string> { "lead" });
+        forced.Tables.Should().BeEmpty();
+        forced.Columns.Select(c => c.Column).Should().Equal("new_score");
+        forced.Unsupported.Should().ContainSingle().Which.Should().Be(new UnsupportedItem("column", "lead.new_total", SchemaDelta.ComputedOfMappedTable));
+        forced.Relationships.Should().Equal("new_lead_new_tag");
+    }
+
+    private static MemoryStream Zip(string customizations)
+    {
+        var stream = new MemoryStream();
+        using (var zip = new System.IO.Compression.ZipArchive(stream, System.IO.Compression.ZipArchiveMode.Create, leaveOpen: true))
+        using (var w = new StreamWriter(zip.CreateEntry("customizations.xml").Open())) w.Write(customizations);
+        stream.Position = 0;
+        return stream;
+    }
 }

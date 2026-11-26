@@ -49,6 +49,7 @@
     <Compile Include="..\Shared\WorkflowFixtures.cs" Link="Shared\WorkflowFixtures.cs" />
     <Compile Include="..\Shared\WorkflowSolutionBuilder.cs" Link="Shared\WorkflowSolutionBuilder.cs" />
     <Compile Include="..\Shared\CalculatedSolutionFixture.cs" Link="Shared\CalculatedSolutionFixture.cs" />
+    <Compile Include="..\Shared\MappingTargetSolution.cs" Link="Shared\MappingTargetSolution.cs" />
     <None Include="..\..\fixtures\ui\*.json" LinkBase="fixtures\ui" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\fixtures\solutions\**\*" LinkBase="fixtures\solutions" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\fixtures\workflows\*.xaml" LinkBase="fixtures\workflows" CopyToOutputDirectory="PreserveNewest" />

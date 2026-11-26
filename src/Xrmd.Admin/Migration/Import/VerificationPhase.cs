@@ -234,7 +234,7 @@ public sealed class VerificationPhase : IMigrationPhase
         {
             var parts = entry.Path.Split('/');
             if (parts.Length != 4 || !Guid.TryParse(parts[3], out var sourceId)) continue;
-            var (table, column) = (parts[1], parts[2]);
+            var (table, column) = FilesPhase.Owner(context.Package, entry.Path);
             if (metadata.GetEntity(table) is not { } m || m.Attributes?.FirstOrDefault(a => a.LogicalName == column) is not { } attribute) continue;
             var target = new EntityReference(table, ImportValueMapper.Map(idMap, sourceId));
             await using var conn = await factory.OpenAsync(ct);

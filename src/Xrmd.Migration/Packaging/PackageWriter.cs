@@ -25,28 +25,54 @@ public sealed class PackageWriter : IDisposable
 
     private readonly string _folder;
     private readonly PackageKeys _keys;
+    private int _formatVersion;
+
+    /// <summary>The format version of the package this writer writes (from its header).</summary>
+    public int FormatVersion => _formatVersion;
     private readonly Dictionary<string, PackageEntry> _entries = new(StringComparer.Ordinal);
     private readonly HashSet<PackageEntryStream> _open = [];
     private readonly Lock _lock = new();
     private bool _disposed;
 
-    private PackageWriter(string folder, PackageKeys keys)
+    private PackageWriter(string folder, PackageKeys keys, int formatVersion)
     {
         _folder = folder;
         _keys = keys;
+        _formatVersion = formatVersion;
+    }
+
+    /// <summary>
+    /// Raises the format version of the package (header and manifest) to <paramref name="formatVersion"/>, for an export that only
+    /// learns while it runs that the package carries archive candidates (spec §8.7); a lower or equal version changes nothing.
+    /// </summary>
+    public void UpgradeFormat(int formatVersion)
+    {
+        if (formatVersion <= _formatVersion) return;
+        if (!PackageHeader.SupportedVersions.Contains(formatVersion))
+            throw new ArgumentOutOfRangeException(nameof(formatVersion), formatVersion, "The package format version is not supported.");
+        var file = Path.Combine(_folder, PackageHeader.FileName);
+        var header = PackageHeader.Parse(File.ReadAllBytes(file)) with { FormatVersion = formatVersion };
+        var temp = file + Partial;
+        File.WriteAllBytes(temp, JsonSerializer.SerializeToUtf8Bytes(header, PackageJson.Options));
+        File.Move(temp, file, overwrite: true);
+        _formatVersion = formatVersion;
     }
 
     /// <summary>Starts a new package in an empty or missing <paramref name="folder"/>.</summary>
+    /// <param name="formatVersion">1, or <see cref="PackageHeader.MappedVersion"/> for a package that carries maps.</param>
     /// <exception cref="IOException">The folder exists and is not empty.</exception>
-    public static PackageWriter Create(string folder, string passphrase)
+    /// <exception cref="ArgumentOutOfRangeException">The format version is not supported.</exception>
+    public static PackageWriter Create(string folder, string passphrase, int formatVersion = PackageHeader.CurrentVersion)
     {
+        if (!PackageHeader.SupportedVersions.Contains(formatVersion))
+            throw new ArgumentOutOfRangeException(nameof(formatVersion), formatVersion, "The package format version is not supported.");
         if (Directory.Exists(folder) && Directory.EnumerateFileSystemEntries(folder).Any())
             throw new IOException($"The folder '{folder}' is not empty: resume an export there, or choose another folder.");
         var salt = RandomNumberGenerator.GetBytes(PackageKeys.SaltLength);
         var keys = PackageKeys.Derive(passphrase, salt);
         Directory.CreateDirectory(Path.Combine(folder, "e"));
-        File.WriteAllBytes(Path.Combine(folder, PackageHeader.FileName), JsonSerializer.SerializeToUtf8Bytes(PackageHeader.For(salt, keys), PackageJson.Options));
-        return new PackageWriter(folder, keys);
+        File.WriteAllBytes(Path.Combine(folder, PackageHeader.FileName), JsonSerializer.SerializeToUtf8Bytes(PackageHeader.For(salt, keys, formatVersion), PackageJson.Options));
+        return new PackageWriter(folder, keys, formatVersion);
     }
 
     /// <summary>Reopens an export that stopped: completed entries are kept, half-written ones discarded.</summary>
@@ -57,8 +83,9 @@ public sealed class PackageWriter : IDisposable
         var headerFile = Path.Combine(folder, PackageHeader.FileName);
         if (!File.Exists(headerFile)) throw new PackageFormatException($"The folder '{folder}' holds no package to resume.");
         if (File.Exists(Path.Combine(folder, ManifestFile))) throw new PackageFormatException("This export is already complete.");
-        var keys = PackageHeader.Parse(File.ReadAllBytes(headerFile)).Open(passphrase);
-        var writer = new PackageWriter(folder, keys);
+        var header = PackageHeader.Parse(File.ReadAllBytes(headerFile));
+        var keys = header.Open(passphrase);
+        var writer = new PackageWriter(folder, keys, header.FormatVersion);
         var dir = Path.Combine(folder, "e");
         Directory.CreateDirectory(dir);
         foreach (var partial in Directory.GetFiles(dir, "*" + Partial)) File.Delete(partial);
@@ -118,7 +145,7 @@ public sealed class PackageWriter : IDisposable
             if (_open.Count > 0) throw new InvalidOperationException("An entry is still being written.");
             var entries = _entries.Values.OrderBy(e => e.Path, StringComparer.Ordinal).ToList();
             WriteInternal(Path.Combine(_folder, ManifestFile), ManifestPath,
-                JsonSerializer.SerializeToUtf8Bytes(manifest with { FormatVersion = PackageHeader.CurrentVersion, Entries = entries }, PackageJson.Options));
+                JsonSerializer.SerializeToUtf8Bytes(manifest with { FormatVersion = _formatVersion, Entries = entries }, PackageJson.Options));
         }
         File.Delete(BlobPath(ProgressPath));
         foreach (var meta in Directory.GetFiles(Path.Combine(_folder, "e"), "*" + Meta)) File.Delete(meta);

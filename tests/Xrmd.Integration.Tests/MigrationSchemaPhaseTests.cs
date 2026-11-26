@@ -7,6 +7,7 @@ using Xrmd.Abstractions;
 using Xrmd.Admin.Migration;
 using Xrmd.Admin.Migration.Import;
 using Xrmd.Metadata.Sdk;
+using Xrmd.Migration.Mapping;
 using Xrmd.TestSupport;
 using static Xrmd.Integration.Tests.MigrationTestPackage;
 
@@ -340,5 +341,244 @@ public sealed class MigrationSchemaPhaseTests(XrmdFixture fx) : IDisposable
         var issues = await h.IssuesAsync();
         issues.Should().ContainSingle(i => i.Code == "schema-item-failed" && i.Column == $"new_bad{suffix}");
         h.App.Services.GetRequiredService<IMetadataStore>().GetEntity($"new_mig{suffix}").Should().NotBeNull("the other items are applied");
+    }
+
+    // ---- carried custom columns (migration table mapping spec §8.3 R7, GAP-27 task 11) --------------------------------------
+
+    private const string LeadMap = """
+        version: 1
+        tables:
+          - source: lead
+            target: xv_lead
+            columns: { subject: xv_name }
+          - source: xs_rival
+            target: xv_rival
+        relationships:
+          - { source: leadcompetitors, target: xv_lead_xv_rival }
+        """;
+
+    private static readonly SourceCatalog LeadCatalog = new(
+    [
+        new SourceCatalogTable("lead", "leadid", 4, "user", false,
+            [new("subject", "String", [], false), new("new_rating", "Picklist", [], true), new("new_score", "Integer", [], true)]),
+        new SourceCatalogTable("xs_rival", "xs_rivalid", 10002, "organization", false, [new("xs_name", "String", [], true)]),
+    ], []);
+
+    /// <summary>The choice <c>lead.new_rating</c> as the export of a mapped table puts it in the delta (a cast GET, no <c>@odata.type</c>).</summary>
+    private static JsonObject RatingColumn() => new()
+    {
+        ["table"] = "lead", ["column"] = "new_rating", ["type"] = "Picklist",
+        ["metadata"] = new JsonObject
+        {
+            ["@odata.context"] = "x", ["LogicalName"] = "new_rating", ["SchemaName"] = "new_Rating", ["AttributeType"] = "Picklist",
+            ["EntityLogicalName"] = "lead", ["DisplayName"] = Label("Rating"),
+            ["OptionSet"] = new JsonObject
+            {
+                ["MetadataId"] = Guid.NewGuid().ToString(), ["IsGlobal"] = false, ["OptionSetType"] = "Picklist",
+                ["Options"] = new JsonArray(
+                    new JsonObject { ["Value"] = 100000000, ["Label"] = Label("Cold") },
+                    new JsonObject { ["Value"] = 100000001, ["Label"] = Label("Hot") }),
+            },
+        },
+    };
+
+    private static JsonObject ScoreColumn() => new()
+    {
+        ["table"] = "lead", ["column"] = "new_score", ["type"] = "Integer",
+        ["metadata"] = new JsonObject
+        {
+            ["@odata.type"] = "#Microsoft.Dynamics.CRM.IntegerAttributeMetadata", ["LogicalName"] = "new_score", ["SchemaName"] = "new_Score",
+            ["AttributeType"] = "Integer", ["EntityLogicalName"] = "lead", ["DisplayName"] = Label("Score"), ["MinValue"] = 0, ["MaxValue"] = 100,
+        },
+    };
+
+    /// <summary>A lookup of the delta with its relationship, in the shape the exporter writes.</summary>
+    private static JsonObject LookupColumn(string table, string column, string referenced, string referencedKey, string relationship) => new()
+    {
+        ["table"] = table, ["column"] = column, ["type"] = "Lookup",
+        ["metadata"] = new JsonObject
+        {
+            ["@odata.type"] = "#Microsoft.Dynamics.CRM.LookupAttributeMetadata", ["LogicalName"] = column, ["SchemaName"] = column,
+            ["AttributeType"] = "Lookup", ["EntityLogicalName"] = table, ["DisplayName"] = Label(column), ["Targets"] = new JsonArray(referenced),
+        },
+        ["relationship"] = new JsonObject
+        {
+            ["SchemaName"] = relationship, ["ReferencedEntity"] = referenced, ["ReferencedAttribute"] = referencedKey,
+            ["ReferencingEntity"] = table, ["ReferencingAttribute"] = column, ["RelationshipType"] = "OneToManyRelationship",
+        },
+    };
+
+    private static JsonObject ManyToManyItem(string name, string first, string second) => new()
+    {
+        ["schemaName"] = name,
+        ["metadata"] = new JsonObject
+        {
+            ["SchemaName"] = name, ["Entity1LogicalName"] = first, ["Entity2LogicalName"] = second, ["IntersectEntityName"] = name,
+            ["Entity1IntersectAttribute"] = first + "id", ["Entity2IntersectAttribute"] = second + "id", ["RelationshipType"] = "ManyToManyRelationship",
+        },
+    };
+
+    /// <summary>A package with the map target solution (unless <paramref name="withTarget"/> is false), <paramref name="delta"/> and <paramref name="map"/>.</summary>
+    private string MappedDeltaPackage(JsonObject delta, string map, bool withTarget = true, JsonArray? unsupported = null, Action<PackageBuilder>? more = null) =>
+        Build(_root, p =>
+        {
+            if (withTarget) p.Solution(MappingTargetSolution.Name, MappingTargetSolution.Build());
+            p.File("schema/delta.json", Encoding.UTF8.GetBytes(delta.ToJsonString()))
+                .File("schema/unsupported.json", Encoding.UTF8.GetBytes((unsupported ?? []).ToJsonString()));
+            more?.Invoke(p);
+        },
+        new PackageMapsPart([("sales", map)], LeadCatalog));
+
+    private static string Text(Microsoft.Xrm.Sdk.Label? label) => label?.LocalizedLabels.FirstOrDefault(l => l.LanguageCode == 1033)?.Label ?? "";
+
+    [Fact]
+    public async Task Carried_column_is_created_on_the_target_with_its_options()
+    {
+        var delta = new JsonObject
+        {
+            ["columns"] = new JsonArray(RatingColumn()),
+            // Local values of the mapped table's own columns and its status values are left to the value and state translation.
+            ["optionValues"] = new JsonArray(new JsonObject
+            {
+                ["table"] = "lead", ["column"] = "leadsourcecode", ["value"] = 100000005,
+                ["metadata"] = new JsonObject { ["Value"] = 100000005, ["Label"] = Label("Fair") },
+            }),
+            ["statusValues"] = new JsonArray(new JsonObject
+            {
+                ["table"] = "lead", ["column"] = "statuscode", ["value"] = 100000002, ["state"] = 2,
+                ["metadata"] = new JsonObject { ["Value"] = 100000002, ["State"] = 2, ["Label"] = Label("Canceled") },
+            }),
+        };
+        await using var h = MigrationPhaseHarness.Start(fx);
+        var unsupported = new JsonArray(new JsonObject { ["kind"] = "column", ["name"] = "lead.new_total", ["reason"] = "rollup or formula column of a table mapped to another table" });
+        await h.RunAsync(MappedDeltaPackage(delta, LeadMap, unsupported: unsupported), null, new SchemaPhase());
+
+        var store = h.App.Services.GetRequiredService<IMetadataStore>();
+        store.GetEntity("lead").Should().BeNull("a mapped table is not created");
+        var rating = store.GetEntity(MappingTargetSolution.Lead)!.Attributes.Should().ContainSingle(a => a.LogicalName == "new_rating")
+            .Which.Should().BeOfType<PicklistAttributeMetadata>().Subject;
+        Text(rating.DisplayName).Should().Be("Rating");
+        rating.OptionSet.Options.Select(o => (o.Value, Text(o.Label))).Should().Equal((100000000, "Cold"), (100000001, "Hot"));
+        var issues = await h.IssuesAsync();
+        issues.Should().NotContain(i => i.Code == "schema-item-failed" || i.Severity == MigrationIssue.Error);
+        // The unsupported item of the mapped table is reported under its target; the lead's status value is left to R4.
+        issues.Where(i => i.Code == "unsupported").Should().ContainSingle()
+            .Which.Should().Match<MigrationIssue>(i => i.Table == MappingTargetSolution.Lead && i.Column == "new_total" && i.Message.Contains("lead.new_total"));
+        issues.Should().NotContain(i => i.Table == "lead", "no item is applied under the source name");
+    }
+
+    [Fact]
+    public async Task Carried_lookup_to_a_mapped_table_targets_the_target_table()
+    {
+        var delta = new JsonObject
+        {
+            ["columns"] = new JsonArray(
+                LookupColumn("lead", "new_rivalid", "xs_rival", "xs_rivalid", "new_xs_rival_lead_rivalid"),
+                LookupColumn("account", "new_leadid", "lead", "leadid", "new_lead_account_leadid")),
+            ["relationships"] = new JsonArray(
+                ManyToManyItem("new_lead_contact", "lead", "contact"),
+                // Named by the map: its pairs go to the target's own relationship.
+                ManyToManyItem("leadcompetitors", "lead", "xs_rival")),
+        };
+        await using var h = MigrationPhaseHarness.Start(fx);
+        await h.RunAsync(MappedDeltaPackage(delta, LeadMap), null, new SchemaPhase());
+
+        (await h.IssuesAsync()).Should().NotContain(i => i.Code == "schema-item-failed" || i.Severity == MigrationIssue.Error);
+        var store = h.App.Services.GetRequiredService<IMetadataStore>();
+        store.GetEntity(MappingTargetSolution.Lead)!.Attributes.OfType<LookupAttributeMetadata>().Should().ContainSingle(a => a.LogicalName == "new_rivalid")
+            .Which.Targets.Should().Equal(MappingTargetSolution.Rival);
+        var rival = store.GetRelationship("new_xs_rival_lead_rivalid").Should().BeOfType<OneToManyRelationshipMetadata>().Subject;
+        (rival.ReferencingEntity, rival.ReferencedEntity, rival.ReferencedAttribute).Should().Be((MappingTargetSolution.Lead, MappingTargetSolution.Rival, "xv_rivalid"));
+        store.GetEntity("account")!.Attributes.OfType<LookupAttributeMetadata>().Should().ContainSingle(a => a.LogicalName == "new_leadid")
+            .Which.Targets.Should().Equal(MappingTargetSolution.Lead);
+        var nn = store.GetRelationship("new_lead_contact").Should().BeOfType<ManyToManyRelationshipMetadata>().Subject;
+        (nn.Entity1LogicalName, nn.Entity2LogicalName, nn.Entity1IntersectAttribute).Should().Be((MappingTargetSolution.Lead, "contact", "xv_leadid"));
+        store.GetRelationship("leadcompetitors").Should().BeNull("the map sends its pairs to xv_lead_xv_rival");
+    }
+
+    [Fact]
+    public async Task Drop_skips_and_reports()
+    {
+        const string map = """
+            version: 1
+            tables:
+              - source: lead
+                target: xv_lead
+                columns: { subject: xv_name }
+                customColumns: drop
+            """;
+        await using var h = MigrationPhaseHarness.Start(fx);
+        var package = MappedDeltaPackage(new JsonObject { ["columns"] = new JsonArray(RatingColumn(), ScoreColumn()) }, map);
+        await h.RunAsync(package, null, new SchemaPhase());
+        await h.RunAsync(package, null, new SchemaPhase()); // a resume reports nothing twice
+
+        h.App.Services.GetRequiredService<IMetadataStore>().GetEntity(MappingTargetSolution.Lead)!.Attributes
+            .Should().NotContain(a => a.LogicalName == "new_rating" || a.LogicalName == "new_score");
+        (await h.IssuesAsync()).Where(i => i.Code == "column-dropped").Should().BeEquivalentTo(new[]
+        {
+            new MigrationIssue(SchemaPhase.PhaseOrder, MigrationIssue.Info, "column-dropped", MappingTargetSolution.Lead, null, "new_rating",
+                "The custom column lead.new_rating is not created on xv_lead (customColumns: drop)."),
+            new MigrationIssue(SchemaPhase.PhaseOrder, MigrationIssue.Info, "column-dropped", MappingTargetSolution.Lead, null, "new_score",
+                "The custom column lead.new_score is not created on xv_lead (customColumns: drop)."),
+        });
+    }
+
+    [Fact]
+    public async Task Existing_same_type_column_is_reused()
+    {
+        await using var h = MigrationPhaseHarness.Start(fx);
+        await h.RunAsync(Build(_root, p => p.Solution(MappingTargetSolution.Name, MappingTargetSolution.Build())), null, new SchemaPhase());
+        var admin = TestServices.NewOrganizationService(h.App.Services, fx.AdminObjectId);
+        await admin.ExecuteAsync(new Microsoft.Xrm.Sdk.Messages.CreateAttributeRequest
+        {
+            EntityName = MappingTargetSolution.Lead,
+            Attribute = new IntegerAttributeMetadata { LogicalName = "new_score", SchemaName = "new_score", MinValue = 0, MaxValue = 1000 },
+        });
+
+        await h.RunAsync(MappedDeltaPackage(new JsonObject { ["columns"] = new JsonArray(ScoreColumn()) }, LeadMap, withTarget: false), null, new SchemaPhase());
+
+        var issues = await h.IssuesAsync();
+        issues.Should().NotContain(i => i.Code == "schema-item-failed" || i.Severity == MigrationIssue.Error);
+        issues.Should().ContainSingle(i => i.Code == "schema-exists" && i.Table == MappingTargetSolution.Lead && i.Column == "new_score");
+        h.App.Services.GetRequiredService<IMetadataStore>().GetEntity(MappingTargetSolution.Lead)!.Attributes
+            .Should().ContainSingle(a => a.LogicalName == "new_score").Which.Should().BeOfType<IntegerAttributeMetadata>()
+            .Which.MaxValue.Should().Be(1000, "the target's column is kept as it is");
+    }
+
+    [Fact]
+    public async Task Reused_carried_choice_gains_the_missing_options_and_its_rows_import()
+    {
+        const string map = """
+            version: 1
+            tables:
+              - source: lead
+                target: xv_lead
+                columns: { subject: xv_name }
+            """;
+        await using var h = MigrationPhaseHarness.Start(fx);
+        await h.RunAsync(Build(_root, p => p.Solution(MappingTargetSolution.Name, MappingTargetSolution.Build())), null, new SchemaPhase());
+        var admin = TestServices.NewOrganizationService(h.App.Services, fx.AdminObjectId);
+        await admin.ExecuteAsync(new Microsoft.Xrm.Sdk.Messages.CreateAttributeRequest
+        {
+            EntityName = MappingTargetSolution.Lead,
+            Attribute = new PicklistAttributeMetadata
+            {
+                LogicalName = "new_rating", SchemaName = "new_rating", DisplayName = new Microsoft.Xrm.Sdk.Label("Rating", 1033),
+                OptionSet = new OptionSetMetadata { IsGlobal = false, OptionSetType = OptionSetType.Picklist, Options = { new OptionMetadata(new Microsoft.Xrm.Sdk.Label("Cold", 1033), 100000000) } },
+            },
+        });
+        var lead = Guid.NewGuid();
+        var package = MappedDeltaPackage(new JsonObject { ["columns"] = new JsonArray(RatingColumn()) }, map, withTarget: false, more: p => p
+            .Security("businessunit", "businessunitid")
+            .Table("lead", "leadid", [Record(lead, ("subject", new Xrmd.Migration.Records.StringValue("Lead 1")), ("new_rating", new Xrmd.Migration.Records.OptionValue(100000001)))]));
+
+        await h.RunAsync(package, null, new VerifyPackagePhase(), new SchemaPhase(), new SecurityPhase(), new RecordsPhase());
+
+        var issues = await h.IssuesAsync();
+        issues.Should().NotContain(i => i.Code == "schema-item-failed" || i.Severity == MigrationIssue.Error);
+        var rating = (PicklistAttributeMetadata)h.App.Services.GetRequiredService<IMetadataStore>().GetEntity(MappingTargetSolution.Lead)!.Attributes
+            .Single(a => a.LogicalName == "new_rating");
+        rating.OptionSet.Options.Select(o => (o.Value, Text(o.Label))).Should().Equal((100000000, "Cold"), (100000001, "Hot"));
+        (await h.ScalarAsync("SELECT new_rating FROM data.xv_lead WHERE xv_leadid = @id", ("@id", lead))).Should().Be(100000001);
     }
 }

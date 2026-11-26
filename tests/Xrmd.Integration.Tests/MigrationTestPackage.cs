@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
 using FluentAssertions;
+using Xrmd.Migration.Mapping;
 using Xrmd.Migration.Packaging;
 using Xrmd.Migration.Records;
 
@@ -43,13 +44,20 @@ internal static class MigrationTestPackage
     /// Builds a package with the tables, relationships and files <paramref name="build"/> adds, written as the exporter writes them
     /// (gzip chunks through <see cref="ChunkWriter"/>); returns the <c>.xrmpkg</c> file.
     /// </summary>
-    public static string Build(string root, Action<PackageBuilder> build, int recordsPerChunk = 5000)
+    public static string Build(string root, Action<PackageBuilder> build, int recordsPerChunk = 5000) => Build(root, build, null, recordsPerChunk);
+
+    /// <summary>
+    /// As <see cref="Build(string, Action{PackageBuilder}, int)"/>, with <paramref name="maps"/> (a format version 2 package: the maps and
+    /// the source catalog stored as the exporter stores them) when not null.
+    /// </summary>
+    public static string Build(string root, Action<PackageBuilder> build, PackageMapsPart? maps, int recordsPerChunk = 5000)
     {
         var folder = Path.Combine(root, "pkg-" + Guid.NewGuid().ToString("N")[..8]);
-        using (var writer = PackageWriter.Create(folder, Passphrase))
+        using (var writer = PackageWriter.Create(folder, Passphrase, maps is null ? PackageHeader.CurrentVersion : PackageHeader.MappedVersion))
         {
             var builder = new PackageBuilder(writer, recordsPerChunk);
             build(builder);
+            var mapEntries = maps is null ? [] : PackageMaps.Write(writer, maps.Maps, maps.Catalog);
             writer.Complete(new PackageManifest
             {
                 CreatedOn = DateTimeOffset.UtcNow,
@@ -58,12 +66,22 @@ internal static class MigrationTestPackage
                 Tables = builder.Tables,
                 Relationships = builder.Relationships,
                 Solutions = builder.Solutions,
+                Maps = mapEntries,
+                ArchiveCandidates = builder.ArchiveCandidates,
             });
         }
         var file = folder + ".xrmpkg";
         PackageWriter.Pack(folder, file);
         return file;
     }
+
+    /// <summary>The maps of a test package (each with its name and YAML text) and its source catalog.</summary>
+    public sealed record PackageMapsPart(IReadOnlyList<(string Name, string Yaml)> Maps, SourceCatalog Catalog);
+
+    /// <summary>A source catalog table with <paramref name="columns"/> (none of them custom); no object type code.</summary>
+    public static SourceCatalogTable CatalogTable(string table, string primaryKey, bool isActivity, string ownership,
+        params (string Column, string Type, string[] Targets)[] columns) =>
+        new(table, primaryKey, null, ownership, isActivity, [.. columns.Select(c => new SourceCatalogColumn(c.Column, c.Type, c.Targets, false))]);
 
     /// <summary>A record with its values.</summary>
     public static MigrationRecord Record(Guid id, params (string Column, MigrationValue Value)[] values) =>
@@ -75,6 +93,7 @@ internal static class MigrationTestPackage
         public List<PackageTable> Tables { get; } = [];
         public List<PackageRelationship> Relationships { get; } = [];
         public List<PackageSolution> Solutions { get; } = [];
+        public List<PackageTable> ArchiveCandidates { get; } = [];
 
         /// <summary>A solution file (<c>solutions/&lt;name&gt;.zip</c>), imported at <paramref name="order"/> (default: after the others).</summary>
         public PackageBuilder Solution(string uniqueName, byte[] zip, int? order = null, bool managed = false)
@@ -92,6 +111,14 @@ internal static class MigrationTestPackage
             foreach (var r in records) chunks.Add(r);
             chunks.Complete();
             Tables.Add(new PackageTable(name, primaryKey, chunks.Count, [.. chunks.Chunks]));
+            return this;
+        }
+
+        /// <summary>A data table the export kept as an archive candidate (table mapping spec §8.7): a standard table the target lacks.</summary>
+        public PackageBuilder Candidate(string name, string primaryKey, IEnumerable<MigrationRecord> records)
+        {
+            Table(name, primaryKey, records);
+            ArchiveCandidates.Add(Tables[^1]);
             return this;
         }
 

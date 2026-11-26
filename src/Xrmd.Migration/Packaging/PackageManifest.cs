@@ -15,6 +15,13 @@ public sealed record PackageManifest
     public IReadOnlyList<PackageRelationship> Relationships { get; init; } = [];
     public IReadOnlyList<PackageEntry> Entries { get; init; } = [];
     public IReadOnlyList<PackageWarning> Warnings { get; init; } = [];
+    /// <summary>The entry paths of the map files (format version 2); empty for a package without maps.</summary>
+    public IReadOnlyList<string> Maps { get; init; } = [];
+    /// <summary>
+    /// The standard tables xrmverse lacks and no map names, whose rows are in the package so that an import can create archive
+    /// tables for them (spec §8.7). They are also in <see cref="Tables"/>; the record count is the same.
+    /// </summary>
+    public IReadOnlyList<PackageTable> ArchiveCandidates { get; init; } = [];
 }
 
 public sealed record PackageSource(string Url, string EnvironmentId, string OrganizationId);

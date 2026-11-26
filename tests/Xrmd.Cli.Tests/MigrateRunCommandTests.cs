@@ -42,6 +42,8 @@ public sealed class MigrateRunCommandTests : IDisposable
         if (path == "/admin/migrate/runs" && method == "POST")
             return start?.Invoke() ?? FakeHandler.Json(HttpStatusCode.Accepted, $$"""{"runId":"{{RunId}}","asyncOperationId":"{{Guid.NewGuid()}}"}""");
         if (path == $"/admin/migrate/runs/{RunId}") return FakeHandler.Json(HttpStatusCode.OK, $$"""{"runId":"{{RunId}}","state":"finalized","phase":10,"phases":["verify"]}""");
+        if (path == $"/admin/migrate/runs/{RunId}/report")
+            return FakeHandler.Json(HttpStatusCode.OK, $$"""{"runId":"{{RunId}}","state":"completed","dryRun":true,"tables":[],"issues":[],"phases":[]}""");
         return new HttpResponseMessage(HttpStatusCode.NotFound);
     };
 
@@ -87,6 +89,22 @@ public sealed class MigrateRunCommandTests : IDisposable
     }
 
     [Fact]
+    public async Task Run_with_map_stores_it_and_sends_it_with_the_start()
+    {
+        using var cli = await CliAsync(Environment(), Xrmd());
+        var map = Path.Combine(_root, "sales-like.yaml");
+        await File.WriteAllTextAsync(map, SyntheticPackage.SalesLikeYaml);
+
+        (await cli.RunAsync(Run(Path.Combine(_root, "work"), "--map", map, "--keep-export"))).Should().Be(0, cli.Err.ToString());
+
+        var start = cli.Handler.Requests.Select((r, i) => (r, i)).Single(x => x.r.Method == HttpMethod.Post && x.r.RequestUri!.AbsolutePath == "/admin/migrate/runs");
+        var body = System.Text.Json.Nodes.JsonNode.Parse(cli.Handler.Bodies[start.i]!)!;
+        body["maps"]!.AsArray().Select(m => m!.GetValue<string>()).Should().Equal(SyntheticPackage.SalesLikeYaml);
+        using var reader = PackageReader.Open(Path.Combine(_root, "work"), SyntheticPackage.Passphrase);
+        reader.Manifest.Maps.Should().Equal("map/1-sales-like.yaml");
+    }
+
+    [Fact]
     public async Task Run_deletes_the_export_after_a_completed_run()
     {
         using (var cli = await CliAsync(Environment(), Xrmd()))
@@ -97,6 +115,28 @@ public sealed class MigrateRunCommandTests : IDisposable
         using (var cli = await CliAsync(Environment(), Xrmd()))
             (await cli.RunAsync(Run(Path.Combine(_root, "b"), "--keep-export"))).Should().Be(0, cli.Err.ToString());
         File.Exists(Path.Combine(_root, "b", PackageHeader.FileName)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Run_dry_run_prints_the_report_and_keeps_the_export()
+    {
+        var work = Path.Combine(_root, "work");
+        using var cli = await CliAsync(Environment(), Xrmd());
+
+        (await cli.RunAsync(Run(work, "--dry-run"))).Should().Be(0, cli.Err.ToString());
+
+        var start = cli.Handler.Requests.Select((r, i) => (r, i)).Single(x => x.r.Method == HttpMethod.Post && x.r.RequestUri!.AbsolutePath == "/admin/migrate/runs");
+        System.Text.Json.Nodes.JsonNode.Parse(cli.Handler.Bodies[start.i]!)!["options"]!["dryRun"]!.GetValue<string>().Should().Be("true");
+        cli.Out.ToString().Should().StartWith("# Dry run report");
+        File.Exists(Path.Combine(work, PackageHeader.FileName)).Should().BeTrue("the real run that follows imports the same export");
+    }
+
+    [Fact]
+    public async Task Run_dry_run_no_wait_points_to_the_report()
+    {
+        using var cli = await CliAsync(Environment(), Xrmd());
+        (await cli.RunAsync(Run(Path.Combine(_root, "work"), "--dry-run", "--no-wait"))).Should().Be(0, cli.Err.ToString());
+        cli.Out.ToString().Should().Contain($"xrmd migrate report {RunId}");
     }
 
     [Fact]

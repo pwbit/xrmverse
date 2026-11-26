@@ -2,9 +2,12 @@ using System.Text.Json.Nodes;
 using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Client;
 using Xrmd.Admin.Migration;
 using Xrmd.Admin.Migration.Import;
+using Xrmd.Migration.Mapping;
 using Xrmd.Security;
 using Xrmd.TestSupport;
 using static Xrmd.Integration.Tests.MigrationTestPackage;
@@ -155,5 +158,128 @@ public sealed class McpMigrationToolsTests(XrmdFixture fx) : IDisposable
         answers.Add((await CallAsync(client, "migrate_get_report", new() { ["runId"] = runId })).Text);
 
         answers.Should().NotContain(a => a.Contains(Passphrase, StringComparison.Ordinal) || a.Contains("not the right passphrase", StringComparison.Ordinal));
+    }
+
+    private const string AccountMap = """
+        version: 1
+        tables:
+          - source: account
+            target: account
+            columns:
+              name: name
+        """;
+
+    [Fact]
+    public async Task Start_import_passes_maps()
+    {
+        var file = Build(_root);
+        await using var app = Host();
+        await using var client = await ConnectAsync(app);
+
+        var (_, started) = await CallAsync(client, "migrate_start_import",
+            new() { ["serverPath"] = file, ["passphrase"] = Passphrase, ["maps"] = new[] { AccountMap } });
+        var runId = started["runId"]!.GetValue<string>();
+        var status = await WaitAsync(client, runId, []);
+        status["state"]!.GetValue<string>().Should().Be(MigrationRunStates.Finalized, status["message"]?.ToString());
+
+        var options = JsonNode.Parse((string)(await TestSql.ScalarAsync(app.Services.GetRequiredService<IConfiguration>().GetConnectionString("Org")!,
+            "SELECT options FROM meta.migration_run WHERE runid = @id", ("@id", Guid.Parse(runId))))!)!;
+        JsonNode.Parse(options["maps"]!.GetValue<string>())!.AsArray().Select(m => m!.GetValue<string>()).Should().Equal(AccountMap);
+
+        var invalid = await client.CallToolAsync("migrate_start_import", new Dictionary<string, object?>
+        {
+            ["serverPath"] = file, ["passphrase"] = Passphrase, ["maps"] = new[] { AccountMap.Replace("source: account", "source: lead", StringComparison.Ordinal) },
+        });
+        invalid.IsError.Should().BeTrue();
+        McpTests.Text(invalid).Should().Contain("The maps name sources that are not in the package: table 'lead'");
+    }
+
+    [Fact]
+    public async Task Start_import_with_dryRun_runs_a_dry_run()
+    {
+        var file = Build(_root);
+        await using var app = Host();
+        await using var client = await ConnectAsync(app);
+
+        var (_, started) = await CallAsync(client, "migrate_start_import", new() { ["serverPath"] = file, ["passphrase"] = Passphrase, ["dryRun"] = true });
+        var runId = started["runId"]!.GetValue<string>();
+        started["dryRun"]!.GetValue<bool>().Should().BeTrue();
+        JsonObject status;
+        var until = DateTime.UtcNow.AddSeconds(60);
+        do
+        {
+            await Task.Delay(250);
+            (_, status) = await CallAsync(client, "migrate_get_status", new() { ["runId"] = runId });
+        }
+        while (status["state"]!.GetValue<string>() is MigrationRunStates.Queued or MigrationRunStates.Running && DateTime.UtcNow < until);
+
+        status["state"]!.GetValue<string>().Should().Be(MigrationRunStates.Completed, status["message"]?.ToString());
+        status["dryRun"]!.GetValue<bool>().Should().BeTrue();
+        (await CallAsync(client, "migrate_get_report", new() { ["runId"] = runId })).Json["dryRun"]!.GetValue<bool>().Should().BeTrue();
+        app.Services.GetRequiredService<MigrationLock>().ActiveRunId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Dry_run_with_archive_returns_the_updated_map()
+    {
+        var file = Build(_root, p => p
+                .Table("account", "accountid", [Record(Guid.NewGuid(), ("name", new Xrmd.Migration.Records.StringValue("Example")))])
+                .Candidate("quote", "quoteid", [Record(Guid.NewGuid(), ("name", new Xrmd.Migration.Records.StringValue("Offer 1")))]),
+            new PackageMapsPart([("Accounts", AccountMap)], new SourceCatalog(
+            [
+                CatalogTable("account", "accountid", false, "user", ("name", "String", [])),
+                CatalogTable("quote", "quoteid", false, "user", ("quoteid", "Uniqueidentifier", []), ("name", "String", [])),
+            ], [])));
+        await using var app = Host();
+        await using var client = await ConnectAsync(app);
+
+        // Not a dry run: refused, nothing started.
+        var refused = await client.CallToolAsync("migrate_start_import",
+            new Dictionary<string, object?> { ["serverPath"] = file, ["passphrase"] = Passphrase, ["archive"] = new[] { "quote" } });
+        refused.IsError.Should().BeTrue();
+        McpTests.Text(refused).Should().Contain("'archive' is only for a dry run");
+        var notCandidate = await client.CallToolAsync("migrate_start_import",
+            new Dictionary<string, object?> { ["serverPath"] = file, ["passphrase"] = Passphrase, ["dryRun"] = true, ["archive"] = new[] { "salesorder" } });
+        notCandidate.IsError.Should().BeTrue();
+        McpTests.Text(notCandidate).Should().Contain("'salesorder' is not an archive candidate");
+
+        // The package's map, with quote added as text.
+        var (_, started) = await CallAsync(client, "migrate_start_import",
+            new() { ["serverPath"] = file, ["passphrase"] = Passphrase, ["dryRun"] = true, ["archive"] = new[] { "quote" } });
+        var map = started["map"]!.GetValue<string>();
+        map.Should().Be(AccountMap + "\n  # 1 row(s); columns become xrmva_<column>\n  - { source: quote, target: xrmva_quote, archive: true }\n");
+        MapSet.Combine([MapReader.Parse(map, "map")]).BySource("quote")!.Archive.Should().BeTrue();
+
+        var runId = started["runId"]!.GetValue<string>();
+        JsonObject status;
+        var until = DateTime.UtcNow.AddSeconds(60);
+        do
+        {
+            await Task.Delay(250);
+            (_, status) = await CallAsync(client, "migrate_get_status", new() { ["runId"] = runId });
+        }
+        while (status["state"]!.GetValue<string>() is MigrationRunStates.Queued or MigrationRunStates.Running && DateTime.UtcNow < until);
+        status["state"]!.GetValue<string>().Should().Be(MigrationRunStates.Completed, status["message"]?.ToString());
+
+        // The report names the maps the run used (here the package's) and every candidate, for the CLI to save the choices with them.
+        var report = (await CallAsync(client, "migrate_get_report", new() { ["runId"] = runId })).Json;
+        report["maps"]!.AsArray().Select(t => t!.GetValue<string>()).Should().Equal(AccountMap);
+        report["archiveCandidates"]!.AsArray().Select(c => c!["table"]!.GetValue<string>()).Should().Equal("quote");
+    }
+
+    [Fact]
+    public async Task Inspect_lists_the_maps_of_a_mapped_package()
+    {
+        await using var app = Host();
+        var token = DevTokenFactory.Create(fx.AdminObjectId, fx.BaseUrl);
+        var file = Build(_root, p => p.Table("account", "accountid", [Record(Guid.NewGuid(), ("name", new Xrmd.Migration.Records.StringValue("Example")))]),
+            new PackageMapsPart([("Accounts", AccountMap)], new SourceCatalog([CatalogTable("account", "accountid", false, "user", ("name", "String", []))], [])));
+        var packageId = await UploadAsync(app.CreateClient(), token, file);
+        await using var client = await ConnectAsync(app);
+
+        var (_, inspected) = await CallAsync(client, "migrate_inspect_package", new() { ["packageId"] = packageId.ToString(), ["passphrase"] = Passphrase });
+
+        inspected["formatVersion"]!.GetValue<int>().Should().Be(2);
+        inspected["maps"]!.AsArray().Select(m => m!.GetValue<string>()).Should().Equal("map/1-accounts.yaml");
     }
 }

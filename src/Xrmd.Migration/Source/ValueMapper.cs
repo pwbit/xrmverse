@@ -26,8 +26,11 @@ public static class ValueMapper
     /// the column is left out. Without it, such a value throws an <see cref="InvalidDataException"/> naming the column.</param>
     /// <param name="tableOfCode">The source table of an object type code, or null: a whole number <c>objecttypecode</c> column is
     /// written as the table's logical name, because a custom table's number is the source's own (M6 run).</param>
+    /// <param name="lookupNames">For a table an archive may be made from (spec §8.7): each non-empty lookup also writes
+    /// <c>&lt;column&gt;name</c>, the referenced row's name as the source formats it, or its id when the source gives none. An archive
+    /// keeps a lookup it cannot create as that text.</param>
     public static MigrationRecord Map(SourceTable table, JsonElement row, Func<SourceColumn, Guid, MigrationValue?> files, Action<string>? unresolved = null,
-        Action<string>? invalid = null, Func<int, string?>? tableOfCode = null)
+        Action<string>? invalid = null, Func<int, string?>? tableOfCode = null, bool lookupNames = false)
     {
         var id = row.GetProperty(table.PrimaryKey).GetGuid();
         var values = new Dictionary<string, MigrationValue>(StringComparer.Ordinal);
@@ -44,9 +47,16 @@ public static class ValueMapper
                 && column.LogicalName.EndsWith("objecttypecode", StringComparison.Ordinal) && tableOfCode((int)code.Value) is { } name)
                 value = new StringValue(name);
             if (value is not null) values[column.LogicalName] = value;
+            if (lookupNames && value is LookupValue lookup && !table.Columns.Any(c => c.LogicalName == column.LogicalName + "name"))
+                values[column.LogicalName + "name"] = new StringValue(LookupName(row, column) ?? lookup.Id.ToString("D"));
         }
         return new MigrationRecord(id, values);
     }
+
+    /// <summary>The formatted value of a lookup (the referenced row's primary name); null when the response has none.</summary>
+    private static string? LookupName(JsonElement row, SourceColumn column) =>
+        row.TryGetProperty($"_{column.LogicalName}_value@OData.Community.Display.V1.FormattedValue", out var name)
+        && name.ValueKind == JsonValueKind.String && name.GetString() is { Length: > 0 } text ? text : null;
 
     private static bool Present(JsonElement row, string name, out JsonElement value) =>
         row.TryGetProperty(name, out value) && value.ValueKind != JsonValueKind.Null;

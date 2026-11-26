@@ -29,6 +29,18 @@ internal sealed class FakeEnvironment
     public HashSet<string> CountFailsFor { get; } = [];
     public string UserRoleTemplate { get; set; } = "627090ff-40a3-4053-8790-584edc5be201";
 
+    /// <summary>Display names: <c>table</c> or <c>table.column</c> → label.</summary>
+    public Dictionary<string, string> DisplayNames { get; } = [];
+
+    /// <summary><c>table.column</c> → MaxLength of a String column.</summary>
+    public Dictionary<string, int> MaxLengths { get; } = [];
+
+    /// <summary><c>table.column</c> → Precision of a Money column.</summary>
+    public Dictionary<string, int> Precisions { get; } = [];
+
+    /// <summary>Tables whose metadata says IsValidForAdvancedFind = false.</summary>
+    public HashSet<string> NotSearchable { get; } = [];
+
     public FakeDataverse Fake { get; } = new();
 
     /// <summary>The answer to the solutions query (read at request time).</summary>
@@ -52,8 +64,32 @@ internal sealed class FakeEnvironment
     /// <summary>Downloads answer 404 (the file was deleted after its record was read).</summary>
     public bool FilesMissing { get; set; }
 
+    /// <summary>Table → OwnershipType (default UserOwned).</summary>
+    public Dictionary<string, string> Ownership { get; } = [];
+
+    /// <summary>Table → ObjectTypeCode.</summary>
+    public Dictionary<string, int> ObjectTypeCodes { get; } = [];
+
+    /// <summary><c>table.column</c> of columns that are custom although their table is not.</summary>
+    public HashSet<string> CustomColumns { get; } = [];
+
+    /// <summary>N:N relationships (by name) that are standard, not custom.</summary>
+    public HashSet<string> StandardManyToMany { get; } = [];
+
+    /// <summary>Choice and status columns: each option has a value, a state (status only) and an English and a German label.</summary>
+    public List<(string Table, string Column, string Type, (int Value, int? State, string En, string De)[] Options)> Choices { get; } = [];
+
+    /// <summary>The <c>languagecode</c> of the organization.</summary>
+    public int OrganizationLanguage { get; set; } = 1033;
+
     /// <summary>Answer of WhoAmI's OrganizationId.</summary>
     public string OrganizationId { get; set; } = "00000000-0000-0000-0000-0000000000c1";
+
+    public FakeEnvironment Also(Action<FakeEnvironment> change)
+    {
+        change(this);
+        return this;
+    }
 
     public FakeEnvironment Build()
     {
@@ -72,15 +108,49 @@ internal sealed class FakeEnvironment
             value = Tables.Select(t => new
             {
                 LogicalName = t.Name, EntitySetName = t.Set, PrimaryIdAttribute = t.Key, IsCustomEntity = t.Custom, IsActivity = false, IsIntersect = t.Intersect,
+                OwnershipType = Ownership.GetValueOrDefault(t.Name, "UserOwned"), ObjectTypeCode = ObjectTypeCodes.TryGetValue(t.Name, out var otc) ? otc : (int?)null,
                 TableType = TableTypes.GetValueOrDefault(t.Name, "Standard"), IsManaged = Managed.Contains(t.Name),
-                Attributes = t.Columns.Select(c => new { LogicalName = c.Name, AttributeType = c.Type, IsCustomAttribute = t.Custom, IsValidForRead = true, AttributeOf = (string?)null, SourceType = 0 }),
+                IsValidForAdvancedFind = new { Value = !NotSearchable.Contains(t.Name), CanBeChanged = false }, IsCustomizable = new { Value = true, CanBeChanged = true }, IsPrivate = false,
+                Attributes = t.Columns.Select(c => new { LogicalName = c.Name, AttributeType = c.Type, IsCustomAttribute = t.Custom || CustomColumns.Contains($"{t.Name}.{c.Name}"), IsValidForRead = true, AttributeOf = (string?)null, SourceType = 0 }),
             }),
         })));
         Fake.Get(@"EntityDefinitions\(LogicalName='([a-z_]+)'\)/Attributes/Microsoft\.Dynamics\.CRM\.LookupAttributeMetadata", (_, m) => FakeDataverse.Json(JsonSerializer.Serialize(new
         {
             value = Tables.Single(t => t.Name == m.Groups[1].Value).Columns.Where(c => c.Type == "Lookup").Select(c => new { LogicalName = c.Name, Targets = c.Targets }),
         })));
+        Fake.Get(@"EntityDefinitions\(LogicalName='([a-z_]+)'\)/Attributes/Microsoft\.Dynamics\.CRM\.(Picklist|MultiSelectPicklist|Status)AttributeMetadata", (_, m) => FakeDataverse.Json(JsonSerializer.Serialize(new
+        {
+            value = Choices.Where(c => c.Table == m.Groups[1].Value && c.Type == m.Groups[2].Value).Select(c => new
+            {
+                LogicalName = c.Column,
+                OptionSet = new
+                {
+                    Name = $"{c.Table}_{c.Column}", IsGlobal = false,
+                    Options = c.Options.Select(o => new
+                    {
+                        o.Value, State = o.State,
+                        Label = new { LocalizedLabels = new[] { new { Label = o.De, LanguageCode = 1031 }, new { Label = o.En, LanguageCode = 1033 } } },
+                    }),
+                },
+            }),
+        })));
+        Fake.Get(@"EntityDefinitions\(LogicalName='([a-z_]+)'\)/Attributes\?\$select=LogicalName,DisplayName", (_, m) => FakeDataverse.Json(JsonSerializer.Serialize(new
+        {
+            value = Tables.Single(t => t.Name == m.Groups[1].Value).Columns.Select(c => new { LogicalName = c.Name, DisplayName = Label($"{m.Groups[1].Value}.{c.Name}") }),
+        })));
+        Fake.Get(@"EntityDefinitions\(LogicalName='([a-z_]+)'\)\?\$select=DisplayName", (_, m) => FakeDataverse.Json(JsonSerializer.Serialize(new { DisplayName = Label(m.Groups[1].Value) })));
+        Fake.Get(@"EntityDefinitions\(LogicalName='([a-z_]+)'\)/Attributes/Microsoft\.Dynamics\.CRM\.StringAttributeMetadata", (_, m) => FakeDataverse.Json(JsonSerializer.Serialize(new
+        {
+            value = Tables.Single(t => t.Name == m.Groups[1].Value).Columns.Where(c => c.Type == "String")
+                .Select(c => new { LogicalName = c.Name, MaxLength = MaxLengths.GetValueOrDefault($"{m.Groups[1].Value}.{c.Name}", 100), Format = "Text" }),
+        })));
+        Fake.Get(@"EntityDefinitions\(LogicalName='([a-z_]+)'\)/Attributes/Microsoft\.Dynamics\.CRM\.MoneyAttributeMetadata", (_, m) => FakeDataverse.Json(JsonSerializer.Serialize(new
+        {
+            value = Tables.Single(t => t.Name == m.Groups[1].Value).Columns.Where(c => c.Type == "Money")
+                .Select(c => new { LogicalName = c.Name, Precision = Precisions.GetValueOrDefault($"{m.Groups[1].Value}.{c.Name}", 2), MinValue = 0.0, MaxValue = 1000000000.0 }),
+        })));
         Fake.GetJson(@"EntityDefinitions\(LogicalName='[a-z_]+'\)/Attributes/", """{"value":[]}""");
+        Fake.Get(@"^/api/data/v9\.2/organizations\?\$select=languagecode$", (_, _) => FakeDataverse.Json($$"""{"value":[{"languagecode":{{OrganizationLanguage}}}]}"""));
         Fake.Get(@"EntityDefinitions\(LogicalName='[a-z_]+'\)/Attributes\(LogicalName='([a-z_]+)'\)", (_, m) => FakeDataverse.Json($$"""{"LogicalName":"{{m.Groups[1].Value}}"}"""));
         Fake.GetJson(@"EntityDefinitions\(LogicalName='[a-z_]+'\)/ManyToOneRelationships", """{"value":[]}""");
         Fake.Get(@"EntityDefinitions\(LogicalName='([a-z_]+)'\)\?", (_, m) => FakeDataverse.Json($$"""{"LogicalName":"{{m.Groups[1].Value}}"}"""));
@@ -93,7 +163,7 @@ internal sealed class FakeEnvironment
                 return new
                 {
                     SchemaName = name, IntersectEntityName = name, Entity1LogicalName = t.Columns[1].Targets[0], Entity1IntersectAttribute = t.Columns[1].Name,
-                    Entity2LogicalName = t.Columns[2].Targets[0], Entity2IntersectAttribute = t.Columns[2].Name, IsCustomRelationship = true,
+                    Entity2LogicalName = t.Columns[2].Targets[0], Entity2IntersectAttribute = t.Columns[2].Name, IsCustomRelationship = !StandardManyToMany.Contains(name),
                 };
             }),
         })));
@@ -115,6 +185,9 @@ internal sealed class FakeEnvironment
         });
         return this;
     }
+
+    private object? Label(string key) =>
+        DisplayNames.TryGetValue(key, out var label) ? new { LocalizedLabels = new[] { new { Label = "x" + label, LanguageCode = 1031 }, new { Label = label, LanguageCode = 1033 } }, UserLocalizedLabel = new { Label = "x" + label, LanguageCode = 1031 } } : null;
 
     private HttpResponseMessage Page(string set, string fetch)
     {

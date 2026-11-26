@@ -1,6 +1,9 @@
 using System.Net;
 using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
+using Xrmd.Migration.Mapping;
 using Xrmd.Migration.Packaging;
 
 namespace Xrmd.Migration.Source;
@@ -17,8 +20,14 @@ public sealed record ExportProgress
     /// <summary>The tables the exported solutions carry (their <c>customizations.xml</c>), kept for a resume.</summary>
     public List<string> SolutionTables { get; init; } = [];
 
-    /// <summary>The solutions and table scope the export started with; a resume must use the same.</summary>
+    /// <summary>The solutions, table scope and maps the export started with; a resume must use the same.</summary>
     public string? Options { get; init; }
+
+    /// <summary>The map entries written to the package (empty without maps), kept for a resume.</summary>
+    public List<string> MapEntries { get; init; } = [];
+
+    /// <summary>The archive candidates the export decided on (spec §8.7); null before the schema phase is done. A resume keeps them.</summary>
+    public List<string>? Candidates { get; init; }
 }
 
 /// <summary>
@@ -35,6 +44,11 @@ public sealed class Exporter(DataverseClient client, ExportOptions options, IPro
 
     private HashSet<string> _solutionTables = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>The standard tables xrmverse lacks and no map names that have rows and are exported for archive tables (spec §8.7).</summary>
+    private HashSet<string> _candidates = new(StringComparer.Ordinal);
+    private bool _candidatesDecided;
+    private (IReadOnlyDictionary<string, long> Counts, IReadOnlyList<string> Uncounted)? _unmigrated;
+
     private readonly object _progressLock = new();
     private ExportProgress _progress = new();
 
@@ -44,15 +58,22 @@ public sealed class Exporter(DataverseClient client, ExportOptions options, IPro
 
     public async Task<PackageManifest> RunAsync(PackageWriter writer, CancellationToken ct)
     {
+        if (options.Maps is not null)
+        {
+            if ((options.MapTexts?.Count ?? 0) == 0)
+                throw new MigrationExportException("The maps have no texts to store in the package (ExportOptions.MapTexts).");
+            if (writer.FormatVersion < PackageHeader.MappedVersion)
+                throw new MigrationExportException($"An export with maps needs a package of format version {PackageHeader.MappedVersion}: create the writer with PackageHeader.MappedVersion.");
+        }
         _progress = writer.ReadProgress<ExportProgress>() ?? new ExportProgress();
         var source = await IdentifyAsync(ct);
-        var fingerprint = Fingerprint();
+        var fingerprint = Fingerprint(options);
         if (_progress.Source is { } first)
         {
             if (!string.Equals(first.OrganizationId, source.OrganizationId, StringComparison.OrdinalIgnoreCase))
                 throw new MigrationExportException($"This folder holds an export of {first.Url}, not of {source.Url}: resume it with the same --source, or use another folder.");
             if (_progress.Options is { } saved && saved != fingerprint)
-                throw new MigrationExportException("The options differ from the ones this export started with (solutions, --include, --exclude): resume with the same options, or use another folder.");
+                throw new MigrationExportException("The options differ from the ones this export started with (solutions, --include, --exclude, --map): resume with the same options, or use another folder.");
         }
         var warnings = new List<PackageWarning>();
         warnings.AddRange(await CheckAdminAsync(ct));
@@ -70,18 +91,29 @@ public sealed class Exporter(DataverseClient client, ExportOptions options, IPro
             var exported = await SolutionExporter.ExportAsync(client, writer, solutions, options.ManagedSolutionFiles, schemaWarnings.Add, ct, coverage);
             log?.Report("Computing the schema outside solutions");
             _solutionTables = new HashSet<string>(coverage.Tables, StringComparer.OrdinalIgnoreCase);
-            var inScope = tables.Where(t => Exported(t.LogicalName) && (t.IsIntersect || InXrmverse(t))).ToList();
+            await FindCandidatesAsync(tables, ct);
+            var inScope = tables.Where(t => Exported(t.LogicalName) && (t.IsIntersect || InXrmverse(t) || IsMapped(t.LogicalName))).ToList();
             var optionValues = await SourceMetadata.ReadOptionsAsync(client, inScope, ct);
-            var plan = SchemaDelta.Compute(inScope, nn, optionValues, coverage);
+            // An archive table is created by the import from the catalog, not by the schema delta: nothing of it goes into the delta.
+            var archived = options.Maps?.Tables.Where(t => t.Archive).Select(t => t.Source).ToHashSet(StringComparer.Ordinal) ?? [];
+            var deltaScope = inScope.Where(t => !archived.Contains(t.LogicalName)).ToList();
+            var deltaOptions = optionValues.Where(o => !archived.Contains(o.Table)).ToList();
+            var deltaNn = nn.Where(r => !archived.Contains(r.Entity1) && !archived.Contains(r.Entity2)).ToList();
+            var forced = options.Maps?.Tables.Where(t => t.IsRenamed && !t.Archive).Select(t => t.Source).ToHashSet(StringComparer.Ordinal) ?? [];
+            var plan = SchemaDelta.Compute(deltaScope, deltaNn, deltaOptions, coverage, forced);
+            // A package with maps or archive candidates is version 2 and carries the source catalog (an older xrmd must refuse it).
+            if (_candidates.Count > 0) writer.UpgradeFormat(PackageHeader.MappedVersion);
+            var mapEntries = options.Maps is null && _candidates.Count == 0 ? [] : await WriteMapsAsync(writer, tables, optionValues, ct);
             await SchemaDelta.WriteAsync(client, writer, plan, ct);
             schemaWarnings.AddRange(plan.Unsupported.Select(u => new PackageWarning("unsupported-metadata", $"{u.Kind} {u.Name}: {u.Reason}")));
             schemaWarnings.AddRange(await DefaultOnlyComponents.FindAsync(client,
                 solutions.Where(s => exported.Any(e => e.UniqueName == s.UniqueName)).Select(s => s.SolutionId), ct));
-            Save(writer, p => p with { SchemaDone = true, Solutions = [.. exported], SchemaWarnings = schemaWarnings, Source = source, Options = fingerprint,
+            Save(writer, p => p with { SchemaDone = true, Solutions = [.. exported], SchemaWarnings = schemaWarnings, Source = source, Options = fingerprint, MapEntries = [.. mapEntries], Candidates = [.. _candidates.Order(StringComparer.Ordinal)],
                 SolutionTables = [.. coverage.Tables.Order(StringComparer.OrdinalIgnoreCase)] });
         }
         warnings.AddRange(_progress.SchemaWarnings);
         _solutionTables = new HashSet<string>(_progress.SolutionTables, StringComparer.OrdinalIgnoreCase);
+        await FindCandidatesAsync(tables, ct);
 
         var byName = tables.ToDictionary(t => t.LogicalName, StringComparer.Ordinal);
         var jobs = new List<(SourceTable Table, string Prefix)>();
@@ -94,8 +126,17 @@ public sealed class Exporter(DataverseClient client, ExportOptions options, IPro
         var relationships = new List<SourceRelationship>();
         foreach (var r in nn.Where(r => !SecurityTables.Contains(r.IntersectEntity) && byName.ContainsKey(r.IntersectEntity)).OrderBy(r => r.SchemaName, StringComparer.Ordinal))
         {
-            bool Migrated(string table) => Exported(table) && byName.TryGetValue(table, out var end) && InXrmverse(end);
-            if (Migrated(r.Entity1) && Migrated(r.Entity2) && Exported(r.IntersectEntity)) relationships.Add(r);
+            bool Migrated(string table) => Exported(table) && byName.TryGetValue(table, out var end) && (InXrmverse(end) || IsMapped(table));
+            // A relationship the map names is exported even when the exclusion catalog lists its intersect table (--exclude still wins).
+            var named = options.Maps?.RelationshipTargetOf(r.SchemaName) is not null;
+            var intersectExported = named ? !IsExcludedByOption(r.IntersectEntity) : Exported(r.IntersectEntity);
+            if (Migrated(r.Entity1) && Migrated(r.Entity2) && intersectExported)
+            {
+                // Of a table that is renamed in the target, only the relationships the map names and the custom ones travel (spec §7).
+                if ((IsRenamedMapped(r.Entity1) || IsRenamedMapped(r.Entity2)) && !named && !r.IsCustom)
+                    warnings.Add(new PackageWarning("relationship-not-mapped", $"{r.SchemaName}: a table of this relationship ({r.Entity1}, {r.Entity2}) is mapped to another table and the map does not name the relationship, so its pairs are not exported"));
+                else relationships.Add(r);
+            }
             else if (!ExclusionCatalog.IsFirstParty(r.IntersectEntity) && (Migrated(r.Entity1) || Migrated(r.Entity2)))
                 warnings.Add(new PackageWarning("relationship-outside-scope", $"{r.SchemaName}: one of its tables ({r.Entity1}, {r.Entity2}) is not migrated, so its pairs are not exported"));
         }
@@ -116,7 +157,8 @@ public sealed class Exporter(DataverseClient client, ExportOptions options, IPro
             {
                 log?.Report($"Exporting {job.Prefix}");
                 var exporter = new TableExporter(client, writer, files, code => codes.GetValueOrDefault(code));
-                var done = await exporter.ExportAsync(job.Table, job.Prefix, Current(job.Prefix), p => Save(writer, x => Put(x, job.Prefix, p)), stop.Token);
+                var done = await exporter.ExportAsync(job.Table, job.Prefix, Current(job.Prefix), p => Save(writer, x => Put(x, job.Prefix, p)), stop.Token,
+                    NamedByMap(job.Table.LogicalName), IsArchivable(job.Table.LogicalName));
                 lock (results)
                     results[job.Prefix] = new TableResult(done, exporter.SkippedColumns.ToHashSet(), exporter.FirstPartyColumns.ToHashSet(),
                         exporter.LookupTargetsOutsideScope.ToDictionary(), exporter.UnresolvedLookups.ToDictionary(), exporter.MissingFiles.ToDictionary(),
@@ -142,10 +184,13 @@ public sealed class Exporter(DataverseClient client, ExportOptions options, IPro
         warnings.AddRange(await NotInXrmverseAsync(tables, ct));
 
         var manifestTables = new List<PackageTable>();
+        var archiveCandidates = new List<PackageTable>();
         foreach (var (prefix, result) in results.Where(r => !r.Key.StartsWith("nn/", StringComparison.Ordinal)).OrderBy(r => r.Key, StringComparer.Ordinal))
         {
             var table = byName[result.Progress.Table];
-            manifestTables.Add(new PackageTable(table.LogicalName, table.PrimaryKey, result.Progress.Records, result.Progress.Chunks));
+            var exported = new PackageTable(table.LogicalName, table.PrimaryKey, result.Progress.Records, result.Progress.Chunks);
+            manifestTables.Add(exported);
+            if (_candidates.Contains(table.LogicalName)) archiveCandidates.Add(exported);
             if (result.Skipped.Count > 0)
                 warnings.Add(new PackageWarning("columns-skipped", $"{table.LogicalName}: {string.Join(", ", result.Skipped.Order(StringComparer.Ordinal))} (type not carried)"));
             if (result.FirstParty.Count > 0)
@@ -172,18 +217,61 @@ public sealed class Exporter(DataverseClient client, ExportOptions options, IPro
             Solutions = _progress.Solutions,
             Tables = manifestTables,
             Relationships = manifestRelationships,
+            Maps = [.. _progress.MapEntries],
+            ArchiveCandidates = archiveCandidates,
             Warnings = warnings,
         };
         writer.Complete(manifest);
         return manifest;
     }
 
-    /// <summary>What a resume must not change: solutions and table scope.</summary>
-    private string Fingerprint() => string.Join("|",
-        string.Join(",", options.Solutions.Select(n => n.ToLowerInvariant()).Order(StringComparer.Ordinal)),
-        options.AllUnmanaged ? "all-unmanaged" : "",
-        string.Join(",", options.Include.Select(n => n.ToLowerInvariant()).Order(StringComparer.Ordinal)),
-        string.Join(",", options.Exclude.Select(n => n.ToLowerInvariant()).Order(StringComparer.Ordinal)));
+    /// <summary>Writes the maps and the source catalog; returns the map entry paths.</summary>
+    private async Task<IReadOnlyList<string>> WriteMapsAsync(PackageWriter writer, IReadOnlyList<SourceTable> tables, IReadOnlyList<SourceOption> optionValues, CancellationToken ct)
+    {
+        using var org = await client.GetJsonAsync("organizations?$select=languagecode", ct);
+        var language = org.RootElement.GetProperty("value").EnumerateArray().Select(o => o.GetProperty("languagecode").GetInt32()).FirstOrDefault(1033);
+        // The tables an archive table may be made from also need their column details and choice values (spec §8.7).
+        var archivable = tables.Where(t => IsDataTable(t) && IsArchivable(t.LogicalName)).ToList();
+        var detailed = new Dictionary<string, SourceTable>(StringComparer.Ordinal);
+        foreach (var t in archivable) detailed[t.LogicalName] = await SourceMetadata.WithDetailsAsync(client, t, language, ct);
+        var candidateOptions = await SourceMetadata.ReadOptionsAsync(client, archivable.Where(t => _candidates.Contains(t.LogicalName)), ct);
+        var catalog = SourceCatalogBuilder.Build(tables.Where(IsDataTable).Select(t => detailed.GetValueOrDefault(t.LogicalName, t)), [.. optionValues, .. candidateOptions], language);
+        return PackageMaps.Write(writer, options.MapTexts ?? [], catalog);
+    }
+
+    /// <summary>What a resume must not change: solutions, table scope and maps.</summary>
+    internal static string Fingerprint(ExportOptions options)
+    {
+        var parts = new List<string>
+        {
+            string.Join(",", options.Solutions.Select(n => n.ToLowerInvariant()).Order(StringComparer.Ordinal)),
+            options.AllUnmanaged ? "all-unmanaged" : "",
+            string.Join(",", options.Include.Select(n => n.ToLowerInvariant()).Order(StringComparer.Ordinal)),
+            string.Join(",", options.Exclude.Select(n => n.ToLowerInvariant()).Order(StringComparer.Ordinal)),
+        };
+        // Only when off: an export begun by an older build keeps its fingerprint.
+        if (!options.ArchiveCandidates) parts.Add("no-archive-candidates");
+        // Only with maps: an export begun without them keeps its fingerprint.
+        if (options.Maps is not null)
+            parts.Add(Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join("\n", options.MapTexts!.Select(m => $"{m.Name}\0{m.Yaml}"))))));
+        return string.Join("|", parts);
+    }
+
+    /// <summary>A source table a map lists (renamed or not): it is exported although xrmverse lacks it, unless <c>--exclude</c> names it.</summary>
+    private bool IsMapped(string table) => options.Maps?.BySource(table) is not null;
+
+    /// <summary>A mapped source table whose rows go to another table: not a table of xrmverse, so it is never created by the delta.</summary>
+    private bool IsRenamedMapped(string table) => options.Maps?.TargetOf(table) is not null;
+
+    /// <summary>The first-party-prefixed columns of a mapped table that the map names (<c>columns</c> keys and the lookups <c>derived</c> reads).</summary>
+    /// <summary>A table an archive table may be made from (spec §8.7): an archive candidate, or archived by a map of the export.</summary>
+    private bool IsArchivable(string table) => _candidates.Contains(table) || options.Maps?.BySource(table)?.Archive == true;
+
+    private IReadOnlySet<string>? NamedByMap(string table)
+    {
+        if (options.Maps?.BySource(table) is not { } map) return null;
+        return map.Columns.Keys.Concat(map.Derived.Values.Select(d => d.LookupColumn)).ToHashSet(StringComparer.Ordinal);
+    }
 
     private bool IsExcludedByOption(string table) => options.Exclude.Contains(table, StringComparer.OrdinalIgnoreCase);
 
@@ -191,14 +279,15 @@ public sealed class Exporter(DataverseClient client, ExportOptions options, IPro
     private bool Exported(string table)
     {
         if (IsExcludedByOption(table)) return false;
-        if (SecurityTables.Contains(table)) return true;
+        if (SecurityTables.Contains(table) || IsMapped(table)) return true;
         var exclusion = ExclusionCatalog.Find(table);
         return exclusion is null || (exclusion.Optional && options.Include.Contains(table, StringComparer.OrdinalIgnoreCase));
     }
 
     private bool IsDataTable(SourceTable t) =>
         Exported(t.LogicalName) && !SecurityTables.Contains(t.LogicalName) && !t.IsIntersect
-        && t.TableType != "Virtual" && t.EntitySetName.Length > 0 && InXrmverse(t);
+        && t.TableType != "Virtual" && t.EntitySetName.Length > 0
+        && (InXrmverse(t) || IsMapped(t.LogicalName) || _candidates.Contains(t.LogicalName));
 
     /// <summary>
     /// A table that exists in the target after the schema phase (spec §6.3): an unmanaged custom table (an exported solution or the
@@ -270,23 +359,24 @@ public sealed class Exporter(DataverseClient client, ExportOptions options, IPro
     /// <summary>How many tables RetrieveTotalRecordCount is asked about at once (the names go in the URL).</summary>
     private const int CountBatch = 50;
 
-    /// <summary>
-    /// The standard tables with data that xrmverse does not have: one warning per table with records, and one line for the tables
-    /// Dataverse would not count (a refused batch), so the owner sees what stays behind.
-    /// </summary>
-    private async Task<IReadOnlyList<PackageWarning>> NotInXrmverseAsync(IReadOnlyList<SourceTable> tables, CancellationToken ct)
-    {
-        var names = tables.Where(t => !t.IsIntersect && t.TableType != "Virtual" && t.EntitySetName.Length > 0 && !InXrmverse(t)
+    /// <summary>Tables that are not migrated and not security tables: standard tables xrmverse lacks, and managed custom ones outside the exported solutions.</summary>
+    private IEnumerable<string> Unmigrated(IReadOnlyList<SourceTable> tables) =>
+        tables.Where(t => !t.IsIntersect && t.TableType != "Virtual" && t.EntitySetName.Length > 0 && !InXrmverse(t) && !IsMapped(t.LogicalName)
                 && !SecurityTables.Contains(t.LogicalName) && Exported(t.LogicalName))
-            .Select(t => t.LogicalName).Order(StringComparer.Ordinal).ToList();
-        var warnings = new List<PackageWarning>();
+            .Select(t => t.LogicalName).Order(StringComparer.Ordinal);
+
+    /// <summary>The record counts of <see cref="Unmigrated"/> (once per run), and the tables Dataverse would not count (a refused batch, or no answer).</summary>
+    private async Task<(IReadOnlyDictionary<string, long> Counts, IReadOnlyList<string> Uncounted)> CountUnmigratedAsync(IReadOnlyList<SourceTable> tables, CancellationToken ct)
+    {
+        if (_unmigrated is { } known) return known;
+        var counts = new Dictionary<string, long>(StringComparer.Ordinal);
         var uncounted = new List<string>();
-        foreach (var batch in names.Chunk(CountBatch))
+        foreach (var batch in Unmigrated(tables).Chunk(CountBatch))
         {
-            Dictionary<string, long> counts;
+            Dictionary<string, long> answer;
             try
             {
-                counts = await CountAsync(batch, ct);
+                answer = await CountAsync(batch, ct);
             }
             catch (DataverseException)
             {
@@ -294,12 +384,45 @@ public sealed class Exporter(DataverseClient client, ExportOptions options, IPro
                 continue;
             }
             foreach (var name in batch)
-                if (counts.TryGetValue(name, out var c))
-                {
-                    if (c != 0) warnings.Add(new PackageWarning("table-not-in-xrmverse", $"{name}: {c} record(s) not migrated (the table does not exist in xrmverse)"));
-                }
+                if (answer.TryGetValue(name, out var c)) counts[name] = c;
                 else uncounted.Add(name);
         }
+        return (_unmigrated = (counts, uncounted)).Value;
+    }
+
+    /// <summary>
+    /// Spec §8.7: the standard tables xrmverse lacks, no map names and the exclusion catalog does not list, that have rows. Their rows are
+    /// exported, so that an import can keep them in archive tables. Nothing is read for them when <see cref="ExportOptions.ArchiveCandidates"/> is off.
+    /// </summary>
+    private async Task FindCandidatesAsync(IReadOnlyList<SourceTable> tables, CancellationToken ct)
+    {
+        if (_candidatesDecided) return;
+        _candidatesDecided = true;
+        // A resumed export keeps the set its first run chose: a table that gained rows since is not added.
+        // An export of an older build (schema done, no set recorded) has none.
+        if (_progress.Candidates is { } chosen) { _candidates = chosen.ToHashSet(StringComparer.Ordinal); return; }
+        if (_progress.SchemaDone) return;
+        if (!options.ArchiveCandidates) return;
+        var (counts, _) = await CountUnmigratedAsync(tables, ct);
+        var unmigrated = Unmigrated(tables).ToHashSet(StringComparer.Ordinal);
+        // The exclusion catalog lists only part of the system and configuration tables: the metadata keeps the rest out (customizable,
+        // searchable and not private), and an --include'd optional catalog table is never a candidate.
+        _candidates = tables.Where(t => !t.IsCustom && (t.TableType is "Standard" or "Activity") && unmigrated.Contains(t.LogicalName)
+                && ExclusionCatalog.Find(t.LogicalName) is null && t.IsCustomizable && t.IsValidForAdvancedFind && !t.IsPrivate
+                && counts.GetValueOrDefault(t.LogicalName) > 0)
+            .Select(t => t.LogicalName).ToHashSet(StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// The standard tables with data that xrmverse does not have and that are not exported as archive candidates: one warning per table
+    /// with records, and one line for the tables Dataverse would not count (a refused batch), so the owner sees what stays behind.
+    /// </summary>
+    private async Task<IReadOnlyList<PackageWarning>> NotInXrmverseAsync(IReadOnlyList<SourceTable> tables, CancellationToken ct)
+    {
+        var (counts, uncounted) = await CountUnmigratedAsync(tables, ct);
+        var warnings = new List<PackageWarning>();
+        foreach (var name in Unmigrated(tables).Where(n => counts.TryGetValue(n, out var c) && c != 0 && !_candidates.Contains(n)))
+            warnings.Add(new PackageWarning("table-not-in-xrmverse", $"{name}: {counts[name]} record(s) not migrated (the table does not exist in xrmverse)"));
         if (uncounted.Count > 0)
             warnings.Add(new PackageWarning("table-not-in-xrmverse",
                 $"{uncounted.Count} table(s) that do not exist in xrmverse were not read and could not be counted: {string.Join(", ", uncounted)}"));
@@ -319,7 +442,7 @@ public sealed class Exporter(DataverseClient client, ExportOptions options, IPro
 
     private async Task<IReadOnlyList<PackageWarning>> NotSupportedYetAsync(IReadOnlyList<SourceTable> tables, CancellationToken ct)
     {
-        var names = tables.Select(t => t.LogicalName).Where(n => ExclusionCatalog.Find(n)?.Category == ExclusionCatalog.NotSupportedYet)
+        var names = tables.Select(t => t.LogicalName).Where(n => ExclusionCatalog.Find(n)?.Category == ExclusionCatalog.NotSupportedYet && !IsMapped(n))
             .Order(StringComparer.Ordinal).ToList();
         if (names.Count == 0) return [];
         var counts = new Dictionary<string, long>(StringComparer.Ordinal);

@@ -31,6 +31,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="Mapping\sales-like.yaml" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Xrmd.Migration\Xrmd.Migration.csproj" />
   </ItemGroup>
 

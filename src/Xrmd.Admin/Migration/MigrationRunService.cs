@@ -4,8 +4,10 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
+using Xrmd.Admin.Migration.Mapping;
 using Xrmd.Core;
 using Xrmd.Files;
+using Xrmd.Migration.Mapping;
 using Xrmd.Migration.Packaging;
 using Xrmd.Migration.Users;
 using Xrmd.Pipeline.Async;
@@ -27,8 +29,11 @@ public static class MigrationRunService
     public const int MinPassphraseLength = 12;
 
     /// <summary>
-    /// Starts an import: <c>{packageId | serverPath, passphrase, users?, options?}</c>. 202 with the run and its job; 409 with the busy
-    /// tables when the organization already holds business data.
+    /// Starts an import: <c>{packageId | serverPath, passphrase, users?, maps?, options?, archive?}</c>. 202 with the run and its job; 409 with the
+    /// busy tables (target names) when the organization already holds business data. With the option <c>dryRun</c> (table mapping spec
+    /// §8.6) the run only reads: no lock, no check for business data, and its job runs phase 1 and the preview only; it is refused
+    /// like any run while another one is open; with <c>archive</c> (source table names, dry run only, spec §8.7) its answer has <c>map</c>:
+    /// the map with those tables added as archive tables.
     /// </summary>
     public static async Task<MigrationResult> StartAsync(IServiceProvider services, Caller caller, JsonObject body, CancellationToken ct)
     {
@@ -44,6 +49,15 @@ public static class MigrationRunService
         try { users = UserMapping.Parse(body["users"]); }
         catch (UserMappingException ex) { throw BadRequest(ex.Message); }
         if (body["users"] is not null) options["users"] = users.ToJson().ToJsonString();
+        // Spec §8.1: the maps of the request (checked now, 400) replace the package's for the whole run, resume included.
+        if (options.ContainsKey(MigrationMaps.OptionName) || options.ContainsKey(MigrationMaps.PackageOptionName))
+            throw BadRequest($"Give the maps as '{MigrationMaps.OptionName}' of the request, not as an option.");
+        var maps = StartMaps(body);
+        if (maps is not null) options[MigrationMaps.OptionName] = MigrationMaps.ToOption(maps.Value.Texts);
+        var dryRun = DryRunOption(options);
+        var archive = ArchiveTables(body);
+        if (archive is not null && !dryRun)
+            throw BadRequest("'archive' is only for a dry run (option dryRun): the archive tables are chosen from what a dry run lists.");
 
         var store = services.GetRequiredService<MigrationRunStore>();
         if (packageId is { } id)
@@ -60,9 +74,20 @@ public static class MigrationRunService
 
         // Open the package now: a wrong passphrase or a file that is no package is a 400 before anything is queued.
         var database = await DatabaseAsync(services, ct);
-        var tables = await ManifestTablesAsync(services, database, packageId, serverPath, passphrase, ct);
+        var tables = await TargetTablesAsync(services, database, packageId, serverPath, passphrase, maps?.Maps, ct);
+        // Spec §8.7: the package's maps as the run uses them, for its report (a dry run's choices are saved with them).
+        if (maps is null && await ReadPackageAsync(services, database, packageId, serverPath, passphrase, p => MigrationMaps.PackageTextsAsync(p, ct), ct)
+                is { Count: > 0 } packageTexts)
+            options[MigrationMaps.PackageOptionName] = MigrationMaps.ToOption(packageTexts);
         await DemandExistingTargetsAsync(services, users, ct);
+        var archiveMap = archive is null ? null : await ArchiveMapAsync(services, database, packageId, serverPath, passphrase, maps?.Texts, archive, ct);
         if (await store.GetOpenRunAsync(ct) is { } open) throw Conflict($"Another migration run is open: {open.RunId}.");
+        if (dryRun)
+        {
+            var started = await StartDryRunAsync(services, caller, store, packageId, serverPath, passphrase, options, ct);
+            if (archiveMap is not null) started.Body["map"] = archiveMap;
+            return started;
+        }
 
         // The run and the lock first (the unique open-run index settles two starts), then the checks: no write can land between
         // the "no business data" check and the lock. A refused start removes the run and lifts the lock.
@@ -109,6 +134,91 @@ public static class MigrationRunService
         return new(new JsonObject { ["runId"] = runId.ToString(), ["asyncOperationId"] = job.ToString() }, StatusCodes.Status202Accepted);
     }
 
+    /// <summary>
+    /// Whether the start's options ask for a dry run (<c>dryRun</c>: true or "true"); the option is kept as <c>true</c>, or removed
+    /// when false. 400 for any other value.
+    /// </summary>
+    private static bool DryRunOption(JsonObject options)
+    {
+        var name = MigrationRunRow.DryRunOption;
+        if (options[name] is null)
+        {
+            options.Remove(name);
+            return false;
+        }
+        var text = options[name] is JsonValue v ? v.ToString() : null;
+        if (text is not ("true" or "false")) throw BadRequest($"The option '{name}' must be true or false.");
+        if (text == "true") options[name] = true;
+        else options.Remove(name);
+        return text == "true";
+    }
+
+    /// <summary>
+    /// Creates and queues a dry run (spec §8.6): no lock, no check for business data or busy jobs, since it writes only its ledger.
+    /// The single open-run rule still holds: a run started meanwhile makes this a 409.
+    /// </summary>
+    private static async Task<MigrationResult> StartDryRunAsync(IServiceProvider services, Caller caller, MigrationRunStore store,
+        Guid? packageId, string? serverPath, string passphrase, JsonObject options, CancellationToken ct)
+    {
+        var runId = Guid.NewGuid();
+        try
+        {
+            await store.CreateRunAsync(new MigrationRunRow(runId, packageId, serverPath, MigrationRunStates.Queued, 0, options.ToJsonString(), null, null,
+                caller.UserId, DateTime.UtcNow, null, null, null), ct);
+        }
+        catch (MigrationRunConflictException ex)
+        {
+            throw Conflict(ex.Message);
+        }
+        Guid job;
+        try
+        {
+            job = await EnqueueAsync(services, caller, runId, passphrase, ct);
+        }
+        catch
+        {
+            await store.DeleteRunAsync(runId, CancellationToken.None);
+            throw;
+        }
+        return new(new JsonObject { ["runId"] = runId.ToString(), ["asyncOperationId"] = job.ToString(), ["dryRun"] = true }, StatusCodes.Status202Accepted);
+    }
+
+    /// <summary>The <c>archive</c> of a start request (a list of source table names); null when it has none. 400 when it is not a list of names.</summary>
+    private static IReadOnlyList<string>? ArchiveTables(JsonObject body)
+    {
+        if (body["archive"] is null) return null;
+        if (body["archive"] is not JsonArray array || array.Any(t => t is not JsonValue v || !v.TryGetValue<string>(out var name) || name.Length == 0))
+            throw BadRequest("'archive' is a list of source table names.");
+        return [.. array.Select(t => t!.GetValue<string>())];
+    }
+
+    /// <summary>
+    /// Table mapping spec §8.7: the map with the archive tables <paramref name="archive"/> added as text (<see cref="ArchiveMapWriter"/>), for
+    /// the owner to save and import with: the single map of the request, else the package's single map, else a new one. 400 when there are
+    /// several maps, a table is not an archive candidate of the package, or the result is not a valid map.
+    /// </summary>
+    private static Task<string> ArchiveMapAsync(IServiceProvider services, string database, Guid? packageId, string? serverPath, string passphrase,
+        IReadOnlyList<string>? maps, IReadOnlyList<string> archive, CancellationToken ct) =>
+        ReadPackageAsync(services, database, packageId, serverPath, passphrase, async package =>
+        {
+            var texts = maps?.ToList() ?? await MigrationMaps.PackageTextsAsync(package, ct);
+            if (texts.Count > 1)
+                throw BadRequest($"'archive' adds the tables to one map, and the run has {texts.Count}: give the one to add them to in 'maps'.");
+            var candidates = package.RawManifest.ArchiveCandidates.ToDictionary(c => c.LogicalName, c => c.Records, StringComparer.Ordinal);
+            try
+            {
+                return ArchiveMapWriter.Append(texts.Count == 1 ? texts[0] : null, archive, await PackageMaps.ReadCatalogAsync(package, ct), candidates);
+            }
+            catch (MapFormatException ex)
+            {
+                throw BadRequest($"The map is not valid: {ex.Message}");
+            }
+            catch (MapValidationException ex)
+            {
+                throw BadRequest(string.Join("; ", ex.Problems));
+            }
+        }, ct);
+
     /// <summary>400 when a user of the mapping is mapped onto a user the organization does not have.</summary>
     private static async Task DemandExistingTargetsAsync(IServiceProvider services, UserMapping users, CancellationToken ct)
     {
@@ -133,19 +243,86 @@ public static class MigrationRunService
             ? passphrase
             : throw BadRequest($"'passphrase' is required: the package passphrase (at least {MinPassphraseLength} characters).");
 
+    /// <summary>
+    /// The maps of a start request (<c>maps</c>: a list of YAML texts), parsed and combined; null when it has none. 400 when they are
+    /// not a list of texts or not valid maps.
+    /// </summary>
+    private static (IReadOnlyList<string> Texts, MapSet Maps)? StartMaps(JsonObject body)
+    {
+        if (body["maps"] is null) return null;
+        if (body["maps"] is not JsonArray array || array.Any(m => m is not JsonValue v || !v.TryGetValue<string>(out _)))
+            throw BadRequest("'maps' is a list of mapping files, each as its YAML text.");
+        if (array.Count == 0) throw BadRequest("'maps' is empty: give at least one mapping file, or leave 'maps' out to use the package's maps.");
+        var texts = array.Select(m => m!.GetValue<string>()).ToList();
+        try
+        {
+            return (texts, MigrationMaps.Parse(texts));
+        }
+        catch (MapFormatException ex)
+        {
+            throw BadRequest($"The map is not valid: {ex.Message}");
+        }
+        catch (MapValidationException ex)
+        {
+            throw BadRequest($"The maps are not valid: {string.Join("; ", ex.Problems)}");
+        }
+    }
+
+    /// <summary>
+    /// The tables the run writes, under their target names: the package's tables through <paramref name="maps"/> when the request has
+    /// maps, else through the package's own maps. 400 when the passphrase is wrong, the file is no package, the request's maps name
+    /// source tables or relationships the package does not hold, the package's maps are not valid, or two tables of the package would
+    /// land in one target table.
+    /// </summary>
+    private static Task<List<string>> TargetTablesAsync(IServiceProvider services, string database, Guid? packageId, string? serverPath,
+        string passphrase, MapSet? maps, CancellationToken ct) =>
+        ReadPackageAsync(services, database, packageId, serverPath, passphrase, async package =>
+        {
+            var tables = package.RawManifest.Tables.Select(t => t.LogicalName).ToList();
+            if (maps is not null)
+            {
+                var missing = maps.Tables.Select(t => t.Source).Where(s => !tables.Contains(s, StringComparer.Ordinal))
+                    .Select(t => $"table '{t}'").ToList();
+                var relationships = package.RawManifest.Relationships.Select(r => r.SchemaName).ToHashSet(StringComparer.Ordinal);
+                missing.AddRange(maps.Files.SelectMany(f => f.Relationships).Select(r => r.Source).Distinct(StringComparer.Ordinal)
+                    .Where(r => !relationships.Contains(r)).Select(r => $"relationship '{r}'"));
+                if (missing.Count > 0)
+                    throw BadRequest($"The maps name sources that are not in the package: {string.Join(", ", missing)}.");
+            }
+            else
+            {
+                try { maps = MapSet.Combine((await PackageMaps.ReadAsync(package, ct)).Files); }
+                catch (MapFormatException ex) { throw BadRequest($"A map of the package is not valid: {ex.Message}"); }
+                catch (MapValidationException ex) { throw BadRequest($"The maps of the package are not valid: {string.Join("; ", ex.Problems)}"); }
+            }
+            // Two tables of the package into one target table (a map's target that the package also holds unmapped, or two sources
+            // of one target): their rows would collide, and the empty-organization check would count the table once.
+            var duplicates = tables.Distinct(StringComparer.Ordinal).GroupBy(t => maps.BySource(t)?.Target ?? t, StringComparer.Ordinal).Where(g => g.Count() > 1)
+                .Select(g => $"'{g.Key}' (from {string.Join(", ", g.Select(t => $"'{t}'"))})").ToList();
+            if (duplicates.Count > 0)
+                throw BadRequest($"The maps send more than one table of the package to the same table: {string.Join(", ", duplicates)}.");
+            return tables.Select(t => maps.BySource(t)?.Target ?? t).ToList();
+        }, ct);
+
     /// <summary>The tables of the package's manifest; 400 when the passphrase is wrong or the file is no package.</summary>
-    internal static async Task<List<string>> ManifestTablesAsync(IServiceProvider services, string database, Guid? packageId, string? serverPath,
+    internal static Task<List<string>> ManifestTablesAsync(IServiceProvider services, string database, Guid? packageId, string? serverPath,
         string passphrase, CancellationToken ct) =>
-        [.. (await ManifestAsync(services, database, packageId, serverPath, passphrase, ct)).Tables.Select(t => t.LogicalName)];
+        ReadPackageAsync(services, database, packageId, serverPath, passphrase,
+            package => Task.FromResult<List<string>>([.. package.Manifest.Tables.Select(t => t.LogicalName)]), ct);
 
     /// <summary>The package's manifest; 400 when the passphrase is wrong or the file is no package.</summary>
-    private static async Task<PackageManifest> ManifestAsync(IServiceProvider services, string database, Guid? packageId, string? serverPath,
-        string passphrase, CancellationToken ct)
+    private static Task<PackageManifest> ManifestAsync(IServiceProvider services, string database, Guid? packageId, string? serverPath,
+        string passphrase, CancellationToken ct) =>
+        ReadPackageAsync(services, database, packageId, serverPath, passphrase, package => Task.FromResult(package.Manifest), ct);
+
+    /// <summary>Opens the package and reads <paramref name="read"/> from it; 400 when the passphrase is wrong or the file is no package.</summary>
+    private static async Task<T> ReadPackageAsync<T>(IServiceProvider services, string database, Guid? packageId, string? serverPath,
+        string passphrase, Func<PackageReader, Task<T>> read, CancellationToken ct)
     {
         try
         {
             using var package = await MigrationPackages.OpenAsync(services.GetRequiredService<IFileStore>(), database, packageId, serverPath, passphrase, ct);
-            return package.Manifest;
+            return await read(package);
         }
         catch (PackagePassphraseException)
         {
@@ -187,6 +364,7 @@ public static class MigrationRunService
                 ["schemaName"] = r.SchemaName, ["pairs"] = r.Pairs,
             })]),
             ["warnings"] = new JsonArray([.. m.Warnings.Select(w => (JsonNode)new JsonObject { ["code"] = w.Code, ["message"] = w.Message })]),
+            ["maps"] = new JsonArray([.. m.Maps.Select(p => (JsonNode)p)]),
             ["entries"] = m.Entries.Count,
             ["bytes"] = package.Bytes,
         };
@@ -270,9 +448,12 @@ public static class MigrationRunService
     public static async Task<MigrationResult> ResumeAsync(IServiceProvider services, Caller caller, Guid id, JsonObject body, CancellationToken ct)
     {
         var run = await RunAsync(services, id, ct);
+        // Spec §8.6: a dry run is never resumed, and never into a real run.
+        if (run.IsDryRun) throw Conflict("A dry run cannot be resumed.");
         if (run.State is not (MigrationRunStates.Failed or MigrationRunStates.Cancelled or MigrationRunStates.CompletedWithErrors))
             throw Conflict($"The migration run {id} is {run.State}: only a failed, cancelled or completed_with_errors run can be resumed.");
         var passphrase = Passphrase(body);
+        if (body["maps"] is not null) throw BadRequest("A resumed run keeps the map it started with.");
         await ManifestTablesAsync(services, await DatabaseAsync(services, ct), run.PackageId, run.ServerPath, passphrase, ct);
 
         if (!await services.GetRequiredService<MigrationRunStore>().SetStateAsync(id, MigrationRunStates.Queued, null, ct,
@@ -291,6 +472,8 @@ public static class MigrationRunService
     public static async Task<JsonObject> FinalizeAsync(IServiceProvider services, Guid id, JsonObject body, CancellationToken ct)
     {
         var run = await RunAsync(services, id, ct);
+        // Spec §8.6: a dry run holds no lock and keeps its package for the real run.
+        if (run.IsDryRun) throw Conflict("A dry run needs no finalize.");
         if (run.State is MigrationRunStates.Queued or MigrationRunStates.Running)
             throw Conflict($"The migration run {id} is {run.State}: cancel it before finalizing it.");
         if (run.State == MigrationRunStates.Finalized) throw Conflict($"The migration run {id} is already finalized.");
@@ -356,8 +539,12 @@ public static class MigrationRunService
         ["packageId"] = run.PackageId?.ToString(),
         ["serverPath"] = run.ServerPath,
         ["state"] = run.State,
+        ["dryRun"] = run.IsDryRun,
         ["phase"] = run.Phase,
-        ["phases"] = new JsonArray([.. services.GetServices<IMigrationPhase>().OrderBy(p => p.Order).Select(p => (JsonNode)p.Name)]),
+        // A dry run runs phase 1 and its preview only (spec §8.6).
+        ["phases"] = new JsonArray([.. services.GetServices<IMigrationPhase>().OrderBy(p => p.Order)
+            .Where(p => !run.IsDryRun || p.Order == VerifyPackagePhase.PhaseOrder).Select(p => (JsonNode)p.Name)
+            .Concat(run.IsDryRun ? [DryRunPreview.Name] : [])]),
         ["message"] = run.Message,
         ["createdOn"] = run.CreatedOn,
         ["startedOn"] = run.StartedOn,

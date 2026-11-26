@@ -62,7 +62,7 @@ public sealed class MigrateImportCommandsTests : IDisposable
 
     /// <summary>A server that takes the upload and the start, then answers the polls with <paramref name="polls"/> in turn.</summary>
     private static Func<HttpRequestMessage, HttpResponseMessage> Server(Queue<Func<HttpResponseMessage>> polls, Func<int, HttpResponseMessage?>? chunk = null,
-        Func<HttpResponseMessage>? package = null) => req =>
+        Func<HttpResponseMessage>? package = null, string? report = null) => req =>
     {
         var path = req.RequestUri!.AbsolutePath;
         var method = req.Method.Method;
@@ -74,7 +74,7 @@ public sealed class MigrateImportCommandsTests : IDisposable
             return package?.Invoke() ?? new HttpResponseMessage(HttpStatusCode.NotFound);
         if (path == "/admin/migrate/runs" && method == "POST") return FakeHandler.Json(HttpStatusCode.Accepted, $$"""{"runId":"{{RunId}}","asyncOperationId":"{{Guid.NewGuid()}}"}""");
         if (path == $"/admin/migrate/runs/{RunId}" && method == "GET") return polls.Count > 1 ? polls.Dequeue()() : polls.Peek()();
-        if (path == $"/admin/migrate/runs/{RunId}/report") return FakeHandler.Json(HttpStatusCode.OK, Report);
+        if (path == $"/admin/migrate/runs/{RunId}/report") return FakeHandler.Json(HttpStatusCode.OK, report ?? Report);
         if (path == $"/admin/migrate/runs/{RunId}/cancel") return Run("cancelled", 3);
         if (path == $"/admin/migrate/runs/{RunId}/finalize") return Run("finalized", 3);
         if (path == $"/admin/migrate/runs/{RunId}/activate") return FakeHandler.Json(HttpStatusCode.OK, $$"""
@@ -172,6 +172,52 @@ public sealed class MigrateImportCommandsTests : IDisposable
         Calls(cli).Should().NotContain(c => c.Path.StartsWith("/admin/migrate", StringComparison.Ordinal));
     }
 
+    private const string LeadMap = "version: 1\ntables:\n  - source: lead\n    target: xv_lead\n";
+    private const string RivalMap = "version: 1\nrelationships:\n  - { source: leadcompetitors, target: xv_lead_xv_rival }\n";
+
+    [Fact]
+    public async Task Import_sends_the_maps()
+    {
+        var file = SyntheticPackage.BuildFile(_root);
+        var leads = Path.Combine(_root, "leads.yaml");
+        var rivals = Path.Combine(_root, "rivals.yaml");
+        await File.WriteAllTextAsync(leads, LeadMap);
+        await File.WriteAllTextAsync(rivals, RivalMap);
+        using var cli = await CliAsync(Server(new Queue<Func<HttpResponseMessage>>([() => Run("completed", 9)])));
+
+        (await cli.RunAsync("migrate", "import", file, "--map", leads, "--map", rivals)).Should().Be(0, cli.Err.ToString());
+
+        var start = JsonNode.Parse(Calls(cli).Single(c => c.Method == "POST" && c.Path == "/admin/migrate/runs").Body!)!;
+        start["maps"]!.AsArray().Select(m => m!.GetValue<string>()).Should().Equal(LeadMap, RivalMap);
+    }
+
+    [Fact]
+    public async Task Import_with_an_invalid_map_exits_2_before_upload()
+    {
+        var file = SyntheticPackage.BuildFile(_root);
+        var map = Path.Combine(_root, "bad.yaml");
+        await File.WriteAllTextAsync(map, LeadMap + "    colums: {}\n");
+        using var cli = await CliAsync(Server(new Queue<Func<HttpResponseMessage>>([() => Run("completed", 9)])));
+
+        (await cli.RunAsync("migrate", "import", file, "--map", map)).Should().Be(2, cli.Err.ToString());
+
+        cli.Err.ToString().Should().Contain("colums");
+        Calls(cli).Should().NotContain(c => c.Path.StartsWith("/admin/migrate", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Map_with_resume_is_a_usage_error()
+    {
+        var map = Path.Combine(_root, "leads.yaml");
+        await File.WriteAllTextAsync(map, LeadMap);
+        using var cli = await CliAsync(Server(new Queue<Func<HttpResponseMessage>>([() => Run("completed", 9)])));
+
+        (await cli.RunAsync("migrate", "import", "--resume", RunId.ToString(), "--map", map)).Should().Be(2, cli.Err.ToString());
+
+        cli.Err.ToString().Should().Contain("A resumed run keeps the map it started with.");
+        Calls(cli).Should().NotContain(c => c.Path.StartsWith("/admin/migrate", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task Wrong_passphrase_exits_8_before_upload()
     {
@@ -207,6 +253,65 @@ public sealed class MigrateImportCommandsTests : IDisposable
         cli.Handler = new FakeHandler(Server(polls, package: () => FakeHandler.Json(HttpStatusCode.OK, $$"""{"packageId":"{{PackageId}}","state":"complete","chunks":[]}""")));
         (await cli.RunAsync("migrate", "import", file)).Should().Be(0, cli.Err.ToString());
         Calls(cli).Should().NotContain(c => c.Path.Contains("/chunks/") || c.Path.EndsWith("/complete", StringComparison.Ordinal));
+    }
+
+    private static readonly string DryRunReport = new JsonObject
+    {
+        ["runId"] = RunId.ToString(), ["state"] = "completed", ["dryRun"] = true, ["message"] = null, ["hasErrors"] = false,
+        ["tables"] = new JsonArray(new JsonObject { ["table"] = "xv_lead", ["exported"] = 3, ["imported"] = 0, ["failed"] = 0 }),
+        ["issues"] = new JsonArray(
+            new JsonObject
+            {
+                ["phase"] = 2, ["severity"] = "info", ["code"] = "component-of-missing-table", ["table"] = "quote", ["recordId"] = null,
+                ["column"] = null, ["message"] = "xvcust: entity quote removed (quote is not in this organization and no map names it).",
+            },
+            new JsonObject
+            {
+                ["phase"] = 2, ["severity"] = "warning", ["code"] = "dry-run-lookup-empty", ["table"] = "new_progetto", ["recordId"] = null,
+                ["column"] = "new_quoteid", ["message"] = "1 row(s)",
+            }),
+        ["issuesTruncated"] = false, ["lookupsNulled"] = new JsonArray(), ["users"] = new JsonObject(), ["mappedTables"] = new JsonArray(),
+        ["phases"] = new JsonArray(new JsonObject { ["phase"] = 1, ["name"] = "verify", ["seconds"] = 1.0 }, new JsonObject { ["phase"] = 2, ["name"] = "dry-run", ["seconds"] = 1.0 }),
+    }.ToJsonString();
+
+    [Fact]
+    public async Task Import_dry_run_prints_the_report()
+    {
+        var file = SyntheticPackage.BuildFile(_root);
+        var polls = new Queue<Func<HttpResponseMessage>>([() => Run("running", 0), () => Run("running", 1), () => Run("completed", 1)]);
+        using var cli = await CliAsync(Server(polls, report: DryRunReport));
+
+        (await cli.RunAsync("migrate", "import", file, "--dry-run")).Should().Be(0, cli.Err.ToString());
+
+        var calls = Calls(cli);
+        JsonNode.Parse(calls.Single(c => c.Method == "POST" && c.Path == "/admin/migrate/runs").Body!)!["options"]!["dryRun"]!.GetValue<string>().Should().Be("true");
+        calls.Should().Contain(c => c.Method == "GET" && c.Path == $"/admin/migrate/runs/{RunId}/report", "the dry run waits and then reads its report");
+        var md = cli.Out.ToString();
+        md.Should().StartWith("# Dry run report").And.Contain("Dry run: nothing was imported")
+            .And.Contain("component-of-missing-table").And.Contain("| 2 | warning | dry-run-lookup-empty | new_progetto |  | new_quoteid | 1 row(s) |");
+        cli.Err.ToString().Should().Contain("Dry run").And.NotContain("finalize", "a dry run needs no finalize");
+    }
+
+    [Fact]
+    public async Task Import_dry_run_exits_5_when_the_real_run_would_stop()
+    {
+        var file = SyntheticPackage.BuildFile(_root);
+        var report = JsonNode.Parse(DryRunReport)!;
+        // The error itself may be past the cap on listed issues: the exit code follows the report's hasErrors.
+        report["hasErrors"] = true;
+        report["message"] = "The real run would stop: see the errors in the report.";
+        using var cli = await CliAsync(Server(new Queue<Func<HttpResponseMessage>>([() => Run("completed", 1)]), report: report.ToJsonString()));
+
+        (await cli.RunAsync("migrate", "import", file, "--dry-run")).Should().Be(5, cli.Err.ToString());
+        cli.Out.ToString().Should().Contain("The real run would stop");
+    }
+
+    [Fact]
+    public async Task Dry_run_with_resume_is_a_usage_error()
+    {
+        using var cli = await CliAsync(Server(new Queue<Func<HttpResponseMessage>>([() => Run("completed", 1)])));
+        (await cli.RunAsync("migrate", "import", "--resume", RunId.ToString(), "--dry-run")).Should().Be(2, cli.Err.ToString());
+        cli.Handler.Requests.Should().NotContain(r => r.RequestUri!.AbsolutePath.StartsWith("/admin/migrate", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -282,5 +387,17 @@ public sealed class MigrateImportCommandsTests : IDisposable
              "deactivated":[{"table":"workflow","id":"77777777-7777-7777-7777-777777777777","name":"Welcome mail","sourceState":1,"sourceStatus":2,"activatedOn":null}]}
             """).RootElement;
         MigrateReportFormat.Markdown(report).Should().Contain("## Business logic left off").And.Contain("| workflow | Welcome mail | 77777777-7777-7777-7777-777777777777 | 1 |");
+    }
+
+    [Fact]
+    public void Report_markdown_lists_the_archive_candidates()
+    {
+        var report = System.Text.Json.JsonDocument.Parse("""
+            {"runId":"r","state":"completed","dryRun":true,"tables":[],"issues":[],"phases":[],
+             "archiveCandidates":[{"table":"quote","rows":2},{"table":"invoice","rows":1}]}
+            """).RootElement;
+        MigrateReportFormat.Markdown(report).Should().Contain("## Archive candidates").And.Contain("| quote | 2 |").And.Contain("| invoice | 1 |");
+        MigrateReportFormat.Markdown(System.Text.Json.JsonDocument.Parse("""{"runId":"r","state":"completed","tables":[],"issues":[],"phases":[]}""").RootElement)
+            .Should().NotContain("Archive candidates");
     }
 }

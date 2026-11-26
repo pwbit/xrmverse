@@ -24,6 +24,12 @@ public static class ExclusionCatalog
         return false;
     }
 
+    /// <summary>The first-party prefixes (<c>msdyn_</c>, <c>adx_</c>, …), for checks that need the names themselves.</summary>
+    public static IReadOnlyList<string> FirstPartyPrefixes => FirstParty.Value;
+
+    private static readonly Lazy<IReadOnlyList<string>> FirstParty = new(() =>
+        Data.Value.Prefixes.Where(p => p.Exclusion.Category == "first-party").Select(p => p.Prefix).ToList());
+
     public static Exclusion? Find(string logicalName)
     {
         var (exact, prefixes) = Data.Value;

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using FluentAssertions;
+using Xrmd.Migration.Mapping;
 using Xrmd.Migration.Packaging;
 
 namespace Xrmd.Migration.Tests;
@@ -32,15 +33,58 @@ public sealed class PackageReaderTests : IDisposable
     }
 
     [Fact]
-    public void Unknown_format_version_is_refused()
+    public void Version_3_is_refused()
     {
         var folder = SyntheticPackage.BuildFolder(Path.Combine(_root, "pkg"));
         var headerFile = Path.Combine(folder, PackageHeader.FileName);
         var header = JsonNode.Parse(File.ReadAllText(headerFile))!;
-        header["formatVersion"] = 2;
+        header["formatVersion"] = 3;
         File.WriteAllText(headerFile, header.ToJsonString());
         var act = () => PackageReader.Open(folder, SyntheticPackage.Passphrase);
-        act.Should().Throw<PackageFormatException>().WithMessage("*2*");
+        act.Should().Throw<PackageFormatException>().WithMessage("Package format version 3 is not supported (this xrmd reads versions 1, 2).");
+    }
+
+    [Fact]
+    public void Version_1_package_still_opens()
+    {
+        var folder = SyntheticPackage.BuildFolder(Path.Combine(_root, "pkg"));
+        using var reader = PackageReader.Open(folder, SyntheticPackage.Passphrase);
+        reader.Header.FormatVersion.Should().Be(1);
+        reader.Manifest.FormatVersion.Should().Be(1);
+        reader.Manifest.Maps.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Version_2_package_round_trips_its_maps_and_catalog()
+    {
+        var file = SyntheticPackage.BuildFile(_root, withMaps: true);
+        using var reader = PackageReader.Open(file, SyntheticPackage.Passphrase);
+        reader.Manifest.FormatVersion.Should().Be(2);
+        reader.Manifest.Maps.Should().Equal("map/1-sales-like.yaml");
+        var (files, catalog) = await PackageMaps.ReadAsync(reader, CancellationToken.None);
+        files.Should().ContainSingle().Which.Name.Should().Be("sales-like");
+        files[0].Tables.Should().ContainSingle().Which.Target.Should().Be("xv_company");
+        catalog.Should().BeEquivalentTo(SyntheticPackage.Catalog);
+        (await reader.VerifyAsync(null, CancellationToken.None)).Problems.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Version_1_package_has_no_maps_and_an_empty_catalog()
+    {
+        var folder = SyntheticPackage.BuildFolder(Path.Combine(_root, "pkg"));
+        using var reader = PackageReader.Open(folder, SyntheticPackage.Passphrase);
+        var (files, catalog) = await PackageMaps.ReadAsync(reader, CancellationToken.None);
+        files.Should().BeEmpty();
+        catalog.Tables.Should().BeEmpty();
+        catalog.Options.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void EntryPath_sanitizes_names()
+    {
+        PackageMaps.EntryPath(1, "Sales Migration").Should().Be("map/1-sales-migration.yaml");
+        PackageMaps.EntryPath(12, "  A/b_c.yaml! ").Should().Be("map/12-a-b-c-yaml.yaml");
+        PackageMaps.EntryPath(2, "***").Should().Be("map/2-map.yaml");
     }
 
     [Fact]

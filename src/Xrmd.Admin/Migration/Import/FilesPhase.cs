@@ -4,6 +4,8 @@ using Xrmd.Abstractions;
 using Xrmd.Core;
 using Xrmd.Files;
 using Xrmd.Metadata.Sdk;
+using Xrmd.Migration.Mapping;
+using Xrmd.Migration.Packaging;
 using Xrmd.Migration.Records;
 
 namespace Xrmd.Admin.Migration.Import;
@@ -41,7 +43,7 @@ public sealed class FilesPhase : IMigrationPhase
 
         // Tables with a file or an image in the package (files/<table>/<column>/<id>): their records say the column and file name.
         var withFiles = package.Manifest.Entries.Select(e => e.Path).Where(p => p.StartsWith("files/", StringComparison.Ordinal) && !p.StartsWith(NoteBodies, StringComparison.Ordinal))
-            .Select(p => p.Split('/')[1]).ToHashSet(StringComparer.Ordinal);
+            .Select(p => Owner(package, p).Table).ToHashSet(StringComparer.Ordinal);
         foreach (var table in RecordsPhase.DataTables(package.Manifest).Where(t => withFiles.Contains(t.LogicalName) && metadata.GetEntity(t.LogicalName) is not null))
         {
             context.Progress.Report($"files: {table.LogicalName}");
@@ -81,6 +83,21 @@ public sealed class FilesPhase : IMigrationPhase
                 await core.UpdateAsync(s, caller, entity, token);
             }, ct);
         }
+    }
+
+    /// <summary>
+    /// The table and column of the file entry <c>files/&lt;table&gt;/&lt;column&gt;/&lt;id&gt;</c> under the target names: the path keeps
+    /// the source's names (it is the entry's name in the package), a map renames them (R5).
+    /// </summary>
+    public static (string Table, string Column) Owner(PackageReader package, string path)
+    {
+        ArgumentNullException.ThrowIfNull(package);
+        ArgumentNullException.ThrowIfNull(path);
+        var parts = path.Split('/');
+        var (table, column) = (parts.Length > 1 ? parts[1] : "", parts.Length > 2 ? parts[2] : "");
+        return package.Translator is MapPackageTranslator { Records: var translator }
+            ? (translator.TableOf(table), translator.ColumnOf(table, column))
+            : (table, column);
     }
 
     private static async Task UploadAsync(DataSession s, FileColumnService files, CoreOperations core, Caller caller, IMetadataStore metadata, EntityReference target, string column,

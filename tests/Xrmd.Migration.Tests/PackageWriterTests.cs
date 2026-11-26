@@ -62,6 +62,23 @@ public sealed class PackageWriterTests : IDisposable
     }
 
     [Fact]
+    public void Resume_keeps_the_version_the_folder_was_created_with()
+    {
+        PackageWriter.Create(Folder, Passphrase, PackageHeader.MappedVersion).Dispose();
+        using (var resumed = PackageWriter.OpenForResume(Folder, Passphrase)) resumed.Complete(new PackageManifest());
+        using var reader = PackageReader.Open(Folder, Passphrase);
+        reader.Header.FormatVersion.Should().Be(2);
+        reader.Manifest.FormatVersion.Should().Be(2);
+    }
+
+    [Fact]
+    public void Create_refuses_an_unsupported_version()
+    {
+        var act = () => PackageWriter.Create(Folder, Passphrase, 3);
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
     public void Resume_keeps_progress()
     {
         using (var writer = PackageWriter.Create(Folder, Passphrase))

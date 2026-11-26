@@ -24,6 +24,24 @@ public class ValueMapperTests
 
     private static string Row(string body) => $$"""{"accountid":"{{Id}}",{{body}}}""";
 
+    [Fact]
+    public void Lookup_names_are_written_only_when_asked_with_the_id_when_the_source_gives_no_name()
+    {
+        var table = Table(Col("parentid", "Lookup", null, "account"), Col("primaryid", "Lookup", null, "contact"), Col("emptyid", "Lookup", null, "account"));
+        var json = Row($$"""
+            "_parentid_value":"{{Other}}","_parentid_value@OData.Community.Display.V1.FormattedValue":"Example Ltd",
+            "_primaryid_value":"{{Id}}","_emptyid_value":null
+            """);
+        using var doc = JsonDocument.Parse(json);
+
+        var named = ValueMapper.Map(table, doc.RootElement, (_, _) => null, lookupNames: true).Values;
+        named["parentidname"].Should().Be(new StringValue("Example Ltd"));
+        named["primaryidname"].Should().Be(new StringValue(Id.ToString("D")), "the source gave no name: the id stands in");
+        named.Should().NotContainKey("emptyidname", "an empty lookup has no name");
+
+        ValueMapper.Map(table, doc.RootElement, (_, _) => null).Values.Keys.Should().NotContain(k => k.EndsWith("name"), "only tables an archive may be made from");
+    }
+
     [Theory]
     [InlineData("String")]
     [InlineData("Memo")]

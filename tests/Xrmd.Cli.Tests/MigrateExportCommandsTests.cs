@@ -41,6 +41,34 @@ public sealed class MigrateExportCommandsTests : IDisposable
     ];
 
     [Fact]
+    public async Task Export_with_map_writes_a_format_2_package_with_the_map()
+    {
+        var env = Environment();
+        using var cli = Cli(env);
+        var map = Path.Combine(_root, "Sales Like.yaml");
+        await File.WriteAllTextAsync(map, SyntheticPackage.SalesLikeYaml);
+        var folder = Path.Combine(_root, "out");
+        (await cli.RunAsync(Export(folder, "--map", map))).Should().Be(0, cli.Err.ToString());
+
+        using var reader = PackageReader.Open(folder, SyntheticPackage.Passphrase);
+        reader.Manifest.FormatVersion.Should().Be(PackageHeader.MappedVersion);
+        reader.Manifest.Maps.Should().Equal("map/1-sales-like.yaml");
+        reader.Manifest.Entries.Should().Contain(e => e.Path == "map/source.json");
+    }
+
+    [Fact]
+    public async Task Export_with_an_invalid_map_exits_2_before_any_request()
+    {
+        var env = Environment();
+        using var cli = Cli(env);
+        var map = Path.Combine(_root, "bad.yaml");
+        await File.WriteAllTextAsync(map, "version: 1\ntables:\n  - source: a\n    target: b\n  - source: c\n    target: b\n");
+        (await cli.RunAsync(Export(Path.Combine(_root, "out"), "--map", map))).Should().Be(2);
+        cli.Err.ToString().Should().Contain("Rule 2");
+        env.Fake.Requests.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Export_with_secret_auth_writes_a_verifiable_package()
     {
         var env = Environment();

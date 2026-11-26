@@ -145,7 +145,6 @@ Features that are missing or partial today. Each one fails explicitly where it i
 | Trigger subscriptions with several server instances | The subscription list is cached per server process: with several instances on one organization, a subscription change is seen by the others only after a restart. | Not scheduled |
 | Sending as another user, delegate access | An email is sent from the caller's own mailbox or from a queue the caller can read; sending on behalf of another user and delegate access to a mailbox are not modelled. See [Email and queues](email-and-queues.md#known-limits). | Not scheduled |
 | Email templates | `SendEmailFromTemplate`, `SendTemplate` and `InstantiateTemplate` are refused, and the `template` table is not seeded. See [Activities and notes](activities.md#what-is-refused). | Not scheduled |
-| Email data in a migration | Email attachments, mailboxes and email server profiles are not copied by `xrmd migrate`. See [Migrating from Dataverse](migration.md). | Not scheduled |
 | Queue form without members | The default queue form shows the queue's items but not its members: there is no seeded view of users to list them. Add and remove members with `xrmd queue member` or `AddPrincipalToQueue`. See [Email and queues](email-and-queues.md#default-forms-and-views). | To be fixed |
 | Link from a system job to its record | `asyncoperation.regardingobjectid` is a plain id column, not a lookup: filter on it by value; it has no navigation property and no name. | Not scheduled |
 | Queue privilege `prvPickFromQueue` | The message privilege is not modelled. Pick, Release, Route, Remove and the Update or Delete of a queue item need the queue item privilege, the item's queue readable (public, owned, a member, or shared) and Read on its record instead; no Write on the queue itself. See [Email and queues](email-and-queues.md#security-of-the-messages). | Stays until verified against Dataverse |
@@ -205,6 +204,19 @@ still differ. See [PostgreSQL organizations](postgresql.md#known-limits).
 | Environment theme on the apps page | The apps page (`/apps`) and the workflow studio use the xrmverse theme in the user's light or dark colour scheme; the app tiles' banner follows that theme's brand colours. The environment's presentation overlay theme (brand colours, font, density), which the web admin applies for a System Administrator and a modern app applies inside the app, is not applied there. See [Model-driven apps](model-driven-apps.md#what-the-app-shell-offers). | Not scheduled |
 | One row at a time in the web admin lists | The lists of the web admin select one row at a time: a command (disable a user, delete a solution, cancel a job) acts on that row. There is no multi-select and no bulk command. See [Web admin](web-admin.md#look-and-feel). | Not scheduled |
 
+### Migration from Dataverse
+
+| Limitation | Description | Status |
+|---|---|---|
+| Email data in a migration | Email attachments, mailboxes and email server profiles are not copied by `xrmd migrate`. See [Migrating from Dataverse](migration.md). | Not scheduled |
+| Mapped tables: merging two source tables into one target | A [map](migration.md#mapping-tables-to-a-solutions-tables) sends one source table to one target table; two source tables cannot go to the same target, and a run whose maps would send two tables of the package to one table is refused at the start. | Not scheduled |
+| Mapped tables: values computed beyond one lookup | A derived value reads one column through one lookup of the source row, with a value map; longer paths, calculations and text transformations are not available. | Not scheduled |
+| Mapped tables: app modules, site maps and role privileges | Entries that reference a removed table are skipped with a warning; site maps and system dashboards are stored as they are. | Not scheduled |
+| Mapped tables: Microsoft tables outside the exclusion catalog | A Microsoft table whose publisher prefix is not in the exclusion catalog (for example `msfp_`, `mspcat_`) is treated as a customer table and is never removed. | Not scheduled |
+| Mapped tables: value matching by label | `byLabel` compares the source labels with the target's English (1033) labels; xrmverse has no organization base-language setting. | Not scheduled |
+| Mapped tables: `customColumns: drop` issue column | Under `customColumns: drop` the issue names the source column, not a target column. | Not scheduled |
+| Archive tables: column types | Image, file and unique-identifier columns are not created (counted as `column-not-mapped`); string and number formats that are not listed fall back to the default. | Not scheduled |
+
 ## Differences that stay
 
 Choices that make xrmverse work outside Microsoft's cloud. They will not change.
@@ -218,6 +230,10 @@ Choices that make xrmverse work outside Microsoft's cloud. They will not change.
 | Elastic tables | Emulated on SQL Server or PostgreSQL instead of Cosmos DB, with a basic subset of JSON queries. See [Elastic tables](elastic-tables.md). | Stays |
 | Custom APIs | Created over the SDK, SOAP, the Web API or `xrmd customapi create`; a managed custom API is never changed in place. See [Custom APIs](custom-apis.md#known-limits). | Stays |
 | Migration from Dataverse | `xrmd migrate` maps roles onto the organization's roles by id, template or name; an assignment to a role the organization lacks is reported, not created. Forms, views, charts, roles and processes made outside the exported solutions are not exported. See [Migrating from Dataverse](migration.md). | Stays |
+| Mapped tables: managed solutions with components of a mapped table | A managed solution of the package that has components of a mapped or missing Microsoft table, or lookups that would be retargeted, fails the run with the list of removals and retargets; a managed solution is never rewritten. See [Migrating from Dataverse](migration.md#mapping-tables-to-a-solutions-tables). | Stays |
+| Mapped tables: processes and plug-in steps | Processes and plug-in steps whose primary table is a mapped or missing Microsoft table are removed from customer solutions and listed (`component-of-mapped-table`, `component-of-missing-table`); re-create them on the solution's tables. | Stays |
+| Mapped tables: options added to a choice column | Options added to a carried choice column that uses a global choice appear on every column that uses that choice; a value already present with another label is kept as it is. | Stays |
+| Archive tables: status reasons | The source's status reasons are kept as copy columns (`xrmva_statecode`, `xrmva_statuscode`), not as the table's own status model; only an activity archive follows the source state. | Stays |
 | Error retries | After a SQL deadlock or timeout the server never retries by itself (pre-validation plug-ins would run twice): the caller retries, with the same error codes as Dataverse. | Stays |
 | Related records open in a side pane | In a model-driven app a lookup's value and a form subgrid's rows and **New** open the related form in a side pane two thirds as wide as the form, where Dataverse opens the full page. Set the app setting `xrmverse_LookupOpenMode` to `page` for Dataverse's behaviour, or use Ctrl+click. See [Opening related records](model-driven-apps.md#opening-related-records). | Stays |
 | Share on several records | The view command bar's **Share** on several selected records only grants rights (`GrantAccess`) and has no current-shares tab; the commands run one request per record and the view does not check each record's rights first, so a refused record is listed in the result. See [Model-driven apps](model-driven-apps.md#known-limits). | Stays |

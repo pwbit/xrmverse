@@ -14,7 +14,7 @@ public static class MigrationPackageStates
 
 /// <summary>
 /// The states of a migration run (<c>meta.migration_run.state</c>, migration spec §7.7). The organization's migration lock is on in
-/// every state but <see cref="Finalized"/>.
+/// every state but <see cref="Finalized"/>, except for a dry run, which never takes it (table mapping spec §8.6).
 /// </summary>
 public static class MigrationRunStates
 {
@@ -38,7 +38,19 @@ public sealed record MigrationPackageRow(Guid PackageId, string State, long? Byt
 
 /// <summary>A row of <c>meta.migration_run</c>. <see cref="Phase"/> is the number of phases completed.</summary>
 public sealed record MigrationRunRow(Guid RunId, Guid? PackageId, string? ServerPath, string State, int Phase, string Options,
-    Guid? AsyncOperationId, string? Message, Guid CreatedBy, DateTime CreatedOn, DateTime? StartedOn, DateTime? EndedOn, DateTime? FinalizedOn);
+    Guid? AsyncOperationId, string? Message, Guid CreatedBy, DateTime CreatedOn, DateTime? StartedOn, DateTime? EndedOn, DateTime? FinalizedOn)
+{
+    /// <summary>The run option that makes a run a dry run (migration table mapping spec §8.6).</summary>
+    public const string DryRunOption = "dryRun";
+
+    /// <summary>True for a dry run: it reads the package and the organization and writes only its ledger (spec §8.6).</summary>
+    public bool IsDryRun => MigrationImportJob.Options(Options).TryGetValue(DryRunOption, out var value) && value == "true";
+
+    /// <summary>
+    /// True for a dry run that has ended: it holds no lock and blocks no other run (its row is closed when the next run is created).
+    /// </summary>
+    public bool IsEndedDryRun => IsDryRun && MigrationRunStates.IsTerminal(State);
+}
 
 /// <summary>A run cannot be created: another run of the organization is not finalized (one open run, migration plan M3 R8).</summary>
 public sealed class MigrationRunConflictException(string message) : Exception(message);
@@ -79,10 +91,17 @@ public sealed class MigrationRunStore(IDbConnectionFactory factory)
     public Task DeletePackageAsync(Guid packageId, CancellationToken ct) =>
         ExecuteAsync("DELETE FROM meta.migration_package WHERE packageid = @id", ct, ("@id", packageId));
 
+    /// <summary>
+    /// Creates a run. A dry run that has ended is closed first (set to <see cref="MigrationRunStates.Finalized"/>, its ended state
+    /// kept in its message: <c>Dry run ended &lt;state&gt;; &lt;message&gt;</c>): the database keeps at most one run that is not
+    /// finalized, and an ended dry run blocks nothing.
+    /// </summary>
     /// <exception cref="MigrationRunConflictException">Another run is not finalized.</exception>
     public async Task CreateRunAsync(MigrationRunRow run, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(run);
+        foreach (var ended in (await QueryRunsAsync("WHERE state <> @finalized", ct, ("@finalized", MigrationRunStates.Finalized))).Where(r => r.IsEndedDryRun))
+            await SetStateAsync(ended.RunId, MigrationRunStates.Finalized, EndedDryRunMessage(ended), ct, ended.State);
         try
         {
             await ExecuteAsync($"INSERT INTO meta.migration_run ({RunColumns}) VALUES " +
@@ -100,6 +119,14 @@ public sealed class MigrationRunStore(IDbConnectionFactory factory)
         }
     }
 
+    /// <summary>The message of a closed dry run: the state it ended in, then its own message.</summary>
+    public static string EndedDryRunMessage(MigrationRunRow run)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        var text = $"Dry run ended {run.State}" + (run.Message is { Length: > 0 } m ? $"; {m}" : ".");
+        return text.Length <= 2000 ? text : text[..1997] + "...";
+    }
+
     public async Task<MigrationRunRow?> GetRunAsync(Guid runId, CancellationToken ct) =>
         (await QueryRunsAsync("WHERE runid = @id", ct, ("@id", runId))).SingleOrDefault();
 
@@ -107,9 +134,12 @@ public sealed class MigrationRunStore(IDbConnectionFactory factory)
     public Task<List<MigrationRunRow>> ListRunsAsync(int top, CancellationToken ct) =>
         QueryRunsAsync(d => "ORDER BY createdon DESC " + d.Page(0, Math.Clamp(top, 1, 1000)), ct);
 
-    /// <summary>The run that is not finalized (it holds the migration lock), if any.</summary>
+    /// <summary>
+    /// The run that is open, if any: not finalized, and not a dry run that has ended (spec §8.6: it needs no finalize). A real run
+    /// that is open holds the migration lock; a dry run never does.
+    /// </summary>
     public async Task<MigrationRunRow?> GetOpenRunAsync(CancellationToken ct) =>
-        (await QueryRunsAsync("WHERE state <> @finalized", ct, ("@finalized", MigrationRunStates.Finalized))).SingleOrDefault();
+        (await QueryRunsAsync("WHERE state <> @finalized", ct, ("@finalized", MigrationRunStates.Finalized))).SingleOrDefault(r => !r.IsEndedDryRun);
 
     /// <summary>
     /// Sets the run's state and message; <see cref="MigrationRunStates.Running"/> stamps <c>startedon</c> (once), a terminal state

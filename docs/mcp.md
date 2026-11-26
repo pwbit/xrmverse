@@ -119,6 +119,10 @@ the JSON of their Admin API route; the package passphrase is an input only and n
 - `migrate_inspect_package` (`packageId`, `passphrase`; read-only) shows what an uploaded package holds.
 - `migrate_start_import` (`passphrase`, `packageId` or `serverPath`, optional `users` and `options` objects; destructive)
   starts a run and returns `{ runId, asyncOperationId }`.
+  `maps` (YAML texts) replace the [table maps](migration.md#mapping-tables-to-a-solutions-tables) of the package; an empty list is a 400, and
+  a resume refuses `maps`. `dryRun: true` only reads: no lock, nothing written, no finalize; its report (`migrate_get_report`) lists
+  what the real run would do. `archive` (with `dryRun`) names archive candidates to keep as archive tables; the answer gains `map`,
+  the map text with them added, to pass as `maps` to the real import.
 - `migrate_get_status` and `migrate_get_report` (`runId`; read-only) read the run.
 - `migrate_cancel` (`runId`) and `migrate_finalize` (`runId`, optional `keepPackage`) are destructive.
 - `migrate_activate` (`runId`, `all` or `ids`) switches back on the business logic a finalized run left off.

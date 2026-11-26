@@ -1,4 +1,5 @@
 using System.Text;
+using Xrmd.Migration.Mapping;
 using Xrmd.Migration.Packaging;
 
 namespace Xrmd.Migration.Tests;
@@ -15,15 +16,19 @@ internal static class SyntheticPackage
     public const string RelationshipChunk = "nn/xv_account_contact/00001.jsonl.gz";
     public const string FileEntry = "files/annotation/documentbody/6f1c0b7a-8f65-4b0e-9d52-0f4bb1d3c0a1";
 
-    public static string BuildFolder(string folder)
+    public const string SalesLikeYaml = "version: 1\ntables:\n  - source: account\n    target: xv_company\n    columns:\n      name: xv_name\n";
+
+    public static string BuildFolder(string folder, bool withMaps = false)
     {
-        using var writer = PackageWriter.Create(folder, Passphrase);
+        using var writer = PackageWriter.Create(folder, Passphrase, withMaps ? PackageHeader.MappedVersion : 1);
         Write(writer, AccountChunk, "{\"id\":\"11111111-1111-1111-1111-111111111111\",\"v\":{\"name\":\"Contoso Example\"}}\n");
         Write(writer, ContactChunk, "{\"id\":\"22222222-2222-2222-2222-222222222222\",\"v\":{\"emailaddress1\":\"anna@example.com\"}}\n");
         Write(writer, RelationshipChunk, "{\"a\":\"11111111-1111-1111-1111-111111111111\",\"b\":\"22222222-2222-2222-2222-222222222222\"}\n");
         Write(writer, FileEntry, "invented attachment");
+        var mapPaths = withMaps ? PackageMaps.Write(writer, [("Sales Like", SalesLikeYaml)], Catalog) : [];
         writer.Complete(new PackageManifest
         {
+            Maps = [.. mapPaths],
             CreatedOn = new DateTimeOffset(2026, 11, 16, 10, 0, 0, TimeSpan.Zero),
             ToolVersion = "test",
             Source = new PackageSource("https://contoso.example.com", "00000000-0000-0000-0000-00000000e001", "00000000-0000-0000-0000-00000000a001"),
@@ -34,9 +39,13 @@ internal static class SyntheticPackage
         return folder;
     }
 
-    public static string BuildFile(string root)
+    public static readonly SourceCatalog Catalog = new(
+        [new SourceCatalogTable("account", "accountid", 1, "user", false, [new SourceCatalogColumn("name", "String", [], false), new SourceCatalogColumn("parentaccountid", "Lookup", ["account"], false)])],
+        [new SourceCatalogOption("account", "statuscode", 1, 0, "Active")]);
+
+    public static string BuildFile(string root, bool withMaps = false)
     {
-        var folder = BuildFolder(Path.Combine(root, "pkg-folder"));
+        var folder = BuildFolder(Path.Combine(root, "pkg-folder"), withMaps);
         var file = Path.Combine(root, "test.xrmpkg");
         PackageWriter.Pack(folder, file);
         return file;

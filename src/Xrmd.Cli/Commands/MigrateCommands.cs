@@ -6,6 +6,7 @@ using System.Text.Json.Nodes;
 using System.Xml.Linq;
 using Xrmd.Cli.Auth;
 using Xrmd.Cli.Output;
+using Xrmd.Migration.Mapping;
 using Xrmd.Migration.Packaging;
 using Xrmd.Migration.Source;
 using Xrmd.Migration.Users;
@@ -31,12 +32,44 @@ public static class MigrateCommands
         Finalize(ctx),
         Activate(ctx),
         Run(ctx),
+        Map(ctx),
     };
 
     private static Option<bool> PassphraseStdin() => new("--passphrase-stdin")
     {
         Description = $"Read the package passphrase (one line) from standard input, when {MigratePassphrase.Variable} is not set. A passphrase is never a command-line argument.",
     };
+
+    private static Command Map(CliContext ctx)
+    {
+        var validate = new Command("validate", "Check mapping files offline: the rules of the file format and between the files (no server, no profile).");
+        var files = new Argument<string[]>("file") { Description = "One or more mapping files; they are checked together, as `--map` combines them.", Arity = ArgumentArity.OneOrMore };
+        validate.Arguments.Add(files);
+        validate.SetAction(async (parse, ct) =>
+        {
+            var maps = new List<MapFile>();
+            var failures = new List<string>();
+            foreach (var path in parse.GetValue(files)!)
+            {
+                try { maps.Add(MapReader.Parse(await File.ReadAllTextAsync(path, ct), Path.GetFileName(path))); }
+                catch (MapFormatException e) { failures.Add($"{path}: {e.Message}"); }
+                catch (IOException e) { failures.Add($"{path}: {e.Message}"); }
+                catch (UnauthorizedAccessException e) { failures.Add($"{path}: {e.Message}"); }
+            }
+            if (failures.Count == 0)
+            {
+                try
+                {
+                    var set = MapSet.Combine(maps);
+                    await ctx.Env.Out.WriteLineAsync($"OK: {set.Tables.Count} table(s), {set.RelationshipCount} relationship(s)");
+                    return ExitCodes.Ok;
+                }
+                catch (MapValidationException e) { failures.AddRange(e.Problems); }
+            }
+            throw new CliException(ExitCodes.Unexpected, string.Join(Environment.NewLine, failures));
+        });
+        return new Command("map", "Work with table mapping files.") { validate };
+    }
 
     private static Command Inspect(CliContext ctx)
     {
@@ -77,6 +110,8 @@ public static class MigrateCommands
         public Option<string[]> SolutionFiles { get; } = new("--solution-file") { Description = "The original file of a managed solution to carry (repeatable): Dataverse cannot export managed solutions." };
         public Option<string[]> Include { get; } = new("--include") { Description = "Optional tables to export anyway (comma-separated or repeated)." };
         public Option<string[]> Exclude { get; } = new("--exclude") { Description = "Tables to leave out (comma-separated or repeated)." };
+        public Option<string[]> Map { get; } = new("--map") { Description = "A mapping file (repeatable): where the rows of tables xrmverse lacks go; stored in the package (format version 2)." };
+        public Option<bool> NoArchiveCandidates { get; } = new("--no-archive-candidates") { Description = "Do not export the rows of standard tables xrmverse lacks and no map names (they let an import keep them in archive tables)." };
         public Option<int> Parallel { get; } = new("--parallel") { Description = "Tables exported at the same time.", DefaultValueFactory = _ => 4 };
         public Option<bool> RequireAdmin { get; } = new("--require-admin") { Description = "Stop unless the signed-in user is System Administrator." };
         public Option<string> Auth { get; } = new("--auth") { Description = "Sign-in to Dataverse: browser, devicecode, secret or certificate.", DefaultValueFactory = _ => "browser" };
@@ -85,7 +120,7 @@ public static class MigrateCommands
         public Option<string?> CertPath { get; } = new("--certificate-path") { Description = $"PFX file for --auth certificate (password in {SourceTokenProvider.CertificatePasswordVariable})." };
         public Option<string?> CertThumbprint { get; } = new("--certificate-thumbprint") { Description = "Thumbprint of a certificate in the current user's store, for --auth certificate." };
 
-        public IEnumerable<Option> All => [Source, Solutions, AllUnmanaged, SolutionFiles, Include, Exclude, Parallel, RequireAdmin, Auth, ClientId, Tenant, CertPath, CertThumbprint];
+        public IEnumerable<Option> All => [Source, Solutions, AllUnmanaged, SolutionFiles, Include, Exclude, Map, NoArchiveCandidates, Parallel, RequireAdmin, Auth, ClientId, Tenant, CertPath, CertThumbprint];
 
         /// <summary>Checks the options that need no network (exit 2) and returns the source and the export options.</summary>
         public (Uri Source, ExportOptions Options) Check(ParseResult parse)
@@ -95,8 +130,9 @@ public static class MigrateCommands
             var names = List(parse.GetValue(Solutions));
             if (names.Count == 0 && !parse.GetValue(AllUnmanaged))
                 throw new CliException(ExitCodes.Usage, "Choose what to export: --solution <name>[,<name>…] and/or --all-unmanaged.");
+            var (maps, texts) = ReadMaps(parse.GetValue(Map));
             return (sourceUri, new ExportOptions(names, parse.GetValue(AllUnmanaged), ManagedFiles(parse.GetValue(SolutionFiles) ?? []), List(parse.GetValue(Include)),
-                List(parse.GetValue(Exclude)), Math.Max(1, parse.GetValue(Parallel)), parse.GetValue(RequireAdmin)));
+                List(parse.GetValue(Exclude)), Math.Max(1, parse.GetValue(Parallel)), parse.GetValue(RequireAdmin), maps, texts, !parse.GetValue(NoArchiveCandidates)));
         }
 
         /// <summary>
@@ -114,7 +150,8 @@ public static class MigrateCommands
             PackageManifest manifest;
             try
             {
-                using var writer = resume ? PackageWriter.OpenForResume(folder, passphrase) : PackageWriter.Create(folder, passphrase);
+                using var writer = resume ? PackageWriter.OpenForResume(folder, passphrase)
+                    : PackageWriter.Create(folder, passphrase, options.Maps is null ? PackageHeader.CurrentVersion : PackageHeader.MappedVersion);
                 if (resume) await ctx.Env.Err.WriteLineAsync($"Resuming the export in {folder}");
                 var handler = ctx.Env.Handler ?? new SocketsHttpHandler { AutomaticDecompression = DecompressionMethods.All };
                 try
@@ -272,10 +309,38 @@ public static class MigrateCommands
         foreach (var r in manifest.Relationships.OrderBy(r => r.SchemaName, StringComparer.Ordinal))
             o.WriteLine($"  {r.SchemaName,-30} {r.Pairs,10}");
         foreach (var w in manifest.Warnings) o.WriteLine($"Warning {w.Code}: {w.Message}");
+        if (manifest.Maps.Count > 0) o.WriteLine($"Maps: {string.Join(", ", manifest.Maps)}");
         o.WriteLine();
         o.WriteLine(verification is null
             ? $"Entries: {manifest.Entries.Count} (not verified)"
             : $"Entries: {verification.EntriesChecked} checked, {verification.BytesChecked} bytes, {verification.Problems.Count} problems");
+    }
+
+    /// <summary>Reads and checks the <c>--map</c> files offline (exit 2): nothing is read from Dataverse or sent to xrmd before they are valid.</summary>
+    private static (MapSet? Maps, IReadOnlyList<(string Name, string Yaml)>? Texts) ReadMaps(string[]? paths)
+    {
+        if (paths is not { Length: > 0 }) return (null, null);
+        var files = new List<MapFile>();
+        var texts = new List<(string Name, string Yaml)>();
+        var failures = new List<string>();
+        foreach (var path in paths)
+        {
+            try
+            {
+                var yaml = File.ReadAllText(path);
+                files.Add(MapReader.Parse(yaml, Path.GetFileName(path)));
+                texts.Add((Path.GetFileNameWithoutExtension(path), yaml));
+            }
+            catch (MapFormatException e) { failures.Add($"{path}: {e.Message}"); }
+            catch (IOException e) { failures.Add($"{path}: {e.Message}"); }
+            catch (UnauthorizedAccessException e) { failures.Add($"{path}: {e.Message}"); }
+        }
+        if (failures.Count == 0)
+        {
+            try { return (MapSet.Combine(files), texts); }
+            catch (MapValidationException e) { failures.AddRange(e.Problems); }
+        }
+        throw new CliException(ExitCodes.Usage, string.Join(Environment.NewLine, failures));
     }
 
     // ---- import on the server (plan M4b task 4) -------------------------------------------------------------------------
@@ -296,10 +361,22 @@ public static class MigrateCommands
         var serverPath = new Option<string?>("--server-path") { Description = "A package already on the server, under its import folder: nothing is uploaded." };
         var noWait = new Option<bool>("--no-wait") { Description = "Start the run and return; follow it with 'xrmd migrate status <runId> --wait'." };
         var resume = new Option<string?>("--resume") { Description = "Resume this failed, cancelled or partly failed run from its first phase not completed." };
+        var map = new Option<string[]>("--map") { Description = "A mapping file (repeatable): replaces the maps stored in the package for this run." };
+        var dryRun = DryRunOption();
+        var archive = new Option<string?>("--archive")
+        {
+            Description = "With --dry-run: the archive candidates of its report to keep as archive tables (comma-separated, e.g. quote,invoice); "
+                          + "added to the map file without asking.",
+        };
+        var saveMap = new Option<string?>("--save-map")
+        {
+            Description = "With --dry-run: the map file the chosen archive tables are added to (created if absent); needed when several --map "
+                          + "are given or the map comes from the package.",
+        };
         var stdin = PassphraseStdin();
         var command = new Command("import", "Import a migration package into the organization: upload, start the run on the server and follow it.")
         {
-            package, users, strict, strictLookups, currencyMap, keep, serverPath, noWait, resume, stdin,
+            package, users, strict, strictLookups, currencyMap, keep, serverPath, noWait, resume, map, dryRun, archive, saveMap, stdin,
         };
         command.SetAction(async (parse, ct) =>
         {
@@ -308,9 +385,22 @@ public static class MigrateCommands
             var resumeId = parse.GetValue(resume) is { } r ? RunIdOf(r) : (Guid?)null;
             if (resumeId is null && (file is null) == (onServer is null))
                 throw new CliException(ExitCodes.Usage, "Give the package file, or --server-path for a package on the server, or --resume <runId>.");
+            if (resumeId is not null && parse.GetValue(map) is { Length: > 0 })
+                throw new CliException(ExitCodes.Usage, "A resumed run keeps the map it started with.");
+            var dry = parse.GetValue(dryRun);
+            if (resumeId is not null && dry) throw new CliException(ExitCodes.Usage, "A dry run cannot be resumed: start a new one.");
             if (file is not null && !File.Exists(file)) throw new CliException(ExitCodes.Usage, $"'{file}' does not exist.");
-            // Checked before anything is sent: a bad users file (exit 2), then the passphrase on the local package (exit 8).
+            // Spec §8.7: the archive tables are chosen after a dry run's report.
+            var archiveTables = parse.GetValue(archive)?.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            var saveTo = parse.GetValue(saveMap);
+            if ((archiveTables is not null || saveTo is not null) && (!dry || parse.GetValue(noWait)))
+                throw new CliException(ExitCodes.Usage, "--archive and --save-map need --dry-run, and its report: not with --no-wait.");
+            var mapFiles = parse.GetValue(map) ?? [];
+            var archiveTarget = MigrateImport.ArchiveTarget(mapFiles, saveTo);
+            if (archiveTables is not null && archiveTarget is null) throw new CliException(ExitCodes.Usage, MigrateImport.SaveMapNeeded);
+            // Checked before anything is sent: a bad users file or map (exit 2), then the passphrase on the local package (exit 8).
             var usersJson = parse.GetValue(users) is { } yaml ? MigrateImport.UsersJson(yaml) : null;
+            var (_, mapTexts) = ReadMaps(parse.GetValue(map));
             var passphrase = await MigratePassphrase.ReadAsync(ctx, parse.GetValue(stdin), ct);
             var client = ctx.CreateClient();
 
@@ -323,20 +413,38 @@ public static class MigrateCommands
             }
             else
             {
-                var options = MigrateImport.Options(parse.GetValue(strict), parse.GetValue(strictLookups), parse.GetValue(currencyMap), parse.GetValue(keep));
+                var options = MigrateImport.Options(parse.GetValue(strict), parse.GetValue(strictLookups), parse.GetValue(currencyMap), parse.GetValue(keep), dry);
                 if (file is not null) MigrateImport.CheckPackage(file, passphrase);
-                runId = await MigrateImport.StartAsync(ctx, client, file, onServer, usersJson, options, passphrase, ct);
-                await ctx.Env.Err.WriteLineAsync($"Run {runId} started.");
+                runId = await MigrateImport.StartAsync(ctx, client, file, onServer, usersJson, mapTexts?.Select(m => m.Yaml).ToList(), options, passphrase, ct);
+                await ctx.Env.Err.WriteLineAsync(dry ? $"Dry run {runId} started." : $"Run {runId} started.");
             }
             if (parse.GetValue(noWait))
             {
-                ctx.WriteResult(new { runId }, $"Run {runId} started. Follow it with: xrmd migrate status {runId} --wait");
+                ctx.WriteResult(new { runId }, $"Run {runId} started. Follow it with: xrmd migrate status {runId} --wait" +
+                                               (dry ? $", then read its report with: xrmd migrate report {runId}" : ""));
                 return ExitCodes.Ok;
             }
-            return await MigrateImport.WaitAsync(ctx, client, runId, ct);
+            if (!dry) return await MigrateImport.WaitAsync(ctx, client, runId, ct);
+            var waited = await MigrateImport.WaitAsync(ctx, client, runId, ct, dryRun: true);
+            if (ct.IsCancellationRequested) return waited;
+            var (exit, report) = await MigrateImport.PrintDryRunReportAsync(ctx, client, runId, waited, ct);
+            // A dry run that failed (the map check) lists no candidates worth choosing from.
+            if (waited == ExitCodes.Ok)
+                await MigrateImport.ChooseArchiveAsync(ctx, report, new MigrateImport.ArchiveChoice(archiveTables, archiveTarget, file,
+                    file ?? $"--server-path {onServer}"), passphrase, ct);
+            else if (archiveTables is not null || saveTo is not null || ctx.Env.IsInputTty)
+                await ctx.Env.Err.WriteLineAsync(MigrateImport.NotSaved);
+            return exit;
         });
         return command;
     }
+
+    /// <summary>The <c>--dry-run</c> of <c>import</c> and <c>run</c> (table mapping spec §8.6).</summary>
+    private static Option<bool> DryRunOption() => new("--dry-run")
+    {
+        Description = "Only read: run the checks and list what the import would remove, leave empty or not import, then print the report. " +
+                      "Nothing is written, the organization is not locked and may hold data; no finalize is needed.",
+    };
 
     private static Command Status(CliContext ctx)
     {
@@ -458,9 +566,10 @@ public static class MigrateCommands
         var currencyMap = new Option<bool>("--base-currency-map") { Description = "Map the source's base currency onto the organization's when their ISO codes differ." };
         var keep = new Option<bool>("--keep-package") { Description = "Keep the uploaded package on the server after the run." };
         var noWait = new Option<bool>("--no-wait") { Description = "Start the run and return; follow it with 'xrmd migrate status <runId> --wait'." };
+        var dryRun = DryRunOption();
         var stdin = PassphraseStdin();
         var command = new Command("run", "Export a Dataverse environment and import it into the organization, in one command.");
-        foreach (var option in args.All.Concat([work, keepExport, users, strict, strictLookups, currencyMap, keep, noWait, stdin])) command.Options.Add(option);
+        foreach (var option in args.All.Concat([work, keepExport, users, strict, strictLookups, currencyMap, keep, noWait, dryRun, stdin])) command.Options.Add(option);
         command.SetAction(async (parse, ct) =>
         {
             // Everything that needs no network first: a bad users file or option never costs an export.
@@ -486,14 +595,25 @@ public static class MigrateCommands
             }
             else manifest = await args.RunAsync(ctx, parse, sourceUri, options, folder, packFile, passphrase, ct);
             await ctx.Env.Err.WriteLineAsync($"Exported {manifest.Tables.Count} tables, {manifest.Tables.Sum(t => t.Records)} records into {folder}.");
-            var runId = await MigrateImport.StartAsync(ctx, client, packFile, null, usersJson,
-                MigrateImport.Options(parse.GetValue(strict), parse.GetValue(strictLookups), parse.GetValue(currencyMap), parse.GetValue(keep)), passphrase, ct);
-            await ctx.Env.Err.WriteLineAsync($"Run {runId} started.");
+            // Spec §9: the maps go into the package and with the start, so that an export done earlier with other maps is imported with these.
+            var dry = parse.GetValue(dryRun);
+            var runId = await MigrateImport.StartAsync(ctx, client, packFile, null, usersJson, options.MapTexts?.Select(m => m.Yaml).ToList(),
+                MigrateImport.Options(parse.GetValue(strict), parse.GetValue(strictLookups), parse.GetValue(currencyMap), parse.GetValue(keep), dry), passphrase, ct);
+            await ctx.Env.Err.WriteLineAsync(dry ? $"Dry run {runId} started." : $"Run {runId} started.");
             if (parse.GetValue(noWait))
             {
                 ctx.WriteResult(new { runId, folder, package = packFile },
-                    $"Run {runId} started. Follow it with: xrmd migrate status {runId} --wait (the export stays in {folder}).");
+                    $"Run {runId} started. Follow it with: xrmd migrate status {runId} --wait" +
+                    (dry ? $", then read its report with: xrmd migrate report {runId}" : "") + $" (the export stays in {folder}).");
                 return ExitCodes.Ok;
+            }
+            if (dry)
+            {
+                // The export is kept: the real run that follows the dry run imports it without reading Dataverse again.
+                var waited = await MigrateImport.WaitAsync(ctx, client, runId, ct, dryRun: true);
+                var result = ct.IsCancellationRequested ? waited : (await MigrateImport.PrintDryRunReportAsync(ctx, client, runId, waited, ct)).Exit;
+                await ctx.Env.Err.WriteLineAsync($"The export stays in {folder} ({packFile}).");
+                return result;
             }
             var exit = await MigrateImport.WaitAsync(ctx, client, runId, ct);
             // Ctrl-C while waiting detaches (exit 0) from a run that goes on: its package may still be needed for a resume.
