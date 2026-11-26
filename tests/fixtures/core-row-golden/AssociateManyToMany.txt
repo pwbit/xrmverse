@@ -1,0 +1,43 @@
+=== PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: AssociateRequest
+  RequestName: String:"Associate"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    RelatedEntities: EntityReferenceCollection[1]
+      [0]: EntityReference
+        LogicalName: String:"new_crrtag"
+        Id: Guid:{a:tag}
+        Name: null
+        KeyAttributes: KeyAttributeCollection[0]
+        RowVersion: null
+    Relationship: Relationship
+      SchemaName: String:"new_crrtypes_new_crrtag"
+      PrimaryEntityRole: null
+    Target: EntityReference
+      LogicalName: String:"new_crrtypes"
+      Id: Guid:{a:types}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.AssociateResponse
+ResponseName: String:"Associate"
+Results: ParameterCollection[0]
+--- rows ---
+data.new_crrtypes_new_crrtag where new_crrtypesid = {a:types}: 1 row(s)
+  [0]
+    createdby: Guid:{user}
+    createdon: DateTime:{date}
+    modifiedby: Guid:{user}
+    modifiedon: DateTime:{date}
+    new_crrtagid: Guid:{a:tag}
+    new_crrtypes_new_crrtagid: Guid:{id1}
+    new_crrtypesid: Guid:{a:types}
+    overriddencreatedon: null
+    owningbusinessunit: null
+    owningteam: null
+    owninguser: null
+    statecode: Int32:0
+    statuscode: Int32:1
+    versionnumber: {rowversion}

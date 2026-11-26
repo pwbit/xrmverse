@@ -1,0 +1,89 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: RetrieveRequest
+  RequestName: String:"Retrieve"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    ColumnSet: ColumnSet
+      AllColumns: Boolean:False
+      AttributeExpressions: DataCollection[0]
+      Columns: DataCollection[7]
+        [0]: String:"subject"
+        [1]: String:"filename"
+        [2]: String:"mimetype"
+        [3]: String:"filesize"
+        [4]: String:"documentbody"
+        [5]: String:"objectid"
+        [6]: String:"isdocument"
+      HasLazyFileAttribute: Boolean:False
+      LazyFileAttributeEntityName: null
+      LazyFileAttributeKey: null
+      LazyFileAttributeSizeLimit: Int32:0
+      LazyFileAttributeValue: null
+    Target: EntityReference
+      LogicalName: String:"annotation"
+      Id: Guid:{a:note}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.RetrieveResponse
+ResponseName: String:"Retrieve"
+Results: ParameterCollection[1]
+  Entity: Entity(annotation)
+    Id: Guid:{a:note}
+    EntityState: null
+    RowVersion: null
+    Attributes: AttributeCollection[8]
+      annotationid: Guid:{a:note}
+      subject: String:"crr note"
+      filename: String:"crr.txt"
+      mimetype: String:"text/plain"
+      filesize: Int32:13
+      objectid: EntityReference
+        LogicalName: String:"account"
+        Id: Guid:{a:account}
+        Name: String:"crr note account"
+        KeyAttributes: KeyAttributeCollection[0]
+        RowVersion: null
+      isdocument: Boolean:True
+      documentbody: String:"Y3JyIG5vdGUgYm9keQ=="
+    FormattedValues: FormattedValueCollection[3]
+      filesize: String:"13"
+      objectid: String:"crr note account"
+      isdocument: String:"Yes"
+    KeyAttributes: KeyAttributeCollection[0]
+    RelatedEntities: RelatedEntityCollection[0]
+=== (b) QueryExecutor.ExecuteAsync ===
+--- result ---
+Result: EntityCollection
+  EntityName: String:"annotation"
+  Entities: DataCollection[1]
+    [0]: Entity(annotation)
+      Id: Guid:{a:note}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[8]
+        annotationid: Guid:{a:note}
+        subject: String:"crr note"
+        filename: String:"crr.txt"
+        mimetype: String:"text/plain"
+        filesize: Int32:13
+        objectid: EntityReference
+          LogicalName: String:"account"
+          Id: Guid:{a:account}
+          Name: String:"crr note account"
+          KeyAttributes: KeyAttributeCollection[0]
+          RowVersion: null
+        isdocument: Boolean:True
+        documentbody: String:"Y3JyIG5vdGUgYm9keQ=="
+      FormattedValues: FormattedValueCollection[3]
+        filesize: String:"13"
+        objectid: String:"crr note account"
+        isdocument: String:"Yes"
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+  MoreRecords: Boolean:False
+  PagingCookie: null
+  TotalRecordCount: Int32:-1
+  TotalRecordCountLimitExceeded: Boolean:False

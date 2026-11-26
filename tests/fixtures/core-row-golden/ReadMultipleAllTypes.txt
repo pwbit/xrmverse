@@ -1,0 +1,226 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: RetrieveMultipleRequest
+  RequestName: String:"RetrieveMultiple"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Query: QueryExpression
+      ColumnSet: ColumnSet
+        AllColumns: Boolean:False
+        AttributeExpressions: DataCollection[0]
+        Columns: DataCollection[20]
+          [0]: String:"new_name"
+          [1]: String:"new_memo"
+          [2]: String:"new_int"
+          [3]: String:"new_big"
+          [4]: String:"new_decimal"
+          [5]: String:"new_double"
+          [6]: String:"new_amount"
+          [7]: String:"new_amount_base"
+          [8]: String:"transactioncurrencyid"
+          [9]: String:"exchangerate"
+          [10]: String:"new_flag"
+          [11]: String:"new_when"
+          [12]: String:"new_day"
+          [13]: String:"new_choice"
+          [14]: String:"new_choices"
+          [15]: String:"new_accountid"
+          [16]: String:"new_code"
+          [17]: String:"ownerid"
+          [18]: String:"statecode"
+          [19]: String:"statuscode"
+        HasLazyFileAttribute: Boolean:False
+        LazyFileAttributeEntityName: null
+        LazyFileAttributeKey: null
+        LazyFileAttributeSizeLimit: Int32:0
+        LazyFileAttributeValue: null
+      Criteria: FilterExpression
+        AnyAllFilterLinkEntity: null
+        Conditions: DataCollection[1]
+          [0]: ConditionExpression
+            AttributeName: String:"new_name"
+            CompareColumns: Boolean:False
+            EntityName: null
+            Operator: ConditionOperator:Equal
+            Values: DataCollection[1]
+              [0]: String:"crr read types"
+        FilterHint: null
+        FilterOperator: LogicalOperator:And
+        Filters: DataCollection[0]
+        IsQuickFindFilter: Boolean:False
+      DataSource: null
+      Distinct: Boolean:False
+      EntityName: String:"new_crrtypes"
+      ForceSeek: null
+      LinkEntities: DataCollection[0]
+      NoLock: Boolean:False
+      Orders: DataCollection[0]
+      PageInfo: PagingInfo
+        Count: Int32:0
+        PageNumber: Int32:0
+        PagingCookie: null
+        ReturnRecordCountLessThanMarv: Boolean:False
+        ReturnTotalRecordCount: Boolean:False
+      QueryHints: null
+      SubQueryExpression: null
+      TopCount: null
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.RetrieveMultipleResponse
+ResponseName: String:"RetrieveMultiple"
+Results: ParameterCollection[1]
+  EntityCollection: EntityCollection
+    EntityName: String:"new_crrtypes"
+    Entities: DataCollection[1]
+      [0]: Entity(new_crrtypes)
+        Id: Guid:{a:types}
+        EntityState: null
+        RowVersion: null
+        Attributes: AttributeCollection[21]
+          new_crrtypesid: Guid:{a:types}
+          new_name: String:"crr read types"
+          new_memo: String:"line one\nline two"
+          new_int: Int32:42
+          new_big: Int64:9000000000
+          new_decimal: Decimal:12.34
+          new_double: Double:0.125
+          new_amount: Money
+            Value: Decimal:1234.5000
+          new_amount_base: Money
+            Value: Decimal:1234.5000
+          transactioncurrencyid: EntityReference
+            LogicalName: String:"transactioncurrency"
+            Id: Guid:{a:basecurrency}
+            Name: String:"Euro"
+            KeyAttributes: KeyAttributeCollection[0]
+            RowVersion: null
+          exchangerate: Decimal:1.0000000000
+          new_flag: Boolean:True
+          new_when: DateTime:2015-03-04T23:30:00.0000000Z
+          new_day: DateTime:2015-03-04T00:00:00.0000000Z
+          new_choice: OptionSetValue
+            Value: Int32:100000001
+          new_choices: OptionSetValueCollection[2]
+            [0]: OptionSetValue
+              Value: Int32:3
+            [1]: OptionSetValue
+              Value: Int32:1
+          new_accountid: EntityReference
+            LogicalName: String:"account"
+            Id: Guid:{a:account}
+            Name: String:"crr types account"
+            KeyAttributes: KeyAttributeCollection[0]
+            RowVersion: null
+          new_code: String:"CRR-0108"
+          ownerid: EntityReference
+            LogicalName: String:"systemuser"
+            Id: Guid:{user}
+            Name: String:"Test Admin"
+            KeyAttributes: KeyAttributeCollection[0]
+            RowVersion: null
+          statecode: OptionSetValue
+            Value: Int32:0
+          statuscode: OptionSetValue
+            Value: Int32:1
+        FormattedValues: FormattedValueCollection[17]
+          new_int: String:"42"
+          new_big: String:"9,000,000,000"
+          new_decimal: String:"12.34"
+          new_double: String:"0.125"
+          new_amount: String:"€1,234.50"
+          new_amount_base: String:"€1,234.50"
+          transactioncurrencyid: String:"Euro"
+          exchangerate: String:"1.0000000000"
+          new_flag: String:"Yes"
+          new_when: String:"3/4/2015 11:30 PM"
+          new_day: String:"3/4/2015"
+          new_choice: String:"Beta"
+          new_choices: String:"Three; One"
+          new_accountid: String:"crr types account"
+          ownerid: String:"Test Admin"
+          statecode: String:"Active"
+          statuscode: String:"Active"
+        KeyAttributes: KeyAttributeCollection[0]
+        RelatedEntities: RelatedEntityCollection[0]
+    MoreRecords: Boolean:False
+    PagingCookie: String:"<cookie page="1"><new_crrtypesid last="{{a:types}}" first="{{a:types}}" /></cookie>"
+    TotalRecordCount: Int32:-1
+    TotalRecordCountLimitExceeded: Boolean:False
+=== (b) QueryExecutor.ExecuteAsync ===
+--- result ---
+Result: EntityCollection
+  EntityName: String:"new_crrtypes"
+  Entities: DataCollection[1]
+    [0]: Entity(new_crrtypes)
+      Id: Guid:{a:types}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[21]
+        new_crrtypesid: Guid:{a:types}
+        new_name: String:"crr read types"
+        new_memo: String:"line one\nline two"
+        new_int: Int32:42
+        new_big: Int64:9000000000
+        new_decimal: Decimal:12.34
+        new_double: Double:0.125
+        new_amount: Money
+          Value: Decimal:1234.5000
+        new_amount_base: Money
+          Value: Decimal:1234.5000
+        transactioncurrencyid: EntityReference
+          LogicalName: String:"transactioncurrency"
+          Id: Guid:{a:basecurrency}
+          Name: String:"Euro"
+          KeyAttributes: KeyAttributeCollection[0]
+          RowVersion: null
+        exchangerate: Decimal:1.0000000000
+        new_flag: Boolean:True
+        new_when: DateTime:2015-03-04T23:30:00.0000000Z
+        new_day: DateTime:2015-03-04T00:00:00.0000000Z
+        new_choice: OptionSetValue
+          Value: Int32:100000001
+        new_choices: OptionSetValueCollection[2]
+          [0]: OptionSetValue
+            Value: Int32:3
+          [1]: OptionSetValue
+            Value: Int32:1
+        new_accountid: EntityReference
+          LogicalName: String:"account"
+          Id: Guid:{a:account}
+          Name: String:"crr types account"
+          KeyAttributes: KeyAttributeCollection[0]
+          RowVersion: null
+        new_code: String:"CRR-0108"
+        ownerid: EntityReference
+          LogicalName: String:"systemuser"
+          Id: Guid:{user}
+          Name: String:"Test Admin"
+          KeyAttributes: KeyAttributeCollection[0]
+          RowVersion: null
+        statecode: OptionSetValue
+          Value: Int32:0
+        statuscode: OptionSetValue
+          Value: Int32:1
+      FormattedValues: FormattedValueCollection[17]
+        new_int: String:"42"
+        new_big: String:"9,000,000,000"
+        new_decimal: String:"12.34"
+        new_double: String:"0.125"
+        new_amount: String:"€1,234.50"
+        new_amount_base: String:"€1,234.50"
+        transactioncurrencyid: String:"Euro"
+        exchangerate: String:"1.0000000000"
+        new_flag: String:"Yes"
+        new_when: String:"3/4/2015 11:30 PM"
+        new_day: String:"3/4/2015"
+        new_choice: String:"Beta"
+        new_choices: String:"Three; One"
+        new_accountid: String:"crr types account"
+        ownerid: String:"Test Admin"
+        statecode: String:"Active"
+        statuscode: String:"Active"
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+  MoreRecords: Boolean:False
+  PagingCookie: String:"<cookie page="1"><new_crrtypesid last="{{a:types}}" first="{{a:types}}" /></cookie>"
+  TotalRecordCount: Int32:-1
+  TotalRecordCountLimitExceeded: Boolean:False

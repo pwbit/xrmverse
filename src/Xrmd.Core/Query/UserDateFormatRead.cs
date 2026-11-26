@@ -1,10 +1,9 @@
 using System.Data;
-using Microsoft.Xrm.Sdk;
-using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Metadata;
-using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Metadata;
+using Xrmd.Model.Records;
 using Xrmd.Query.Sql;
 using Xrmd.Security;
 
@@ -22,42 +21,42 @@ internal static class UserDateFormatRead
     private static readonly string[] Columns =
         [TimeZoneSchema.Code, "dateformatstring", "timeformatstring", "dateseparator", "timeseparator", "amdesignator", "pmdesignator"];
 
-    public static async Task CompleteAsync(EntityCollection result, Caller caller, IMetadataStore store, DataSession session, CancellationToken ct)
+    internal static async Task CompleteAsync(IReadOnlyList<QueryRow> rows, Caller caller, IMetadataStore store, DataSession session, CancellationToken ct)
     {
-        if (caller.UserId == Guid.Empty || !HasDateFormattedValue(result, store)) return;
+        if (caller.UserId == Guid.Empty || !HasDateFormattedValue(rows, store)) return;
         var format = await ReadAsync(caller.UserId, store, session, ct);
-        if (format != UserDateFormat.Default) Apply(result, store, format);
+        if (format != UserDateFormat.Default) Apply(rows, store, format);
     }
 
-    /// <summary>Rewrites the date formatted values of <paramref name="result"/> (root columns and linked ones) in <paramref name="format"/>.</summary>
-    public static void Apply(EntityCollection result, IMetadataStore store, UserDateFormat format)
+    /// <summary>Rewrites the date formatted values of <paramref name="rows"/> (root columns and linked ones) in <paramref name="format"/>.</summary>
+    internal static void Apply(IReadOnlyList<QueryRow> rows, IMetadataStore store, UserDateFormat format)
     {
-        foreach (var entity in result.Entities)
-            foreach (var (key, column, value) in Dates(entity, store))
-                entity.FormattedValues[key] = format.Format(column, value);
+        foreach (var entity in rows)
+            foreach (var (key, column, value) in Dates(entity, store).ToList())
+                entity.SetFormatted(key, format.Format(column, value));
     }
 
-    private static bool HasDateFormattedValue(EntityCollection result, IMetadataStore store) =>
-        result.Entities.Any(e => Dates(e, store).Any());
+    private static bool HasDateFormattedValue(IReadOnlyList<QueryRow> rows, IMetadataStore store) =>
+        rows.Any(e => Dates(e, store).Any());
 
     /// <summary>The attributes of <paramref name="entity"/> holding a date that has a formatted value, with their column.</summary>
-    private static IEnumerable<(string Key, DateTimeAttributeMetadata Column, DateTime Value)> Dates(Entity entity, IMetadataStore store)
+    private static IEnumerable<(string Key, DateTimeColumn Column, DateTime Value)> Dates(QueryRow entity, IMetadataStore store)
     {
-        foreach (var (key, raw) in entity.Attributes)
+        foreach (var key in entity.Keys)
         {
-            if (!entity.FormattedValues.ContainsKey(key)) continue;
-            var (table, attribute, value) = raw is AliasedValue aliased
+            if (!entity.HasFormatted(key) || !entity.TryGetValue(key, out var raw)) continue;
+            var (table, attribute, value) = raw is AliasedColumnValue aliased
                 ? (aliased.EntityLogicalName, aliased.AttributeLogicalName, aliased.Value)
                 : (entity.LogicalName, key, raw);
             if (value is not DateTime date || table is null || attribute is null) continue;
-            if (store.GetEntity(table)?.Attributes?.FirstOrDefault(a => a.LogicalName == attribute) is DateTimeAttributeMetadata column)
+            if (store.GetTable(table)?.Attributes?.FirstOrDefault(a => a.LogicalName == attribute) is DateTimeColumn column)
                 yield return (key, column, date);
         }
     }
 
     private static async Task<UserDateFormat> ReadAsync(Guid userId, IMetadataStore store, DataSession session, CancellationToken ct)
     {
-        var settings = store.GetEntity(CurrencySchema.UserSettings);
+        var settings = store.GetTable(CurrencySchema.UserSettings);
         if (Columns.Any(c => settings?.Attributes?.Any(a => a.LogicalName == c) != true)) return UserDateFormat.Default;
         // Plan 2.7a: in the dialect's SQL (a query of every user, P11), as LanguageCodeAsync.
         await using var cmd = session.Command(

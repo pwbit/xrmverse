@@ -2,6 +2,8 @@ using System.Data.Common;
 using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Metadata;
+using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Metadata;
 
 namespace Xrmd.Core;
 
@@ -31,13 +33,20 @@ public sealed record CurrencySnapshot(Guid BaseCurrencyId, int PricingPrecision,
     /// currency's (its ISO code with display option 1), the precision the attribute's effective one
     /// (<see cref="CurrencyMath.EffectivePrecision"/>). Null, which keeps the <c>N2</c> format, without a known currency.
     /// </summary>
-    public MoneyFormat? FormatFor(MoneyAttributeMetadata a, Guid? currencyId)
+    public MoneyFormat? FormatFor(MoneyColumn a, Guid? currencyId)
     {
         ArgumentNullException.ThrowIfNull(a);
         var id = a.IsBaseCurrency == true ? BaseCurrencyId : currencyId;
         if (id is not { } known || !Currencies.TryGetValue(known, out var currency)) return null;
         return new MoneyFormat(DisplayOption == 1 ? currency.IsoCode : currency.Symbol,
             CurrencyMath.EffectivePrecision(a, currency.Precision, PricingPrecision), FormatCode);
+    }
+
+    /// <summary>The SDK twin of <see cref="FormatFor(MoneyColumn, Guid?)"/>: its column read as the model.</summary>
+    public MoneyFormat? FormatFor(MoneyAttributeMetadata a, Guid? currencyId)
+    {
+        ArgumentNullException.ThrowIfNull(a);
+        return FormatFor((MoneyColumn)a.ToModel(), currencyId);
     }
 }
 

@@ -1,18 +1,16 @@
 using System.Data;
-using Microsoft.Xrm.Sdk;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
 using Xrmd.Pipeline.Mail;
-using Microsoft.Xrm.Sdk.Metadata;
 
 namespace Xrmd.Core.Mail;
 
 /// <summary>
 /// The write-only passwords of the mail tables (plan 4.1b): <c>emailserverprofile.incomingpassword</c>, <c>outgoingpassword</c> and
 /// <c>oauthclientsecret</c>, and <c>mailbox.password</c>. As the webhook <c>authvalue</c> (plan 3.2), a secret has no data column:
-/// <see cref="Take"/> removes it from the Create or Update target before the core write (the pipeline already did, <see cref="PendingMailSecrets"/>), <see cref="StoreAsync"/> keeps it in
+/// the core write takes it out of the Create or Update target (the pipeline already did, <see cref="PendingMailSecrets"/>), <see cref="StoreAsync"/> keeps it in
 /// <c>meta.mail_secret</c> (one row per record and column, which no read path reaches) and sets the record's read-only <c>is*set</c>
 /// flag. A value is read back only by the server (<see cref="ReadAsync"/>) to send or sync mail, and never appears in a log or a fault.
 /// </summary>
@@ -22,24 +20,6 @@ public static class MailSecrets
 
     /// <summary>The MaxLength of the secret column in <c>meta.mail_secret</c>.</summary>
     private const int MaxValueLength = PendingMailSecrets.StoreLength;
-
-    /// <summary>
-    /// The secrets of a Create or Update of a mail table: those the pipeline already took out of the request's Target
-    /// (<see cref="PendingMailSecrets.Claim"/>) and those still in <paramref name="target"/> (a write that did not come through the
-    /// pipeline), which becomes a copy without them. A null value clears the secret. Any other table gives an empty result.
-    /// </summary>
-    /// <exception cref="XrmdFaultException">400 <c>InvalidArgument</c> for a value that is not a string or is too long.</exception>
-    public static IReadOnlyDictionary<string, string?> Take(ref Entity target, EntityMetadata table)
-    {
-        ArgumentNullException.ThrowIfNull(target);
-        var taken = new Dictionary<string, string?>(PendingMailSecrets.Claim(target), StringComparer.Ordinal);
-        if (!PendingMailSecrets.Carries(target)) return taken;
-        var copy = new Entity(target.LogicalName, target.Id);
-        foreach (var (name, value) in target.Attributes) copy[name] = value;
-        foreach (var (name, value) in PendingMailSecrets.Extract(copy, table)) taken[name] = value;
-        target = copy;
-        return taken;
-    }
 
     /// <summary>
     /// Stores the taken values for the record in <paramref name="s"/>'s transaction (update, else insert, under the record's key lock;

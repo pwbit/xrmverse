@@ -231,9 +231,11 @@ What stays on the SDK, and the step that moves it:
 
 | Still on the SDK | Moves in |
 |---|---|
-| The CRUD handlers of the core (Create, Retrieve, Update, Delete, RetrieveMultiple, Assign, Associate, Disassociate) and the request marks | S.2e3b |
-| The other core messages, the core entry adapter and the SDK extension methods of `IPipelineCore` | S.2e3c |
-| Mail, Elastic, Duplicates, Solutions and Rollups | S.2e4 |
+| The other core messages, `OrganizationService`, the core entry adapter and the SDK extension methods of `IPipelineCore` | S.2e3c |
+| The Security row rules that the CRUD handlers reach through bridges, and `RetrieveMultipleModelRequest` | S.2e3c |
+| The `StandardUpsert`, `InnerExecution` and `AccessTeamRules` marks, and the stage-20 guard (`SecurityGuard`) | S.2e3c |
+| Mail, Elastic, Duplicates, Solutions and Rollups, and their bridges | S.2e4 |
+| Files and Audit, and the bridges that reach them | S.2f |
 | Workflows (`Xrmd.Workflows`), whose hooks the pipeline calls with a lent SDK view | S.2h |
 | The SDK plug-in adapter, which moves to `Xrmd.Sdk.Adapters`, and the SDK overloads, which are removed | S.2i |
 
@@ -337,21 +339,101 @@ The cost of a message through the core, measured against the code before S.2e3a 
   806 objects instead of 606, or 2 to 3 more per child. The time stays within noise.
 - **The stage-20 SDK image checks cost one conversion each.** The checks on writes of the custom API, plug-in registration, workflow
   and service endpoint tables, and the owner lookup of real-time workflows, read their image through the model member into a mirror
-  of their own. Each read converts that one row in once, and the checks get the core's `Entity`. S.2e3b or S.2e3c can move these
+  of their own. Each read converts that one row in once, and the checks get the core's `Entity`. S.2e3c can move these
   checks to `Record`.
 - **Direct SDK callers pay three conversions of the request.** An extension method converts the request in, and the adapter writes
   it out and reads it back, so a caller outside a pipeline pays three times the size of its request. That is what a message pays
   through the pipeline too (one read at entry, one write and one read at the core): an Associate of 5 objects converts 15 there, as
-  before. The response crosses back unconverted as the shell's twin.
+  before. The response crosses back unconverted as the shell's twin. The same holds for the CRUD twins: an extension caller still
+  mirrors the typed response out (`mirror.Out`), which this step does not remove, so a CRUD read through an extension method pays
+  that conversion of the response on top of the three of the request.
 - **Direct SDK image reads convert the image once.** The `RetrieveImageAsync` extension method (used by the workflow store and
   authoring, `ExecuteWorkflow` and the solution importer) converts the target and then the image once, into the call's mirror, and
   returns the core's own `Entity`. Before S.2e3a these reads converted nothing; the cost is one conversion of one row.
 
-What moves next: S.2e3b moves the CRUD handlers and what they use (validation, the row mapper, activity parties, audit writes) to
-`Record`, and keys the request marks (`CascadeHint`, `AuditActionHint`, the Web API query model, the `StandardUpsert` and inner
-execution marks, `AccessTeamRules`) on the model request. S.2e3c moves the other core messages and `OrganizationService`, removes the
-core entry adapter and the extension methods, and moves the callers outside the pipeline to their own boundary. The SDK usage count
-of Core is 59 (the adapter's file added) and that of Pipeline stays 30.
+What moves next is S.2e3b, below, and then S.2e3c.
+
+### Core CRUD on the model (S.2e3b)
+
+S.2e3b moves the eight CRUD messages of the core (Create, Retrieve, Update, Delete, RetrieveMultiple, Assign, Associate,
+Disassociate) and the read path they use onto `Record`. External contracts do not change: the response goldens in
+`tests/fixtures/core-response-golden/`, the row goldens in `tests/fixtures/core-row-golden/` (stored rows, activity parties,
+audit rows, match codes and fault texts), the parameter goldens in `tests/fixtures/row-parameters-golden/` and the plug-in and
+remote context goldens are byte-identical to the code before S.2e3b. The handlers read `TableDefinition` and `ColumnDefinition`
+from the metadata store, and match model values (`ChoiceValue`, `MoneyValue`, `RecordReference`, `RecordCollection`, ...). Fault
+texts that name a value type keep the SDK name they show today.
+
+- **The moved files.** `EntityRowMapper`, `ActivityParties`, `ActivityPointerSync`, `CurrencyStamp`, `PostRules`,
+  `Validation/EntityValidator` and `Query/QueryExecutor` with `ActivityRead`, `NoteBodyRead` and `UserDateFormatRead` name no SDK
+  type any more. The handlers are partial files of `CoreOperations`: `CoreOperations.Read.cs`, `.Write.cs` (the shared write
+  rules), `.Create.cs`, `.Update.cs`, `.Delete.cs`, `.Associate.cs` and `.Messages.cs` (the dispatch).
+- **The model members and their SDK twins.** The members take and return model types. Each public member that other modules call
+  keeps an SDK twin with the old name and signature in `src/Xrmd.Core/Sdk/CoreOperations.Records.Sdk.cs`; the twin leaves the
+  caller's `Entity` as it did before.
+
+  | Model member | SDK twin |
+  |---|---|
+  | `RetrieveRecordAsync` | `RetrieveAsync` |
+  | `RetrieveRecordsAsync` | `RetrieveMultipleAsync` |
+  | `CreateRecordAsync` | `CreateAsync` |
+  | `UpdateRecordAsync` | `UpdateAsync` |
+  | `DeleteRecordAsync` | `DeleteAsync` |
+  | `AssignRecordAsync` | `AssignAsync` |
+  | `AssociateRecordsAsync` | `AssociateAsync` (`associate: false` disassociates) |
+  | `QueryExecutor.ExecuteRecordsAsync` | `QueryExecutorSdk.ExecuteAsync` |
+
+- **The bridges.** `src/Xrmd.Core/Sdk/CoreSdkBridges.cs` (internal) is the only place where the moved code reaches the SDK-typed
+  helpers of other steps: Security row rules, Mail, Elastic, Duplicates, Rollups, Files and Audit. The guard rule: a bridge first
+  runs the helper's own guard (the table name, an elastic table, an image column, a rollup column, an audited table,
+  `detectDuplicates`), copied from the helper and commented with its name. If the guard says the helper does nothing, nothing is
+  converted. Otherwise the bridge converts the row with a mirror of the call, reads it in before writing it out, calls the helper
+  and reads the row back into the same `Record`. A Create, Update, Retrieve or Delete of a plain custom table therefore crosses no
+  bridge; `CoreSdkBridges.Crossings` and `CountCrossings()` are the test seams that prove it. Each bridge goes away with the step
+  that moves its helper (S.2e3c for Security, S.2e4 for Mail, Elastic, Duplicates and Rollups, S.2f for Files and Audit).
+- **The mark copies.** `CascadeHint` and `AuditActionHint` have model keys (`Mark(Request)`, `IsMarked(Request)`, `Of(Request)`)
+  in SDK-free files; their SDK overloads are in `src/Xrmd.Abstractions/Sdk/RequestHints.Sdk.cs`. The pipeline copies the marks at its
+  crossings: an SDK `AuditActionHint` goes onto the model request after the request crosses in, and a model `CascadeHint` goes onto
+  the SDK twin of a core-issued nested request, because the stage-20 guard still reads it there. A query model that a front end
+  gives is attached to the model request with `QueryModelHint.Attach` and read with `QueryModelHint.Of`.
+- **Typed responses by name.** The handlers return model responses. For these eight messages the adapter pairs the model response
+  with `CoreResponses.Typed(name)` (`src/Xrmd.Core/Sdk/CoreResponses.cs`), a new `CreateResponse`, `RetrieveResponse`, ... with the
+  response name set, and fills it once. `CoreResponses.IsCrud` tells the adapter which names it applies to. The caller still gets the
+  same CLR type as before.
+- **No held window for CRUD.** The model request is current when the pipeline reaches the core. The model bodies do change the Target in
+  place (validation strips calculated values, a write by key fills key ids and `partitionid`), and `KeepCallerTarget` copies exactly
+  those changes onto the caller's `Entity`, so the SDK request is not written out for stage 30. The pipeline writes the request out and reads it back only for the tables in
+  `HoldChecksMayWrite` (the custom API, registration, workflow, service endpoint and mail-secret tables), whose stage-20 checks may
+  change it. The core no longer holds a plug-in's early-bound `Entity`: it works on the `Record`, and the stored row and the async
+  payload are unchanged.
+
+The read path shapes `Record`s, and that moves the cost of a read. A direct SDK caller (the TDS endpoint, MCP, Host and Admin
+helpers, the migration verification) would pay one conversion per row, so the row shaper writes through a row sink
+(`QueryRow`, `RowSink` and `QueryPage` in `src/Xrmd.Core/Query/QueryRow.cs`) with two implementations: one makes `Record` rows, the
+other (in `Sdk/QueryExecutor.Sdk.cs`) makes `Entity` rows directly, building no `Record`. The per-column
+logic is the same code for both. The responses of Retrieve and RetrieveMultiple copy their typed rows plainly, as the SDK handler
+did before; the mirror, which keeps instance identity, is used only when a caller reads the same instance back (an observed
+pipeline: a stage-40 step, a workflow or a plug-in that uses `OutputParameters`). The counts in `PipelineModelBoundaryTests` are:
+
+- An unobserved read converts no row. A RetrieveMultiple of 1,000 rows converts 7 objects, the request, the same as for 1 row.
+- An observed read (one post-operation step) converts 33 objects for 1 row and 3,030 for 1,000, at most the 50 and 4,046 of S.2e3a.
+
+Timing is measured by `tests/Xrmd.Integration.Tests/CoreCrudTimingTests.cs` (`Category=Timing`, excluded from the CI test filters; run
+it by name). The medians of 10 warm runs, main against this branch in one container, back to back, three rounds:
+
+| Scenario | Round 1 | Round 2 | Round 3 |
+|---|---|---|---|
+| 2,000 Creates through the pipeline | -0.6% | +3.9% | -6.8% |
+| 5,000-row RetrieveMultiple through the Web API | +2.7% | +8.0% | +4.1% |
+| 5,000-row `QueryExecutor` SDK twin read | +32.0% | +2.4% | -4.5% |
+| Migration import of 2,000 rows | +5.3% | +3.0% | -5.6% |
+
+The budget is +10%. The SDK twin read is over it in one round of three, and the Web API read is within it in all three, so the
+step meets the budget. Each caller that reads through the SDK twin stops paying it when its own step moves to the model (S.2f for
+the Web API, S.2h for MCP and Host).
+
+The SDK usage count of Core is 55 and that of Abstractions is 8; Pipeline stays 30. S.2e3c moves the other core messages,
+`OrganizationService`, the Security row rules and `RetrieveMultipleModelRequest`, removes the core entry adapter and the SDK extension
+methods, and moves the callers outside the pipeline to their own boundary.
 
 The view is transitional. The other modules move to the model in S.2d to S.2h, and S.2i removes the view, the twins and the bridge.
 

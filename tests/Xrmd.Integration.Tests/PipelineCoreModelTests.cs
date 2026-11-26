@@ -74,11 +74,13 @@ public sealed class PipelineCoreModelTests(XrmdFixture fx)
     }
 
     /// <summary>
-    /// A model Create through the model entry: the response is an unread shell of the core's <see cref="CreateResponse"/>, paired in
-    /// the request's registered mirror; reading the twin in fills it with the stored row's id. The Target crosses as its own twin.
+    /// A model Create through the model entry. S.2e3b (Decision 7): the core answers it on the model, so the response is the core's model
+    /// response with the stored row's id, paired in the request's registered mirror with today's <see cref="CreateResponse"/>, which is
+    /// already filled (written out once); it is an ordinary twin, not an unread shell (S.2e3a returned a shell). The request does not
+    /// cross: the Target gets no SDK twin.
     /// </summary>
     [Fact]
-    public async Task Model_path_returns_a_shell_of_the_typed_response()
+    public async Task Model_path_returns_the_model_response_paired_with_the_typed_one()
     {
         await using var kit = await CoreScenarioKit.StartAsync(fx, false);
         await kit.EnsurePipeAsync();
@@ -99,19 +101,13 @@ public sealed class PipelineCoreModelTests(XrmdFixture fx)
         }
 
         SdkMirror.For(request).Should().BeSameAs(mirror);
-        mirror.IsUnread(response).Should().BeTrue();
-        response.Name.Should().Be("Create");
-        response.Results.Should().BeEmpty();
-        mirror.TryGetSdk(response, out var twin).Should().BeTrue();
-        var typed = twin.Should().BeOfType<CreateResponse>().Subject;
-        var stored = (Guid)(await kit.ScalarAsync($"SELECT pb_pipeid FROM data.{Pipe} WHERE pb_name = 'pcm-create'"))!;
-        typed.id.Should().Be(stored);
-        mirror.TryGetSdk(target, out var sdkTarget).Should().BeTrue();
-        sdkTarget.Should().BeOfType<Entity>().Which.LogicalName.Should().Be(Pipe);
-
-        mirror.In(typed).Should().BeSameAs(response);
         mirror.IsUnread(response).Should().BeFalse();
+        response.Name.Should().Be("Create");
+        var stored = (Guid)(await kit.ScalarAsync($"SELECT pb_pipeid FROM data.{Pipe} WHERE pb_name = 'pcm-create'"))!;
         response.Results["id"].Should().Be(stored);
+        mirror.TryGetSdk(response, out var twin).Should().BeTrue();
+        twin.Should().BeOfType<CreateResponse>().Which.id.Should().Be(stored);
+        mirror.TryGetSdk(target, out _).Should().BeFalse("the request does not cross");
     }
 
     /// <summary>

@@ -1,0 +1,44 @@
+=== PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(new_crrimage)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[2]
+        new_name: String:"crr image"
+        new_pic: Byte[]:[766] sha256:43581B9AE4BCB0CC418F108138BA43DC08ADA7D195B90128C9AB7D864E642AD0
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.CreateResponse
+ResponseName: String:"Create"
+Results: ParameterCollection[1]
+  id: Guid:{a:created}
+--- rows ---
+data.new_crrimage where new_crrimageid = {a:created}: 1 row(s)
+  [0]
+    createdby: Guid:{user}
+    createdon: DateTime:{date}
+    modifiedby: Guid:{user}
+    modifiedon: DateTime:{date}
+    new_crrimageid: Guid:{a:created}
+    new_name: String:"crr image"
+    new_pic: Thumbnail:Png 144x144 (20,20)=#ffff0000 (124,20)=#ff0000ff (20,124)=#ffff0000 (124,124)=#ffff0000
+    new_pic_timestamp: {volatile}
+    new_picid: Guid:{id1}
+    overriddencreatedon: null
+    ownerid: Guid:{user}
+    owneridtype: Int32:8
+    owningbusinessunit: Guid:{businessunit}
+    owningteam: null
+    owninguser: Guid:{user}
+    statecode: Int32:0
+    statuscode: Int32:1
+    versionnumber: {rowversion}
+data.fileattachment where objectid = {a:created}: 0 row(s)
+file store blobs of the fileattachment rows: 0

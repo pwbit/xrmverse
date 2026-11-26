@@ -1,10 +1,10 @@
 {
   "files": {
-    "Xrmd.Abstractions": 9,
+    "Xrmd.Abstractions": 8,
     "Xrmd.Admin": 20,
     "Xrmd.Audit": 5,
     "Xrmd.Cli": 3,
-    "Xrmd.Core": 59,
+    "Xrmd.Core": 55,
     "Xrmd.Files": 3,
     "Xrmd.Host": 5,
     "Xrmd.Mcp": 8,

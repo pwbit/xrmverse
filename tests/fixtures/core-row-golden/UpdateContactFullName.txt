@@ -1,0 +1,53 @@
+=== PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: UpdateRequest
+  RequestName: String:"Update"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(contact)
+      Id: Guid:{a:contact}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[2]
+        firstname: String:"Grace"
+        lastname: String:"crr-fullname-changed"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.UpdateResponse
+ResponseName: String:"Update"
+Results: ParameterCollection[0]
+--- rows ---
+data.contact where contactid = {a:contact}: 1 row(s)
+  [0]
+    address1_city: null
+    address1_country: null
+    address1_line1: null
+    address1_postalcode: null
+    contactid: Guid:{a:contact}
+    createdby: Guid:{user}
+    createdon: DateTime:{date}
+    emailaddress1: null
+    exchangerate: Decimal:1.0000000000
+    firstname: String:"Grace"
+    fullname: String:"crr-fullname-changed, Grace"
+    jobtitle: null
+    lastname: String:"crr-fullname-changed"
+    middlename: null
+    mobilephone: null
+    modifiedby: Guid:{user}
+    modifiedon: DateTime:{date}
+    overriddencreatedon: null
+    ownerid: Guid:{user}
+    owneridtype: Int32:8
+    owningbusinessunit: Guid:{businessunit}
+    owningteam: null
+    owninguser: Guid:{user}
+    parentcustomerid: null
+    parentcustomeridtype: null
+    statecode: Int32:0
+    statuscode: Int32:1
+    telephone1: null
+    transactioncurrencyid: Guid:{a:basecurrency}
+    versionnumber: {rowversion}

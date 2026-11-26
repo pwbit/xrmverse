@@ -1,0 +1,40 @@
+=== PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(new_crgelastic)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[2]
+        new_name: String:"crr elastic"
+        partitionid: String:"crr-partition"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.CreateResponse
+ResponseName: String:"Create"
+Results: ParameterCollection[2]
+  id: Guid:{a:created}
+  x-ms-session-token: String:{x-ms-session-token}
+--- rows ---
+data.new_crgelastic where new_crgelasticid = {a:created}: 1 row(s)
+  [0]
+    createdby: Guid:{user}
+    createdon: DateTime:{date}
+    modifiedby: Guid:{user}
+    modifiedon: DateTime:{date}
+    new_crgelasticid: Guid:{a:created}
+    new_name: String:"crr elastic"
+    overriddencreatedon: null
+    ownerid: Guid:{user}
+    owneridtype: Int32:8
+    owningbusinessunit: Guid:{businessunit}
+    owningteam: null
+    owninguser: Guid:{user}
+    partitionid: String:"crr-partition"
+    ttlinseconds: null
+    versionnumber: {rowversion}

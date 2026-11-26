@@ -1,0 +1,52 @@
+=== PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: AssignRequest
+  RequestName: String:"Assign"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    Assignee: EntityReference
+      LogicalName: String:"systemuser"
+      Id: Guid:{a:assignee}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+    Target: EntityReference
+      LogicalName: String:"account"
+      Id: Guid:{a:account}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- response ---
+Type: Microsoft.Crm.Sdk.Messages.AssignResponse
+ResponseName: String:"Assign"
+Results: ParameterCollection[0]
+--- rows ---
+data.account where accountid = {a:account}: 1 row(s)
+  [0]
+    accountid: Guid:{a:account}
+    accountnumber: null
+    address1_city: null
+    address1_country: null
+    address1_line1: null
+    address1_postalcode: null
+    createdby: Guid:{user}
+    createdon: DateTime:{date}
+    emailaddress1: null
+    exchangerate: Decimal:1.0000000000
+    modifiedby: Guid:{user}
+    modifiedon: DateTime:{date}
+    name: String:"crr assign"
+    overriddencreatedon: null
+    ownerid: Guid:{a:assignee}
+    owneridtype: Int32:8
+    owningbusinessunit: Guid:{a:childunit}
+    owningteam: null
+    owninguser: Guid:{a:assignee}
+    parentaccountid: null
+    primarycontactid: null
+    statecode: Int32:0
+    statuscode: Int32:1
+    telephone1: null
+    transactioncurrencyid: Guid:{a:basecurrency}
+    versionnumber: {rowversion}
+    websiteurl: null

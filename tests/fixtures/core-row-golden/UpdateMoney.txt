@@ -1,0 +1,54 @@
+=== PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: UpdateRequest
+  RequestName: String:"Update"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(new_crrtypes)
+      Id: Guid:{a:types}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[1]
+        new_amount: Money
+          Value: Decimal:99.125
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.UpdateResponse
+ResponseName: String:"Update"
+Results: ParameterCollection[0]
+--- rows ---
+data.new_crrtypes where new_crrtypesid = {a:types}: 1 row(s)
+  [0]
+    createdby: Guid:{user}
+    createdon: DateTime:{date}
+    exchangerate: Decimal:1.0000000000
+    modifiedby: Guid:{user}
+    modifiedon: DateTime:{date}
+    new_accountid: null
+    new_amount: Decimal:99.1300
+    new_amount_base: Decimal:99.1300
+    new_big: null
+    new_choice: null
+    new_choices: null
+    new_code: String:"CRR-0101"
+    new_crrtypesid: Guid:{a:types}
+    new_day: null
+    new_decimal: null
+    new_double: null
+    new_flag: null
+    new_int: null
+    new_memo: null
+    new_name: String:"crr money"
+    new_when: null
+    overriddencreatedon: null
+    ownerid: Guid:{user}
+    owneridtype: Int32:8
+    owningbusinessunit: Guid:{businessunit}
+    owningteam: null
+    owninguser: Guid:{user}
+    statecode: Int32:0
+    statuscode: Int32:1
+    transactioncurrencyid: Guid:{a:basecurrency}
+    versionnumber: {rowversion}

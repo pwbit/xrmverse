@@ -1,0 +1,79 @@
+=== PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(annotation)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[6]
+        subject: String:"crr note"
+        notetext: String:"crr text"
+        filename: String:"crr.txt"
+        mimetype: String:"text/plain"
+        documentbody: String:"Y3JyIG5vdGUgYm9keQ=="
+        objectid: EntityReference
+          LogicalName: String:"account"
+          Id: Guid:{a:account}
+          Name: null
+          KeyAttributes: KeyAttributeCollection[0]
+          RowVersion: null
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.CreateResponse
+ResponseName: String:"Create"
+Results: ParameterCollection[1]
+  id: Guid:{a:created}
+--- rows ---
+data.annotation where annotationid = {a:created}: 1 row(s)
+  [0]
+    annotationid: Guid:{a:created}
+    createdby: Guid:{user}
+    createdon: DateTime:{date}
+    filename: String:"crr.txt"
+    filesize: Int32:13
+    isdocument: Boolean:True
+    langid: null
+    mimetype: String:"text/plain"
+    modifiedby: Guid:{user}
+    modifiedon: DateTime:{date}
+    notetext: String:"crr text"
+    objectid: Guid:{a:account}
+    objectidtype: Int32:1
+    overriddencreatedon: null
+    ownerid: Guid:{user}
+    owneridtype: Int32:8
+    owningbusinessunit: Guid:{businessunit}
+    owningteam: null
+    owninguser: Guid:{user}
+    statecode: Int32:0
+    statuscode: Int32:1
+    subject: String:"crr note"
+    versionnumber: {rowversion}
+data.fileattachment where objectid = {a:created}: 1 row(s)
+  [0]
+    createdby: null
+    createdon: DateTime:{date}
+    fileattachmentid: Guid:{id1}
+    filename: String:"crr.txt"
+    filesizeinbytes: Int64:13
+    mimetype: String:"text/plain"
+    modifiedby: null
+    modifiedon: DateTime:{date}
+    objectid: Guid:{a:created}
+    objectidtype: Int32:5
+    objecttypecode: String:"annotation"
+    overriddencreatedon: null
+    owningbusinessunit: null
+    owningteam: null
+    owninguser: null
+    regardingfieldname: String:"documentbody"
+    statecode: Int32:0
+    statuscode: Int32:1
+    versionnumber: {rowversion}
+file store blobs of the fileattachment rows: 1
+  Byte[]:637272206E6F746520626F6479

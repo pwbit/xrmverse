@@ -21,9 +21,10 @@ jobs:
           sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
           df -h /
       - uses: actions/checkout@v4
-      # Same filter as ci.yml: the acceptance tests accept the SQL Server terms, so they are run by hand (issue #60).
+      # Same filter as ci.yml: the acceptance tests accept the SQL Server terms, so they are run by hand (issue #60); the timing
+      # tests (Category=Timing, S.2e3b Decision 9) are run by hand too.
       - name: Build the dev container and run the tests inside it
         uses: devcontainers/ci@v0.3
         with:
           push: never
-          runCmd: dotnet test --filter "Category!=Acceptance"
+          runCmd: dotnet test --filter "Category!=Acceptance&Category!=Timing"

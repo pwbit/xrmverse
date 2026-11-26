@@ -1,0 +1,59 @@
+=== PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: AssociateRequest
+  RequestName: String:"Associate"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    RelatedEntities: EntityReferenceCollection[1]
+      [0]: EntityReference
+        LogicalName: String:"contact"
+        Id: Guid:{a:contact}
+        Name: null
+        KeyAttributes: KeyAttributeCollection[0]
+        RowVersion: null
+    Relationship: Relationship
+      SchemaName: String:"contact_customer_accounts"
+      PrimaryEntityRole: null
+    Target: EntityReference
+      LogicalName: String:"account"
+      Id: Guid:{a:account}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.AssociateResponse
+ResponseName: String:"Associate"
+Results: ParameterCollection[0]
+--- rows ---
+data.contact where contactid = {a:contact}: 1 row(s)
+  [0]
+    address1_city: null
+    address1_country: null
+    address1_line1: null
+    address1_postalcode: null
+    contactid: Guid:{a:contact}
+    createdby: Guid:{user}
+    createdon: DateTime:{date}
+    emailaddress1: null
+    exchangerate: Decimal:1.0000000000
+    firstname: String:"Ada"
+    fullname: String:"crr-child, Ada"
+    jobtitle: null
+    lastname: String:"crr-child"
+    middlename: null
+    mobilephone: null
+    modifiedby: Guid:{user}
+    modifiedon: DateTime:{date}
+    overriddencreatedon: null
+    ownerid: Guid:{user}
+    owneridtype: Int32:8
+    owningbusinessunit: Guid:{businessunit}
+    owningteam: null
+    owninguser: Guid:{user}
+    parentcustomerid: Guid:{a:account}
+    parentcustomeridtype: Int32:1
+    statecode: Int32:0
+    statuscode: Int32:1
+    telephone1: null
+    transactioncurrencyid: Guid:{a:basecurrency}
+    versionnumber: {rowversion}

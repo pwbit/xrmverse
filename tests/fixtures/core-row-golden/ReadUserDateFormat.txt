@@ -1,0 +1,65 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: RetrieveRequest
+  RequestName: String:"Retrieve"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    ColumnSet: ColumnSet
+      AllColumns: Boolean:False
+      AttributeExpressions: DataCollection[0]
+      Columns: DataCollection[3]
+        [0]: String:"new_name"
+        [1]: String:"new_when"
+        [2]: String:"new_day"
+      HasLazyFileAttribute: Boolean:False
+      LazyFileAttributeEntityName: null
+      LazyFileAttributeKey: null
+      LazyFileAttributeSizeLimit: Int32:0
+      LazyFileAttributeValue: null
+    Target: EntityReference
+      LogicalName: String:"new_crrtypes"
+      Id: Guid:{a:types}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.RetrieveResponse
+ResponseName: String:"Retrieve"
+Results: ParameterCollection[1]
+  Entity: Entity(new_crrtypes)
+    Id: Guid:{a:types}
+    EntityState: null
+    RowVersion: null
+    Attributes: AttributeCollection[4]
+      new_crrtypesid: Guid:{a:types}
+      new_name: String:"crr read dates"
+      new_when: DateTime:2015-03-04T23:30:00.0000000Z
+      new_day: DateTime:2015-03-04T00:00:00.0000000Z
+    FormattedValues: FormattedValueCollection[2]
+      new_when: String:"2015-03-05 00:30"
+      new_day: String:"2015-03-04"
+    KeyAttributes: KeyAttributeCollection[0]
+    RelatedEntities: RelatedEntityCollection[0]
+=== (b) QueryExecutor.ExecuteAsync ===
+--- result ---
+Result: EntityCollection
+  EntityName: String:"new_crrtypes"
+  Entities: DataCollection[1]
+    [0]: Entity(new_crrtypes)
+      Id: Guid:{a:types}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[4]
+        new_crrtypesid: Guid:{a:types}
+        new_name: String:"crr read dates"
+        new_when: DateTime:2015-03-04T23:30:00.0000000Z
+        new_day: DateTime:2015-03-04T00:00:00.0000000Z
+      FormattedValues: FormattedValueCollection[2]
+        new_when: String:"2015-03-05 00:30"
+        new_day: String:"2015-03-04"
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+  MoreRecords: Boolean:False
+  PagingCookie: null
+  TotalRecordCount: Int32:-1
+  TotalRecordCountLimitExceeded: Boolean:False

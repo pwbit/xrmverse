@@ -141,7 +141,7 @@ public sealed class WorkflowsTests
         ((YamlSequenceNode)((YamlMappingNode)on["push"])["branches"]).Select(b => b.ToString()).Should().Equal("main");
 
         var build = Runs(Job(ci, "build-test"));
-        build.Should().Contain("dotnet build").And.Contain("dotnet test \"$project\" --no-build --filter \"Category!=Acceptance\"");
+        build.Should().Contain("dotnet build").And.Contain("dotnet test \"$project\" --no-build --filter \"Category!=Acceptance&Category!=Timing\"");
         var ui = Runs(Job(ci, "ui"));
         foreach (var command in new[]
                  {
@@ -153,7 +153,7 @@ public sealed class WorkflowsTests
 
         var integration = Runs(Job(ci, "integration"));
         integration.Should().Contain("eng/test-shard.sh tests/Xrmd.Integration.Tests")
-            .And.Contain("dotnet test tests/Xrmd.Integration.Tests --no-build --filter \"Category!=Acceptance&($shard)\"");
+            .And.Contain("dotnet test tests/Xrmd.Integration.Tests --no-build --filter \"Category!=Acceptance&Category!=Timing&($shard)\"");
         Needs(ci, "integration").Should().Contain("ui", "the integration tests need the web admin build (HostStaticWebAssetsTests)");
 
         Runs(Job(ci, "licenses")).Should().Contain($"eng/licenses.sh check --notices {Notices}");
@@ -176,7 +176,7 @@ public sealed class WorkflowsTests
         var test = Steps(job).Single(s => Run(s).Contains("dotnet test", StringComparison.Ordinal));
         ((YamlMappingNode)test["env"])["XRMD_TEST_PROVIDER"].ToString().Should().Be("postgres");
         Run(test).Should().Contain("eng/test-shard.sh tests/Xrmd.Integration.Tests")
-            .And.Contain("dotnet test tests/Xrmd.Integration.Tests --no-build --filter \"Category!=Acceptance&($shard)\"");
+            .And.Contain("dotnet test tests/Xrmd.Integration.Tests --no-build --filter \"Category!=Acceptance&Category!=Timing&($shard)\"");
         Job(ci, "integration").Children.Should().NotContainKey(new YamlScalarNode("env"), "the SQL Server job keeps the default provider");
     }
 
@@ -246,7 +246,7 @@ public sealed class WorkflowsTests
         var ci = steps.FindIndex(s => s.Children.TryGetValue(new YamlScalarNode("uses"), out var u) && u.ToString() == "devcontainers/ci@v0.3");
         ci.Should().BeGreaterThanOrEqualTo(0);
         var with = (YamlMappingNode)steps[ci]["with"];
-        with["runCmd"].ToString().Should().Be("dotnet test --filter \"Category!=Acceptance\"", "the same tests as ci.yml; the acceptance tests accept the SQL Server terms and are run by hand (issue #60)");
+        with["runCmd"].ToString().Should().Be("dotnet test --filter \"Category!=Acceptance&Category!=Timing\"", "the same tests as ci.yml; the acceptance tests accept the SQL Server terms and the timing tests (S.2e3b Decision 9) are run by hand (issue #60)");
         with["push"].ToString().Should().Be("never");
 
         var free = steps.FindIndex(s => Run(s).Contains("sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL", StringComparison.Ordinal));

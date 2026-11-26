@@ -187,11 +187,13 @@ public sealed class PipelineModelBoundaryTests(XrmdFixture fx) : IAsyncLifetime
     // ---- Decision 3: the fast path ----------------------------------------------------------------------------------
 
     /// <summary>
-    /// A read with no stage-40 observer never converts its response: the objects the mirror writes are the same for 1 row and for 50
-    /// rows (a converted response would add at least one per row).
+    /// S.2e3b, ruling 8a: a read with no stage-40 observer converts no row through the mirror. The core answers RetrieveMultiple on the
+    /// model and its adapter fills the typed SDK response with plain copies of the rows, as the SDK handler did before S.2e3b, so 1 row and
+    /// 50 rows cost the mirror the same (the request crossing) and a returned row has no model twin. (Task 8 first wrote each row out
+    /// through the mirror, 49 rows more for 50 rows than for 1; ruling 8a took that back for the Web API's read time.)
     /// </summary>
     [Fact]
-    public async Task Read_without_stage_40_observer_converts_no_response()
+    public async Task Read_without_stage_40_observer_converts_no_row()
     {
         for (var i = 0; i < 50; i++) await Admin.CreateAsync(new Entity(Pipe) { ["pb_name"] = $"row{i:D2}" });
 
@@ -200,14 +202,16 @@ public sealed class PipelineModelBoundaryTests(XrmdFixture fx) : IAsyncLifetime
             var mirror = new SdkMirror();
             var query = new QueryExpression(Pipe) { ColumnSet = new ColumnSet("pb_name"), TopCount = rows };
             var response = await ExecuteAsync(new RetrieveMultipleRequest { Query = query }, mirror);
-            ((EntityCollection)response.Results["EntityCollection"]).Entities.Should().HaveCount(rows);
+            var entities = ((EntityCollection)response.Results["EntityCollection"]).Entities;
+            entities.Should().HaveCount(rows);
+            entities.Where(e => mirror.TryGetModel(e, out _)).Should().BeEmpty("the rows are plain copies, not mirror twins");
             return mirror.SyncCount;
         }
 
         var one = await CountAsync(1);
         var fifty = await CountAsync(50);
 
-        fifty.Should().Be(one, "the response of a read nobody observes after stage 30 is not converted");
+        fifty.Should().Be(one, "no row crosses the mirror");
         one.Should().BePositive("the request crosses the mirror");
     }
 
@@ -386,9 +390,10 @@ public sealed class PipelineModelBoundaryTests(XrmdFixture fx) : IAsyncLifetime
     }
 
     /// <summary>
-    /// A write with no step crosses its request exactly as at BASE: in at entry, out and in at the boundary (3 times its size, 15 objects
-    /// for this Associate). The core runs on the held request, the response stays an unread shell and <c>WrittenEntities</c> (which
-    /// reads the name and the relationship only) converts nothing.
+    /// A write with no step crosses its request once: in at entry (5 objects for this Associate). S.2e3b (Decision 8): the core answers
+    /// the CRUD messages on the model request, so the boundary no longer writes it out and reads it back (BASE wrote it 3 times, 15
+    /// objects); the core's typed response, empty for an Associate, is written once (1 object). <c>WrittenEntities</c> (which reads the
+    /// name and the relationship only) converts nothing.
     /// </summary>
     [Fact]
     public async Task Write_message_converts_only_its_request()
@@ -405,12 +410,13 @@ public sealed class PipelineModelBoundaryTests(XrmdFixture fx) : IAsyncLifetime
 
         var count = await CountAsync(Associate());
 
-        count.Should().Be(3 * SizeOf(Associate())).And.Be(15, "BASE wrote 15 objects for this Associate");
+        count.Should().Be(SizeOf(Associate()) + 1).And.Be(6, "the request crosses once (5) and the empty typed response is written once; BASE wrote 15");
     }
 
     /// <summary>
     /// The pre and post images of a step are each read and converted once, into the chain's mirror, where the record's SDK twin is
-    /// the core's own <c>Entity</c> (not a copy); the whole Update writes what BASE wrote (23 objects).
+    /// the core's own <c>Entity</c> (not a copy). The whole Update writes 19 objects: BASE wrote 23, and S.2e3b (Decision 8) no longer
+    /// writes the request out and reads it back at the boundary of a CRUD message.
     /// </summary>
     [Fact]
     public async Task Images_are_converted_once_into_the_chain_mirror()
@@ -439,16 +445,20 @@ public sealed class PipelineModelBoundaryTests(XrmdFixture fx) : IAsyncLifetime
             twin.Should().BeSameAs(image, "the record's twin is the core's own Entity");
         }
         reads.Select(r => r.Image.GetAttributeValue<string>("pb_name")).Should().Equal("img", "img2");
-        mirror.SyncCount.Should().Be(23, "BASE wrote 23 objects for this Update");
+        mirror.SyncCount.Should().Be(19, "BASE wrote 23 objects for this Update; S.2e3b crosses the request once instead of 3 times");
     }
 
     /// <summary>
-    /// A RetrieveMultiple of 1,000 rows that nothing observes after the core converts no response value: it writes what a read of one
-    /// row writes, as at BASE (21). With one post-operation step the response is converted once, as at BASE (50 for one row, 4,046
-    /// for 1,000).
+    /// S.2e3b, ruling 8a: a RetrieveMultiple of 1,000 rows. The core answers it on the model and its adapter fills the typed SDK response
+    /// with plain copies of the rows (as before S.2e3b), so an unobserved read converts no row through the mirror: a read of one row and a
+    /// read of 1,000 rows each write 7 objects, the request crossing once (BASE: 21 for both, the request crossed 3 times). With one
+    /// post-operation step the rows cross only where the step's view and the final response need them: 33 objects for one row and 3,030
+    /// for 1,000 rows, at most BASE (50 and 4,046).
+    /// (Task 8 first measured 10, 1,009, 36 and 4,032: its adapter wrote the response and each row out through the mirror, 3 objects for
+    /// the response and 1 per row more, observed or not; ruling 8a replaced that write with the plain copy.)
     /// </summary>
     [Fact]
-    public async Task Unobserved_retrieve_multiple_converts_no_response()
+    public async Task Unobserved_retrieve_multiple_converts_no_row()
     {
         for (var batch = 0; batch < 10; batch++)
             await Admin.ExecuteAsync(new CreateMultipleRequest
@@ -466,13 +476,21 @@ public sealed class PipelineModelBoundaryTests(XrmdFixture fx) : IAsyncLifetime
             },
         };
 
-        (await CountAsync(Read(1))).Should().Be(21, "BASE wrote 21 objects for a read of one row");
-        (await CountAsync(Read(1000))).Should().Be(21, "the response of a read nobody observes is not converted");
-
+        var unobserved = (One: await CountAsync(Read(1)), Thousand: await CountAsync(Read(1000)));
         await StepAsync("ThrowOnNamePlugin", "RetrieveMultiple", Pipe, 40, "never|x");
-        (await CountAsync(Read(1))).Should().Be(50, "BASE wrote 50 objects for an observed read of one row");
-        (await CountAsync(Read(1000))).Should().Be(4046, "BASE wrote 4,046 objects for an observed read of 1,000 rows");
+        var observed = (One: await CountAsync(Read(1)), Thousand: await CountAsync(Read(1000)));
+
+        (unobserved.One, unobserved.Thousand, observed.One, observed.Thousand).Should().Be(
+            (UnobservedOne, UnobservedThousand, ObservedOne, ObservedThousand), "the counts measured on S.2e3b (see the summary)");
+        observed.One.Should().BeLessThanOrEqualTo(50, "BASE wrote 50 objects for an observed read of one row");
+        observed.Thousand.Should().BeLessThanOrEqualTo(4046, "BASE wrote 4,046 objects for an observed read of 1,000 rows");
     }
+
+    // Measured on S.2e3b Task 8, fix round 1 (ruling 8a; see the summary of Unobserved_retrieve_multiple_converts_no_row).
+    private const long UnobservedOne = 7;
+    private const long UnobservedThousand = 7;
+    private const long ObservedOne = 33;
+    private const long ObservedThousand = 3030;
 
     /// <summary>
     /// A stage-40 step of a read sees the rows the core read (the shell is read in before the step's view is lent), and its change
@@ -541,8 +559,9 @@ public sealed class PipelineModelBoundaryTests(XrmdFixture fx) : IAsyncLifetime
 
     /// <summary>
     /// The Delete of an email with an attachment: the core issues the attachment's Delete as a marked cascade, the handler of that Delete
-    /// runs on the core's own <c>DeleteRequest</c> (its mark kept), the child's step sees the email's Delete as its parent, and a shared
-    /// variable the child's step sets on its parent reaches the outer stage 40.
+    /// runs on the core's own request (its mark kept; S.2e3b: the model request, seen through <see cref="CoreOperations.CrudRequest"/>,
+    /// whose SDK twin in the chain mirror is a <c>DeleteRequest</c> carrying the SDK mark), the child's step sees the email's Delete as its
+    /// parent, and a shared variable the child's step sets on its parent reaches the outer stage 40.
     /// </summary>
     [Fact]
     public async Task Core_cascade_nested_step_sees_the_core_message_as_parent()
@@ -557,50 +576,56 @@ public sealed class PipelineModelBoundaryTests(XrmdFixture fx) : IAsyncLifetime
         await StepAsync("ContextRecorderPlugin", "Delete", Attachment, 20, DumpLog);
         await StepAsync("SharedVariablePlugin", "Delete", Attachment, 40, "setparent|k|v");
         await StepAsync("SharedVariablePlugin", "Delete", "email", 40, $"record|{PipeLog}|k");
-        var handled = new List<OrganizationRequest>();
+        var handled = new List<Xrmd.Model.Messages.Request>();
 
-        CoreHandOff.HandlerRequest.Value = handled.Add;
+        CoreOperations.CrudRequest.Value = handled.Add;
         try
         {
             await ExecuteAsync(new DeleteRequest { Target = new EntityReference("email", email) });
         }
         finally
         {
-            CoreHandOff.HandlerRequest.Value = null;
+            CoreOperations.CrudRequest.Value = null;
         }
 
-        var child = handled.OfType<DeleteRequest>().Should().ContainSingle(r => r.Target.LogicalName == Attachment).Subject;
+        var child = handled.Should().ContainSingle(r => r.Name == "Delete"
+            && ((Xrmd.Model.Records.RecordReference)r.Parameters["Target"]!).LogicalName == Attachment).Subject;
         CascadeHint.IsMarked(child).Should().BeTrue("the core's cascade reaches its handler as the instance it marked");
+        SdkMirror.For(child)!.TryGetSdk(child, out var twin).Should().BeTrue();
+        CascadeHint.IsMarked(twin.Should().BeOfType<DeleteRequest>().Subject).Should().BeTrue("the guard and the plug-ins see today's DeleteRequest");
         (await ColumnAsync($"SELECT pb_data FROM data.{DumpLog}")).Should().ContainSingle()
             .Which.Should().Contain("\nparent=Delete\n");
         (await ColumnAsync($"SELECT pb_name FROM data.{PipeLog}")).Should().Equal("Delete|40|1|v");
     }
 
     /// <summary>
-    /// The early-bound <c>PipeLog</c> that <c>EarlyBoundLogPlugin</c> creates reaches the core's handler as that instance (a stage-20
-    /// step changed it in place), and the stored row is today's.
+    /// S.2e3b (Decision 8): the early-bound <c>PipeLog</c> that <c>EarlyBoundLogPlugin</c> creates reaches the core's model Create handler
+    /// as the model record of that instance, holding the change a stage-20 step made in place (<see cref="CoreOperations.CrudRequest"/>);
+    /// the core no longer holds the plug-in's early-bound <c>Entity</c> itself (it ran on it before S.2e3b). What callers see is today's:
+    /// the stored row here, the queued payload in <see cref="Early_bound_target_is_queued_with_todays_payload"/>.
     /// </summary>
     [Fact]
-    public async Task Early_bound_target_reaches_the_core_as_the_same_instance()
+    public async Task Early_bound_target_reaches_the_core_with_the_steps_change()
     {
         await EarlyBoundLogOnPipeCreateAsync();
         await StepAsync("SetAttributePlugin", "Create", PipeLog, 20, "pb_data=set-at-20");
-        var handled = new List<OrganizationRequest>();
+        var handled = new List<Xrmd.Model.Messages.Request>();
 
-        CoreHandOff.HandlerRequest.Value = handled.Add;
+        CoreOperations.CrudRequest.Value = handled.Add;
         try
         {
             await Admin.CreateAsync(new Entity(Pipe) { ["pb_name"] = "p" });
         }
         finally
         {
-            CoreHandOff.HandlerRequest.Value = null;
+            CoreOperations.CrudRequest.Value = null;
         }
 
-        var target = handled.Where(r => r.RequestName == "Create").Select(r => (Entity)r.Parameters["Target"])
+        var target = handled.Where(r => r.Name == "Create").Select(r => (Xrmd.Model.Records.Record)r.Parameters["Target"]!)
             .Should().ContainSingle(e => e.LogicalName == PipeLog).Subject;
-        target.GetType().Name.Should().Be("PipeLog", "the handler runs on the plug-in's early-bound instance");
-        target.GetAttributeValue<string>("pb_data").Should().Be("set-at-20");
+        target.GetValue<string>("pb_data").Should().Be("set-at-20");
+        SdkMirror.For(handled.Single(r => ReferenceEquals(r.Parameters["Target"], target)))!.TryGetSdk(target, out var twin).Should().BeTrue();
+        twin!.GetType().Name.Should().Be("PipeLog", "the record's twin is still the plug-in's early-bound instance");
         (await ColumnAsync($"SELECT pb_name FROM data.{PipeLog}")).Should().Equal("early|p|1");
         (await ColumnAsync($"SELECT pb_data FROM data.{PipeLog}")).Should().Equal("set-at-20");
     }

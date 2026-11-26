@@ -1,0 +1,20 @@
+=== PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: DeleteRequest
+  RequestName: String:"Delete"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: EntityReference
+      LogicalName: String:"account"
+      Id: Guid:{a:account}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.DeleteResponse
+ResponseName: String:"Delete"
+Results: ParameterCollection[0]
+--- rows ---
+data.account where accountid = {a:account}: 0 row(s)
+data.contact where contactid = {a:child1}: 0 row(s)
+data.contact where contactid = {a:child2}: 0 row(s)

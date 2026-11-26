@@ -1,11 +1,10 @@
 using System.Data;
-using Microsoft.Xrm.Sdk;
-using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
-using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Metadata;
+using Xrmd.Model.Records;
 
 namespace Xrmd.Core;
 
@@ -14,9 +13,10 @@ namespace Xrmd.Core;
 /// have no SQL column, each party is a row of <c>data.activityparty</c> with the column's participation type. The Core writes them
 /// in the session of the activity's Create and Update, keeps one Owner row (9) and, with a regarding record, one Regarding row (8),
 /// deletes them with the activity and marks them <c>ispartydeleted</c> when the party record is deleted. Rows are not audited
-/// (A21).
+/// (A21). On the model since S.2e3b (party lists are <see cref="RecordCollection"/>s); the SDK twin of the read is in
+/// <c>Sdk/ActivityParties.Sdk.cs</c>.
 /// </summary>
-public sealed class ActivityParties(IMetadataStore store)
+public sealed partial class ActivityParties(IMetadataStore store)
 {
     private const string IdParameter = "@_id";
     private static string Table(ISqlDialect d) => d.DataTable(ActivitySchema.Party);
@@ -25,15 +25,15 @@ public sealed class ActivityParties(IMetadataStore store)
     /// Removes the party list values from <paramref name="target"/> and returns them by column (a null value becomes an empty
     /// collection: both clear the column's rows on Update). Nothing for a table without party lists.
     /// </summary>
-    public static IReadOnlyDictionary<string, EntityCollection> ExtractPartyLists(EntityMetadata activity, Entity target)
+    public static IReadOnlyDictionary<string, RecordCollection> ExtractPartyLists(TableDefinition activity, Record target)
     {
         ArgumentNullException.ThrowIfNull(activity);
         ArgumentNullException.ThrowIfNull(target);
-        var lists = new Dictionary<string, EntityCollection>(StringComparer.Ordinal);
+        var lists = new Dictionary<string, RecordCollection>(StringComparer.Ordinal);
         foreach (var (attribute, _, _) in ActivitySchema.PartyLists(activity))
         {
             if (!target.Attributes.TryGetValue(attribute, out var value)) continue;
-            lists[attribute] = value as EntityCollection ?? new EntityCollection();
+            lists[attribute] = value as RecordCollection ?? new RecordCollection();
             target.Attributes.Remove(attribute);
         }
         return lists;
@@ -53,7 +53,7 @@ public sealed class ActivityParties(IMetadataStore store)
     /// activity row itself is locked before either (the Update locks it first, the Create inserts it first).
     /// </remarks>
     /// <exception cref="XrmdFaultException">ObjectDoesNotExist (404) for a missing party record.</exception>
-    public async Task WriteAsync(DataSession s, EntityMetadata activity, Guid id, IReadOnlyDictionary<string, EntityCollection> lists,
+    public async Task WriteAsync(DataSession s, TableDefinition activity, Guid id, IReadOnlyDictionary<string, RecordCollection> lists,
         bool isCreate, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(s);
@@ -67,14 +67,14 @@ public sealed class ActivityParties(IMetadataStore store)
         foreach (var (attribute, collection) in lists)
         {
             var items = new List<(Guid?, int?, string?)>();
-            foreach (var item in collection.Entities)
+            foreach (var item in collection.Records)
             {
-                var party = item.GetAttributeValue<EntityReference>(ActivitySchema.PartyId);
-                var address = item.GetAttributeValue<string>(ActivitySchema.AddressUsed);
+                var party = item.GetValue<RecordReference>(ActivitySchema.PartyId);
+                var address = item.GetValue<string>(ActivitySchema.AddressUsed);
                 int? partyType = null;
                 if (party is not null)
                 {
-                    var table = store.GetEntity(party.LogicalName)
+                    var table = store.GetTable(party.LogicalName)
                                 ?? throw XrmdFaultException.InvalidArgument($"A party names table '{party.LogicalName}', which does not exist.");
                     partyType = table.ObjectTypeCode;
                     var known = await PartyAddressAsync(s, table, party.Id, ct);
@@ -186,7 +186,7 @@ public sealed class ActivityParties(IMetadataStore store)
     public async Task MarkPartyDeletedAsync(DataSession s, string table, Guid id, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(s);
-        if (store.GetEntity(table)?.ObjectTypeCode is not { } code) return;
+        if (store.GetTable(table)?.ObjectTypeCode is not { } code) return;
         await using var cmd = s.Command(
             $"UPDATE {Table(s.Dialect)} SET {s.Quote(ActivitySchema.IsPartyDeleted)} = {s.Dialect.BooleanLiteral(true)} WHERE {s.Quote(ActivitySchema.PartyId)} = {IdParameter} AND {s.Quote(ActivitySchema.PartyId + "type")} = @_otc");
         cmd.AddParameter(IdParameter, DbType.Guid, id);
@@ -196,12 +196,12 @@ public sealed class ActivityParties(IMetadataStore store)
 
     /// <summary>
     /// The party lists <paramref name="attributes"/> of the activities <paramref name="ids"/> of <paramref name="activity"/>: for each
-    /// activity, each requested column of the table with its <c>activityparty</c> entities (an empty collection when it has none),
+    /// activity, each requested column of the table with its <c>activityparty</c> records (an empty collection when it has none),
     /// each carrying <c>activitypartyid</c>, <c>activityid</c>, <c>partyid</c> (with the record's name), <c>participationtypemask</c>,
     /// <c>addressused</c> and <c>ispartydeleted</c>, in the order they were written. Names that are not party lists of the table are
-    /// ignored.
+    /// ignored. On the model (S.2e3b): the read path shapes model records.
     /// </summary>
-    public async Task<IReadOnlyDictionary<Guid, IReadOnlyDictionary<string, EntityCollection>>> ReadAsync(DataSession s, EntityMetadata activity,
+    public async Task<IReadOnlyDictionary<Guid, IReadOnlyDictionary<string, RecordCollection>>> ReadAsync(DataSession s, TableDefinition activity,
         IReadOnlyCollection<Guid> ids, IReadOnlyCollection<string> attributes, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(s);
@@ -209,13 +209,13 @@ public sealed class ActivityParties(IMetadataStore store)
         ArgumentNullException.ThrowIfNull(ids);
         ArgumentNullException.ThrowIfNull(attributes);
         var columns = ActivitySchema.PartyLists(activity).Where(p => attributes.Contains(p.Attribute)).ToList();
-        var result = new Dictionary<Guid, Dictionary<string, EntityCollection>>();
+        var result = new Dictionary<Guid, Dictionary<string, RecordCollection>>();
         foreach (var id in ids.Distinct())
-            result[id] = columns.ToDictionary(c => c.Attribute, _ => new EntityCollection { EntityName = ActivitySchema.Party }, StringComparer.Ordinal);
+            result[id] = columns.ToDictionary(c => c.Attribute, _ => new RecordCollection { EntityName = ActivitySchema.Party }, StringComparer.Ordinal);
         if (columns.Count == 0 || result.Count == 0) return Freeze(result);
         var byType = columns.ToDictionary(c => (int)c.Type, c => c.Attribute);
 
-        var rows = new List<Entity>();
+        var rows = new List<Record>();
         // SQL Server takes at most 2100 parameters in one command.
         foreach (var chunk in result.Keys.Chunk(1000))
         {
@@ -231,17 +231,17 @@ public sealed class ActivityParties(IMetadataStore store)
             while (await rd.ReadAsync(ct))
             {
                 var activityId = rd.GetGuid(1);
-                var party = new Entity(ActivitySchema.Party, rd.GetGuid(0))
+                var party = new Record(ActivitySchema.Party, rd.GetGuid(0))
                 {
                     [ActivitySchema.ActivityPartyId] = rd.GetGuid(0),
-                    [ActivitySchema.ActivityId] = new EntityReference(activity.LogicalName, activityId),
-                    [ActivitySchema.ParticipationTypeMask] = new OptionSetValue(rd.GetInt32(4)),
+                    [ActivitySchema.ActivityId] = new RecordReference { LogicalName = activity.LogicalName!, Id = activityId },
+                    [ActivitySchema.ParticipationTypeMask] = new ChoiceValue(rd.GetInt32(4)),
                     [ActivitySchema.IsPartyDeleted] = !rd.IsDBNull(6) && rd.GetBoolean(6),
                 };
-                if (!rd.IsDBNull(2) && !rd.IsDBNull(3) && store.GetEntityByObjectTypeCode(rd.GetInt32(3)) is { } partyTable)
-                    party[ActivitySchema.PartyId] = new EntityReference(partyTable.LogicalName, rd.GetGuid(2));
+                if (!rd.IsDBNull(2) && !rd.IsDBNull(3) && store.GetTableByObjectTypeCode(rd.GetInt32(3)) is { } partyTable)
+                    party[ActivitySchema.PartyId] = new RecordReference { LogicalName = partyTable.LogicalName!, Id = rd.GetGuid(2) };
                 if (!rd.IsDBNull(5)) party[ActivitySchema.AddressUsed] = rd.GetString(5);
-                result[activityId][byType[rd.GetInt32(4)]].Entities.Add(party);
+                result[activityId][byType[rd.GetInt32(4)]].Records.Add(party);
                 rows.Add(party);
             }
         }
@@ -249,23 +249,23 @@ public sealed class ActivityParties(IMetadataStore store)
         return Freeze(result);
     }
 
-    private static IReadOnlyDictionary<Guid, IReadOnlyDictionary<string, EntityCollection>> Freeze(
-        Dictionary<Guid, Dictionary<string, EntityCollection>> result) =>
-        result.ToDictionary(kv => kv.Key, kv => (IReadOnlyDictionary<string, EntityCollection>)kv.Value);
+    private static IReadOnlyDictionary<Guid, IReadOnlyDictionary<string, RecordCollection>> Freeze(
+        Dictionary<Guid, Dictionary<string, RecordCollection>> result) =>
+        result.ToDictionary(kv => kv.Key, kv => (IReadOnlyDictionary<string, RecordCollection>)kv.Value);
 
     /// <summary>Gives each <c>partyid</c> the primary name of its record (a deleted record keeps no name).</summary>
-    private async Task NameAsync(DataSession s, List<Entity> rows, CancellationToken ct)
+    private async Task NameAsync(DataSession s, List<Record> rows, CancellationToken ct)
     {
-        foreach (var group in rows.Select(r => r.GetAttributeValue<EntityReference>(ActivitySchema.PartyId)).OfType<EntityReference>()
+        foreach (var group in rows.Select(r => r.GetValue<RecordReference>(ActivitySchema.PartyId)).OfType<RecordReference>()
                      .GroupBy(r => r.LogicalName))
         {
-            if (store.GetEntity(group.Key) is not { PrimaryNameAttribute: { Length: > 0 } nameColumn } table) continue;
+            if (store.GetTable(group.Key) is not { PrimaryNameAttribute: { Length: > 0 } nameColumn } table) continue;
             var ids = group.Select(r => r.Id).Distinct().ToArray();
             var names = new Dictionary<Guid, string>();
             foreach (var chunk in ids.Chunk(1000))
             {
                 await using var cmd = s.Command(
-                    $"SELECT {s.Quote(SystemAttributes.PrimaryIdName(table))}, {s.Quote(nameColumn)} FROM {s.DataTable(table.LogicalName)} " +
+                    $"SELECT {s.Quote(SystemAttributes.PrimaryIdName(table))}, {s.Quote(nameColumn)} FROM {s.DataTable(table.LogicalName!)} " +
                     $"WHERE {s.Quote(SystemAttributes.PrimaryIdName(table))} IN ({string.Join(", ", chunk.Select((_, i) => $"@_p{i}"))})");
                 for (var i = 0; i < chunk.Length; i++) cmd.AddParameter($"@_p{i}", DbType.Guid, chunk[i]);
                 await using var rd = await cmd.ExecuteReaderAsync(ct);
@@ -283,7 +283,7 @@ public sealed class ActivityParties(IMetadataStore store)
     /// column or it is empty).
     /// </summary>
     /// <exception cref="XrmdFaultException">ObjectDoesNotExist (404) when the record does not exist.</exception>
-    private static async Task<string?> PartyAddressAsync(DataSession s, EntityMetadata table, Guid id, CancellationToken ct)
+    private static async Task<string?> PartyAddressAsync(DataSession s, TableDefinition table, Guid id, CancellationToken ct)
     {
         var column = table.LogicalName switch
         {
@@ -293,11 +293,11 @@ public sealed class ActivityParties(IMetadataStore store)
         };
         var hasColumn = table.Attributes?.Any(a => a.LogicalName == column) == true;
         await using var cmd = s.Command(
-            $"SELECT {(hasColumn ? $"{s.Quote(column)}" : "NULL")} FROM {s.DataTable(table.LogicalName)}{s.Dialect.LockHint(RowLock.Shared)} " +
+            $"SELECT {(hasColumn ? $"{s.Quote(column)}" : "NULL")} FROM {s.DataTable(table.LogicalName!)}{s.Dialect.LockHint(RowLock.Shared)} " +
             $"WHERE {s.Quote(SystemAttributes.PrimaryIdName(table))} = {IdParameter}{s.Dialect.LockClause(RowLock.Shared)}");
         cmd.AddParameter(IdParameter, DbType.Guid, id);
         await using var rd = await cmd.ExecuteReaderAsync(ct);
-        if (!await rd.ReadAsync(ct)) throw XrmdFaultException.ObjectDoesNotExist(table.LogicalName, id);
+        if (!await rd.ReadAsync(ct)) throw XrmdFaultException.ObjectDoesNotExist(table.LogicalName!, id);
         return rd.IsDBNull(0) ? null : rd.GetString(0);
     }
 
@@ -311,14 +311,14 @@ public sealed class ActivityParties(IMetadataStore store)
         $"{d.UtcNow}, {d.UtcNow}, 0, 1";
 
     /// <summary>Inserts one party row, with the owner columns of the stored activity row.</summary>
-    private static async Task InsertAsync(DataSession s, EntityMetadata activity, Guid id, int type, Guid? party, int? partyType, string? address,
+    private static async Task InsertAsync(DataSession s, TableDefinition activity, Guid id, int type, Guid? party, int? partyType, string? address,
         CancellationToken ct)
     {
         await using var cmd = s.Command($"""
             INSERT INTO {Table(s.Dialect)} ({InsertColumns})
             SELECT {s.Dialect.NewGuid}, a.activityid, @_atype, @_party, @_partytype, @_type, @_address, {s.Dialect.BooleanLiteral(false)}, a.ownerid, a.owneridtype, a.owninguser,
                 a.owningteam, a.owningbusinessunit, {s.Dialect.UtcNow}, {s.Dialect.UtcNow}, 0, 1
-            FROM {s.DataTable(activity.LogicalName)} a WHERE a.activityid = {IdParameter}
+            FROM {s.DataTable(activity.LogicalName!)} a WHERE a.activityid = {IdParameter}
             """);
         cmd.AddParameter(IdParameter, DbType.Guid, id);
         cmd.AddParameter("@_atype", DbType.Int32, activity.ObjectTypeCode ?? 0);

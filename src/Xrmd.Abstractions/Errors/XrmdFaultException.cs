@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Crm.Sdk.Messages;
+using Xrmd.Model.Security;
 
 namespace Xrmd.Core.Errors;
 
@@ -379,6 +380,13 @@ public sealed class XrmdFaultException(int errorCode, string message, int httpSt
         // Exact Dataverse text: client code parses the missing access right and the record id out of this message.
         new(ErrorCodes.AccessDenied,
             $"Principal user with id {userId} does not have {right} right(s) for record with id {recordId} of entity {entity}.", 403);
+
+    /// <summary>
+    /// The model twin of <see cref="AccessDenied(Guid, AccessRights, string, Guid)"/> (S.2e3b): the same text, as
+    /// <see cref="AccessMask"/> has the SDK's member names and values.
+    /// </summary>
+    public static XrmdFaultException AccessDenied(Guid userId, AccessMask right, string entity, Guid recordId) =>
+        AccessDenied(userId, (AccessRights)(int)right, entity, recordId);
 
     /// <summary>403 <see cref="ErrorCodes.PrincipalPrivilegeDenied"/>: the target user or team (e.g. a new owner) lacks a privilege.</summary>
     public static XrmdFaultException PrincipalPrivilegeDenied() =>

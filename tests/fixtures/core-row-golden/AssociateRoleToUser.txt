@@ -1,0 +1,43 @@
+=== PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: AssociateRequest
+  RequestName: String:"Associate"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    RelatedEntities: EntityReferenceCollection[1]
+      [0]: EntityReference
+        LogicalName: String:"role"
+        Id: Guid:{a:role}
+        Name: null
+        KeyAttributes: KeyAttributeCollection[0]
+        RowVersion: null
+    Relationship: Relationship
+      SchemaName: String:"systemuserroles_association"
+      PrimaryEntityRole: null
+    Target: EntityReference
+      LogicalName: String:"systemuser"
+      Id: Guid:{a:roleuser}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.AssociateResponse
+ResponseName: String:"Associate"
+Results: ParameterCollection[0]
+--- rows ---
+data.systemuserroles where systemuserid = {a:roleuser}: 1 row(s)
+  [0]
+    createdby: null
+    createdon: DateTime:{date}
+    modifiedby: null
+    modifiedon: DateTime:{date}
+    overriddencreatedon: null
+    owningbusinessunit: Guid:{businessunit}
+    owningteam: null
+    owninguser: null
+    roleid: Guid:{a:role}
+    statecode: Int32:0
+    statuscode: Int32:1
+    systemuserid: Guid:{a:roleuser}
+    systemuserrolesid: Guid:{id1}
+    versionnumber: {rowversion}

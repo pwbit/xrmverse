@@ -95,19 +95,6 @@ public static class ComponentType
         entityLogicalName is not null && RowTypes.TryGetValue(entityLogicalName, out var type) ? type : null;
 
     /// <summary>
-    /// The component type of a created row: <see cref="OfTable"/>, except that a <c>workflow</c> row is a component only as a
-    /// definition (<c>type</c> 1; an activation, type 2, is not: controller ruling, plan 2.14 Task 3).
-    /// </summary>
-    public static int? OfRow(Microsoft.Xrm.Sdk.Entity row)
-    {
-        ArgumentNullException.ThrowIfNull(row);
-        return OfTable(row.LogicalName) is { } type
-               && (type != Workflow || IsWorkflowDefinition(row.Attributes.TryGetValue(Xrmd.Metadata.WorkflowSchema.TypeColumn, out var value) ? value : null))
-            ? type
-            : null;
-    }
-
-    /// <summary>
     /// True when a <c>workflow.type</c> value names a definition, the only process row that is a component: 1, or no value
     /// (a row is a definition unless it says otherwise).
     /// </summary>

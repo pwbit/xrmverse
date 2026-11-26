@@ -1,9 +1,8 @@
-using Microsoft.Xrm.Sdk;
 using Xrmd.Abstractions;
 using Xrmd.Core.Errors;
 using Xrmd.Files;
 using Xrmd.Metadata;
-using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Records;
 using Xrmd.Query.Model;
 using Xrmd.Query.Sql;
 
@@ -14,7 +13,7 @@ namespace Xrmd.Core.Query;
 /// has no SQL column: selected on an <c>annotation</c> (by name or through all columns) it is taken out of the query and read
 /// afterwards from the file store for the notes of the page (<see cref="AnnotationBodies"/>), as base64 text, in one batch for the
 /// whole page: the root's notes and those of every link-entity on <c>annotation</c> (review I2: FetchXML all-attributes, the Web
-/// API's <c>$expand</c>), where it comes back as an <see cref="AliasedValue"/> named <c>{alias}.documentbody</c>. The batch counts
+/// API's <c>$expand</c>), where it comes back as an <see cref="AliasedColumnValue"/> named <c>{alias}.documentbody</c>. The batch counts
 /// toward <c>Files:MaxNoteBodyBytesPerRead</c> (ruling Y5). Only the rows the query returned get their body, so a body is read
 /// exactly where its note is (the note's read security); a note without a body has no value, as a null column. The body cannot be
 /// used in a condition, an order, a join or an aggregate, nor take an alias (400). A distinct query reads it only with the note's
@@ -54,7 +53,7 @@ internal sealed class NoteBodyRead
         var aliases = new Dictionary<string, string>(StringComparer.Ordinal);
         CollectAliases(query.Root, aliases);
         DemandNoBodyUse(query.Root, parent: null, aliases);
-        var present = Kinds.Where(k => store.GetEntity(k.Table) is { } table && (table.Attributes ?? []).Any(a => a.LogicalName == k.Attribute)).ToList();
+        var present = Kinds.Where(k => store.GetTable(k.Table) is { } table && (table.Attributes ?? []).Any(a => a.LogicalName == k.Attribute)).ToList();
         if (query.Aggregate || present.Count == 0) return new NoteBodyRead(query, []);
 
         var targets = new List<Target>();
@@ -66,7 +65,7 @@ internal sealed class NoteBodyRead
             var copy = node;
             if (present.FirstOrDefault(k => k.Table == node.EntityName) is { } kind)
             {
-                var pk = SystemAttributes.PrimaryIdName(store.GetEntity(kind.Table)!);
+                var pk = SystemAttributes.PrimaryIdName(store.GetTable(kind.Table)!);
                 var named = node.Columns.Where(c => c.Attribute == kind.Attribute).ToList();
                 if (named.FirstOrDefault(c => c.Alias is not null) is { } aliased)
                     throw XrmdFaultException.InvalidArgument($"The {kind.Label} '{aliased.Attribute}' of '{kind.Table}' cannot take an alias.");
@@ -114,31 +113,31 @@ internal sealed class NoteBodyRead
 
     /// <summary>Adds the bodies to the notes of <paramref name="result"/>, the root's and the link-entities', in one batch.</summary>
     /// <exception cref="InvalidOperationException">The executor has no file service to read them from (fail closed: never an empty body).</exception>
-    public async Task CompleteAsync(EntityCollection result, FileColumnService? files, DataSession session, CancellationToken ct)
+    internal async Task CompleteAsync(IReadOnlyList<QueryRow> rows, FileColumnService? files, DataSession session, CancellationToken ct)
     {
         if (_targets.Count == 0) return;
-        Guid? NoteOf(Entity entity, Target target) =>
+        Guid? NoteOf(QueryRow entity, Target target) =>
             target.Alias is null
                 ? entity.Id != Guid.Empty ? entity.Id : null
-                : entity.Attributes.TryGetValue($"{target.Alias}.{target.PrimaryKey}", out var value) && value is AliasedValue { Value: Guid id } ? id : null;
+                : entity.TryGetValue($"{target.Alias}.{target.PrimaryKey}", out var value) && value is AliasedColumnValue { Value: Guid id } ? id : null;
         foreach (var kind in _targets.Select(t => t.Kind).Distinct())
         {
             var targets = _targets.Where(t => t.Kind == kind).ToList();
-            var ids = result.Entities.SelectMany(e => targets.Select(t => NoteOf(e, t))).OfType<Guid>().Distinct().ToList();
+            var ids = rows.SelectMany(e => targets.Select(t => NoteOf(e, t))).OfType<Guid>().Distinct().ToList();
             if (ids.Count == 0) continue;
             if (files is null)
                 throw new InvalidOperationException($"Note and attachment bodies are read from the file store: this query executor has no file service.");
             var bodies = kind == Attachment ? await files.Attachments.ReadAsync(session, ids, ct) : await files.Annotations.ReadAsync(session, ids, ct);
-            foreach (var entity in result.Entities)
+            foreach (var entity in rows)
                 foreach (var target in targets)
                 {
                     if (NoteOf(entity, target) is not { } id || !bodies.TryGetValue(id, out var body)) continue;
                     if (target.Alias is null) entity[kind.Attribute] = body;
-                    else entity[$"{target.Alias}.{kind.Attribute}"] = new AliasedValue(kind.Table, kind.Attribute, body);
+                    else entity[$"{target.Alias}.{kind.Attribute}"] = new AliasedColumnValue(kind.Table, kind.Attribute, body);
                 }
         }
         foreach (var target in _targets.Where(t => t.AddedKey && t.Alias is not null))
-            foreach (var entity in result.Entities) entity.Attributes.Remove($"{target.Alias}.{target.PrimaryKey}");
+            foreach (var entity in rows) entity.Remove($"{target.Alias}.{target.PrimaryKey}");
     }
 
     /// <summary>

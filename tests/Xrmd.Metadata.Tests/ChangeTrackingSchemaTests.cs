@@ -123,6 +123,17 @@ public class ChangeTrackingSchemaTests
     public void Raw_delete_pattern_matches_TOP_and_alias_forms(string sql, string target) =>
         RawDelete.Match(sql).Groups["target"].Value.Should().Be(target);
 
+    /// <summary>
+    /// True for the files of <c>CoreOperations</c> in <c>src/Xrmd.Core</c>: <c>CoreOperations.cs</c> and its partial files
+    /// (<c>CoreOperations.*.cs</c>, S.2e3b), which are the core itself.
+    /// </summary>
+    private static bool IsCoreOperations(string root, string file)
+    {
+        var name = Path.GetFileName(file);
+        return Path.GetDirectoryName(file) == Path.Combine(root, "src", "Xrmd.Core")
+               && (name == "CoreOperations.cs" || (name.StartsWith("CoreOperations.", StringComparison.Ordinal) && name.EndsWith(".cs", StringComparison.Ordinal)));
+    }
+
     [Fact]
     public void Raw_deletes_outside_core_only_touch_ineligible_tables()
     {
@@ -131,7 +142,8 @@ public class ChangeTrackingSchemaTests
         intersects.Should().Contain("roleprivileges", "the seed's intersect tables are read from fixtures/seed");
         var files = Directory.EnumerateFiles(Path.Combine(root, "src"), "*.cs", SearchOption.AllDirectories)
             .Where(f => !f.Split(Path.DirectorySeparatorChar).Any(p => p is "bin" or "obj"))
-            .Where(f => Path.GetFileName(f) != "CoreOperations.cs")
+            // The core: CoreOperations.cs and its partial files (CoreOperations.*.cs) in src/Xrmd.Core, which log their deletes.
+            .Where(f => !IsCoreOperations(root, f))
             .ToList();
 
         var found = new List<string>();

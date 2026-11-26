@@ -1,0 +1,19 @@
+=== PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(new_crrkey)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[1]
+        new_name: String:"CRR-UNIQUE"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- response ---
+Fault: XrmdFaultException 0x80040237 412 "A record with the same value of a unique attribute already exists on entity 'new_crrkey'."
+--- rows ---
+SELECT COUNT(*) FROM data.new_crrkey WHERE new_name = 'crr-unique': 1

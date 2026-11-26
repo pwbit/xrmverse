@@ -1,0 +1,189 @@
+=== (a) PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: RetrieveMultipleRequest
+  RequestName: String:"RetrieveMultiple"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Query: QueryExpression
+      ColumnSet: ColumnSet
+        AllColumns: Boolean:False
+        AttributeExpressions: DataCollection[0]
+        Columns: DataCollection[2]
+          [0]: String:"fullname"
+          [1]: String:"parentcustomerid"
+        HasLazyFileAttribute: Boolean:False
+        LazyFileAttributeEntityName: null
+        LazyFileAttributeKey: null
+        LazyFileAttributeSizeLimit: Int32:0
+        LazyFileAttributeValue: null
+      Criteria: FilterExpression
+        AnyAllFilterLinkEntity: null
+        Conditions: DataCollection[1]
+          [0]: ConditionExpression
+            AttributeName: String:"lastname"
+            CompareColumns: Boolean:False
+            EntityName: null
+            Operator: ConditionOperator:Equal
+            Values: DataCollection[1]
+              [0]: String:"crr-read-link"
+        FilterHint: null
+        FilterOperator: LogicalOperator:And
+        Filters: DataCollection[0]
+        IsQuickFindFilter: Boolean:False
+      DataSource: null
+      Distinct: Boolean:False
+      EntityName: String:"contact"
+      ForceSeek: null
+      LinkEntities: DataCollection[1]
+        [0]: LinkEntity
+          Columns: ColumnSet
+            AllColumns: Boolean:False
+            AttributeExpressions: DataCollection[0]
+            Columns: DataCollection[5]
+              [0]: String:"name"
+              [1]: String:"telephone1"
+              [2]: String:"accountnumber"
+              [3]: String:"statecode"
+              [4]: String:"ownerid"
+            HasLazyFileAttribute: Boolean:False
+            LazyFileAttributeEntityName: null
+            LazyFileAttributeKey: null
+            LazyFileAttributeSizeLimit: Int32:0
+            LazyFileAttributeValue: null
+          EntityAlias: String:"acct"
+          ForceSeek: null
+          JoinOperator: JoinOperator:Inner
+          LinkCriteria: FilterExpression
+            AnyAllFilterLinkEntity: null
+            Conditions: DataCollection[0]
+            FilterHint: null
+            FilterOperator: LogicalOperator:And
+            Filters: DataCollection[0]
+            IsQuickFindFilter: Boolean:False
+          LinkEntities: DataCollection[0]
+          LinkFromAttributeName: String:"parentcustomerid"
+          LinkFromEntityName: String:"contact"
+          LinkToAttributeName: String:"accountid"
+          LinkToEntityName: String:"account"
+          Orders: DataCollection[0]
+      NoLock: Boolean:False
+      Orders: DataCollection[0]
+      PageInfo: PagingInfo
+        Count: Int32:0
+        PageNumber: Int32:0
+        PagingCookie: null
+        ReturnRecordCountLessThanMarv: Boolean:False
+        ReturnTotalRecordCount: Boolean:False
+      QueryHints: null
+      SubQueryExpression: null
+      TopCount: null
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.RetrieveMultipleResponse
+ResponseName: String:"RetrieveMultiple"
+Results: ParameterCollection[1]
+  EntityCollection: EntityCollection
+    EntityName: String:"contact"
+    Entities: DataCollection[1]
+      [0]: Entity(contact)
+        Id: Guid:{a:contact}
+        EntityState: null
+        RowVersion: null
+        Attributes: AttributeCollection[8]
+          contactid: Guid:{a:contact}
+          fullname: String:"crr-read-link, Ada"
+          parentcustomerid: EntityReference
+            LogicalName: String:"account"
+            Id: Guid:{a:account}
+            Name: String:"crr read link"
+            KeyAttributes: KeyAttributeCollection[0]
+            RowVersion: null
+          acct.name: AliasedValue
+            AttributeLogicalName: String:"name"
+            EntityLogicalName: String:"account"
+            Value: String:"crr read link"
+          acct.telephone1: AliasedValue
+            AttributeLogicalName: String:"telephone1"
+            EntityLogicalName: String:"account"
+            Value: String:"555 0100"
+          acct.accountnumber: AliasedValue
+            AttributeLogicalName: String:"accountnumber"
+            EntityLogicalName: String:"account"
+            Value: String:"CRR-7"
+          acct.statecode: AliasedValue
+            AttributeLogicalName: String:"statecode"
+            EntityLogicalName: String:"account"
+            Value: OptionSetValue
+              Value: Int32:0
+          acct.ownerid: AliasedValue
+            AttributeLogicalName: String:"ownerid"
+            EntityLogicalName: String:"account"
+            Value: EntityReference
+              LogicalName: String:"systemuser"
+              Id: Guid:{user}
+              Name: String:"Test Admin"
+              KeyAttributes: KeyAttributeCollection[0]
+              RowVersion: null
+        FormattedValues: FormattedValueCollection[3]
+          parentcustomerid: String:"crr read link"
+          acct.statecode: String:"Active"
+          acct.ownerid: String:"Test Admin"
+        KeyAttributes: KeyAttributeCollection[0]
+        RelatedEntities: RelatedEntityCollection[0]
+    MoreRecords: Boolean:False
+    PagingCookie: String:"<cookie page="1"><contactid last="{{a:contact}}" first="{{a:contact}}" /></cookie>"
+    TotalRecordCount: Int32:-1
+    TotalRecordCountLimitExceeded: Boolean:False
+=== (b) QueryExecutor.ExecuteAsync ===
+--- result ---
+Result: EntityCollection
+  EntityName: String:"contact"
+  Entities: DataCollection[1]
+    [0]: Entity(contact)
+      Id: Guid:{a:contact}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[8]
+        contactid: Guid:{a:contact}
+        fullname: String:"crr-read-link, Ada"
+        parentcustomerid: EntityReference
+          LogicalName: String:"account"
+          Id: Guid:{a:account}
+          Name: String:"crr read link"
+          KeyAttributes: KeyAttributeCollection[0]
+          RowVersion: null
+        acct.name: AliasedValue
+          AttributeLogicalName: String:"name"
+          EntityLogicalName: String:"account"
+          Value: String:"crr read link"
+        acct.telephone1: AliasedValue
+          AttributeLogicalName: String:"telephone1"
+          EntityLogicalName: String:"account"
+          Value: String:"555 0100"
+        acct.accountnumber: AliasedValue
+          AttributeLogicalName: String:"accountnumber"
+          EntityLogicalName: String:"account"
+          Value: String:"CRR-7"
+        acct.statecode: AliasedValue
+          AttributeLogicalName: String:"statecode"
+          EntityLogicalName: String:"account"
+          Value: OptionSetValue
+            Value: Int32:0
+        acct.ownerid: AliasedValue
+          AttributeLogicalName: String:"ownerid"
+          EntityLogicalName: String:"account"
+          Value: EntityReference
+            LogicalName: String:"systemuser"
+            Id: Guid:{user}
+            Name: String:"Test Admin"
+            KeyAttributes: KeyAttributeCollection[0]
+            RowVersion: null
+      FormattedValues: FormattedValueCollection[3]
+        parentcustomerid: String:"crr read link"
+        acct.statecode: String:"Active"
+        acct.ownerid: String:"Test Admin"
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+  MoreRecords: Boolean:False
+  PagingCookie: String:"<cookie page="1"><contactid last="{{a:contact}}" first="{{a:contact}}" /></cookie>"
+  TotalRecordCount: Int32:-1
+  TotalRecordCountLimitExceeded: Boolean:False

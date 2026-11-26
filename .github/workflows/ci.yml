@@ -135,7 +135,7 @@ jobs:
           failed=0
           for project in tests/*/*.Tests.csproj; do
             [[ "$project" == */Xrmd.Integration.Tests.csproj ]] && continue
-            dotnet test "$project" --no-build --filter "Category!=Acceptance" || failed=1
+            dotnet test "$project" --no-build --filter "Category!=Acceptance&Category!=Timing" || failed=1
           done
           exit $failed
       # The ambiguous daylight-saving hour in the remote-context JSON/XML tests only exists in a zone with DST (runners use UTC).
@@ -182,7 +182,7 @@ jobs:
       - name: Test (integration tests start SQL Server with Testcontainers)
         run: |
           shard="$(eng/test-shard.sh tests/Xrmd.Integration.Tests ${{ matrix.shard }} 4)"
-          dotnet test tests/Xrmd.Integration.Tests --no-build --filter "Category!=Acceptance&($shard)"
+          dotnet test tests/Xrmd.Integration.Tests --no-build --filter "Category!=Acceptance&Category!=Timing&($shard)"
 
   # The integration tests on PostgreSQL (plan 2.7a, XRMD_TEST_PROVIDER=postgres; PostgreSQL 16 with Testcontainers), every night and
   # on demand only, never on pull requests or pushes: the same shards and the same tests (since plan 2.7b PostgreSQL runs every feature).
@@ -242,7 +242,7 @@ jobs:
           XRMD_TEST_PG_TOOLS: /usr/lib/postgresql/18/bin
         run: |
           shard="$(eng/test-shard.sh tests/Xrmd.Integration.Tests ${{ matrix.shard }} 4)"
-          dotnet test tests/Xrmd.Integration.Tests --no-build --filter "Category!=Acceptance&($shard)"
+          dotnet test tests/Xrmd.Integration.Tests --no-build --filter "Category!=Acceptance&Category!=Timing&($shard)"
 
   licenses:
     name: third-party licenses

@@ -10,6 +10,7 @@ using Xrmd.Core.Errors;
 using Xrmd.Core.Mail;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Records;
 using Xrmd.Pipeline.Async;
 
 namespace Xrmd.Core;
@@ -103,13 +104,15 @@ public sealed class EmailMessages
         };
         // Pending Send clears a senton left by an earlier attempt of a Failed email (from memory: checklist 3h), and its attempts.
         var serverAttributes = new Dictionary<string, object?>(StringComparer.Ordinal) { ["senton"] = issueSend ? null : DateTime.UtcNow };
-        var serverParties = new Dictionary<string, EntityCollection>(StringComparer.Ordinal);
+        var serverParties = new Dictionary<string, RecordCollection>(StringComparer.Ordinal);
         // The sender defaults to the caller (from memory: checklist 3h); it is the caller's own record, so no read check (Y2).
         EntityReference? sender = null;
         if (parties.TryGetValue("from", out var from) && from.Entities.Count > 0) sender = DemandSender(id, from, caller);
         else
-            serverParties["from"] = new EntityCollection(
-                [new Entity(ActivitySchema.Party) { [ActivitySchema.PartyId] = new EntityReference("systemuser", caller.UserId) }]);
+            serverParties["from"] = new RecordCollection
+            {
+                Records = [new Record(ActivitySchema.Party) { [ActivitySchema.PartyId] = new RecordReference { LogicalName = "systemuser", Id = caller.UserId } }],
+            };
 
         IReadOnlyList<Guid> queueItems = [];
         if (issueSend)
@@ -199,7 +202,7 @@ public sealed class EmailMessages
         var server = new Dictionary<string, object?>(StringComparer.Ordinal);
         if (sent) server["senton"] = DateTime.UtcNow;
         return _core.UpdateForMessageAsync(s, caller, update, AuditActions.Update,
-            new CoreOperations.ServerValues(server, new Dictionary<string, EntityCollection>()), ct);
+            new CoreOperations.ServerValues(server, new Dictionary<string, RecordCollection>()), ct);
     }
 
     /// <summary>

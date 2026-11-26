@@ -1,0 +1,92 @@
+=== PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(queue)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[4]
+        name: String:"crr queue"
+        queueviewtype: OptionSetValue
+          Value: Int32:0
+        queuetypecode: OptionSetValue
+          Value: Int32:1
+        emailaddress: String:"crr.queue@example.com"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.CreateResponse
+ResponseName: String:"Create"
+Results: ParameterCollection[1]
+  id: Guid:{a:created}
+--- rows ---
+data.queue where queueid = {a:created}: 1 row(s)
+  [0]
+    createdby: Guid:{user}
+    createdon: DateTime:{date}
+    defaultmailbox: Guid:{id1}
+    description: null
+    emailaddress: String:"crr.queue@example.com"
+    emailrouteraccessapproval: Int32:2
+    incomingemaildeliverymethod: null
+    incomingemailfilteringmethod: null
+    modifiedby: Guid:{user}
+    modifiedon: DateTime:{date}
+    name: String:"crr queue"
+    numberofitems: null
+    numberofmembers: null
+    outgoingemaildeliverymethod: null
+    overriddencreatedon: null
+    ownerid: Guid:{user}
+    owneridtype: Int32:8
+    owningbusinessunit: Guid:{businessunit}
+    owningteam: null
+    owninguser: Guid:{user}
+    queueid: Guid:{a:created}
+    queuetypecode: Int32:1
+    queueviewtype: Int32:0
+    statecode: Int32:0
+    statuscode: Int32:1
+    versionnumber: {rowversion}
+data.mailbox where regardingobjectid = {a:created}: 1 row(s)
+  [0]
+    createdby: Guid:{user}
+    createdon: DateTime:{date}
+    emailaddress: String:"crr.queue@example.com"
+    emailrouteraccessapproval: Int32:2
+    emailserverprofile: null
+    enabledforincomingemail: Boolean:False
+    enabledforoutgoingemail: Boolean:False
+    incomingemaildeliverymethod: Int32:0
+    incomingemailstatus: Int32:0
+    isemailaddressapprovedbyo365admin: Boolean:False
+    ispasswordset: Boolean:False
+    lastsuccessfulsynccompletedon: null
+    lastsyncerror: null
+    lastsyncerrorcount: null
+    lastsyncerroroccurredon: null
+    mailboxid: Guid:{id1}
+    modifiedby: Guid:{user}
+    modifiedon: DateTime:{date}
+    name: String:"crr queue"
+    outgoingemaildeliverymethod: Int32:0
+    outgoingemailstatus: Int32:0
+    overriddencreatedon: null
+    ownerid: Guid:{user}
+    owneridtype: Int32:8
+    owningbusinessunit: Guid:{businessunit}
+    owningteam: null
+    owninguser: Guid:{user}
+    processemailreceivedafter: null
+    regardingobjectid: Guid:{a:created}
+    regardingobjectidtype: Int32:2020
+    statecode: Int32:0
+    statuscode: Int32:1
+    testemailconfigurationscheduled: Boolean:False
+    testmailboxaccesscompletedon: null
+    username: null
+    versionnumber: {rowversion}

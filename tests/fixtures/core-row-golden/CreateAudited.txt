@@ -1,0 +1,57 @@
+=== PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(new_crgaudited)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[1]
+        new_name: String:"crr-audited"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.CreateResponse
+ResponseName: String:"Create"
+Results: ParameterCollection[1]
+  id: Guid:{a:created}
+--- rows ---
+data.new_crgaudited where new_crgauditedid = {a:created}: 1 row(s)
+  [0]
+    createdby: Guid:{user}
+    createdon: DateTime:{date}
+    modifiedby: Guid:{user}
+    modifiedon: DateTime:{date}
+    new_crgauditedid: Guid:{a:created}
+    new_name: String:"crr-audited"
+    overriddencreatedon: null
+    ownerid: Guid:{user}
+    owneridtype: Int32:8
+    owningbusinessunit: Guid:{businessunit}
+    owningteam: null
+    owninguser: Guid:{user}
+    statecode: Int32:0
+    statuscode: Int32:1
+    versionnumber: {rowversion}
+data.audit where objectid = {a:created}: 1 row(s)
+  [0]
+    action: Int32:1
+    additionalinfo: null
+    attributemask: null
+    auditid: Guid:{id1}
+    callinguserid: null
+    changedata: String:"{"v":1,"old":{},"new":{"new_name":"crr-audited","ownerid":{"$lookup":{"id":"{user}","logicalName":"systemuser","name":"Test Admin"}},"statecode":{"$option":0},"statuscode":{"$option":1}}}"
+    createdon: DateTime:{date}
+    objectid: Guid:{a:created}
+    objectidtype: Int32:{otc}
+    objecttypecode: String:"new_crgaudited"
+    operation: Int32:1
+    regardingobjectid: null
+    regardingobjectidtype: null
+    timetoliveinseconds: Int32:2592000
+    transactionid: Guid:{id2}
+    useradditionalinfo: null
+    userid: Guid:{user}

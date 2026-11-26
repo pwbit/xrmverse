@@ -1,11 +1,10 @@
 using System.Data;
-using Microsoft.Xrm.Sdk;
-using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
-using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Metadata;
+using Xrmd.Model.Records;
 
 namespace Xrmd.Core;
 
@@ -22,7 +21,8 @@ namespace Xrmd.Core;
 /// impersonating user, as for a delegate on Learn).</item>
 /// </list>
 /// The request-level refusals (before any privilege check) are <c>SystemTableRules</c>'; Delete of <c>postregarding</c> is refused
-/// there only, since the Core deletes those rows with their record (<c>{Stem}_PostRegardings</c>, Delete Cascade).
+/// there only, since the Core deletes those rows with their record (<c>{Stem}_PostRegardings</c>, Delete Cascade). On the model since
+/// S.2e3b.
 /// </summary>
 internal static class PostRules
 {
@@ -36,7 +36,7 @@ internal static class PostRules
 
     /// <summary>The refusals of a Create or Update of <paramref name="m"/> with the values of <paramref name="row"/>.</summary>
     /// <exception cref="XrmdFaultException">400 InvalidArgument.</exception>
-    public static void DemandWritable(EntityMetadata m, Entity row, bool isCreate)
+    public static void DemandWritable(TableDefinition m, Record row, bool isCreate)
     {
         switch (m.LogicalName)
         {
@@ -44,7 +44,7 @@ internal static class PostRules
                 throw XrmdFaultException.InvalidArgument(PostSchema.ServerMaintained);
             case PostSchema.Post or PostSchema.Comment when !isCreate:
                 throw XrmdFaultException.InvalidArgument(PostSchema.NotUpdatable);
-            case PostSchema.Post when row.GetAttributeValue<OptionSetValue>(PostSchema.Source) is { } source && PostSchema.IsAutoSource(source.Value):
+            case PostSchema.Post when row.GetValue<ChoiceValue>(PostSchema.Source) is { } source && PostSchema.IsAutoSource(source.Value):
                 throw XrmdFaultException.InvalidArgument(PostSchema.AutoPostsRefused);
         }
     }
@@ -55,50 +55,50 @@ internal static class PostRules
     /// </summary>
     /// <exception cref="XrmdFaultException">400 without <c>regardingobjectid</c> (post) or <c>postid</c> (comment); 404 when the
     /// regarding record does not exist.</exception>
-    public static async Task ApplyCreateAsync(DataSession s, IMetadataStore store, Caller caller, EntityMetadata m,
-        IReadOnlyDictionary<string, AttributeMetadata> attrs, Entity row, CancellationToken ct)
+    public static async Task ApplyCreateAsync(DataSession s, IMetadataStore store, Caller caller, TableDefinition m,
+        IReadOnlyDictionary<string, ColumnDefinition> attrs, Record row, CancellationToken ct)
     {
         if (m.LogicalName is not (PostSchema.Post or PostSchema.Comment)) return;
-        if (caller.ImpersonatorId is { } delegateId) SetIfDefined(row, attrs, "createdonbehalfby", new EntityReference(SystemUser, delegateId));
-        if (await OrganizationIdAsync(s, ct) is { } organization) SetIfDefined(row, attrs, "organizationid", new EntityReference(Organization, organization));
+        if (caller.ImpersonatorId is { } delegateId) SetIfDefined(row, attrs, "createdonbehalfby", Reference(SystemUser, delegateId));
+        if (await OrganizationIdAsync(s, ct) is { } organization) SetIfDefined(row, attrs, "organizationid", Reference(Organization, organization));
         if (m.LogicalName == PostSchema.Comment)
         {
-            if (row.GetAttributeValue<EntityReference>(PostSchema.PostId) is null)
+            if (row.GetValue<RecordReference>(PostSchema.PostId) is null)
                 throw XrmdFaultException.InvalidArgument($"A {PostSchema.Comment} needs '{PostSchema.PostId}': the post it replies to.");
             return;
         }
 
         // xrmverse applies no column default on insert: the defaults of the choices (2 Manual Post, 1 Check-in) are written here.
-        if (row.GetAttributeValue<OptionSetValue>(PostSchema.Source) is null) row[PostSchema.Source] = new OptionSetValue(ManualPost);
-        if (row.GetAttributeValue<OptionSetValue>(PostSchema.Type) is null) row[PostSchema.Type] = new OptionSetValue(CheckIn);
-        var regarding = row.GetAttributeValue<EntityReference>(ActivitySchema.RegardingObjectId)
+        if (row.GetValue<ChoiceValue>(PostSchema.Source) is null) row[PostSchema.Source] = new ChoiceValue(ManualPost);
+        if (row.GetValue<ChoiceValue>(PostSchema.Type) is null) row[PostSchema.Type] = new ChoiceValue(CheckIn);
+        var regarding = row.GetValue<RecordReference>(ActivitySchema.RegardingObjectId)
                         ?? throw XrmdFaultException.InvalidArgument($"A {PostSchema.Post} needs '{ActivitySchema.RegardingObjectId}': the record it is about.");
-        var target = store.GetEntity(regarding.LogicalName ?? "")
+        var target = store.GetTable(regarding.LogicalName ?? "")
                      ?? throw XrmdFaultException.InvalidArgument($"Attribute '{ActivitySchema.RegardingObjectId}' references entity '{regarding.LogicalName}', which does not exist.");
         var (owner, unit) = await RegardingOwnerAsync(s, target, regarding.Id, ct);
         if (owner is not null) row[OwnerColumn] = owner;
-        if (unit is { } u) row[OwningUnitColumn] = new EntityReference(BusinessUnit, u);
-        var postedOn = row.GetAttributeValue<DateTime?>("createdon") ?? DateTime.UtcNow;
+        if (unit is { } u) row[OwningUnitColumn] = Reference(BusinessUnit, u);
+        var postedOn = row.GetValue<DateTime?>("createdon") ?? DateTime.UtcNow;
         var regardingRow = await KeepRegardingRowAsync(s, store, caller, target, regarding.Id, owner, unit, postedOn, ct);
-        row[PostSchema.RegardingId] = new EntityReference(PostSchema.Regarding, regardingRow);
+        row[PostSchema.RegardingId] = Reference(PostSchema.Regarding, regardingRow);
     }
 
     /// <summary>The owner (user or team) and owning business unit of the regarding record; nulls for an organization-owned table.</summary>
     /// <exception cref="XrmdFaultException">404 when the record does not exist.</exception>
-    private static async Task<(EntityReference? Owner, Guid? Unit)> RegardingOwnerAsync(DataSession s, EntityMetadata target, Guid id,
+    private static async Task<(RecordReference? Owner, Guid? Unit)> RegardingOwnerAsync(DataSession s, TableDefinition target, Guid id,
         CancellationToken ct)
     {
         var known = (target.Attributes ?? []).Select(a => a.LogicalName).ToHashSet(StringComparer.Ordinal);
         var columns = new[] { "owninguser", "owningteam", "owningbusinessunit" }.Where(known.Contains).ToList();
         await using var cmd = s.Command(
-            $"SELECT 1{string.Concat(columns.Select(c => $", {s.Quote(c)}"))} FROM {s.DataTable(target.LogicalName)}{s.Dialect.LockHint(RowLock.Shared)} " +
+            $"SELECT 1{string.Concat(columns.Select(c => $", {s.Quote(c)}"))} FROM {s.DataTable(target.LogicalName!)}{s.Dialect.LockHint(RowLock.Shared)} " +
             $"WHERE {s.Quote(SystemAttributes.PrimaryIdName(target))} = {IdParameter}{s.Dialect.LockClause(RowLock.Shared)}");
         cmd.AddParameter(IdParameter, DbType.Guid, id);
         await using var rd = await cmd.ExecuteReaderAsync(ct);
-        if (!await rd.ReadAsync(ct)) throw XrmdFaultException.ObjectDoesNotExist(target.LogicalName, id);
+        if (!await rd.ReadAsync(ct)) throw XrmdFaultException.ObjectDoesNotExist(target.LogicalName!, id);
         Guid? Value(string column) => columns.IndexOf(column) is var i and >= 0 && !rd.IsDBNull(i + 1) ? rd.GetGuid(i + 1) : null;
-        var owner = Value("owninguser") is { } user ? new EntityReference(SystemUser, user)
-            : Value("owningteam") is { } team ? new EntityReference(Team, team)
+        var owner = Value("owninguser") is { } user ? Reference(SystemUser, user)
+            : Value("owningteam") is { } team ? Reference(Team, team)
             : null;
         return (owner, Value("owningbusinessunit"));
     }
@@ -107,11 +107,11 @@ internal static class PostRules
     /// The <c>postregarding</c> row of the record (found under an update lock, else inserted), with the record's owner columns and
     /// <c>latestmanualpostmodifiedon</c> moved to <paramref name="postedOn"/> when later; returns its id.
     /// </summary>
-    private static async Task<Guid> KeepRegardingRowAsync(DataSession s, IMetadataStore store, Caller caller, EntityMetadata target,
-        Guid recordId, EntityReference? owner, Guid? unit, DateTime postedOn, CancellationToken ct)
+    private static async Task<Guid> KeepRegardingRowAsync(DataSession s, IMetadataStore store, Caller caller, TableDefinition target,
+        Guid recordId, RecordReference? owner, Guid? unit, DateTime postedOn, CancellationToken ct)
     {
-        var table = store.GetEntity(PostSchema.Regarding) ?? throw new InvalidOperationException($"The {PostSchema.Regarding} table has not been seeded.");
-        var attrs = (table.Attributes ?? []).ToDictionary(a => a.LogicalName, StringComparer.Ordinal);
+        var table = store.GetTable(PostSchema.Regarding) ?? throw new InvalidOperationException($"The {PostSchema.Regarding} table has not been seeded.");
+        var attrs = (table.Attributes ?? []).ToDictionary(a => a.LogicalName!, StringComparer.Ordinal);
         var pk = SystemAttributes.PrimaryIdName(table);
         var typeColumn = ActivitySchema.RegardingObjectId + TypeMapping.TypeColumnSuffix;
         Guid? found;
@@ -126,12 +126,12 @@ internal static class PostRules
             found = await cmd.ExecuteScalarAsync(ct) as Guid?;
         }
 
-        var row = new Entity(PostSchema.Regarding);
+        var row = new Record(PostSchema.Regarding);
         row[OwnerColumn] = owner;
-        row[OwningUnitColumn] = unit is { } u ? new EntityReference(BusinessUnit, u) : null;
+        row[OwningUnitColumn] = unit is { } u ? Reference(BusinessUnit, u) : null;
         if (found is { } existing)
         {
-            var parameters = EntityRowMapper.ToParameters(row, attrs, store.GetEntity);
+            var parameters = EntityRowMapper.ToParameters(row, attrs, store.GetTable);
             await using var cmd = s.Command(
                 $"UPDATE {s.DataTable(PostSchema.Regarding)} SET " +
                 string.Join(", ", parameters.Select(p => $"{s.Quote(p.ParameterName[1..])} = {p.ParameterName}")) +
@@ -146,17 +146,17 @@ internal static class PostRules
         }
 
         var id = Guid.NewGuid();
-        var by = new EntityReference(SystemUser, caller.UserId);
+        var by = Reference(SystemUser, caller.UserId);
         row[pk] = id;
-        row[ActivitySchema.RegardingObjectId] = new EntityReference(target.LogicalName, recordId);
+        row[ActivitySchema.RegardingObjectId] = Reference(target.LogicalName!, recordId);
         row[PostSchema.LatestManualPostModifiedOn] = postedOn;
         SetIfDefined(row, attrs, "createdon", postedOn);
         SetIfDefined(row, attrs, "modifiedon", postedOn);
         SetIfDefined(row, attrs, "createdby", by);
         SetIfDefined(row, attrs, "modifiedby", by);
-        SetIfDefined(row, attrs, "statecode", new OptionSetValue(0));
-        SetIfDefined(row, attrs, "statuscode", new OptionSetValue(1));
-        var inserted = EntityRowMapper.ToParameters(row, attrs, store.GetEntity);
+        SetIfDefined(row, attrs, "statecode", new ChoiceValue(0));
+        SetIfDefined(row, attrs, "statuscode", new ChoiceValue(1));
+        var inserted = EntityRowMapper.ToParameters(row, attrs, store.GetTable);
         await using (var cmd = s.Command(
                          $"INSERT INTO {s.DataTable(PostSchema.Regarding)} " +
                          $"({string.Join(", ", inserted.Select(p => s.Quote(p.ParameterName[1..])))}) " +
@@ -174,8 +174,10 @@ internal static class PostRules
         return await cmd.ExecuteScalarAsync(ct) as Guid?;
     }
 
-    private static void SetIfDefined(Entity row, IReadOnlyDictionary<string, AttributeMetadata> attrs, string name, object value)
+    private static void SetIfDefined(Record row, IReadOnlyDictionary<string, ColumnDefinition> attrs, string name, object value)
     {
         if (attrs.ContainsKey(name)) row[name] = value;
     }
+
+    private static RecordReference Reference(string table, Guid id) => new() { LogicalName = table, Id = id };
 }

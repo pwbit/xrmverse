@@ -22,6 +22,14 @@ public static class UnmaskedData
         if (request.Parameters.TryGetValue(Parameter, out var value)) Refuse(value);
     }
 
+    /// <summary>The model form of <see cref="Refuse(OrganizationRequest)"/> (S.2e3b: the core's Retrieve and RetrieveMultiple on the model).</summary>
+    /// <exception cref="XrmdFaultException">400 when the request asks for unmasked data.</exception>
+    public static void Refuse(Xrmd.Model.Messages.Request request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.Parameters.TryGetValue(Parameter, out var value)) Refuse(value);
+    }
+
     /// <summary>The Web API form: every query option named <see cref="Parameter"/> (without case) is checked.</summary>
     /// <exception cref="XrmdFaultException">400 when one asks for unmasked data.</exception>
     public static void RefuseQueryOptions(IEnumerable<KeyValuePair<string, string>> options)

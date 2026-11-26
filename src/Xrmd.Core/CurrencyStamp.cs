@@ -1,12 +1,12 @@
 using System.Data;
 using System.Data.Common;
-using Microsoft.Xrm.Sdk;
-using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Computed;
+using Xrmd.Model.Metadata;
+using Xrmd.Model.Records;
 
 namespace Xrmd.Core;
 
@@ -14,7 +14,8 @@ namespace Xrmd.Core;
 /// Stage 30 of Create and Update on a table with the currency pair (plan 2.10, rulings X5, X6, X8–X10): resolves the record's
 /// currency, stores its rate in <c>exchangerate</c>, rounds every money value of the row to its effective precision and puts each
 /// <c>{money}_base</c> = value / rate in the row. The currency (rate, precision, state) and the organization's pricing precision
-/// are read in the request's session, never from a cache, so a rate committed before the request is the one applied.
+/// are read in the request's session, never from a cache, so a rate committed before the request is the one applied. On the model
+/// since S.2e3b.
 /// </summary>
 public static class CurrencyStamp
 {
@@ -30,8 +31,8 @@ public static class CurrencyStamp
     /// <exception cref="XrmdFaultException">ObjectDoesNotExist (404) for a currency that does not exist; InvalidCurrency (400) for
     /// a new currency that is inactive; CurrencyCannotBeNullDueToNonNullMoneyFields (400) when the currency is cleared while a
     /// money value remains; BaseCurrencyOverflow/BaseCurrencyUnderflow (400) for a base value beyond ±922337203685477.</exception>
-    public static async Task ApplyAsync(DataSession s, Caller caller, EntityMetadata m, IReadOnlyDictionary<string, AttributeMetadata> attrs,
-        Entity row, Guid id, bool isCreate, CancellationToken ct)
+    public static async Task ApplyAsync(DataSession s, Caller caller, TableDefinition m, IReadOnlyDictionary<string, ColumnDefinition> attrs,
+        Record row, Guid id, bool isCreate, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(s);
         ArgumentNullException.ThrowIfNull(caller);
@@ -44,21 +45,21 @@ public static class CurrencyStamp
         // aggregate of the related bases, the value _base × rate), so a write of the row never restamps them.
         var monies = CurrencySchema.MoneyAttributes(m).Where(a => !ComputedColumnRules.IsComputed(a) && !RollupColumns.IsRollup(a)).ToList();
         var currencyGiven = row.Contains(CurrencySchema.CurrencyId);
-        if (!isCreate && !currencyGiven && !monies.Any(a => row.Contains(a.LogicalName))) return;
+        if (!isCreate && !currencyGiven && !monies.Any(a => row.Contains(a.LogicalName!))) return;
 
         // The values of the money columns: the row's, else (Update) the stored ones.
-        var values = monies.ToDictionary(a => a.LogicalName, a => row.Contains(a.LogicalName) ? row.GetAttributeValue<Money>(a.LogicalName)?.Value : null);
+        var values = monies.ToDictionary(a => a.LogicalName!, a => row.Contains(a.LogicalName!) ? row.GetValue<MoneyValue>(a.LogicalName!)?.Value : null);
         Guid? storedCurrency = null;
         if (!isCreate)
         {
-            var stored = await StoredAsync(s, m, monies.Where(a => !row.Contains(a.LogicalName)).ToList(), id, ct);
+            var stored = await StoredAsync(s, m, monies.Where(a => !row.Contains(a.LogicalName!)).ToList(), id, ct);
             if (stored is null) return; // no such record: the Update reports it
             storedCurrency = stored.Value.Currency;
             foreach (var (name, value) in stored.Value.Money) values[name] = value;
         }
 
         // A null currency on Create is no currency given (the default applies); on Update it clears the currency (X6).
-        var given = currencyGiven ? row.GetAttributeValue<EntityReference>(CurrencySchema.CurrencyId) : null;
+        var given = currencyGiven ? row.GetValue<RecordReference>(CurrencySchema.CurrencyId) : null;
         if (!isCreate && currencyGiven && given is null)
         {
             if (values.FirstOrDefault(v => v.Value is not null) is { Key: { } withValue })
@@ -85,7 +86,7 @@ public static class CurrencyStamp
         else
         {
             currency = await DefaultCurrencyAsync(s, caller, ct);
-            row[CurrencySchema.CurrencyId] = new EntityReference(CurrencySchema.Table, currency.Id);
+            row[CurrencySchema.CurrencyId] = new RecordReference { LogicalName = CurrencySchema.Table, Id = currency.Id };
         }
 
         // A rate that is missing or rounds to 0 on the record cannot convert anything: refused, never a division by zero.
@@ -97,24 +98,24 @@ public static class CurrencyStamp
         var pricing = monies.Any(a => a.PrecisionSource == 1) ? await PricingPrecisionAsync(s, ct) : CurrencySchema.DefaultPricingPrecision;
         foreach (var a in monies)
         {
-            var value = values[a.LogicalName];
-            if (value is { } amount && row.Contains(a.LogicalName))
+            var value = values[a.LogicalName!];
+            if (value is { } amount && row.Contains(a.LogicalName!))
             {
                 value = CurrencyMath.Round(amount, CurrencyMath.EffectivePrecision(a, currency.Precision, pricing));
-                row[a.LogicalName] = new Money(value.Value);
+                row[a.LogicalName!] = new MoneyValue(value.Value);
             }
             SetBase(row, attrs, a, value is { } v ? BaseOf(m, a, v, rate) : null);
         }
     }
 
-    private static void SetBase(Entity row, IReadOnlyDictionary<string, AttributeMetadata> attrs, MoneyAttributeMetadata a, decimal? value)
+    private static void SetBase(Record row, IReadOnlyDictionary<string, ColumnDefinition> attrs, MoneyColumn a, decimal? value)
     {
         var name = a.LogicalName + TypeMapping.BaseColumnSuffix;
-        if (attrs.ContainsKey(name)) row[name] = value is { } v ? new Money(v) : null;
+        if (attrs.ContainsKey(name)) row[name] = value is { } v ? new MoneyValue(v) : null;
     }
 
     /// <summary>The base value of <paramref name="value"/>; refused beyond the base money range (X10), naming the attribute.</summary>
-    private static decimal BaseOf(EntityMetadata m, MoneyAttributeMetadata a, decimal value, decimal rate)
+    private static decimal BaseOf(TableDefinition m, MoneyColumn a, decimal value, decimal rate)
     {
         var result = CurrencyMath.ToBase(value, rate);
         var name = a.LogicalName + TypeMapping.BaseColumnSuffix;
@@ -198,18 +199,18 @@ public static class CurrencyStamp
     /// The stored currency of the record and the stored values of <paramref name="monies"/>, read under an update lock (the
     /// Update writes the row next); null when the record does not exist.
     /// </summary>
-    private static async Task<(Guid? Currency, Dictionary<string, decimal?> Money)?> StoredAsync(DataSession s, EntityMetadata m,
-        IReadOnlyList<MoneyAttributeMetadata> monies, Guid id, CancellationToken ct)
+    private static async Task<(Guid? Currency, Dictionary<string, decimal?> Money)?> StoredAsync(DataSession s, TableDefinition m,
+        IReadOnlyList<MoneyColumn> monies, Guid id, CancellationToken ct)
     {
-        var columns = string.Concat(monies.Select(a => $", {s.Quote(a.LogicalName)}"));
+        var columns = string.Concat(monies.Select(a => $", {s.Quote(a.LogicalName!)}"));
         await using var cmd = s.Command(
-            $"SELECT {s.Quote(CurrencySchema.CurrencyId)}{columns} FROM {s.DataTable(m.LogicalName)}{s.Dialect.LockHint(RowLock.Update)} " +
+            $"SELECT {s.Quote(CurrencySchema.CurrencyId)}{columns} FROM {s.DataTable(m.LogicalName!)}{s.Dialect.LockHint(RowLock.Update)} " +
             $"WHERE {s.Quote(SystemAttributes.PrimaryIdName(m))} = {IdParameter}{s.Dialect.LockClause(RowLock.Update)}");
         cmd.AddParameter(IdParameter, DbType.Guid, id);
         await using var rd = await cmd.ExecuteReaderAsync(ct);
         if (!await rd.ReadAsync(ct)) return null;
         var money = new Dictionary<string, decimal?>(StringComparer.Ordinal);
-        for (var i = 0; i < monies.Count; i++) money[monies[i].LogicalName] = rd.IsDBNull(i + 1) ? null : rd.GetDecimal(i + 1);
+        for (var i = 0; i < monies.Count; i++) money[monies[i].LogicalName!] = rd.IsDBNull(i + 1) ? null : rd.GetDecimal(i + 1);
         return (rd.IsDBNull(0) ? null : rd.GetGuid(0), money);
     }
 }

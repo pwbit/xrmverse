@@ -1,0 +1,57 @@
+=== PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(queueitem)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[2]
+        objectid: EntityReference
+          LogicalName: String:"email"
+          Id: Guid:{a:email}
+          Name: null
+          KeyAttributes: KeyAttributeCollection[0]
+          RowVersion: null
+        queueid: EntityReference
+          LogicalName: String:"queue"
+          Id: Guid:{a:queue}
+          Name: null
+          KeyAttributes: KeyAttributeCollection[0]
+          RowVersion: null
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.CreateResponse
+ResponseName: String:"Create"
+Results: ParameterCollection[1]
+  id: Guid:{a:created}
+--- rows ---
+data.queueitem where queueitemid = {a:created}: 1 row(s)
+  [0]
+    createdby: Guid:{user}
+    createdon: DateTime:{date}
+    enteredon: null
+    modifiedby: Guid:{user}
+    modifiedon: DateTime:{date}
+    objectid: Guid:{a:email}
+    objectidtype: Int32:4202
+    overriddencreatedon: null
+    owningbusinessunit: Guid:{businessunit}
+    owningteam: null
+    owninguser: null
+    priority: null
+    queueid: Guid:{a:queue}
+    queueitemid: Guid:{a:created}
+    sender: null
+    statecode: Int32:0
+    statuscode: Int32:1
+    title: null
+    torecipients: null
+    versionnumber: {rowversion}
+    workerid: null
+    workeridmodifiedon: null
+    workeridtype: null

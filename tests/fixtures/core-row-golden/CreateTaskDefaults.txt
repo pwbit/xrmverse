@@ -1,0 +1,114 @@
+=== PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(task)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[2]
+        subject: String:"crr task"
+        scheduledend: DateTime:2015-03-04T05:06:07.0000000Z
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.CreateResponse
+ResponseName: String:"Create"
+Results: ParameterCollection[1]
+  id: Guid:{a:created}
+--- rows ---
+data.task where activityid = {a:created}: 1 row(s)
+  [0]
+    activityid: Guid:{a:created}
+    activitytypecode: Int32:4212
+    actualdurationminutes: null
+    actualend: null
+    actualstart: null
+    category: null
+    createdby: Guid:{user}
+    createdon: DateTime:{date}
+    description: null
+    exchangerate: Decimal:1.0000000000
+    isbilled: null
+    isregularactivity: null
+    isworkflowcreated: null
+    modifiedby: Guid:{user}
+    modifiedon: DateTime:{date}
+    overriddencreatedon: null
+    ownerid: Guid:{user}
+    owneridtype: Int32:8
+    owningbusinessunit: Guid:{businessunit}
+    owningteam: null
+    owninguser: Guid:{user}
+    percentcomplete: null
+    prioritycode: null
+    regardingobjectid: null
+    regardingobjectidtype: null
+    scheduleddurationminutes: null
+    scheduledend: DateTime:2015-03-04T05:06:07.0000000
+    scheduledstart: null
+    statecode: Int32:0
+    statuscode: Int32:2
+    subcategory: null
+    subject: String:"crr task"
+    transactioncurrencyid: Guid:{a:basecurrency}
+    versionnumber: {rowversion}
+data.activitypointer where activityid = {a:created}: 1 row(s)
+  [0]
+    activityid: Guid:{a:created}
+    activitytypecode: Int32:4212
+    actualdurationminutes: null
+    actualend: null
+    actualstart: null
+    createdby: Guid:{user}
+    createdon: DateTime:{date}
+    description: null
+    exchangerate: Decimal:1.0000000000
+    isbilled: null
+    isregularactivity: null
+    isworkflowcreated: null
+    modifiedby: Guid:{user}
+    modifiedon: DateTime:{date}
+    overriddencreatedon: null
+    ownerid: Guid:{user}
+    owneridtype: Int32:8
+    owningbusinessunit: Guid:{businessunit}
+    owningteam: null
+    owninguser: Guid:{user}
+    prioritycode: null
+    regardingobjectid: null
+    regardingobjectidtype: null
+    scheduleddurationminutes: null
+    scheduledend: DateTime:2015-03-04T05:06:07.0000000
+    scheduledstart: null
+    statecode: Int32:0
+    statuscode: Int32:2
+    subject: String:"crr task"
+    transactioncurrencyid: Guid:{a:basecurrency}
+    versionnumber: {rowversion}
+data.activityparty where activityid = {a:created}: 1 row(s)
+  [0]
+    activityid: Guid:{a:created}
+    activityidtype: Int32:4212
+    activitypartyid: Guid:{id1}
+    addressused: null
+    createdby: null
+    createdon: DateTime:{date}
+    ispartydeleted: Boolean:False
+    modifiedby: null
+    modifiedon: DateTime:{date}
+    overriddencreatedon: null
+    ownerid: Guid:{user}
+    owneridtype: Int32:8
+    owningbusinessunit: Guid:{businessunit}
+    owningteam: null
+    owninguser: Guid:{user}
+    participationtypemask: Int32:9
+    partyid: Guid:{user}
+    partyidtype: Int32:8
+    statecode: Int32:0
+    statuscode: Int32:1
+    versionnumber: {rowversion}

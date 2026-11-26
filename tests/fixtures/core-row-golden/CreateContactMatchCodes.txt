@@ -1,0 +1,58 @@
+=== PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(contact)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[2]
+        lastname: String:"crr-match"
+        emailaddress1: String:"Crr.Match@Example.com"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.CreateResponse
+ResponseName: String:"Create"
+Results: ParameterCollection[1]
+  id: Guid:{a:created}
+--- rows ---
+data.contact where contactid = {a:created}: 1 row(s)
+  [0]
+    address1_city: null
+    address1_country: null
+    address1_line1: null
+    address1_postalcode: null
+    contactid: Guid:{a:created}
+    createdby: Guid:{user}
+    createdon: DateTime:{date}
+    emailaddress1: String:"Crr.Match@Example.com"
+    exchangerate: Decimal:1.0000000000
+    firstname: null
+    fullname: String:"crr-match"
+    jobtitle: null
+    lastname: String:"crr-match"
+    middlename: null
+    mobilephone: null
+    modifiedby: Guid:{user}
+    modifiedon: DateTime:{date}
+    overriddencreatedon: null
+    ownerid: Guid:{user}
+    owneridtype: Int32:8
+    owningbusinessunit: Guid:{businessunit}
+    owningteam: null
+    owninguser: Guid:{user}
+    parentcustomerid: null
+    parentcustomeridtype: null
+    statecode: Int32:0
+    statuscode: Int32:1
+    telephone1: null
+    transactioncurrencyid: Guid:{a:basecurrency}
+    versionnumber: {rowversion}
+meta.matchcode_{rule} where objectid = {a:created}: 1 row(s)
+  [0]
+    matchcode: Byte[]:0E4B7845F1F59DBF081895C9E8F4F996414C10A11BDD4FB8ABA1EED0DDCD1DF0
+    objectid: Guid:{a:created}

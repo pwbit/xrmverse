@@ -1,0 +1,92 @@
+=== values ===
+--- EntityRowMapper.ToParameters ---
+@new_rowtypesid DbType=Guid Size=0 Precision=0 Scale=0 Direction=Input Value=Guid:a0a0a0a0-0000-4000-8000-000000000005
+@new_name DbType=String Size=-1 Precision=0 Scale=0 Direction=Input Value=String:"row golden"
+@new_memo DbType=String Size=-1 Precision=0 Scale=0 Direction=Input Value=String:"line one\nline two"
+@new_int DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=Int32:42
+@new_big DbType=Int64 Size=0 Precision=0 Scale=0 Direction=Input Value=Int64:9000000000
+@new_decimal DbType=Decimal Size=0 Precision=0 Scale=0 Direction=Input Value=Decimal:12.3456
+@new_double DbType=Double Size=0 Precision=0 Scale=0 Direction=Input Value=Double:0.125
+@new_amount DbType=Decimal Size=0 Precision=0 Scale=0 Direction=Input Value=Decimal:1234.5
+@new_flag DbType=Boolean Size=0 Precision=0 Scale=0 Direction=Input Value=Boolean:True
+@new_whenutc DbType=DateTime2 Size=0 Precision=0 Scale=0 Direction=Input Value=DateTime:2015-03-04T05:06:07.1230000Z Utc
+@new_whenlocal DbType=DateTime2 Size=0 Precision=0 Scale=0 Direction=Input Value=DateTime:2015-03-04T05:06:07.1230000Z Utc
+@new_whenunspecified DbType=DateTime2 Size=0 Precision=0 Scale=0 Direction=Input Value=DateTime:2015-03-04T05:06:07.1230000Z Utc
+@new_choice DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=Int32:100000001
+@statecode DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=Int32:1
+@statuscode DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=Int32:2
+@new_choices DbType=String Size=-1 Precision=0 Scale=0 Direction=Input Value=String:"3,1"
+@new_accountid DbType=Guid Size=0 Precision=0 Scale=0 Direction=Input Value=Guid:a0a0a0a0-0000-4000-8000-000000000001
+@new_customerid DbType=Guid Size=0 Precision=0 Scale=0 Direction=Input Value=Guid:a0a0a0a0-0000-4000-8000-000000000002
+@new_customeridtype DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=Int32:2
+@new_tablename DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=Int32:2
+@new_doc DbType=Guid Size=0 Precision=0 Scale=0 Direction=Input Value=Guid:a0a0a0a0-0000-4000-8000-000000000003
+@new_pic DbType=Binary Size=-1 Precision=0 Scale=0 Direction=Input Value=Byte[]:[80] sha256:C56705FEA5B110B8DC63688533CED21167E628017387C885423B835A55EDD5EF
+--- NpgsqlCommand.Parameters ---
+@new_rowtypesid DbType=Guid Size=0 Precision=0 Scale=0 Direction=Input Value=Guid:a0a0a0a0-0000-4000-8000-000000000005 NpgsqlDbType=Uuid DataTypeName=uuid
+@new_name DbType=String Size=-1 Precision=0 Scale=0 Direction=Input Value=String:"row golden" NpgsqlDbType=Citext DataTypeName=citext
+@new_memo DbType=String Size=-1 Precision=0 Scale=0 Direction=Input Value=String:"line one\nline two" NpgsqlDbType=Citext DataTypeName=citext
+@new_int DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=Int32:42 NpgsqlDbType=Integer DataTypeName=integer
+@new_big DbType=Int64 Size=0 Precision=0 Scale=0 Direction=Input Value=Int64:9000000000 NpgsqlDbType=Bigint DataTypeName=bigint
+@new_decimal DbType=Decimal Size=0 Precision=0 Scale=0 Direction=Input Value=Decimal:12.3456 NpgsqlDbType=Numeric DataTypeName=numeric
+@new_double DbType=Double Size=0 Precision=0 Scale=0 Direction=Input Value=Double:0.125 NpgsqlDbType=Double DataTypeName=double precision
+@new_amount DbType=Decimal Size=0 Precision=0 Scale=0 Direction=Input Value=Decimal:1234.5 NpgsqlDbType=Numeric DataTypeName=numeric
+@new_flag DbType=Boolean Size=0 Precision=0 Scale=0 Direction=Input Value=Boolean:True NpgsqlDbType=Boolean DataTypeName=boolean
+@new_whenutc DbType=DateTime2 Size=0 Precision=0 Scale=0 Direction=Input Value=DateTime:2015-03-04T05:06:07.1230000Z Utc NpgsqlDbType=TimestampTz DataTypeName=timestamp with time zone
+@new_whenlocal DbType=DateTime2 Size=0 Precision=0 Scale=0 Direction=Input Value=DateTime:2015-03-04T05:06:07.1230000Z Utc NpgsqlDbType=TimestampTz DataTypeName=timestamp with time zone
+@new_whenunspecified DbType=DateTime2 Size=0 Precision=0 Scale=0 Direction=Input Value=DateTime:2015-03-04T05:06:07.1230000Z Utc NpgsqlDbType=TimestampTz DataTypeName=timestamp with time zone
+@new_choice DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=Int32:100000001 NpgsqlDbType=Integer DataTypeName=integer
+@statecode DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=Int32:1 NpgsqlDbType=Integer DataTypeName=integer
+@statuscode DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=Int32:2 NpgsqlDbType=Integer DataTypeName=integer
+@new_choices DbType=String Size=-1 Precision=0 Scale=0 Direction=Input Value=String:"3,1" NpgsqlDbType=Citext DataTypeName=citext
+@new_accountid DbType=Guid Size=0 Precision=0 Scale=0 Direction=Input Value=Guid:a0a0a0a0-0000-4000-8000-000000000001 NpgsqlDbType=Uuid DataTypeName=uuid
+@new_customerid DbType=Guid Size=0 Precision=0 Scale=0 Direction=Input Value=Guid:a0a0a0a0-0000-4000-8000-000000000002 NpgsqlDbType=Uuid DataTypeName=uuid
+@new_customeridtype DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=Int32:2 NpgsqlDbType=Integer DataTypeName=integer
+@new_tablename DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=Int32:2 NpgsqlDbType=Integer DataTypeName=integer
+@new_doc DbType=Guid Size=0 Precision=0 Scale=0 Direction=Input Value=Guid:a0a0a0a0-0000-4000-8000-000000000003 NpgsqlDbType=Uuid DataTypeName=uuid
+@new_pic DbType=Binary Size=-1 Precision=0 Scale=0 Direction=Input Value=Byte[]:[80] sha256:C56705FEA5B110B8DC63688533CED21167E628017387C885423B835A55EDD5EF NpgsqlDbType=Bytea DataTypeName=bytea
+=== nulls ===
+--- EntityRowMapper.ToParameters ---
+@new_rowtypesid DbType=Guid Size=0 Precision=0 Scale=0 Direction=Input Value=Guid:a0a0a0a0-0000-4000-8000-000000000004
+@new_name DbType=String Size=-1 Precision=0 Scale=0 Direction=Input Value=DBNull
+@new_memo DbType=String Size=-1 Precision=0 Scale=0 Direction=Input Value=DBNull
+@new_int DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull
+@new_big DbType=Int64 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull
+@new_decimal DbType=Decimal Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull
+@new_double DbType=Double Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull
+@new_amount DbType=Decimal Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull
+@new_flag DbType=Boolean Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull
+@new_whenutc DbType=DateTime2 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull
+@new_whenlocal DbType=DateTime2 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull
+@new_whenunspecified DbType=DateTime2 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull
+@new_choice DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull
+@statecode DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull
+@statuscode DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull
+@new_choices DbType=String Size=-1 Precision=0 Scale=0 Direction=Input Value=DBNull
+@new_accountid DbType=Guid Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull
+@new_customerid DbType=Guid Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull
+@new_customeridtype DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull
+@new_doc DbType=Guid Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull
+@new_pic DbType=Binary Size=-1 Precision=0 Scale=0 Direction=Input Value=DBNull
+--- NpgsqlCommand.Parameters ---
+@new_rowtypesid DbType=Guid Size=0 Precision=0 Scale=0 Direction=Input Value=Guid:a0a0a0a0-0000-4000-8000-000000000004 NpgsqlDbType=Uuid DataTypeName=uuid
+@new_name DbType=String Size=-1 Precision=0 Scale=0 Direction=Input Value=DBNull NpgsqlDbType=Citext DataTypeName=citext
+@new_memo DbType=String Size=-1 Precision=0 Scale=0 Direction=Input Value=DBNull NpgsqlDbType=Citext DataTypeName=citext
+@new_int DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull NpgsqlDbType=Integer DataTypeName=integer
+@new_big DbType=Int64 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull NpgsqlDbType=Bigint DataTypeName=bigint
+@new_decimal DbType=Decimal Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull NpgsqlDbType=Numeric DataTypeName=numeric
+@new_double DbType=Double Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull NpgsqlDbType=Double DataTypeName=double precision
+@new_amount DbType=Decimal Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull NpgsqlDbType=Numeric DataTypeName=numeric
+@new_flag DbType=Boolean Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull NpgsqlDbType=Boolean DataTypeName=boolean
+@new_whenutc DbType=DateTime2 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull NpgsqlDbType=TimestampTz DataTypeName=timestamp with time zone
+@new_whenlocal DbType=DateTime2 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull NpgsqlDbType=TimestampTz DataTypeName=timestamp with time zone
+@new_whenunspecified DbType=DateTime2 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull NpgsqlDbType=TimestampTz DataTypeName=timestamp with time zone
+@new_choice DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull NpgsqlDbType=Integer DataTypeName=integer
+@statecode DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull NpgsqlDbType=Integer DataTypeName=integer
+@statuscode DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull NpgsqlDbType=Integer DataTypeName=integer
+@new_choices DbType=String Size=-1 Precision=0 Scale=0 Direction=Input Value=DBNull NpgsqlDbType=Citext DataTypeName=citext
+@new_accountid DbType=Guid Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull NpgsqlDbType=Uuid DataTypeName=uuid
+@new_customerid DbType=Guid Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull NpgsqlDbType=Uuid DataTypeName=uuid
+@new_customeridtype DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull NpgsqlDbType=Integer DataTypeName=integer
+@new_doc DbType=Guid Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull NpgsqlDbType=Uuid DataTypeName=uuid
+@new_pic DbType=Binary Size=-1 Precision=0 Scale=0 Direction=Input Value=DBNull NpgsqlDbType=Bytea DataTypeName=bytea

@@ -1,5 +1,5 @@
 using System.Runtime.CompilerServices;
-using Microsoft.Xrm.Sdk;
+using Xrmd.Model.Messages;
 
 namespace Xrmd.Abstractions;
 
@@ -9,21 +9,25 @@ namespace Xrmd.Abstractions;
 /// a core cascade triggers no workflow. The mark is kept beside the request, not in its parameters, so plug-ins see the same
 /// <c>InputParameters</c>.
 /// </summary>
-public static class CascadeHint
+/// <remarks>
+/// A model request and an SDK request (<c>Sdk/RequestHints.Sdk.cs</c>) have separate tables; only the pipeline copies a mark from one to
+/// the other where a request crosses (S.2e3b, Decision 6).
+/// </remarks>
+public static partial class CascadeHint
 {
-    private static readonly ConditionalWeakTable<OrganizationRequest, object> Marks = new();
+    private static readonly ConditionalWeakTable<Request, object> ModelMarks = new();
 
-    /// <summary>Marks <paramref name="request"/> as a cascade the core issues.</summary>
-    public static void Mark(OrganizationRequest request)
+    /// <summary>Marks the model <paramref name="request"/> as a cascade the core issues.</summary>
+    public static void Mark(Request request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        Marks.AddOrUpdate(request, Marks);
+        ModelMarks.AddOrUpdate(request, ModelMarks);
     }
 
-    /// <summary>True when <paramref name="request"/> was marked by <see cref="Mark"/>.</summary>
-    public static bool IsMarked(OrganizationRequest request)
+    /// <summary>True when the model <paramref name="request"/> was marked by <see cref="Mark(Request)"/>.</summary>
+    public static bool IsMarked(Request request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        return Marks.TryGetValue(request, out _);
+        return ModelMarks.TryGetValue(request, out _);
     }
 }

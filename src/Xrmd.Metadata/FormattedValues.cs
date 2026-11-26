@@ -1,5 +1,6 @@
 using System.Globalization;
 using Xrmd.Model.Metadata;
+using Xrmd.Model.Records;
 
 namespace Xrmd.Metadata;
 
@@ -36,6 +37,39 @@ public static partial class FormattedValues
     }
 
     /// <summary>
+    /// The formatted value of the model value <paramref name="value"/> of column <paramref name="a"/> (S.2e3b; the SDK twin reads
+    /// the SDK values in and runs this body): Picklist/State/Status → option label (unknown option → null); multi-select → labels joined by <c>"; "</c>;
+    /// Boolean → TrueOption/FalseOption label (default "Yes"/"No"); Money → <see cref="FormatMoney"/> with <paramref name="money"/>
+    /// (<c>N2</c> without it); Decimal → <c>N{Precision}</c>; Double → <c>N{Precision ?? 2}</c>; Integer/BigInt → <c>N0</c>;
+    /// DateTime → <c>M/d/yyyy h:mm tt</c> (<c>M/d/yyyy</c> for DateOnly); lookup → <see cref="RecordReference.Name"/>. Other types,
+    /// and <c>versionnumber</c>: null. <paramref name="money"/> is ignored for the other types. EntityName (plan 2.11 A7: the value
+    /// is a table's logical name) → the table's display name from <paramref name="tables"/>, else its SchemaName, else the name
+    /// itself.
+    /// </summary>
+    public static string? Format(ColumnDefinition a, object value, MoneyFormat? money = null, Func<string, TableDefinition?>? tables = null,
+        int languageCode = English)
+    {
+        ArgumentNullException.ThrowIfNull(a);
+        if (a.LogicalName == TypeMapping.VersionNumber) return null; // Dataverse does not format the row version
+        return (a, value) switch
+        {
+            (MultiChoiceColumn m, ChoiceValues options) => JoinLabels(m.OptionSet, options, languageCode),
+            (ChoiceColumnBase e, ChoiceValue option) => OptionLabel(e.OptionSet, option.Value, languageCode),
+            (BooleanColumn b, bool flag) => BooleanLabel(b, flag, languageCode),
+            (MoneyColumn, MoneyValue amount) => FormatMoney(amount.Value, money),
+            (DecimalColumn d, decimal number) => number.ToString("N" + (d.Precision ?? 2).ToString(CultureInfo.InvariantCulture), EnUs),
+            (DoubleColumn d, double number) => number.ToString("N" + (d.Precision ?? 2).ToString(CultureInfo.InvariantCulture), EnUs),
+            (IntegerColumn, int number) => number.ToString("N0", EnUs),
+            (BigIntColumn, long number) => number.ToString("N0", EnUs),
+            (DateTimeColumn d, DateTime date) =>
+                date.ToString(d.Format == DateTimeDisplayFormat.DateOnly ? "M/d/yyyy" : "M/d/yyyy h:mm tt", EnUs),
+            (LookupColumn, RecordReference reference) => reference.Name,
+            (EntityNameColumn, string table) => TableName(table, tables?.Invoke(table), languageCode),
+            _ => null,
+        };
+    }
+
+    /// <summary>
     /// The label of an <c>activitypointer</c> row's <c>statuscode</c> (plan 2.11, ruling A11, checklist 3f): the pointer keeps the
     /// activity's own status, so the label comes from the <c>statuscode</c> option set of the activity's table
     /// (<paramref name="activityTable"/>, the row's <c>activitytypecode</c>), e.g. 3 on a task is "In Progress". Null when the table or
@@ -66,4 +100,13 @@ public static partial class FormattedValues
 
     private static string? OptionLabel(ChoiceSet? optionSet, int value, int languageCode) =>
         LabelText(optionSet?.Options?.FirstOrDefault(o => o.Value == value)?.Label, languageCode);
+
+    private static string? JoinLabels(ChoiceSet? optionSet, ChoiceValues options, int languageCode)
+    {
+        var labels = options.Select(o => OptionLabel(optionSet, o.Value, languageCode)).OfType<string>().ToList();
+        return labels.Count == 0 ? null : string.Join("; ", labels);
+    }
+
+    private static string BooleanLabel(BooleanColumn b, bool flag, int languageCode) =>
+        LabelText((flag ? b.OptionSet?.TrueOption : b.OptionSet?.FalseOption)?.Label, languageCode) ?? (flag ? "Yes" : "No");
 }

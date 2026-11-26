@@ -1,0 +1,51 @@
+=== PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(account)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[2]
+        name: String:"crr imported"
+        overriddencreatedon: DateTime:2015-03-04T05:06:07.0000000Z
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.CreateResponse
+ResponseName: String:"Create"
+Results: ParameterCollection[1]
+  id: Guid:{a:created}
+--- rows ---
+data.account where accountid = {a:created}: 1 row(s)
+  [0]
+    accountid: Guid:{a:created}
+    accountnumber: null
+    address1_city: null
+    address1_country: null
+    address1_line1: null
+    address1_postalcode: null
+    createdby: Guid:{user}
+    createdon: DateTime:2015-03-04T05:06:07.0000000
+    emailaddress1: null
+    exchangerate: Decimal:1.0000000000
+    modifiedby: Guid:{user}
+    modifiedon: DateTime:{date}
+    name: String:"crr imported"
+    overriddencreatedon: DateTime:{date}
+    ownerid: Guid:{user}
+    owneridtype: Int32:8
+    owningbusinessunit: Guid:{businessunit}
+    owningteam: null
+    owninguser: Guid:{user}
+    parentaccountid: null
+    primarycontactid: null
+    statecode: Int32:0
+    statuscode: Int32:1
+    telephone1: null
+    transactioncurrencyid: Guid:{a:basecurrency}
+    versionnumber: {rowversion}
+    websiteurl: null

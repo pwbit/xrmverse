@@ -1,0 +1,73 @@
+=== PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: DeleteRequest
+  RequestName: String:"Delete"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: EntityReference
+      LogicalName: String:"new_crgaudited"
+      Id: Guid:{a:audited}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.DeleteResponse
+ResponseName: String:"Delete"
+Results: ParameterCollection[0]
+--- rows ---
+data.new_crgaudited where new_crgauditedid = {a:audited}: 0 row(s)
+data.audit where objectid = {a:audited}: 3 row(s)
+  [0]
+    action: Int32:1
+    additionalinfo: null
+    attributemask: null
+    auditid: Guid:{a:audit-create}
+    callinguserid: null
+    changedata: String:"{"v":1,"old":{},"new":{"new_name":"crg-audited","ownerid":{"$lookup":{"id":"{user}","logicalName":"systemuser","name":"Test Admin"}},"statecode":{"$option":0},"statuscode":{"$option":1}}}"
+    createdon: DateTime:{date}
+    objectid: Guid:{a:audited}
+    objectidtype: Int32:{otc}
+    objecttypecode: String:"new_crgaudited"
+    operation: Int32:1
+    regardingobjectid: null
+    regardingobjectidtype: null
+    timetoliveinseconds: Int32:2592000
+    transactionid: Guid:{id1}
+    useradditionalinfo: null
+    userid: Guid:{user}
+  [1]
+    action: Int32:2
+    additionalinfo: null
+    attributemask: null
+    auditid: Guid:{a:audit-update}
+    callinguserid: null
+    changedata: String:"{"v":1,"old":{"new_name":"crg-audited"},"new":{"new_name":"crg-audited-changed"}}"
+    createdon: DateTime:{date}
+    objectid: Guid:{a:audited}
+    objectidtype: Int32:{otc}
+    objecttypecode: String:"new_crgaudited"
+    operation: Int32:2
+    regardingobjectid: null
+    regardingobjectidtype: null
+    timetoliveinseconds: Int32:2592000
+    transactionid: Guid:{id2}
+    useradditionalinfo: null
+    userid: Guid:{user}
+  [2]
+    action: Int32:3
+    additionalinfo: null
+    attributemask: null
+    auditid: Guid:{id3}
+    callinguserid: null
+    changedata: String:"{"v":1,"old":{"new_name":"crg-audited-changed","ownerid":{"$lookup":{"id":"{user}","logicalName":"systemuser","name":"Test Admin"}},"statecode":{"$option":0},"statuscode":{"$option":1}},"new":{}}"
+    createdon: DateTime:{date}
+    objectid: Guid:{a:audited}
+    objectidtype: Int32:{otc}
+    objecttypecode: String:"new_crgaudited"
+    operation: Int32:3
+    regardingobjectid: null
+    regardingobjectidtype: null
+    timetoliveinseconds: Int32:2592000
+    transactionid: Guid:{id4}
+    useradditionalinfo: null
+    userid: Guid:{user}

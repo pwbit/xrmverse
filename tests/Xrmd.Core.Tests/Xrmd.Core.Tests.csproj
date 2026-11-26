@@ -27,6 +27,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Xrmd.Core\Xrmd.Core.csproj" />
+    <ProjectReference Include="..\..\src\Xrmd.Storage.PostgreSql\Xrmd.Storage.PostgreSql.csproj" />
   </ItemGroup>
 
 </Project>

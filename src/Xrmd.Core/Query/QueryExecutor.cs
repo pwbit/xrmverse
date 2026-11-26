@@ -1,14 +1,13 @@
 using System.Data;
 using System.Data.Common;
 using System.Globalization;
-using Microsoft.Xrm.Sdk;
-using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
-using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Metadata;
 using Xrmd.Model.Query;
+using Xrmd.Model.Records;
 using Xrmd.Query;
 using Xrmd.Query.FetchXml;
 using Xrmd.Query.Model;
@@ -18,18 +17,20 @@ using Xrmd.Security;
 namespace Xrmd.Core.Query;
 
 /// <summary>
-/// Runs a <see cref="QueryModel"/> (compiled by <see cref="SqlQueryCompiler"/>) and shapes the rows into an
-/// <see cref="EntityCollection"/> as Dataverse does: root attributes as values (see <see cref="EntityRowMapper.ReadValue"/>),
-/// link-entity and aliased attributes as <see cref="AliasedValue"/>s keyed by their result name, aggregate and groupby
-/// columns as <see cref="AliasedValue"/>s keyed by their alias. Selected lookups carry the target's primary name
-/// (<see cref="EntityReference.Name"/>) and values their <see cref="FormattedValues"/>, keyed like the value (the logical name
+/// Runs a <see cref="QueryModel"/> (compiled by <see cref="SqlQueryCompiler"/>) and shapes the rows into a
+/// <see cref="RecordCollection"/> of model records as Dataverse shapes its entities (S.2e3b; the SDK twin
+/// <c>QueryExecutorSdk.ExecuteAsync</c> shapes SDK entities from the reader with the same values, through its row sink: Decision 4): root attributes as values (see
+/// <see cref="EntityRowMapper.ReadValue(DbDataReader, int, ColumnDefinition, int?, Func{int, TableDefinition?})"/>),
+/// link-entity and aliased attributes as <see cref="AliasedColumnValue"/>s keyed by their result name, aggregate and groupby
+/// columns as <see cref="AliasedColumnValue"/>s keyed by their alias. Selected lookups carry the target's primary name
+/// (<see cref="RecordReference.Name"/>) and values their <see cref="FormattedValues"/>, keyed like the value (the logical name
 /// for root attributes, the result name such as <c>u.fullname</c> otherwise, the alias for aggregate and groupby columns).
 /// The caller's read restriction (<see cref="ReadSecurity"/>) is compiled into the query unless the caller is unrestricted
 /// (<see cref="SecurityCache.IsUnrestricted"/>); the business unit hierarchy operators are resolved for every caller, and so are
 /// the user hierarchy operators (plan 2.5, ruling H7), whose ids are loaded only for a query that uses them.
 /// Field security (plan 14, ruling F3): a secured column the caller cannot read is refused by the compiler in a condition, an
 /// order, an aggregate or a join (403 0x8004F504); selected (by name or through all columns), it comes back as the key with a null
-/// value (an <see cref="AliasedValue"/> with a null value in a link-entity), unless a field share grants it on that record
+/// value (an <see cref="AliasedColumnValue"/> with a null value in a link-entity), unless a field share grants it on that record
 /// (<see cref="FieldSecurity.SharesAsync"/>, read once per page). A caller field security does not restrict (ruling F1) skips
 /// all of it.
 /// Money (plan 2.10, ruling X11) is formatted with the symbol and precision of its row's currency, read from the hidden
@@ -52,27 +53,42 @@ public sealed class QueryExecutor(SqlQueryCompiler compiler, IDbConnectionFactor
 
     /// <summary>
     /// Executes the query for <paramref name="caller"/> (resolved beforehand; it feeds the user/business-unit and date
-    /// operators). Without <c>top</c>, one page: <see cref="EntityCollection.MoreRecords"/> when a further row exists,
+    /// operators). Without <c>top</c>, one page: <see cref="RecordCollection.MoreRecords"/> when a further row exists,
     /// and a paging cookie (page, first and last root id) when the page has records, the query is not an aggregate and the
-    /// rows carry the root id (a distinct query selects it only on request; without it <see cref="Entity.Id"/> is empty).
-    /// <see cref="EntityCollection.TotalRecordCount"/> is −1 unless requested, and capped by <see cref="TotalRecordCount"/>.
+    /// rows carry the root id (a distinct query selects it only on request; without it <see cref="Record.Id"/> is empty).
+    /// <see cref="RecordCollection.TotalRecordCount"/> is −1 unless requested, and capped by <see cref="TotalRecordCount"/>.
+    /// The model member is named apart from the SDK twin (<c>QueryExecutorSdk.ExecuteAsync</c>), which differs only in its return
+    /// type (S.2e3b; renamed back when the twin goes).
     /// </summary>
     /// <exception cref="XrmdFaultException">InvalidArgument (400) for an invalid query (the compiler's message) or an
     /// integer sum out of range or an arithmetic overflow in SQL (error 8115, e.g. a SUM beyond the column type);
     /// AggregateQueryRecordLimitExceeded (400) when an aggregate reads more than 50,000 records; PrivilegeDenied (403) when
     /// the caller has no read privilege on the root or a linked entity.</exception>
-    public async Task<EntityCollection> ExecuteAsync(QueryModel query, Caller caller, CancellationToken ct = default)
+    public async Task<RecordCollection> ExecuteRecordsAsync(QueryModel query, Caller caller, CancellationToken ct = default) =>
+        (await ExecutePageAsync(query, caller, RowSink.Model, ct)).ToRecords();
+
+    /// <summary>As <see cref="ExecuteRecordsAsync(QueryModel, Caller, CancellationToken)"/>, on the connection and transaction of <paramref name="session"/>.</summary>
+    public async Task<RecordCollection> ExecuteRecordsAsync(QueryModel query, Caller caller, DataSession session, CancellationToken ct = default) =>
+        (await ExecutePageAsync(query, caller, session, RowSink.Model, ct)).ToRecords();
+
+    /// <summary>
+    /// The read path behind <see cref="ExecuteRecordsAsync(QueryModel, Caller, CancellationToken)"/>, with its rows made by
+    /// <paramref name="sink"/> (Decision 4, the dual row sink): model records, or the SDK entities of <c>QueryExecutorSdk</c>, shaped from
+    /// the reader with the same values.
+    /// </summary>
+    internal async Task<QueryPage> ExecutePageAsync(QueryModel query, Caller caller, RowSink sink, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(query);
         ArgumentNullException.ThrowIfNull(caller);
         await using var conn = await factory.OpenAsync(ct);
-        return await ExecuteAsync(query, caller, new DataSession(conn, null), ct);
+        return await ExecutePageAsync(query, caller, new DataSession(conn, null), sink, ct);
     }
 
-    /// <summary>As <see cref="ExecuteAsync(QueryModel, Caller, CancellationToken)"/>, on the connection and transaction of <paramref name="session"/>.</summary>
-    public async Task<EntityCollection> ExecuteAsync(QueryModel query, Caller caller, DataSession session, CancellationToken ct = default)
+    /// <summary>As <see cref="ExecutePageAsync(QueryModel, Caller, RowSink, CancellationToken)"/>, on <paramref name="session"/>.</summary>
+    internal async Task<QueryPage> ExecutePageAsync(QueryModel query, Caller caller, DataSession session, RowSink sink, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(query);
+        ArgumentNullException.ThrowIfNull(sink);
         ArgumentNullException.ThrowIfNull(caller);
         ArgumentNullException.ThrowIfNull(session);
         Elastic.ElasticQueryRules.Demand(query, store);
@@ -88,10 +104,10 @@ public sealed class QueryExecutor(SqlQueryCompiler compiler, IDbConnectionFactor
         var compiled = Compile(query, context);
         try
         {
-            var result = await RunAsync(query, caller, context, compiled, session, ct);
-            await activity.CompleteAsync(result, store, session, context.LanguageCode, ct);
-            await notes.CompleteAsync(result, files, session, ct);
-            if (!query.Aggregate) await UserDateFormatRead.CompleteAsync(result, caller, store, session, ct);
+            var result = await RunAsync(query, caller, context, compiled, session, sink, ct);
+            await activity.CompleteAsync(result.Rows, store, session, context.LanguageCode, ct);
+            await notes.CompleteAsync(result.Rows, files, session, ct);
+            if (!query.Aggregate) await UserDateFormatRead.CompleteAsync(result.Rows, caller, store, session, ct);
             return result;
         }
         catch (DbException ex) when (session.Dialect.Classify(ex) == DbErrorKind.NumericOverflow)
@@ -177,7 +193,7 @@ public sealed class QueryExecutor(SqlQueryCompiler compiler, IDbConnectionFactor
         // A fileattachment row is hidden when its column is a secured one the caller cannot read (ReadSecurity): load the
         // tables its rows belong to.
         if (tables.Contains(FileColumns.AttachmentEntity)
-            && store.GetEntity(FileColumns.AttachmentEntity)?.Attributes?.OfType<LookupAttributeMetadata>()
+            && store.GetTable(FileColumns.AttachmentEntity)?.Attributes?.OfType<LookupColumn>()
                 .FirstOrDefault(FileColumns.IsAttachmentObjectId) is { Targets: { } targets })
             tables.UnionWith(targets);
 
@@ -188,33 +204,33 @@ public sealed class QueryExecutor(SqlQueryCompiler compiler, IDbConnectionFactor
             if (ReferenceEquals(set, FieldPermissionSet.Unrestricted)) return null; // every principal bypasses: on every table
             // F11: the change data of an audit row holds the values of the audited record's columns. It cannot be filtered,
             // sorted or aggregated on; selected, it comes back without the columns the caller cannot read (HideUnreadableAsync).
-            result[table] = string.Equals(store.GetEntity(table)?.LogicalName, AuditTable.Name, StringComparison.Ordinal)
+            result[table] = string.Equals(store.GetTable(table)?.LogicalName, AuditTable.Name, StringComparison.Ordinal)
                 ? new HashSet<string>(set.UnreadableSecured, StringComparer.OrdinalIgnoreCase) { AuditTable.ChangeData }
                 : set.UnreadableSecured;
         }
         return result;
     }
 
-    private async Task<EntityCollection> RunAsync(QueryModel query, Caller caller, QueryContext context, CompiledQuery compiled, DataSession conn,
-        CancellationToken ct)
+    private async Task<QueryPage> RunAsync(QueryModel query, Caller caller, QueryContext context, CompiledQuery compiled, DataSession conn,
+        RowSink sink, CancellationToken ct)
     {
         if (query.Aggregate && compiled.CountSql is { } probe
             && await ScalarAsync(conn, probe, compiled, ct) > SqlQueryCompiler.AggregateRecordLimit)
             throw new XrmdFaultException(ErrorCodes.AggregateQueryRecordLimitExceeded, AggregateRecordLimitMessage, 400);
 
         var paged = query.Top is null;
-        var entities = new List<Entity>();
+        var entities = new List<QueryRow>();
         var more = false;
         int? windowCount = null;
         // The currencies money is formatted with: read before the rows, as the session runs one command at a time.
-        var snapshot = compiled.Columns.Any(c => c is { Kind: ResultKind.Value or ResultKind.Aggregate, Attribute: MoneyAttributeMetadata })
+        var snapshot = compiled.Columns.Any(c => c is { Kind: ResultKind.Value or ResultKind.Aggregate, Column: MoneyColumn })
             ? await currencies.GetAsync(conn, ct)
             : null;
         RowShaper shaper;
         await using (var cmd = Command(conn, compiled.Sql, compiled))
         await using (var rd = await cmd.ExecuteReaderAsync(ct))
         {
-            shaper = new RowShaper(compiled, rd, query.Aggregate ? AggregateColumns(query.Root) : null, store, snapshot, context.LanguageCode);
+            shaper = new RowShaper(compiled, rd, sink, query.Aggregate ? AggregateColumns(query.Root) : null, store, snapshot, context.LanguageCode);
             while (await rd.ReadAsync(ct))
             {
                 if (paged && entities.Count == compiled.PageSize)
@@ -228,23 +244,24 @@ public sealed class QueryExecutor(SqlQueryCompiler compiler, IDbConnectionFactor
         }
         await shaper.HideUnreadableAsync(fields, caller, conn, readShares: !query.Distinct, ct);
 
-        var result = new EntityCollection(entities)
+        var result = new QueryPage
         {
-            EntityName = compiled.Root.LogicalName,
+            Rows = entities,
+            EntityName = compiled.Table.LogicalName,
             MoreRecords = more,
             TotalRecordCount = -1,
             TotalRecordCountLimitExceeded = false,
         };
-        // A distinct query that does not select the primary key has no ids (Entity.Id is Guid.Empty): no cookie.
+        // A distinct query that does not select the primary key has no ids (Record.Id is Guid.Empty): no cookie.
         if (!query.Aggregate && paged && entities.Count > 0 && entities[0].Id != Guid.Empty)
-            result.PagingCookie = new PagingCookie(compiled.PageNumber, SystemAttributes.PrimaryIdName(compiled.Root),
+            result.PagingCookie = new PagingCookie(compiled.PageNumber, SystemAttributes.PrimaryIdName(compiled.Table),
                 entities[0].Id, entities[^1].Id).Format();
         if (query.ReturnTotalRecordCount)
         {
             var total = compiled.CountSql is { } countSql
                 ? await ScalarAsync(conn, countSql, compiled, ct)
                 : windowCount ?? await CountWithoutRowsAsync(conn, query, context, ct);
-            (result.TotalRecordCount, result.TotalRecordCountLimitExceeded) = TotalRecordCount.Cap(total, ElasticTables.IsElastic(compiled.Root));
+            (result.TotalRecordCount, result.TotalRecordCountLimitExceeded) = TotalRecordCount.Cap(total, ElasticTables.IsElastic(compiled.Table));
         }
         return result;
     }
@@ -310,12 +327,16 @@ public sealed class QueryExecutor(SqlQueryCompiler compiler, IDbConnectionFactor
         return result;
     }
 
-    /// <summary>Turns the current row of the reader into an <see cref="Entity"/>; ordinals resolved once.</summary>
+    /// <summary>
+    /// Turns the current row of the reader into a row of the sink (a <see cref="Record"/>, or an SDK entity: Decision 4); ordinals
+    /// resolved once. The values and formatted values are computed here, in the model form, for either sink.
+    /// </summary>
     private sealed class RowShaper
     {
         private static readonly CultureInfo EnUs = CultureInfo.GetCultureInfo("en-US");
         private readonly DbDataReader _rd;
-        private readonly EntityMetadata _root;
+        private readonly RowSink _sink;
+        private readonly TableDefinition _root;
         private readonly string _primaryKey;
         private readonly IMetadataStore _store;
         private readonly IReadOnlyDictionary<string, ColumnNode>? _aggregates;
@@ -332,20 +353,21 @@ public sealed class QueryExecutor(SqlQueryCompiler compiler, IDbConnectionFactor
         /// <summary>The language of the choice labels (#109).</summary>
         private readonly int _languageCode;
         /// <summary>The unreadable secured columns of the rows shaped so far (see <see cref="HideUnreadableAsync"/>).</summary>
-        private readonly List<(Entity Entity, string Key, string EntityName, string Attribute, Guid? RecordId, bool Aliased)> _unreadable = [];
+        private readonly List<(QueryRow Entity, string Key, string EntityName, string Attribute, Guid? RecordId, bool Aliased)> _unreadable = [];
         /// <summary>The ordinals of the audited record and table of each selected audit <c>changedata</c>, by its result name.</summary>
         private readonly Dictionary<string, (int Record, int Table)> _auditTargets = new(StringComparer.Ordinal);
         /// <summary>The audit <c>changedata</c> values of the rows shaped so far, with their audited table and record.</summary>
-        private readonly List<(Entity Entity, string Key, bool Aliased, string? Table, Guid? Record)> _changeData = [];
+        private readonly List<(QueryRow Entity, string Key, bool Aliased, string? Table, Guid? Record)> _changeData = [];
 
-        public RowShaper(CompiledQuery compiled, DbDataReader rd, IReadOnlyDictionary<string, ColumnNode>? aggregates, IMetadataStore store,
+        public RowShaper(CompiledQuery compiled, DbDataReader rd, RowSink sink, IReadOnlyDictionary<string, ColumnNode>? aggregates, IMetadataStore store,
             CurrencySnapshot? currencies, int languageCode = FormattedValues.English)
         {
             _currencies = currencies;
             _languageCode = languageCode;
             _rd = rd;
-            _root = compiled.Root;
-            _primaryKey = SystemAttributes.PrimaryIdName(compiled.Root);
+            _sink = sink;
+            _root = compiled.Table;
+            _primaryKey = SystemAttributes.PrimaryIdName(compiled.Table);
             _store = store;
             _aggregates = aggregates;
             var wanted = aggregates is null ? ResultKind.Value : ResultKind.Aggregate;
@@ -357,14 +379,14 @@ public sealed class QueryExecutor(SqlQueryCompiler compiler, IDbConnectionFactor
                 if (column.Kind == ResultKind.AuditTarget)
                 {
                     var target = _auditTargets.TryGetValue(column.ResultName, out var known) ? known : (Record: -1, Table: -1);
-                    _auditTargets[column.ResultName] = column.Attribute?.LogicalName == AuditTable.ObjectId
+                    _auditTargets[column.ResultName] = column.Column?.LogicalName == AuditTable.ObjectId
                         ? (rd.GetOrdinal(column.SqlAlias), target.Table)
                         : (target.Record, rd.GetOrdinal(column.SqlAlias));
                 }
-                if (aggregates is null && column is { Kind: ResultKind.Value, EntityAlias: null, Unreadable: false } && column.Attribute?.LogicalName == _primaryKey
+                if (aggregates is null && column is { Kind: ResultKind.Value, EntityAlias: null, Unreadable: false } && column.Column?.LogicalName == _primaryKey
                     && column.ResultName == _primaryKey)
                     _rootRecordId = rd.GetOrdinal(column.SqlAlias);
-                if (column.Kind != wanted || column.Attribute is null) continue;
+                if (column.Kind != wanted || column.Column is null) continue;
                 // Owner/Customer lookups: the object type code column of the same result names the target entity;
                 // the lookup name column of the same result holds the target's primary name.
                 var type = Companion(compiled, column, ResultKind.LookupType);
@@ -381,7 +403,7 @@ public sealed class QueryExecutor(SqlQueryCompiler compiler, IDbConnectionFactor
 
         /// <summary>
         /// Ruling F3: each unreadable secured column of the shaped rows becomes its key with a null value (an
-        /// <see cref="AliasedValue"/> with a null value when aliased) and loses its formatted value, except on the records a field
+        /// <see cref="AliasedColumnValue"/> with a null value when aliased) and loses its formatted value, except on the records a field
         /// share grants it on, read once per table for the whole page (<paramref name="readShares"/>: false for a distinct query,
         /// which did not read the values). Nothing to do, and no read, when no unreadable column was selected.
         /// </summary>
@@ -402,8 +424,8 @@ public sealed class QueryExecutor(SqlQueryCompiler compiler, IDbConnectionFactor
                 if (recordId is { } id && grants.TryGetValue(entityName, out var shares) && shares.TryGetValue(id, out var grant)
                     && grant.Read.Contains(attribute))
                     continue;
-                entity[key] = aliased ? new AliasedValue(entityName, attribute, null) : null;
-                entity.FormattedValues.Remove(key);
+                entity[key] = aliased ? new AliasedColumnValue(entityName, attribute, null) : null;
+                entity.RemoveFormatted(key);
             }
         }
 
@@ -418,25 +440,25 @@ public sealed class QueryExecutor(SqlQueryCompiler compiler, IDbConnectionFactor
             var hidden = await AuditFieldSecurity.HiddenAsync(fields, caller, known.Select(c => (c.Table!, c.Record!.Value)), session, ct);
             foreach (var (entity, key, aliased, table, record) in _changeData)
             {
-                if (!entity.Attributes.TryGetValue(key, out var value)) continue; // no change data on this row
-                var json = (value as AliasedValue)?.Value as string ?? value as string;
+                if (!entity.TryGetValue(key, out var value)) continue; // no change data on this row
+                var json = (value as AliasedColumnValue)?.Value as string ?? value as string;
                 var filtered = json is not null && readShares && table is not null && record is { } id
                     ? AuditFieldSecurity.WithoutColumns(json, hidden(table, id))
                     : null;
-                entity[key] = aliased ? new AliasedValue(AuditTable.Name, AuditTable.ChangeData, filtered) : filtered;
-                entity.FormattedValues.Remove(key);
+                entity[key] = aliased ? new AliasedColumnValue(AuditTable.Name, AuditTable.ChangeData, filtered) : filtered;
+                entity.RemoveFormatted(key);
             }
         }
 
-        public Entity Shape()
+        public QueryRow Shape()
         {
-            var entity = new Entity(_root.LogicalName);
+            var entity = _sink.New(_root.LogicalName!);
             foreach (var (column, ordinal, typeOrdinal, nameOrdinal) in _columns)
             {
-                if (column.Unreadable && column.EntityName == AuditTable.Name && column.Attribute!.LogicalName == AuditTable.ChangeData)
+                if (column.Unreadable && column.EntityName == AuditTable.Name && column.Column!.LogicalName == AuditTable.ChangeData)
                 {
                     var (record, table) = _auditTargets.GetValueOrDefault(column.ResultName, (-1, -1));
-                    _changeData.Add((entity, column.ResultName, column.EntityAlias is not null || column.ResultName != column.Attribute.LogicalName,
+                    _changeData.Add((entity, column.ResultName, column.EntityAlias is not null || column.ResultName != column.Column.LogicalName,
                         table >= 0 && !_rd.IsDBNull(table) ? _rd.GetString(table) : null,
                         record >= 0 && !_rd.IsDBNull(record) ? _rd.GetGuid(record) : null));
                 }
@@ -445,34 +467,34 @@ public sealed class QueryExecutor(SqlQueryCompiler compiler, IDbConnectionFactor
                     // Shaped as any value (a null one omitted); HideUnreadableAsync then nulls it unless a field share grants it.
                     var idOrdinal = column.EntityAlias is { } alias ? _recordIds.GetValueOrDefault(alias, -1) : _rootRecordId ?? -1;
                     Guid? recordId = idOrdinal >= 0 && !_rd.IsDBNull(idOrdinal) ? _rd.GetGuid(idOrdinal) : null;
-                    _unreadable.Add((entity, column.ResultName, column.EntityName, column.Attribute!.LogicalName, recordId,
-                        column.EntityAlias is not null || column.ResultName != column.Attribute.LogicalName));
+                    _unreadable.Add((entity, column.ResultName, column.EntityName, column.Column!.LogicalName!, recordId,
+                        column.EntityAlias is not null || column.ResultName != column.Column.LogicalName));
                 }
                 if (_rd.IsDBNull(ordinal)) continue; // null values are omitted, as Dataverse does
-                var a = column.Attribute!;
+                var a = column.Column!;
                 if (_aggregates is not null)
                 {
                     var node = _aggregates[column.ResultName];
                     var aggregate = AggregateValue(column, node, ordinal, typeOrdinal);
-                    if (aggregate is EntityReference group && nameOrdinal is { } g && !_rd.IsDBNull(g)) group.Name = _rd.GetString(g);
-                    entity[column.ResultName] = new AliasedValue(column.EntityName, a.LogicalName, aggregate);
-                    if (AggregateFormatted(a, node, aggregate) is { } text) entity.FormattedValues[column.ResultName] = text;
+                    if (aggregate is RecordReference group && nameOrdinal is { } g && !_rd.IsDBNull(g)) group.Name = _rd.GetString(g);
+                    entity[column.ResultName] = new AliasedColumnValue(column.EntityName, a.LogicalName, aggregate);
+                    if (AggregateFormatted(a, node, aggregate) is { } text) entity.SetFormatted(column.ResultName, text);
                     continue;
                 }
 
-                var value = EntityRowMapper.ReadValue(_rd, ordinal, a, typeOrdinal, _store.GetEntityByObjectTypeCode);
-                if (value is EntityReference reference && nameOrdinal is { } n && !_rd.IsDBNull(n)) reference.Name = _rd.GetString(n);
+                var value = EntityRowMapper.ReadValue(_rd, ordinal, a, typeOrdinal, _store.GetTableByObjectTypeCode);
+                if (value is RecordReference reference && nameOrdinal is { } n && !_rd.IsDBNull(n)) reference.Name = _rd.GetString(n);
                 if (column.EntityAlias is null && column.ResultName == a.LogicalName) entity[a.LogicalName] = value;
-                else entity[column.ResultName] = new AliasedValue(column.EntityName, a.LogicalName, value);
+                else entity[column.ResultName] = new AliasedColumnValue(column.EntityName, a.LogicalName, value);
                 // Keyed like the value: the attribute name for root attributes, the result name ("u.fullname") otherwise.
-                if (FormattedValues.Format(a, value, a is MoneyAttributeMetadata money ? FormatOf(column, money) : null, _store.GetEntity, _languageCode) is { } formatted)
-                    entity.FormattedValues[column.ResultName] = formatted;
+                if (FormattedValues.Format(a, value, a is MoneyColumn money ? FormatOf(column, money) : null, _store.GetTable, _languageCode) is { } formatted)
+                    entity.SetFormatted(column.ResultName, formatted);
             }
 
             if (_aggregates is null)
             {
-                if (entity.Attributes.TryGetValue(_primaryKey, out var id) && id is Guid guid) entity.Id = guid;
-                if (entity.Attributes.TryGetValue(TypeMapping.VersionNumber, out var version) && version is long rowVersion)
+                if (entity.TryGetValue(_primaryKey, out var id) && id is Guid guid) entity.Id = guid;
+                if (entity.TryGetValue(TypeMapping.VersionNumber, out var version) && version is long rowVersion)
                     entity.RowVersion = rowVersion.ToString(System.Globalization.CultureInfo.InvariantCulture);
             }
             return entity;
@@ -482,7 +504,7 @@ public sealed class QueryExecutor(SqlQueryCompiler compiler, IDbConnectionFactor
         /// The format of the money <paramref name="a"/> of the current row (ruling X11): its scope's record currency, read from the
         /// hidden currency column (none in a distinct query: <c>N2</c>), or the base currency for a <c>{money}_base</c>.
         /// </summary>
-        private MoneyFormat? FormatOf(ResultColumn column, MoneyAttributeMetadata a)
+        private MoneyFormat? FormatOf(ResultColumn column, MoneyColumn a)
         {
             if (_currencies is null) return null;
             Guid? currency = _currencyIds.TryGetValue(column.EntityAlias ?? "", out var ordinal) && !_rd.IsDBNull(ordinal) ? _rd.GetGuid(ordinal) : null;
@@ -497,7 +519,7 @@ public sealed class QueryExecutor(SqlQueryCompiler compiler, IDbConnectionFactor
         /// example shows it), any other aggregate as a value of its attribute. Money has no row currency here: the base currency
         /// formats it (<c>N2</c> when the organization has none).
         /// </summary>
-        private string? AggregateFormatted(AttributeMetadata a, ColumnNode node, object value)
+        private string? AggregateFormatted(ColumnDefinition a, ColumnNode node, object value)
         {
             if (node.GroupBy && node.DateGrouping is { } grouping)
                 return grouping == DateGrouping.Day
@@ -506,25 +528,25 @@ public sealed class QueryExecutor(SqlQueryCompiler compiler, IDbConnectionFactor
             return (node.Aggregate, value) switch
             {
                 (XrmAggregate.Count or XrmAggregate.CountColumn, int count) => count.ToString("N0", EnUs),
-                (XrmAggregate.Avg, decimal average) when a is IntegerAttributeMetadata or BigIntAttributeMetadata =>
+                (XrmAggregate.Avg, decimal average) when a is IntegerColumn or BigIntColumn =>
                     average.ToString("N0", EnUs),
-                _ => FormattedValues.Format(a, value, a is MoneyAttributeMetadata money ? _currencies?.FormatFor(money, _currencies.BaseCurrencyId) : null,
-                    _store.GetEntity, _languageCode),
+                _ => FormattedValues.Format(a, value, a is MoneyColumn money ? _currencies?.FormatFor(money, _currencies.BaseCurrencyId) : null,
+                    _store.GetTable, _languageCode),
             };
         }
 
         /// <summary>
         /// Dataverse types of aggregate results: counts → int, SUM of Integer → int (summed as bigint by SQL), AVG of
-        /// Integer/BigInt → decimal, Money → Money; groupby columns as the attribute's own value (day grouping → UTC
+        /// Integer/BigInt → decimal, Money → MoneyValue; groupby columns as the attribute's own value (day grouping → UTC
         /// date, other date groupings → int).
         /// </summary>
         private object AggregateValue(ResultColumn column, ColumnNode node, int ordinal, int? typeOrdinal)
         {
-            var a = column.Attribute!;
+            var a = column.Column!;
             if (node.GroupBy)
                 return node.DateGrouping switch
                 {
-                    null => EntityRowMapper.ReadValue(_rd, ordinal, a, typeOrdinal, _store.GetEntityByObjectTypeCode),
+                    null => EntityRowMapper.ReadValue(_rd, ordinal, a, typeOrdinal, _store.GetTableByObjectTypeCode),
                     DateGrouping.Day => DateTime.SpecifyKind(_rd.GetDateTime(ordinal), DateTimeKind.Utc),
                     _ => _rd.GetValue(ordinal),
                 };
@@ -532,16 +554,16 @@ public sealed class QueryExecutor(SqlQueryCompiler compiler, IDbConnectionFactor
             {
                 case XrmAggregate.Count or XrmAggregate.CountColumn:
                     return _rd.GetInt32(ordinal);
-                case XrmAggregate.Sum when a is IntegerAttributeMetadata:
+                case XrmAggregate.Sum when a is IntegerColumn:
                     var sum = _rd.GetInt64(ordinal);
                     return sum is >= int.MinValue and <= int.MaxValue
                         ? (int)sum
                         : throw XrmdFaultException.InvalidArgument(
                             $"The sum '{column.ResultName}' of attribute '{a.LogicalName}' is outside the range of an Integer.");
-                case XrmAggregate.Avg when a is IntegerAttributeMetadata or BigIntAttributeMetadata:
+                case XrmAggregate.Avg when a is IntegerColumn or BigIntColumn:
                     return _rd.GetDecimal(ordinal);
                 default:
-                    return EntityRowMapper.ReadValue(_rd, ordinal, a, typeOrdinal, _store.GetEntityByObjectTypeCode);
+                    return EntityRowMapper.ReadValue(_rd, ordinal, a, typeOrdinal, _store.GetTableByObjectTypeCode);
             }
         }
     }

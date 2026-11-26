@@ -1,0 +1,74 @@
+=== PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(emailserverprofile)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[7]
+        name: String:"crr profile"
+        servertype: OptionSetValue
+          Value: Int32:4
+        outgoingserverlocation: String:"smtp.example.com"
+        outgoingauthenticationprotocol: OptionSetValue
+          Value: Int32:3
+        outgoingcredentialretrieval: OptionSetValue
+          Value: Int32:1
+        outgoingusername: String:"sender@example.com"
+        outgoingpassword: String:"crr-secret"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.CreateResponse
+ResponseName: String:"Create"
+Results: ParameterCollection[1]
+  id: Guid:{a:created}
+--- rows ---
+data.emailserverprofile where emailserverprofileid = {a:created}: 1 row(s)
+  [0]
+    createdby: Guid:{user}
+    createdon: DateTime:{date}
+    description: null
+    emailserverprofileid: Guid:{a:created}
+    exchangeonlinetenantid: null
+    incomingauthenticationprotocol: null
+    incomingcredentialretrieval: null
+    incomingportnumber: null
+    incomingserverlocation: null
+    incomingusername: null
+    incomingusessl: null
+    isincomingpasswordset: null
+    isoauthclientsecretset: null
+    isoutgoingpasswordset: Boolean:True
+    modifiedby: Guid:{user}
+    modifiedon: DateTime:{date}
+    name: String:"crr profile"
+    oauthclientid: null
+    outgoingauthenticationprotocol: Int32:3
+    outgoingcredentialretrieval: Int32:1
+    outgoingportnumber: null
+    outgoingserverlocation: String:"smtp.example.com"
+    outgoingusername: String:"sender@example.com"
+    outgoingusessl: null
+    overriddencreatedon: null
+    ownerid: Guid:{user}
+    owneridtype: Int32:8
+    owningbusinessunit: Guid:{businessunit}
+    owningteam: null
+    owninguser: Guid:{user}
+    serverauthority: null
+    servertype: Int32:4
+    statecode: Int32:0
+    statuscode: Int32:1
+    usedefaulttenantid: null
+    usesamesettingsforoutgoingconnections: null
+    versionnumber: {rowversion}
+meta.mail_secret where recordid = {a:created}: 1 row(s)
+  [0]
+    name: String:"outgoingpassword"
+    recordid: Guid:{a:created}
+    value: String:"crr-secret"

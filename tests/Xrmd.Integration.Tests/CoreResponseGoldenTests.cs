@@ -554,9 +554,12 @@ internal sealed class CoreScenarioKit : IAsyncDisposable
     /// order over the whole file (so an id that differs between (a) and (b) shows), <c>{empty}</c> for the empty id; formatted dates
     /// are <c>{date}</c>.
     /// </summary>
-    public string Normalize(string text)
+    /// <remarks><paramref name="keepFixedDates"/> (S.2e3b) keeps a formatted date before <see cref="CoreDump.FixedDateYear"/> (a fixed value
+    /// a scenario wrote).</remarks>
+    public string Normalize(string text, bool keepFixedDates = false)
     {
-        text = FormattedDatePattern.Replace(text, "{date}");
+        text = FormattedDatePattern.Replace(text, m =>
+            keepFixedDates && int.Parse(m.Value.Split(' ')[0].Split('/')[2], CultureInfo.InvariantCulture) < CoreDump.FixedDateYear ? m.Value : "{date}");
         var ids = new Dictionary<Guid, string>();
         foreach (var (id, name) in _known) ids.TryAdd(id, name);
         var numbered = 0;
@@ -568,6 +571,17 @@ internal sealed class CoreScenarioKit : IAsyncDisposable
             if (!ids.TryGetValue(id, out var n)) ids[id] = n = "{id" + ++numbered + "}";
             return n;
         });
+    }
+
+    /// <summary>
+    /// <paramref name="text"/> with each id named so far written by its name and every other id as <c>?</c>: a key that orders rows the
+    /// same way on every run (S.2e3b), whatever ids the database gave them.
+    /// </summary>
+    public string Mask(string text)
+    {
+        var ids = new Dictionary<Guid, string>();
+        foreach (var (id, name) in _known) ids.TryAdd(id, name);
+        return GuidPattern.Replace(text, m => ids.TryGetValue(Guid.Parse(m.Value), out var n) ? n : "?");
     }
 
     // ---- data -------------------------------------------------------------------------------------------------------
@@ -975,7 +989,7 @@ internal sealed class CoreScenarioKit : IAsyncDisposable
 /// fallback. In golden mode dates are <c>{date}</c>, row versions <c>{rowversion}</c>, custom object type codes <c>{otc}</c>; in probe
 /// mode values are raw and each reference object carries an identity token (<c>@n</c>, the same instance the same token).
 /// </summary>
-internal sealed class CoreDump(CoreDump.Tokens? tokens = null, bool byName = false)
+internal sealed class CoreDump(CoreDump.Tokens? tokens = null, bool byName = false, bool fixedDates = false)
 {
     private readonly List<(string Path, int Depth, string Line)> _entries = [];
     private readonly HashSet<object> _visiting = new(ReferenceEqualityComparer.Instance);
@@ -987,10 +1001,12 @@ internal sealed class CoreDump(CoreDump.Tokens? tokens = null, bool byName = fal
     /// <remarks>
     /// <paramref name="byName"/> writes an entity's <c>Attributes</c> and <c>FormattedValues</c> by name, for a message whose core reads
     /// all columns (their order then depends on the state of the metadata cache, not on the message).
+    /// <para><paramref name="fixedDates"/> (S.2e3b) writes a date before 2024 (a fixed value a scenario wrote) as it is; later ones stay
+    /// <c>{date:Kind}</c>.</para>
     /// </remarks>
-    public static string Response(OrganizationResponse? response, Exception? fault, bool byName = false)
+    public static string Response(OrganizationResponse? response, Exception? fault, bool byName = false, bool fixedDates = false)
     {
-        var dump = new CoreDump(byName: byName);
+        var dump = new CoreDump(byName: byName, fixedDates: fixedDates);
         if (fault is not null)
         {
             var inner = fault is AggregateException { InnerException: { } e } ? e : fault;
@@ -1015,10 +1031,21 @@ internal sealed class CoreDump(CoreDump.Tokens? tokens = null, bool byName = fal
         return dump;
     }
 
-    /// <summary>The golden text of a request (its name, id and parameters), written at the head of a section.</summary>
-    public static string RequestText(OrganizationRequest request)
+    /// <summary>
+    /// The golden text of any value (S.2e3b: a query result read through <c>QueryExecutor</c>), with the writers of a response;
+    /// <paramref name="byName"/> and <paramref name="fixedDates"/> as in <see cref="Response"/>.
+    /// </summary>
+    public static string ValueText(string label, object? value, bool byName = false, bool fixedDates = false)
     {
-        var dump = new CoreDump();
+        var dump = new CoreDump(byName: byName, fixedDates: fixedDates);
+        dump.Value("", label, value, 0);
+        return dump.Render();
+    }
+
+    /// <summary>The golden text of a request (its name, id and parameters), written at the head of a section.</summary>
+    public static string RequestText(OrganizationRequest request, bool fixedDates = false)
+    {
+        var dump = new CoreDump(fixedDates: fixedDates);
         dump.Value("", "Request", request, 0);
         return dump.Render();
     }
@@ -1049,13 +1076,17 @@ internal sealed class CoreDump(CoreDump.Tokens? tokens = null, bool byName = fal
     /// <summary>The results whose text changes with every call (a version, a session or a continuation token): written as <c>{label}</c>.</summary>
     private static readonly HashSet<string> VolatileStrings = new(StringComparer.Ordinal) { "DataToken", "FileContinuationToken", "x-ms-session-token" };
 
-    private static string Quote(string s) => "\"" + s.Replace("\\", "\\\\").Replace("\r", "\\r").Replace("\n", "\\n") + "\"";
+    /// <summary>A date before this year is a fixed value a scenario wrote, not the time of a call (S.2e3b, <c>fixedDates</c>).</summary>
+    public const int FixedDateYear = 2024;
+
+    public static string Quote(string s) => "\"" + s.Replace("\\", "\\\\").Replace("\r", "\\r").Replace("\n", "\\n") + "\"";
 
     private string? Scalar(string label, object v) => v switch
     {
         string s when Probe || !VolatileStrings.Contains(label) => Quote(s),
         string => "{" + label + "}",
         Guid g => g.ToString("D"),
+        DateTime d when fixedDates && d.Year < FixedDateYear => d.ToString("O", CultureInfo.InvariantCulture),
         DateTime d => Probe ? d.ToString("O", CultureInfo.InvariantCulture) : "{date:" + d.Kind + "}",
         DateTimeOffset d => Probe ? d.ToString("O", CultureInfo.InvariantCulture) : "{date:" + d.Offset.ToString("c", CultureInfo.InvariantCulture) + "}",
         bool b => b ? "True" : "False",
@@ -1207,12 +1238,12 @@ internal sealed class CoreDump(CoreDump.Tokens? tokens = null, bool byName = fal
     }
 
     /// <summary>
-    /// Compares <paramref name="text"/> with <c>tests/fixtures/core-response-golden/{name}</c>: a missing file is written once and the
-    /// test fails; an existing file is never rewritten.
+    /// Compares <paramref name="text"/> with <c>tests/fixtures/{directory}/{name}</c> (<c>core-response-golden</c> by default): a missing
+    /// file is written once and the test fails; an existing file is never rewritten.
     /// </summary>
-    public static void AssertGolden(string name, string text)
+    public static void AssertGolden(string name, string text, string directory = "core-response-golden")
     {
-        var path = Path.Combine(RepositoryRoot(), "tests", "fixtures", "core-response-golden", name);
+        var path = Path.Combine(RepositoryRoot(), "tests", "fixtures", directory, name);
         var actual = Encoding.UTF8.GetBytes(text);
         if (!File.Exists(path))
         {

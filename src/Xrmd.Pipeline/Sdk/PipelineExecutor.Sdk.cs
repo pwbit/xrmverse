@@ -80,6 +80,15 @@ public sealed partial class PipelineExecutor
         /// <summary>The model twin of <see cref="Response"/>; null on the fast path (the response is never converted).</summary>
         public Response? ModelResponse { get; set; }
 
+        /// <summary>
+        /// S.2e3b (Decision 8): true for a CRUD message the core answers on the model request (<see cref="CoreHandOff.IsModelMessage"/>):
+        /// no window is held at the core for it.
+        /// </summary>
+        public bool CoreOnModel => !CustomAction && UpsertTable is null && BulkTable is null && CoreHandOff.IsModelMessage(Message);
+
+        /// <summary>The model response the core answered with (<see cref="CoreOperationAsync"/>); null for any other stage 30.</summary>
+        public Response? CoreResponse { get; set; }
+
         public bool HeldAtCore { get; set; }
 
         /// <summary>True when this execution registered its bag in <see cref="AtCore"/> (not one sharing its caller's held bag).</summary>
@@ -247,6 +256,8 @@ public sealed partial class PipelineExecutor
         // after it) change the SDK request.
         var mirror = invocation.Mirror!;
         var model = mirror.In(request)!;
+        // S.2e3b (Decision 6): the audit action is a mark on the SDK request; the core on the model reads it on the model request.
+        if (AuditActionHint.Of(request) is { } auditAction) AuditActionHint.Mark(model, auditAction);
         // S.2e3a: the model request carries its chain mirror, so the core converts with it (twins and typed responses keep their identity).
         SdkMirror.Register(model, mirror);
         // The request's own collection is the SDK side of its parameters: every view's InputParameters is that collection. A request
@@ -321,14 +332,25 @@ public sealed partial class PipelineExecutor
     /// which the core holds from here, then the internal checks of stage 20 run on it (custom API authoring, registration, process
     /// writes, service endpoints, the mail secrets).
     /// </summary>
+    /// <remarks>
+    /// S.2e3b (Decision 8): a CRUD message (<see cref="Run.CoreOnModel"/>) runs on the model request, so no window is held for it. The SDK
+    /// request is current here (every view's <c>InputParameters</c> is its collection, read back after each step), so the checks run on
+    /// it as it is. A check that writes the request (the tables of <see cref="HoldChecksMayWrite"/>) gets it written out first and read
+    /// back after, as today; for any other table the request does not cross here.
+    /// </remarks>
     private async Task HoldAtCoreAsync(Run run, CancellationToken ct)
     {
-        run.Mirror.Out(run.Request);
-        // A nested request on the caller's own collection shares the caller's bag: only the execution that registered it removes it.
-        run.HeldAtCore = true;
-        run.OwnsAtCore = !AtCore.TryGetValue(run.Request.Parameters, out _);
-        if (run.OwnsAtCore) AtCore.Add(run.Request.Parameters, run.Sdk.Parameters);
-        run.OwnsHeld = CoreHandOff.Hold(run.Request, run.Sdk);
+        var onModel = run.CoreOnModel;
+        var crosses = !onModel || HoldChecksMayWrite(run.EntityName);
+        if (crosses) run.Mirror.Out(run.Request);
+        if (!onModel)
+        {
+            // A nested request on the caller's own collection shares the caller's bag: only the execution that registered it removes it.
+            run.HeldAtCore = true;
+            run.OwnsAtCore = !AtCore.TryGetValue(run.Request.Parameters, out _);
+            if (run.OwnsAtCore) AtCore.Add(run.Request.Parameters, run.Sdk.Parameters);
+            run.OwnsHeld = CoreHandOff.Hold(run.Request, run.Sdk);
+        }
         if (run.CustomAction) return;
         var request = run.Sdk;
         var caller = run.Invocation.Caller;
@@ -341,7 +363,20 @@ public sealed partial class PipelineExecutor
         // never hold it (an Upsert's inner Create or Update gets the value through PendingMailSecrets.Carry).
         if (run.EntityName is not null && metadata.GetEntity(run.Session, run.EntityName) is { } mailTable)
             PendingMailSecrets.StripRequest(request, mailTable);
+        if (onModel && crosses) run.Mirror.In(run.Sdk);
     }
+
+    /// <summary>
+    /// True for a table whose internal checks of stage 20 may write the request (<see cref="HoldAtCoreAsync"/>): the custom API tables
+    /// (<see cref="AuthorCustomApiAsync"/>), the registration entities (<see cref="ValidateRegistrationAsync"/>), <c>workflow</c> and
+    /// <c>processtrigger</c> (<see cref="CheckWorkflowWriteAsync"/>), <c>serviceendpoint</c> (<see cref="AuthorServiceEndpointAsync"/>)
+    /// and a table with mail secret columns (<see cref="PendingMailSecrets.StripRequest"/>). The other checks only read the request.
+    /// </summary>
+    private static bool HoldChecksMayWrite(string? entityName) =>
+        entityName is not null
+        && (CustomApiTables.All.Contains(entityName) || StepRegistry.RegistrationEntities.Contains(entityName)
+            || entityName is WorkflowSchema.Table or WorkflowSchema.TriggerTable or ServiceEndpointSchema.Table
+            || MailSchema.SecretColumns.Keys.Any(k => k.StartsWith(entityName + ".", StringComparison.Ordinal)));
 
     /// <summary>
     /// The end of the boundary, after stage 30 and its follow-ups (also when they failed): the model reads the SDK request back once.
@@ -435,6 +470,7 @@ public sealed partial class PipelineExecutor
         var invocation = run.Invocation;
         var shell = await core.ExecuteCoreAsync(run.Request,
             new CoreCall(invocation.Caller, run.Session, (nested, c) => CoreNestedAsync(nested, run, c), invocation.ServerSetValues), ct);
+        run.CoreResponse = shell;
         return run.Mirror.TryGetSdk(shell, out var twin) && twin is OrganizationResponse response
             ? response
             : run.Mirror.Out(shell)!; // a core that answers with a model response of its own
@@ -452,6 +488,8 @@ public sealed partial class PipelineExecutor
     {
         var mirror = run.Mirror;
         var request = mirror.TryGetSdk(nested, out var twin) && twin is OrganizationRequest held ? held : mirror.Out(nested)!;
+        // S.2e3b (Decision 6): the guard reads the cascade mark on the SDK request until S.2e3c; the core's model mark goes onto the twin.
+        if (CascadeHint.IsMarked(nested)) CascadeHint.Mark(request);
         var response = await ExecuteAsync(request,
             run.Invocation with
             {
@@ -505,7 +543,12 @@ public sealed partial class PipelineExecutor
         var context = run.Context;
         if (run.Observed || context.OutputParameters.Count > 0)
         {
-            run.ModelResponse = run.Mirror.In(response)!;
+            // S.2e3b (Decision 7): a CRUD response is the core's model response, already written into its typed twin (an ordinary twin,
+            // current): it is not read back. Any other core response is an unread shell, read in here.
+            run.ModelResponse = run.CoreResponse is { } answered && !run.Mirror.IsUnread(answered)
+                                && run.Mirror.TryGetSdk(answered, out var answeredTwin) && ReferenceEquals(answeredTwin, response)
+                ? answered
+                : run.Mirror.In(response)!;
             foreach (var (key, value) in run.ModelResponse.Results)
                 context.OutputParameters[run.MapsOutput ? PluginOutputKeys.GetValueOrDefault(key, key) : key] = value;
             if (run.Api is not null) CompleteCustomApi(run, dropped);
@@ -1054,6 +1097,18 @@ internal static class CoreHandOff
     /// Test seam: called by the core's entry adapter with the SDK request its handler runs on (early-bound identity tests).
     /// </summary>
     internal static readonly AsyncLocal<Action<OrganizationRequest>?> HandlerRequest = new();
+
+    /// <summary>
+    /// The eight CRUD messages (Create, Retrieve, Update, Delete, RetrieveMultiple, Assign, Associate, Disassociate; any case, as the
+    /// step registry matches names), which the core answers on the model request (S.2e3b, Decision 8): the pipeline holds no window for
+    /// them and the adapter's <see cref="HandlerRequest"/> seam never fires for them. The core's own list is <c>CoreResponses.IsCrud</c>.
+    /// </summary>
+    internal static bool IsModelMessage(string? message) => message is not null && ModelMessages.Contains(message);
+
+    private static readonly HashSet<string> ModelMessages = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Create", "Retrieve", "Update", "Delete", "RetrieveMultiple", "Assign", "Associate", "Disassociate",
+    };
 
     /// <summary>Test seam: called by the core's entry adapter with each image it read and the model record it converted it into.</summary>
     internal static readonly AsyncLocal<Action<Entity, Record>?> ImageRead = new();

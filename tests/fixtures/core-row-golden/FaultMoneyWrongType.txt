@@ -1,0 +1,20 @@
+=== PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(new_crrtypes)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[2]
+        new_name: String:"crr-fault-money"
+        new_amount: Decimal:12.5
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- response ---
+Fault: XrmdFaultException 0x80040203 400 "Attribute 'new_amount' of entity 'new_crrtypes' expects a value of type Money, got Decimal."
+--- rows ---
+SELECT COUNT(*) FROM data.new_crrtypes WHERE new_name = 'crr-fault-money': 0

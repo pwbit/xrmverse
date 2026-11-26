@@ -1,0 +1,92 @@
+=== values ===
+--- EntityRowMapper.ToParameters ---
+@new_rowtypesid DbType=Guid Size=0 Precision=0 Scale=0 Direction=Input Value=Guid:a0a0a0a0-0000-4000-8000-000000000005
+@new_name DbType=String Size=-1 Precision=0 Scale=0 Direction=Input Value=String:"row golden"
+@new_memo DbType=String Size=-1 Precision=0 Scale=0 Direction=Input Value=String:"line one\nline two"
+@new_int DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=Int32:42
+@new_big DbType=Int64 Size=0 Precision=0 Scale=0 Direction=Input Value=Int64:9000000000
+@new_decimal DbType=Decimal Size=0 Precision=0 Scale=0 Direction=Input Value=Decimal:12.3456
+@new_double DbType=Double Size=0 Precision=0 Scale=0 Direction=Input Value=Double:0.125
+@new_amount DbType=Decimal Size=0 Precision=0 Scale=0 Direction=Input Value=Decimal:1234.5
+@new_flag DbType=Boolean Size=0 Precision=0 Scale=0 Direction=Input Value=Boolean:True
+@new_whenutc DbType=DateTime2 Size=0 Precision=0 Scale=0 Direction=Input Value=DateTime:2015-03-04T05:06:07.1230000Z Utc
+@new_whenlocal DbType=DateTime2 Size=0 Precision=0 Scale=0 Direction=Input Value=DateTime:2015-03-04T05:06:07.1230000Z Utc
+@new_whenunspecified DbType=DateTime2 Size=0 Precision=0 Scale=0 Direction=Input Value=DateTime:2015-03-04T05:06:07.1230000Z Utc
+@new_choice DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=Int32:100000001
+@statecode DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=Int32:1
+@statuscode DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=Int32:2
+@new_choices DbType=String Size=-1 Precision=0 Scale=0 Direction=Input Value=String:"3,1"
+@new_accountid DbType=Guid Size=0 Precision=0 Scale=0 Direction=Input Value=Guid:a0a0a0a0-0000-4000-8000-000000000001
+@new_customerid DbType=Guid Size=0 Precision=0 Scale=0 Direction=Input Value=Guid:a0a0a0a0-0000-4000-8000-000000000002
+@new_customeridtype DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=Int32:2
+@new_tablename DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=Int32:2
+@new_doc DbType=Guid Size=0 Precision=0 Scale=0 Direction=Input Value=Guid:a0a0a0a0-0000-4000-8000-000000000003
+@new_pic DbType=Binary Size=-1 Precision=0 Scale=0 Direction=Input Value=Byte[]:[80] sha256:C56705FEA5B110B8DC63688533CED21167E628017387C885423B835A55EDD5EF
+--- SqlCommand.Parameters ---
+@new_rowtypesid DbType=Guid Size=0 Precision=0 Scale=0 Direction=Input Value=Guid:a0a0a0a0-0000-4000-8000-000000000005 SqlDbType=UniqueIdentifier
+@new_name DbType=String Size=-1 Precision=0 Scale=0 Direction=Input Value=String:"row golden" SqlDbType=NVarChar
+@new_memo DbType=String Size=-1 Precision=0 Scale=0 Direction=Input Value=String:"line one\nline two" SqlDbType=NVarChar
+@new_int DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=Int32:42 SqlDbType=Int
+@new_big DbType=Int64 Size=0 Precision=0 Scale=0 Direction=Input Value=Int64:9000000000 SqlDbType=BigInt
+@new_decimal DbType=Decimal Size=0 Precision=6 Scale=4 Direction=Input Value=Decimal:12.3456 SqlDbType=Decimal
+@new_double DbType=Double Size=0 Precision=0 Scale=0 Direction=Input Value=Double:0.125 SqlDbType=Float
+@new_amount DbType=Decimal Size=0 Precision=5 Scale=1 Direction=Input Value=Decimal:1234.5 SqlDbType=Decimal
+@new_flag DbType=Boolean Size=0 Precision=0 Scale=0 Direction=Input Value=Boolean:True SqlDbType=Bit
+@new_whenutc DbType=DateTime2 Size=0 Precision=0 Scale=0 Direction=Input Value=DateTime:2015-03-04T05:06:07.1230000Z Utc SqlDbType=DateTime2
+@new_whenlocal DbType=DateTime2 Size=0 Precision=0 Scale=0 Direction=Input Value=DateTime:2015-03-04T05:06:07.1230000Z Utc SqlDbType=DateTime2
+@new_whenunspecified DbType=DateTime2 Size=0 Precision=0 Scale=0 Direction=Input Value=DateTime:2015-03-04T05:06:07.1230000Z Utc SqlDbType=DateTime2
+@new_choice DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=Int32:100000001 SqlDbType=Int
+@statecode DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=Int32:1 SqlDbType=Int
+@statuscode DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=Int32:2 SqlDbType=Int
+@new_choices DbType=String Size=-1 Precision=0 Scale=0 Direction=Input Value=String:"3,1" SqlDbType=NVarChar
+@new_accountid DbType=Guid Size=0 Precision=0 Scale=0 Direction=Input Value=Guid:a0a0a0a0-0000-4000-8000-000000000001 SqlDbType=UniqueIdentifier
+@new_customerid DbType=Guid Size=0 Precision=0 Scale=0 Direction=Input Value=Guid:a0a0a0a0-0000-4000-8000-000000000002 SqlDbType=UniqueIdentifier
+@new_customeridtype DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=Int32:2 SqlDbType=Int
+@new_tablename DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=Int32:2 SqlDbType=Int
+@new_doc DbType=Guid Size=0 Precision=0 Scale=0 Direction=Input Value=Guid:a0a0a0a0-0000-4000-8000-000000000003 SqlDbType=UniqueIdentifier
+@new_pic DbType=Binary Size=-1 Precision=0 Scale=0 Direction=Input Value=Byte[]:[80] sha256:C56705FEA5B110B8DC63688533CED21167E628017387C885423B835A55EDD5EF SqlDbType=VarBinary
+=== nulls ===
+--- EntityRowMapper.ToParameters ---
+@new_rowtypesid DbType=Guid Size=0 Precision=0 Scale=0 Direction=Input Value=Guid:a0a0a0a0-0000-4000-8000-000000000004
+@new_name DbType=String Size=-1 Precision=0 Scale=0 Direction=Input Value=DBNull
+@new_memo DbType=String Size=-1 Precision=0 Scale=0 Direction=Input Value=DBNull
+@new_int DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull
+@new_big DbType=Int64 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull
+@new_decimal DbType=Decimal Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull
+@new_double DbType=Double Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull
+@new_amount DbType=Decimal Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull
+@new_flag DbType=Boolean Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull
+@new_whenutc DbType=DateTime2 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull
+@new_whenlocal DbType=DateTime2 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull
+@new_whenunspecified DbType=DateTime2 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull
+@new_choice DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull
+@statecode DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull
+@statuscode DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull
+@new_choices DbType=String Size=-1 Precision=0 Scale=0 Direction=Input Value=DBNull
+@new_accountid DbType=Guid Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull
+@new_customerid DbType=Guid Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull
+@new_customeridtype DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull
+@new_doc DbType=Guid Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull
+@new_pic DbType=Binary Size=-1 Precision=0 Scale=0 Direction=Input Value=DBNull
+--- SqlCommand.Parameters ---
+@new_rowtypesid DbType=Guid Size=0 Precision=0 Scale=0 Direction=Input Value=Guid:a0a0a0a0-0000-4000-8000-000000000004 SqlDbType=UniqueIdentifier
+@new_name DbType=String Size=-1 Precision=0 Scale=0 Direction=Input Value=DBNull SqlDbType=NVarChar
+@new_memo DbType=String Size=-1 Precision=0 Scale=0 Direction=Input Value=DBNull SqlDbType=NVarChar
+@new_int DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull SqlDbType=Int
+@new_big DbType=Int64 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull SqlDbType=BigInt
+@new_decimal DbType=Decimal Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull SqlDbType=Decimal
+@new_double DbType=Double Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull SqlDbType=Float
+@new_amount DbType=Decimal Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull SqlDbType=Decimal
+@new_flag DbType=Boolean Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull SqlDbType=Bit
+@new_whenutc DbType=DateTime2 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull SqlDbType=DateTime2
+@new_whenlocal DbType=DateTime2 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull SqlDbType=DateTime2
+@new_whenunspecified DbType=DateTime2 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull SqlDbType=DateTime2
+@new_choice DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull SqlDbType=Int
+@statecode DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull SqlDbType=Int
+@statuscode DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull SqlDbType=Int
+@new_choices DbType=String Size=-1 Precision=0 Scale=0 Direction=Input Value=DBNull SqlDbType=NVarChar
+@new_accountid DbType=Guid Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull SqlDbType=UniqueIdentifier
+@new_customerid DbType=Guid Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull SqlDbType=UniqueIdentifier
+@new_customeridtype DbType=Int32 Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull SqlDbType=Int
+@new_doc DbType=Guid Size=0 Precision=0 Scale=0 Direction=Input Value=DBNull SqlDbType=UniqueIdentifier
+@new_pic DbType=Binary Size=-1 Precision=0 Scale=0 Direction=Input Value=DBNull SqlDbType=VarBinary

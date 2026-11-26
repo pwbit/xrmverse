@@ -2,6 +2,7 @@ using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
+using Xrmd.Model.Metadata;
 using Xrmd.Model.Query;
 using Xrmd.Query.Model;
 
@@ -85,13 +86,16 @@ public readonly record struct ElasticRecordKey(Guid Id, string? PartitionId)
         return From(m, target.Id, target.KeyAttributes, request);
     }
 
-    /// <summary>The conditions that find the row: <c>{primary id} = Id</c> and <c>partitionid = PartitionId</c> (or null).</summary>
-    public ConditionNode[] Conditions(EntityMetadata m)
+    /// <summary>
+    /// The conditions that find the row: <c>{primary id} = Id</c> and <c>partitionid = PartitionId</c> (or null). On the model
+    /// (S.2e3b: the read path).
+    /// </summary>
+    public ConditionNode[] Conditions(TableDefinition table)
     {
-        ArgumentNullException.ThrowIfNull(m);
+        ArgumentNullException.ThrowIfNull(table);
         return
         [
-            new ConditionNode(null, SystemAttributes.PrimaryIdName(m), FilterOperator.Equal, [Id]),
+            new ConditionNode(null, SystemAttributes.PrimaryIdName(table), FilterOperator.Equal, [Id]),
             PartitionId is null
                 ? new ConditionNode(null, ElasticTables.PartitionId, FilterOperator.Null, [])
                 : new ConditionNode(null, ElasticTables.PartitionId, FilterOperator.Equal, [PartitionId]),

@@ -1,0 +1,50 @@
+=== PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: UpdateRequest
+  RequestName: String:"Update"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(account)
+      Id: Guid:{a:account}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[1]
+        statecode: OptionSetValue
+          Value: Int32:1
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.UpdateResponse
+ResponseName: String:"Update"
+Results: ParameterCollection[0]
+--- rows ---
+data.account where accountid = {a:account}: 1 row(s)
+  [0]
+    accountid: Guid:{a:account}
+    accountnumber: null
+    address1_city: null
+    address1_country: null
+    address1_line1: null
+    address1_postalcode: null
+    createdby: Guid:{user}
+    createdon: DateTime:{date}
+    emailaddress1: null
+    exchangerate: Decimal:1.0000000000
+    modifiedby: Guid:{user}
+    modifiedon: DateTime:{date}
+    name: String:"crr state"
+    overriddencreatedon: null
+    ownerid: Guid:{user}
+    owneridtype: Int32:8
+    owningbusinessunit: Guid:{businessunit}
+    owningteam: null
+    owninguser: Guid:{user}
+    parentaccountid: null
+    primarycontactid: null
+    statecode: Int32:1
+    statuscode: Int32:2
+    telephone1: null
+    transactioncurrencyid: Guid:{a:basecurrency}
+    versionnumber: {rowversion}
+    websiteurl: null

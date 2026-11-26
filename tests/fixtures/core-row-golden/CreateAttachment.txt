@@ -1,0 +1,126 @@
+=== PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(activitymimeattachment)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[5]
+        objectid: EntityReference
+          LogicalName: String:"email"
+          Id: Guid:{a:email}
+          Name: null
+          KeyAttributes: KeyAttributeCollection[0]
+          RowVersion: null
+        subject: String:"crr attachment"
+        filename: String:"crr.txt"
+        mimetype: String:"text/plain"
+        body: String:"Y3JyIGF0dGFjaG1lbnQgYm9keQ=="
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.CreateResponse
+ResponseName: String:"Create"
+Results: ParameterCollection[1]
+  id: Guid:{a:created}
+--- rows ---
+data.activitymimeattachment where activitymimeattachmentid = {a:created}: 1 row(s)
+  [0]
+    activitymimeattachmentid: Guid:{a:created}
+    attachmentnumber: Int32:1
+    createdby: Guid:{user}
+    createdon: DateTime:{date}
+    filename: String:"crr.txt"
+    filesize: Int32:19
+    mimetype: String:"text/plain"
+    modifiedby: Guid:{user}
+    modifiedon: DateTime:{date}
+    objectid: Guid:{a:email}
+    objectidtype: Int32:4202
+    overriddencreatedon: null
+    owningbusinessunit: Guid:{businessunit}
+    owningteam: null
+    owninguser: null
+    statecode: Int32:0
+    statuscode: Int32:1
+    subject: String:"crr attachment"
+    versionnumber: {rowversion}
+data.fileattachment where objectid = {a:created}: 1 row(s)
+  [0]
+    createdby: null
+    createdon: DateTime:{date}
+    fileattachmentid: Guid:{id1}
+    filename: String:"crr.txt"
+    filesizeinbytes: Int64:19
+    mimetype: String:"text/plain"
+    modifiedby: null
+    modifiedon: DateTime:{date}
+    objectid: Guid:{a:created}
+    objectidtype: Int32:1001
+    objecttypecode: String:"activitymimeattachment"
+    overriddencreatedon: null
+    owningbusinessunit: null
+    owningteam: null
+    owninguser: null
+    regardingfieldname: String:"body"
+    statecode: Int32:0
+    statuscode: Int32:1
+    versionnumber: {rowversion}
+file store blobs of the fileattachment rows: 1
+  Byte[]:637272206174746163686D656E7420626F6479
+data.email where activityid = {a:email}: 1 row(s)
+  [0]
+    activityid: Guid:{a:email}
+    activitytypecode: Int32:4202
+    actualdurationminutes: null
+    actualend: null
+    actualstart: null
+    attachmentcount: Int32:1
+    conversationindex: null
+    correlatedsubjectchanged: null
+    correlationmethod: null
+    createdby: Guid:{user}
+    createdon: DateTime:{date}
+    deliveryattempts: null
+    deliveryprioritycode: null
+    description: null
+    directioncode: null
+    emailsender: null
+    emailsendertype: null
+    exchangerate: Decimal:1.0000000000
+    followemailuserpreference: null
+    inreplyto: null
+    isbilled: null
+    isduplicatesenderunresolved: null
+    isregularactivity: null
+    isworkflowcreated: null
+    messageid: null
+    modifiedby: Guid:{user}
+    modifiedon: DateTime:{date}
+    notifications: null
+    overriddencreatedon: null
+    ownerid: Guid:{user}
+    owneridtype: Int32:8
+    owningbusinessunit: Guid:{businessunit}
+    owningteam: null
+    owninguser: Guid:{user}
+    parentactivityid: null
+    prioritycode: null
+    regardingobjectid: null
+    regardingobjectidtype: null
+    scheduleddurationminutes: null
+    scheduledend: null
+    scheduledstart: null
+    sender: null
+    senton: null
+    statecode: Int32:0
+    statuscode: Int32:1
+    subject: String:"crr email"
+    torecipients: null
+    trackingtoken: null
+    transactioncurrencyid: Guid:{a:basecurrency}
+    versionnumber: {rowversion}

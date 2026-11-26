@@ -1,0 +1,80 @@
+=== CoreOperations.CreateAsync in a MigrationScope ===
+--- request ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(account)
+      Id: Guid:{a:migrated}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[9]
+        name: String:"crr migrated"
+        createdon: DateTime:2015-03-04T05:06:07.0000000Z
+        modifiedon: DateTime:2015-03-05T05:06:07.0000000Z
+        createdby: EntityReference
+          LogicalName: String:"systemuser"
+          Id: Guid:{a:migrateduser}
+          Name: null
+          KeyAttributes: KeyAttributeCollection[0]
+          RowVersion: null
+        modifiedby: EntityReference
+          LogicalName: String:"systemuser"
+          Id: Guid:{a:migrateduser}
+          Name: null
+          KeyAttributes: KeyAttributeCollection[0]
+          RowVersion: null
+        ownerid: EntityReference
+          LogicalName: String:"systemuser"
+          Id: Guid:{a:migrateduser}
+          Name: null
+          KeyAttributes: KeyAttributeCollection[0]
+          RowVersion: null
+        owningbusinessunit: EntityReference
+          LogicalName: String:"businessunit"
+          Id: Guid:{businessunit}
+          Name: null
+          KeyAttributes: KeyAttributeCollection[0]
+          RowVersion: null
+        statecode: OptionSetValue
+          Value: Int32:1
+        statuscode: OptionSetValue
+          Value: Int32:2
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.CreateResponse
+ResponseName: null
+Results: ParameterCollection[1]
+  id: Guid:{a:migrated}
+--- rows ---
+data.account where accountid = {a:migrated}: 1 row(s)
+  [0]
+    accountid: Guid:{a:migrated}
+    accountnumber: null
+    address1_city: null
+    address1_country: null
+    address1_line1: null
+    address1_postalcode: null
+    createdby: Guid:{a:migrateduser}
+    createdon: DateTime:2015-03-04T05:06:07.0000000
+    emailaddress1: null
+    exchangerate: Decimal:1.0000000000
+    modifiedby: Guid:{a:migrateduser}
+    modifiedon: DateTime:2015-03-05T05:06:07.0000000
+    name: String:"crr migrated"
+    overriddencreatedon: null
+    ownerid: Guid:{a:migrateduser}
+    owneridtype: Int32:8
+    owningbusinessunit: Guid:{businessunit}
+    owningteam: null
+    owninguser: Guid:{a:migrateduser}
+    parentaccountid: null
+    primarycontactid: null
+    statecode: Int32:1
+    statuscode: Int32:2
+    telephone1: null
+    transactioncurrencyid: Guid:{a:basecurrency}
+    versionnumber: {rowversion}
+    websiteurl: null

@@ -1,11 +1,10 @@
 using System.Data;
 using System.Data.Common;
-using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Abstractions;
 using Xrmd.Metadata;
-using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Metadata;
 
 namespace Xrmd.Core;
 
@@ -13,7 +12,8 @@ namespace Xrmd.Core;
 /// The <c>activitypointer</c> row of an activity (plan 2.11, ruling A1, decision D1): one row per activity with the activity's
 /// <c>activityid</c>, holding the common columns of the stored activity row and <c>activitytypecode</c>. The Core writes it in the
 /// session of every Create, Update (SetState and Assign included) and Delete of an activity, after the activity row and before
-/// the post-operation stage, so that a rollback undoes both. It is not a message: no plug-in step and no audit row (A21).
+/// the post-operation stage, so that a rollback undoes both. It is not a message: no plug-in step and no audit row (A21). On the
+/// model since S.2e3b.
 /// </summary>
 public sealed class ActivityPointerSync(IMetadataStore store)
 {
@@ -32,11 +32,11 @@ public sealed class ActivityPointerSync(IMetadataStore store)
     /// </summary>
     /// <remarks>Ruling Y1, from memory: checklist (what Dataverse's pointer holds for a subject longer than its own length).</remarks>
     /// <exception cref="XrmdFaultException">DuplicateRecord (412) on Create when a pointer row with <paramref name="id"/> exists.</exception>
-    public async Task WriteAsync(DataSession s, EntityMetadata activity, Guid id, bool isCreate, CancellationToken ct)
+    public async Task WriteAsync(DataSession s, TableDefinition activity, Guid id, bool isCreate, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(s);
         ArgumentNullException.ThrowIfNull(activity);
-        var pointer = store.GetEntity(ActivitySchema.Pointer)
+        var pointer = store.GetTable(ActivitySchema.Pointer)
                       ?? throw new InvalidOperationException($"The {ActivitySchema.Pointer} table has not been seeded.");
         var activityColumns = ColumnsOf(activity);
         var columns = new List<(string Name, string Source)>();
@@ -50,7 +50,7 @@ public sealed class ActivityPointerSync(IMetadataStore store)
         var all = columns.Select(c => c.Name).Prepend(ActivitySchema.ActivityTypeCode).ToList();
         var select = $"""
             SELECT a.{s.Quote(ActivitySchema.ActivityId)}, @_otc AS {s.Quote(ActivitySchema.ActivityTypeCode)}{string.Concat(columns.Select(c => $", {c.Source} AS {s.Quote(c.Name)}"))}
-                   FROM {s.DataTable(activity.LogicalName)} a WHERE a.{s.Quote(ActivitySchema.ActivityId)} = {IdParameter}
+                   FROM {s.DataTable(activity.LogicalName!)} a WHERE a.{s.Quote(ActivitySchema.ActivityId)} = {IdParameter}
             """;
         var sql = isCreate
             ? $"""
@@ -85,9 +85,9 @@ public sealed class ActivityPointerSync(IMetadataStore store)
     }
 
     /// <summary>The SQL columns of a table, each with the attribute that owns it.</summary>
-    private static Dictionary<string, AttributeMetadata> ColumnsOf(EntityMetadata e)
+    private static Dictionary<string, ColumnDefinition> ColumnsOf(TableDefinition e)
     {
-        var result = new Dictionary<string, AttributeMetadata>(StringComparer.Ordinal);
+        var result = new Dictionary<string, ColumnDefinition>(StringComparer.Ordinal);
         foreach (var a in e.Attributes ?? [])
             foreach (var column in TypeMapping.ToColumns(a))
                 result.TryAdd(column.Name, a);
@@ -99,19 +99,19 @@ public sealed class ActivityPointerSync(IMetadataStore store)
     /// from memory: checklist) and a Memo column such as <c>description</c> (final review M8: the pointer declares 2000, an
     /// email's description is longer; from memory: checklist 1b).
     /// </summary>
-    private static string Truncated(ISqlDialect d, string column, AttributeMetadata pointer, AttributeMetadata source)
+    private static string Truncated(ISqlDialect d, string column, ColumnDefinition pointer, ColumnDefinition source)
     {
         int? max = pointer switch
         {
-            StringAttributeMetadata { MaxLength: { } length } when length <= TypeMapping.MaxNvarcharLength => length,
-            MemoAttributeMetadata { MaxLength: { } length } => length,
+            TextColumn { MaxLength: { } length } when length <= TypeMapping.MaxNvarcharLength => length,
+            MemoColumn { MaxLength: { } length } => length,
             _ => null,
         };
         if (max is not { } limit) return $"a.{d.Quote(column)}";
         var longer = source switch
         {
-            StringAttributeMetadata s => s.MaxLength is not { } length || length > limit,
-            MemoAttributeMetadata m => m.MaxLength is not { } length || length > limit,
+            TextColumn s => s.MaxLength is not { } length || length > limit,
+            MemoColumn m => m.MaxLength is not { } length || length > limit,
             _ => false,
         };
         return longer ? $"LEFT(a.{d.Quote(column)}, {limit})" : $"a.{d.Quote(column)}";

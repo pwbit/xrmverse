@@ -1,0 +1,27 @@
+=== PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: DeleteRequest
+  RequestName: String:"Delete"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: EntityReference
+      LogicalName: String:"email"
+      Id: Guid:{a:email}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.DeleteResponse
+ResponseName: String:"Delete"
+Results: ParameterCollection[0]
+--- rows ---
+data.email where activityid = {a:email}: 0 row(s)
+data.activitypointer where activityid = {a:email}: 0 row(s)
+data.activityparty where activityid = {a:email}: 0 row(s)
+data.activitymimeattachment where objectid = {a:email}: 0 row(s)
+data.fileattachment where objectid = {a:attachment1}: 0 row(s)
+file store blobs of the fileattachment rows: 0
+file store blob {a:attachment1-file}: none
+data.fileattachment where objectid = {a:attachment2}: 0 row(s)
+file store blobs of the fileattachment rows: 0
+file store blob {a:attachment2-file}: none

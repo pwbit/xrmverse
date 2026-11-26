@@ -1,0 +1,21 @@
+=== PipelineExecutor.ExecuteAsync ===
+--- request ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    SuppressDuplicateDetection: Boolean:False
+    Target: Entity(contact)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[2]
+        lastname: String:"crr-duplicate"
+        emailaddress1: String:"crr.duplicate@example.com"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- response ---
+Fault: XrmdFaultException 0x80040333 412 "A duplicate record was found: a published duplicate detection rule matches an existing record. Change the values or suppress duplicate detection."
+--- rows ---
+SELECT COUNT(*) FROM data.contact WHERE lastname = 'crr-duplicate': 1
