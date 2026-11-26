@@ -24,7 +24,7 @@ server.
 
 | Trigger | Request |
 | --- | --- |
-| When a row changes (`OnRowChanged`) | `POST /api/connector/v1/subscriptions` with `{ table, changes, filteringColumns, callbackUrl }`: answered 201 with a `Location` header and `{ id }`; the platform fills `callbackUrl` in |
+| When a row is created, updated or deleted (`OnRowChanged`) | `POST /api/connector/v1/subscriptions` with `{ table, changes, filteringColumns, callbackUrl }`: answered 201 with a `Location` header and `{ id }`; the platform fills `callbackUrl` in |
 
 The platform removes the subscription when the flow is turned off or deleted, with the hidden operation `DeleteSubscription`
 (`DELETE /api/connector/v1/subscriptions/{id}`, 204). `changes` is a comma-separated subset of `create`, `update` and `delete`.

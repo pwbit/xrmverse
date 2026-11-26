@@ -668,9 +668,62 @@
       }
     },
     "/api/connector/v1/subscriptions": {
+      "x-ms-notification-content": {
+        "description": "The change that happened.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "change": {
+              "type": "string",
+              "enum": [
+                "create",
+                "update",
+                "delete"
+              ],
+              "x-ms-summary": "Change",
+              "description": "The kind of change: create, update or delete."
+            },
+            "table": {
+              "type": "string",
+              "x-ms-summary": "Table",
+              "description": "The logical name of the table."
+            },
+            "id": {
+              "type": "string",
+              "x-ms-summary": "Row ID",
+              "description": "The ID of the row."
+            },
+            "row": {
+              "type": "object",
+              "x-ms-summary": "Row",
+              "description": "The row as the signed-in user of the trigger reads it. Absent for a delete.",
+              "x-ms-dynamic-schema": {
+                "operationId": "GetTableSchema",
+                "parameters": {
+                  "name": {
+                    "parameter": "table"
+                  },
+                  "use": "read"
+                }
+              },
+              "x-ms-dynamic-properties": {
+                "operationId": "GetTableSchema",
+                "parameters": {
+                  "name": {
+                    "parameterReference": "subscription/table"
+                  },
+                  "use": {
+                    "value": "read"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       "post": {
         "operationId": "OnRowChanged",
-        "summary": "When a row changes",
+        "summary": "When a row is created, updated or deleted",
         "description": "Starts the flow when a row of the chosen table is created, updated or deleted. The server calls the flow once for each change, after the change is saved.",
         "x-ms-visibility": "important",
         "x-ms-trigger": "single",
@@ -780,48 +833,6 @@
                 "id": {
                   "type": "string",
                   "description": "The ID of the subscription."
-                }
-              }
-            }
-          }
-        },
-        "x-ms-notification-content": {
-          "description": "The change that happened.",
-          "schema": {
-            "type": "object",
-            "properties": {
-              "change": {
-                "type": "string",
-                "enum": [
-                  "create",
-                  "update",
-                  "delete"
-                ],
-                "x-ms-summary": "Change",
-                "description": "The kind of change: create, update or delete."
-              },
-              "table": {
-                "type": "string",
-                "x-ms-summary": "Table",
-                "description": "The logical name of the table."
-              },
-              "id": {
-                "type": "string",
-                "x-ms-summary": "Row ID",
-                "description": "The ID of the row."
-              },
-              "row": {
-                "type": "object",
-                "x-ms-summary": "Row",
-                "description": "The row as the signed-in user of the trigger reads it. Absent for a delete.",
-                "x-ms-dynamic-schema": {
-                  "operationId": "GetTableSchema",
-                  "parameters": {
-                    "name": {
-                      "parameter": "table"
-                    },
-                    "use": "read"
-                  }
                 }
               }
             }

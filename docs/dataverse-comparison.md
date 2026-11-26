@@ -102,7 +102,7 @@ These Dataverse and Power Platform features are not offered:
 
 | Area | Not offered |
 |---|---|
-| Automation | Power Automate and the Dataverse connector (xrmverse has its own [cloud flow connector](flow-connector.md): actions and the trigger *When a row changes*) |
+| Automation | Power Automate and the Dataverse connector (xrmverse has its own [cloud flow connector](flow-connector.md): actions and the trigger *When a row is created, updated or deleted*) |
 | Apps | Canvas apps and custom pages, Business Process Flows, editable grids, the offline mobile app, Power Pages |
 | AI | Copilot and AI Builder in Power Apps |
 | Data | Virtual tables, Dataverse search (relevance search, vector search) |

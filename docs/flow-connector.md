@@ -16,7 +16,7 @@ the Dataverse connector cannot be pointed at another server.
 Row actions call the same Web API as every other client. A row written by a flow therefore runs plug-ins, workflows,
 auditing and security exactly as any other write, and the flow acts as the signed-in user of the connection.
 
-The trigger **When a row changes** starts a flow when a row of a table is created, updated or deleted: the server calls the flow
+The trigger **When a row is created, updated or deleted** starts a flow on those changes to the rows of a table: the server calls the flow
 after the change is saved (see [The trigger](#the-trigger)).
 
 ### Compared with Dataverse
@@ -25,7 +25,7 @@ after the change is saved (see [The trigger](#the-trigger)).
 |---|---|---|
 | Connector | Own custom connector named `xrmverse`, imported once per organization | **Differs**: Dataverse has a ready-made connector in the gallery; xrmverse's is not in the public gallery |
 | Actions | List rows, get a row, add a row, update a row, delete a row, run a custom API | **Narrower**: no bound actions, batch, relevance search, changesets, associate/disassociate, file and image transfer |
-| Trigger | When a row changes: create, update or delete of a row of one table, delivered by the server calling the flow | **Narrower**: no trigger on elastic tables, no scope or organization/business-unit filter, no filter expression, no "run as" choice (the flow acts as the user who made the flow) |
+| Trigger | When a row is created, updated or deleted: create, update or delete of a row of one table, delivered by the server calling the flow | **Narrower**: no trigger on elastic tables, no scope or organization/business-unit filter, no filter expression, no "run as" choice (the flow acts as the user who made the flow) |
 | Tables and columns | Picked from the organization at design time, including custom ones | Same idea |
 | Sign-in | OAuth 2.0 with Microsoft Entra ID, as the user of the connection | Same security model |
 | Local identity provider | Not supported | **Narrower**: the organization needs Entra ID sign-in |
@@ -54,7 +54,7 @@ Everything outside these rules fails with an explicit error; nothing is silently
 | Import the package | `pac connector create` or the maker portal | [Setting up](#setting-up) |
 | Sign in from a flow | Create a connection | [Setting up](#setting-up) |
 | Read, add, change or delete rows | The row actions | [Actions](#actions) |
-| Start a flow when a row changes | The *When a row changes* trigger | [The trigger](#the-trigger) |
+| Start a flow when a row changes | The *When a row is created, updated or deleted* trigger | [The trigger](#the-trigger) |
 | Run a custom API | The *Run a custom API* action | [Actions](#actions) |
 | See which columns can be written | The column types table | [Column types](#column-types) |
 
@@ -106,8 +106,14 @@ pac connector create --environment <environment id> \
   --secret <client secret>
 ```
 
-Or in the maker portal: **Custom connectors**, **Import an OpenAPI file**, then choose `apiDefinition.swagger.json`. On the security
-step, enter the client secret.
+Or in the maker portal: **Custom connectors**, **New custom connector**, **Import an OpenAPI file**, then choose
+`apiDefinition.swagger.json` (a connector created from blank has no actions and no trigger; paste the file in the Swagger editor to
+fill it). The portal import does not read `apiProperties.json`: on the security step choose OAuth 2.0 with Azure Active Directory and
+enter the client ID, the client secret, `https://login.microsoftonline.com` as the authorization URL and the application ID URI of
+the organization's API app registration as the resource URL.
+
+The package names the tenant `common`. That works only for a client app registered as multitenant: for a single-tenant app (the
+usual case), set the **Tenant ID** on the security step to your tenant's ID, or the sign-in fails.
 
 After the import, open the connector's security settings, copy the **redirect URL** and add it to the app registration of step 1.
 There is one connector import per organization: the host and the OAuth resource are fixed in it.
@@ -149,7 +155,7 @@ rule shows up as the failure of the action with its own message.
 
 ## The trigger
 
-**When a row changes** starts a flow when a row of one table is created, updated or deleted. When you turn the flow on, the
+**When a row is created, updated or deleted** starts a flow on those changes to the rows of one table. When you turn the flow on, the
 connector registers a subscription with the server and gives it the address of the flow; when you turn the flow off or delete it, the
 subscription is removed. The server calls the flow once per change, after the change is saved.
 

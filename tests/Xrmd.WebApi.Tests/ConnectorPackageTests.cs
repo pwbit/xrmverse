@@ -286,7 +286,7 @@ public class ConnectorPackageTests
         path.Should().Be("/api/connector/v1/subscriptions");
         method.Should().Be("post");
         ((string?)trigger["x-ms-trigger"]).Should().Be("single");
-        ((string?)trigger["summary"]).Should().Be("When a row changes");
+        ((string?)trigger["summary"]).Should().Be("When a row is created, updated or deleted");
         ((string?)trigger["x-ms-visibility"]).Should().NotBe("internal");
 
         var body = trigger["parameters"]!.AsArray().Single(p => (string?)p!["in"] == "body")!["schema"]!["properties"]!.AsObject();
@@ -307,13 +307,20 @@ public class ConnectorPackageTests
     [Fact]
     public void Notification_content_has_change_table_id_row()
     {
-        var trigger = Operation("OnRowChanged");
-        var properties = trigger["x-ms-notification-content"]!["schema"]!["properties"]!.AsObject();
+        // The maker portal reads the notification content on the path item, not on the operation (live import, 2026-11-26).
+        var path = Definition()["paths"]!["/api/connector/v1/subscriptions"]!.AsObject();
+        Operation("OnRowChanged").AsObject().ContainsKey("x-ms-notification-content").Should().BeFalse();
+        var properties = path["x-ms-notification-content"]!["schema"]!["properties"]!.AsObject();
         properties.Select(p => p.Key).Should().BeEquivalentTo("change", "table", "id", "row");
         var schema = properties["row"]!["x-ms-dynamic-schema"]!;
         ((string?)schema["operationId"]).Should().Be("GetTableSchema");
         ((string?)schema["parameters"]!["use"]).Should().Be("read");
         ((string?)schema["parameters"]!["name"]!["parameter"]).Should().Be("table");
+        // `table` is a property of the body parameter: the maker portal requires the path-string form as well (live import, 2026-11-26).
+        var dynamic = properties["row"]!["x-ms-dynamic-properties"]!;
+        ((string?)dynamic["operationId"]).Should().Be("GetTableSchema");
+        ((string?)dynamic["parameters"]!["name"]!["parameterReference"]).Should().Be("subscription/table");
+        ((string?)dynamic["parameters"]!["use"]!["value"]).Should().Be("read");
     }
 
     [Fact]

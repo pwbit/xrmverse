@@ -101,7 +101,7 @@ Settings marked "(not in `.env`)" have no `.env` variable of their own.
 
 | `.env` variable | Configuration key | Notes |
 |---|---|---|
-| (not in `.env`) | `Connector:CallbackHosts` | host patterns the address of a flow must match for the trigger *When a row changes* (default `*.logic.azure.com` and `*.environment.api.powerplatform.com`; `*.` matches one or more labels). A list you configure replaces the default. Addresses must be `https` on port 443, with no IP literal and no user info, at most 2048 characters. See [Cloud flow connector](flow-connector.md#the-address-of-the-flow) |
+| (not in `.env`) | `Connector:CallbackHosts` | host patterns the address of a flow must match for the trigger *When a row is created, updated or deleted* (default `*.logic.azure.com` and `*.environment.api.powerplatform.com`; `*.` matches one or more labels). A list you configure replaces the default. Addresses must be `https` on port 443, with no IP literal and no user info, at most 2048 characters. See [Cloud flow connector](flow-connector.md#the-address-of-the-flow) |
 | (not in `.env`) | `Connector:MaxSubscriptionsPerUser` | the most trigger subscriptions one user may hold (default `50`; one more fails with a 429 error, code `0x80090910`) |
 | (not in `.env`) | `Connector:AllowPrivateCallbacks` | tests and development only (default `false`): allows `http`, any port, loopback and private addresses as flow addresses. Leave it off in production |
 
