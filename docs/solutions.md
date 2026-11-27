@@ -661,7 +661,7 @@ git diff
 
 `sync` writes the changed and new files and removes the files of components the solution no longer holds. An empty or new
 folder receives a first copy. Files ending in `_managed.xml`, a `.cdsproj` and everything outside the component folders
-(`Other/`, `Entities/`, `WebResources/`, `Workflows/`, `PluginAssemblies/`, `SdkMessageProcessingSteps/`, `Dashboards/`,
+(`Other/`, `Entities/`, `OptionSets/`, `WebResources/`, `Workflows/`, `PluginAssemblies/`, `SdkMessageProcessingSteps/`, `Dashboards/`,
 `Roles/`, `AppModules/`, `AppModuleSiteMaps/`, `Controls/`, `bots/`, `botcomponents/`, `skills/`, `customapis/`,
 `environmentvariabledefinitions/`, `appactions/`, `Assets/`, matched with this exact case) are left alone, so a `README.md`,
 `.git/` or `.github/` beside `Other/` stays; a folder whose name starts with a dot is skipped inside the component folders
@@ -670,9 +670,11 @@ solution or holds a solution with another unique name. Names that cannot be file
 `?`, a trailing dot or space, device names such as `CON` or `NUL`) are refused before anything is written, so a folder
 stays usable on every system.
 
-`Workflows/` holds the processes that are stored as JSON (cloud flows): each JSON file is copied byte for byte, with its
-definition beside it in `<file>.data.xml`. Classic workflows, business rules, actions and business process flows are refused
-for now (exit 5; see [Known limits](#known-limits)).
+`OptionSets/` holds the global choices of the solution, one `<name>.xml` file each; the name inside the file is what counts, so
+renaming a file by hand does not rename the choice, and the next `sync` writes it back under its own name. `Workflows/` holds cloud flows and
+classic workflows: the definition file of each process (the JSON of a cloud flow, the `.xaml` of a classic workflow) is
+copied byte for byte, with the process record beside it in `<file>.data.xml`. Business rules, business process flows,
+actions and dialogs are refused for now (exit 5; see [Known limits](#known-limits)).
 
 **Moving a repository to xrmverse.** If the folder was created by Dataverse's tools from a Dataverse environment, run
 `xrmd solution sync` once after the first import into xrmverse and commit the result. Until then `diff` reports
@@ -714,8 +716,8 @@ Each of these is refused explicitly (exit 5 or 2) or stated here; [Known issues 
 them with their outlook.
 
 - **Components the layout cannot carry are refused (exit 5)** and the message names the first one: canvas apps,
-  attributes on a table's group of forms (other than its type) or of views, Copilot Studio components the layout has no folder for, `.resx` resources, global choices (option sets),
-  classic workflows and business rules (these three for now), and any other component type that the reference folders
+  attributes on a table's group of forms (other than its type) or of views, Copilot Studio components the layout has no folder for, `.resx` resources, business rules,
+  business process flows, actions and dialogs (these four for now), and any other component type that the reference folders
   of Dataverse's tools hold nothing for. `unpack` and `sync` write nothing in that case; `diff` reports the
   same refusal.
 - **Managed solutions** are not unpacked, packed, compared or synced: a managed zip is refused (exit 2).

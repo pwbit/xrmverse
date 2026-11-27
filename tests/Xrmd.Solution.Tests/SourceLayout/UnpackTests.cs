@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text;
+using System.Xml.Linq;
 using FluentAssertions;
 using Xrmd.Core.Errors;
 using Xrmd.Solution.SourceLayout;
@@ -51,17 +52,73 @@ public class UnpackTests
     [SourceLayoutFact]
     public void Unknown_component_fails_with_its_name()
     {
-        // Global option sets have no place in the reference folders: unpack must refuse them, never drop them.
+        // A part the reference folders hold nothing for has no place in the layout: unpack must refuse it, never drop it.
         var zip = Rewrite(SourceLayoutFixtures.Zip("XrmSharedTest"), "customizations.xml",
-            bytes => Replace(bytes, "<optionsets />",
-                "<optionsets><optionset Name=\"new_colour\" localizedName=\"Colour\"><OptionSetType>picklist</OptionSetType></optionset></optionsets>"));
+            bytes => Replace(bytes, "<EntityDataProviders />",
+                "<EntityDataProviders><EntityDataProvider Name=\"new_provider\"><DataSourceLogicalName>new_source</DataSourceLogicalName></EntityDataProvider></EntityDataProviders>"));
 
         var act = () => SolutionUnpacker.Unpack(zip);
 
         var fault = act.Should().Throw<XrmdFaultException>().Which;
         fault.HttpStatus.Should().Be(400);
         fault.ErrorCode.Should().Be(ErrorCodes.UnsupportedComponent);
-        fault.Message.Should().Contain("optionset").And.Contain("new_colour");
+        fault.Message.Should().Contain("EntityDataProvider").And.Contain("new_provider");
+    }
+
+    [SourceLayoutFact]
+    public void Global_option_set_is_written_to_its_own_file()
+    {
+        var files = SolutionUnpacker.Unpack(SourceLayoutFixtures.Zip("XrmSharedTest"));
+
+        files.Keys.Should().Contain("OptionSets/new_buttamiscelte.xml");
+        var optionSet = XDocument.Load(new MemoryStream(files["OptionSets/new_buttamiscelte.xml"])).Root!;
+        optionSet.Name.LocalName.Should().Be("optionset");
+        optionSet.Attribute("Name")!.Value.Should().Be("new_buttamiscelte");
+        Encoding.UTF8.GetString(files["Other/Customizations.xml"]).Should().Contain("<optionsets />");
+    }
+
+    [SourceLayoutFact]
+    public void Option_set_with_a_name_that_cannot_be_a_file_is_refused()
+    {
+        var zip = Rewrite(SourceLayoutFixtures.Zip("XrmSharedTest"), "customizations.xml",
+            bytes => Replace(bytes, "<optionset Name=\"new_buttamiscelte\"", "<optionset Name=\"CON\""));
+
+        var act = () => SolutionUnpacker.Unpack(zip);
+
+        var fault = act.Should().Throw<XrmdFaultException>().Which;
+        fault.HttpStatus.Should().Be(400);
+        fault.Message.Should().Contain("CON");
+    }
+
+    [SourceLayoutFact]
+    public void Unknown_element_among_the_option_sets_is_refused()
+    {
+        var zip = Rewrite(SourceLayoutFixtures.Zip("XrmSharedTest"), "customizations.xml",
+            bytes => Replace(bytes, "</optionsets>", "<booleanoptionset Name=\"new_flag\" /></optionsets>"));
+
+        var act = () => SolutionUnpacker.Unpack(zip);
+
+        var fault = act.Should().Throw<XrmdFaultException>().Which;
+        fault.ErrorCode.Should().Be(ErrorCodes.UnsupportedComponent);
+        fault.Message.Should().Contain("new_flag");
+    }
+
+    [SourceLayoutFact]
+    public void Classic_workflow_is_written_as_its_xaml_and_data_file()
+    {
+        const string xaml = "Workflows/Buttami-BF5DBD53-E0E9-F111-84EA-7CED8D2D53E4.xaml";
+        var zip = SourceLayoutFixtures.Zip("XrmSharedTest");
+
+        var files = SolutionUnpacker.Unpack(zip);
+
+        using var archive = new ZipArchive(new MemoryStream(zip));
+        using var entry = archive.GetEntry(xaml)!.Open();
+        using var original = new MemoryStream();
+        entry.CopyTo(original);
+        files[xaml].Should().Equal(original.ToArray());
+        var data = XDocument.Load(new MemoryStream(files[xaml + ".data.xml"])).Root!;
+        data.Name.LocalName.Should().Be("Workflow");
+        data.Element("XamlFileName")!.Value.Should().Be("/" + xaml);
     }
 
     [SourceLayoutFact]
@@ -75,19 +132,37 @@ public class UnpackTests
         act.Should().Throw<XrmdFaultException>().Which.Message.Should().Contain("SomethingNew").And.Contain("op365_Project");
     }
 
-    [SourceLayoutFact]
-    public void Classic_workflow_is_refused_with_its_name()
+    [SourceLayoutTheory]
+    [InlineData("<Category>1</Category>")] // dialog
+    [InlineData("<Category>2</Category>")] // business rule
+    [InlineData("<Category>3</Category>")] // action
+    [InlineData("<Category>4</Category>")] // business process flow
+    [InlineData("<Category>6</Category>")] // desktop flow
+    [InlineData("<Category></Category>")]
+    [InlineData("")]
+    public void Process_with_xaml_of_another_category_is_refused_with_its_name(string category)
     {
+        // Only classic workflows (category 0) have a reference folder; every other kind of XAML process is refused.
         var zip = Rewrite(SourceLayoutFixtures.Zip("XrmSharedTest"), "customizations.xml",
-            bytes => Replace(bytes, "<Workflows></Workflows>",
-                "<Workflows><Workflow WorkflowId=\"{11111111-2222-3333-4444-555555555555}\" Name=\"Notify owner\">"
-                + "<XamlFileName>/Workflows/NotifyOwner-11111111-2222-3333-4444-555555555555.xaml</XamlFileName></Workflow></Workflows>"));
+            bytes => Replace(bytes, "<Category>0</Category>", category));
 
         var act = () => SolutionUnpacker.Unpack(zip);
 
         var fault = act.Should().Throw<XrmdFaultException>().Which;
+        fault.HttpStatus.Should().Be(400);
         fault.ErrorCode.Should().Be(ErrorCodes.UnsupportedComponent);
-        fault.Message.Should().Contain("Notify owner");
+        fault.Message.Should().Contain("Buttami");
+    }
+
+    [SourceLayoutFact]
+    public void Process_with_both_xaml_and_json_is_refused_with_its_name()
+    {
+        var zip = Rewrite(SourceLayoutFixtures.Zip("XrmSharedTest"), "customizations.xml",
+            bytes => Replace(bytes, "<Type>1</Type>", "<JsonFileName>/Workflows/Buttami.json</JsonFileName><Type>1</Type>"));
+
+        var act = () => SolutionUnpacker.Unpack(zip);
+
+        act.Should().Throw<XrmdFaultException>().Which.ErrorCode.Should().Be(ErrorCodes.UnsupportedComponent);
     }
 
     [SourceLayoutTheory]

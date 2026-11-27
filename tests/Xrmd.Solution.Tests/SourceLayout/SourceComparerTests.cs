@@ -144,6 +144,40 @@ public class SourceComparerTests
         diff.Items.Single(i => i.Path == controlFolder).Name.Should().Be(controlFolder["Controls/".Length..]);
     }
 
+    private const string Choice = "OptionSets/new_buttamiscelte.xml";
+    private const string WorkflowXaml = "Workflows/Buttami-BF5DBD53-E0E9-F111-84EA-7CED8D2D53E4.xaml";
+
+    [SourceLayoutFact]
+    public void Changed_global_choice_is_one_component()
+    {
+        var folder = Read("XrmSharedTest");
+        var organization = With(folder, files => files[Choice] = EditXml(files[Choice],
+            doc => doc.Descendants("label").First().SetAttributeValue("description", "Uno")));
+
+        SourceComparer.Compare(organization, folder).Items.Should().ContainSingle()
+            .Which.Should().BeEquivalentTo(new ComponentDifference("changed", "choice", "new_buttamiscelte", Choice, [Choice]));
+    }
+
+    [SourceLayoutFact]
+    public void Classic_workflow_is_its_xaml_and_data_file()
+    {
+        var folder = Read("XrmSharedTest");
+        var changed = With(folder, files => files[WorkflowXaml] = EditXml(files[WorkflowXaml],
+            doc => doc.Root!.SetAttributeValue("{http://schemas.microsoft.com/winfx/2006/xaml}Class", "XrmWorkflowEdited")));
+        SourceComparer.Compare(changed, folder).Items.Should().ContainSingle()
+            .Which.Should().BeEquivalentTo(new ComponentDifference("changed", "workflow", "Buttami", WorkflowXaml, [WorkflowXaml]));
+
+        var removed = With(folder, files =>
+        {
+            files.Remove(WorkflowXaml);
+            files.Remove(WorkflowXaml + ".data.xml");
+            files.Remove(Choice);
+        });
+        SourceComparer.Compare(removed, folder).Items.Select(i => (i.Status, i.Type, i.Name, i.Path, string.Join(",", i.Files))).Should().Equal(
+            ("missing", "choice", "new_buttamiscelte", Choice, Choice),
+            ("missing", "workflow", "Buttami", WorkflowXaml, WorkflowXaml + "," + WorkflowXaml + ".data.xml"));
+    }
+
     [SourceLayoutFact]
     public void Binary_compares_by_content()
     {

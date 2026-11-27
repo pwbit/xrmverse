@@ -406,12 +406,12 @@ public sealed class SolutionSourceCommandsTests : IDisposable
             Directory.Exists(Path.Combine(_root, "new")).Should().BeFalse();
         }
 
-        var unsupported = FixtureZipWith("customizations.xml", t => t.Replace("<optionsets />",
-            "<optionsets><optionset Name=\"new_colour\"><OptionSetType>picklist</OptionSetType></optionset></optionsets>", StringComparison.Ordinal));
+        // A business rule (a XAML process of category 2) has no reference folder: refused, never guessed.
+        var unsupported = FixtureZipWith("customizations.xml", t => t.Replace("<Category>0</Category>", "<Category>2</Category>", StringComparison.Ordinal));
         using (var cli = await ServerCliAsync(_ => Export(unsupported)))
         {
             (await cli.RunAsync("solution", "sync", "XrmSharedTest", "--folder", Path.Combine(_root, "new"))).Should().Be(ExitCodes.Rejected);
-            cli.Err.ToString().Should().Contain("new_colour");
+            cli.Err.ToString().Should().Contain("Buttami");
         }
     }
 

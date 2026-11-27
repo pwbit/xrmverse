@@ -27,6 +27,7 @@ public static class SolutionPacker
         RelationshipWriter.Read(context);
         SecurityWriter.Read(context);
         WorkflowWriter.Read(context);
+        OptionSetWriter.Read(context);
         DashboardWriter.Read(context);
         WebResourceWriter.Read(context);
         CustomControlWriter.Read(context);

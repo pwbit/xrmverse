@@ -19,7 +19,7 @@ public class PackTests
     [
         "Entities", "Roles", "Workflows", "FieldSecurityProfiles", "Dashboards", "WebResources", "CustomControls",
         "SolutionPluginAssemblies", "SdkMessageProcessingSteps", "AppModules", "AppModuleSiteMaps", "EntityRelationships",
-        "FormXml", "forms", "savedqueries", "Visualizations", "AppModuleComponents", "MissingDependencies",
+        "FormXml", "forms", "savedqueries", "Visualizations", "AppModuleComponents", "MissingDependencies", "RootComponents", "optionsets",
     ];
 
     [SourceLayoutTheory]
@@ -113,6 +113,59 @@ public class PackTests
         var act = () => SolutionPacker.Pack(files);
 
         act.Should().Throw<XrmdFaultException>().Which.HttpStatus.Should().Be(400);
+    }
+
+    private const string ButtamiXaml = "Workflows/Buttami-BF5DBD53-E0E9-F111-84EA-7CED8D2D53E4.xaml";
+
+    [SourceLayoutFact]
+    public void Option_set_and_classic_workflow_are_packed_into_the_customizations()
+    {
+        var packed = SolutionPacker.Pack(SourceFolder.Read(SourceLayoutFixtures.Folder("XrmSharedTest", 'a')));
+
+        var entries = Entries(packed);
+        entries.Keys.Should().Contain(ButtamiXaml).And.NotContain(ButtamiXaml + ".data.xml").And.NotContain(k => k.StartsWith("OptionSets/", StringComparison.Ordinal));
+        var customizations = XDocument.Load(new MemoryStream(entries[SolutionZip.CustomizationsEntry])).Root!;
+        customizations.Element("optionsets")!.Elements("optionset").Select(o => o.Attribute("Name")!.Value).Should().Equal("new_buttamiscelte");
+        customizations.Element("Workflows")!.Elements("Workflow").Single().Element("XamlFileName")!.Value.Should().Be("/" + ButtamiXaml);
+    }
+
+    [SourceLayoutTheory]
+    [InlineData("<Category>2</Category>")]
+    [InlineData("<Category>4</Category>")]
+    [InlineData("")]
+    public void Xaml_process_of_another_category_is_refused_by_pack(string category)
+    {
+        var files = SourceFolder.Read(SourceLayoutFixtures.Folder("XrmSharedTest", 'a'));
+        var data = Encoding.UTF8.GetString(files[ButtamiXaml + ".data.xml"]).Replace("<Category>0</Category>", category);
+        files = With(Without(files, ButtamiXaml + ".data.xml"), ButtamiXaml + ".data.xml", Encoding.UTF8.GetBytes(data));
+
+        var act = () => SolutionPacker.Pack(files);
+
+        var fault = act.Should().Throw<XrmdFaultException>().Which;
+        fault.HttpStatus.Should().Be(400);
+        fault.ErrorCode.Should().Be(ErrorCodes.UnsupportedComponent);
+        fault.Message.Should().Contain("Buttami");
+    }
+
+    [SourceLayoutFact]
+    public void Workflow_definition_without_its_xaml_fails_with_the_path()
+    {
+        var files = Without(SourceFolder.Read(SourceLayoutFixtures.Folder("XrmSharedTest", 'a')), ButtamiXaml);
+
+        var act = () => SolutionPacker.Pack(files);
+
+        act.Should().Throw<XrmdFaultException>().Which.Message.Should().Contain(ButtamiXaml);
+    }
+
+    [SourceLayoutFact]
+    public void Option_set_file_with_another_root_fails_with_its_path()
+    {
+        const string path = "OptionSets/new_buttamiscelte.xml";
+        var files = With(Without(SourceFolder.Read(SourceLayoutFixtures.Folder("XrmSharedTest", 'a')), path), path, "<optionsets />"u8.ToArray());
+
+        var act = () => SolutionPacker.Pack(files);
+
+        act.Should().Throw<XrmdFaultException>().Which.Message.Should().Contain(path);
     }
 
     private const string PurchasingData = "WebResources/op365_/scripts/purchasing.js.data.xml";

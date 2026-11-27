@@ -24,6 +24,7 @@ public sealed class CliSolutionSourceTests(XrmdFixture fx) : IAsyncLifetime
 {
     private const string Solution = "XrmSharedTest";
     private const string Api = "/api/data/v9.2/";
+    private const string Workflow = "Buttami-BF5DBD53-E0E9-F111-84EA-7CED8D2D53E4.xaml";
 
     private readonly string _root = Path.Combine(Path.GetTempPath(), "xrmd-cli-source-int", Guid.NewGuid().ToString("N"));
     private readonly StringWriter _out = new();
@@ -80,6 +81,10 @@ public sealed class CliSolutionSourceTests(XrmdFixture fx) : IAsyncLifetime
         (await RunAsync("solution", "sync", Solution, "--folder", folder)).Should().Be(0, Output);
         File.Exists(Path.Combine(folder, "Other", "Solution.xml")).Should().BeTrue();
         (await RunAsync("solution", "diff", Solution, "--folder", folder)).Should().Be(0, Output);
+        // The global choice and the classic workflow of the zip come back from the organization in their own files.
+        File.Exists(Path.Combine(folder, "OptionSets", "new_buttamiscelte.xml")).Should().BeTrue();
+        File.Exists(Path.Combine(folder, "Workflows", Workflow)).Should().BeTrue();
+        File.Exists(Path.Combine(folder, "Workflows", Workflow + ".data.xml")).Should().BeTrue();
 
         // A form changed by hand in the organization.
         var form = Directory.EnumerateFiles(Path.Combine(folder, "Entities"), "*.xml", SearchOption.AllDirectories)

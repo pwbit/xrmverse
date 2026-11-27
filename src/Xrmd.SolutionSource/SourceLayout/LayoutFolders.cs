@@ -20,7 +20,7 @@ internal static class LayoutFolders
     /// </summary>
     public static readonly string[] Components =
     [
-        "Other/", "Entities/", "WebResources/", "Workflows/", "PluginAssemblies/", "SdkMessageProcessingSteps/", "Dashboards/", "Roles/",
+        "Other/", "Entities/", "OptionSets/", "WebResources/", "Workflows/", "PluginAssemblies/", "SdkMessageProcessingSteps/", "Dashboards/", "Roles/",
         "AppModules/", "AppModuleSiteMaps/", .. PassThrough,
     ];
 

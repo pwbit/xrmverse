@@ -117,7 +117,7 @@ public static class SourceComparer
 
     /// <summary>
     /// The component a file belongs to, grouped the way unpack writes them: one file per form, view, chart, step, dashboard,
-    /// role, relationship file and <c>Other/</c> file; a content file and its <c>.data.xml</c> for web resources, processes
+    /// role, global choice, relationship file and <c>Other/</c> file; a content file and its <c>.data.xml</c> for web resources, processes
     /// and plug-in assemblies; a folder for apps, site maps, code components and the folders kept as the zip has them.
     /// </summary>
     private static Component Identify(string path)
@@ -137,6 +137,8 @@ public static class SourceComparer
                 return new("view", path, path, stem);
             case "Entities" when parts.Length == 4 && parts[2] == "Visualizations":
                 return new("chart", path, path, stem);
+            case "OptionSets" when parts.Length == 2:
+                return new("choice", path, path, stem);
             case "WebResources" when parts.Length >= 2:
             {
                 var content = WithoutDataSuffix(path);

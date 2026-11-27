@@ -5,12 +5,23 @@ namespace Xrmd.Solution.SourceLayout.Writers;
 
 /// <summary>
 /// <c>Other/Solution.xml</c>: the solution manifest as the zip holds it, with the missing dependencies in a stable order
-/// (an export lists them in no fixed order; the reference folders sort them).
+/// (an export lists them in no fixed order; the reference folders sort them) and the root components grouped by their
+/// <c>type</c> compared as text, as the reference folders show (type 29 before type 9); within a type the zip's order stays.
 /// </summary>
 internal static class SolutionManifestWriter
 {
     public static void Write(UnpackContext context, XElement solution)
     {
+        var roots = solution.Element("SolutionManifest")?.Element("RootComponents");
+        if (roots is not null)
+        {
+            // Root components are grouped by type, the type compared as text ("29" before "9"). This is inferred from the
+            // reference folders: XrmSharedTest's zip lists types 1, 9, 29 and both clones list 1, 29, 9; OpenProject365 agrees.
+            // The order within one type is not shown by them; OrderBy is stable, so it stays as the zip gives it. Import looks
+            // root components up by type and key, so this order only affects how Other/Solution.xml reads in git.
+            var grouped = roots.Elements().OrderBy(r => (string?)r.Attribute("type") ?? "", StringComparer.Ordinal).ToList();
+            roots.ReplaceNodes(grouped);
+        }
         var missing = solution.Element("SolutionManifest")?.Element("MissingDependencies");
         if (missing is not null)
         {

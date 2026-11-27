@@ -102,7 +102,7 @@ gives an array. `sync` writes changed files and removes those of components the 
 outside the component folders. Run `sync --dry-run` first when the folder has uncommitted work.
 
 Exit codes here: 9 differences (`diff` only), 5 the solution has a component the layout cannot carry (canvas apps,
-global choices, classic workflows, business rules, `.resx` and others; nothing is written), 2 a managed zip or
+business rules, business process flows, `.resx` and others; nothing is written), 2 a managed zip or
 a bad folder, 4 solution not found, 3 not allowed, 6 unreachable. A folder first written by Dataverse's tools shows
 differences until one `sync`; run it once after the first import and commit the result.
 
