@@ -8,7 +8,8 @@ name: ci
 # - a push to main (code already tested by its pull request) builds and runs the unit tests only;
 #   the integration tests run on pull requests, every night (when main changed) and on demand;
 # - the integration tests on PostgreSQL (plan 2.7a) run every night (when main changed) and on demand only;
-# - the integration tests run as parallel shards (eng/test-shard.sh);
+# - the integration tests run as parallel shards (eng/test-shard.sh), split by the measured time of each test class
+#   (eng/test-timings/) so the shards end together;
 # - the web admin is rebuilt only when ui/ changes (its build output is cached by the hash of ui/);
 # - the license check runs when dependencies change and every night; the vulnerability gate on every pull request
 #   (legal guardrails L.6), every night, and on pushes to main that change dependencies.
@@ -157,10 +158,11 @@ jobs:
     steps:
       # The integration tests (SQL Server container, backups, one database per test host) ran the hosted
       # runner out of disk; drop preinstalled toolchains this job never uses (Android SDK, GHC, CodeQL).
-      - name: Free disk space
+      # In the background (it takes 1-2 minutes): the test step waits for it, the checkout and build do not.
+      - name: Free disk space (background)
         run: |
-          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
-          df -h /
+          nohup bash -c 'sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL; touch /tmp/disk-freed' \
+            > /dev/null 2>&1 &
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
@@ -181,8 +183,19 @@ jobs:
         run: dotnet build tests/Xrmd.Integration.Tests
       - name: Test (integration tests start SQL Server with Testcontainers)
         run: |
+          while [[ ! -f /tmp/disk-freed ]]; do sleep 2; done
+          df -h /
           shard="$(eng/test-shard.sh tests/Xrmd.Integration.Tests ${{ matrix.shard }} 4)"
-          dotnet test tests/Xrmd.Integration.Tests --no-build --filter "Category!=Acceptance&Category!=Timing&($shard)"
+          dotnet test tests/Xrmd.Integration.Tests --no-build --filter "Category!=Acceptance&Category!=Timing&($shard)" \
+            --logger "trx;LogFileName=shard.trx" --results-directory TestResults
+      # Seconds per test class of this shard, to refresh eng/test-timings/ (see eng/test-timings.py).
+      - name: Test timings
+        if: always()
+        run: |
+          [[ -f TestResults/shard.trx ]] || exit 0
+          echo "test-timings: begin"
+          eng/test-timings.py TestResults/shard.trx
+          echo "test-timings: end"
 
   # The integration tests on PostgreSQL (plan 2.7a, XRMD_TEST_PROVIDER=postgres; PostgreSQL 16 with Testcontainers), every night and
   # on demand only, never on pull requests or pushes: the same shards and the same tests (since plan 2.7b PostgreSQL runs every feature).
@@ -196,11 +209,11 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4]
     steps:
-      # As the integration job: room on the hosted runner's disk for the database containers.
-      - name: Free disk space
+      # As the integration job: room on the hosted runner's disk for the database containers, freed in the background.
+      - name: Free disk space (background)
         run: |
-          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
-          df -h /
+          nohup bash -c 'sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL; touch /tmp/disk-freed' \
+            > /dev/null 2>&1 &
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
@@ -241,8 +254,19 @@ jobs:
           XRMD_TEST_PROVIDER: postgres
           XRMD_TEST_PG_TOOLS: /usr/lib/postgresql/18/bin
         run: |
+          while [[ ! -f /tmp/disk-freed ]]; do sleep 2; done
+          df -h /
           shard="$(eng/test-shard.sh tests/Xrmd.Integration.Tests ${{ matrix.shard }} 4)"
-          dotnet test tests/Xrmd.Integration.Tests --no-build --filter "Category!=Acceptance&Category!=Timing&($shard)"
+          dotnet test tests/Xrmd.Integration.Tests --no-build --filter "Category!=Acceptance&Category!=Timing&($shard)" \
+            --logger "trx;LogFileName=shard.trx" --results-directory TestResults
+      # Seconds per test class of this shard, to refresh eng/test-timings/ (see eng/test-timings.py).
+      - name: Test timings
+        if: always()
+        run: |
+          [[ -f TestResults/shard.trx ]] || exit 0
+          echo "test-timings: begin"
+          eng/test-timings.py TestResults/shard.trx
+          echo "test-timings: end"
 
   licenses:
     name: third-party licenses

@@ -83,8 +83,13 @@ machine before you open a pull request (see [Tests on PostgreSQL](#tests-on-post
 - Changes to `docs/`, `site/` or `*.md` files only start no run; the nightly run covers them.
 - A new push to a pull request cancels the run of the previous push.
 - The web admin is built once per content of `ui/`: its `ui/dist` is cached and reused by the integration shards.
-- `eng/test-shard.sh <project> <shard> <count>` prints the test filter of one shard. Classes are spread by number of
-  test cases; the last shard takes every test the others do not, so no test is left out.
+- `eng/test-shard.sh <project> <shard> <count>` prints the test filter of one shard. Classes are spread by their
+  measured time in `eng/test-timings/<project>.tsv` (a class not listed there counts its test cases times the average
+  time per test case); the last shard takes every test the others do not, so no test is left out.
+- Each integration shard prints its seconds per test class at the end of its log (`test-timings: begin` ... `end`).
+  When the shards drift apart, save those lines of the four shards and run
+  `eng/test-timings.py --merge --serial xrmd --sources tests/Xrmd.Integration.Tests shard*.tsv > eng/test-timings/Xrmd.Integration.Tests.tsv`.
+  A class's time includes its fixtures; classes outside the `xrmd` collection run beside it and weigh less.
 
 ## Tests on your own machine
 
