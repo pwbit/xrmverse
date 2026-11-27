@@ -94,11 +94,24 @@ public sealed class SecurityAdministration(IMetadataStore store, SecurityCache c
         schemaName is not null && Relationships.TryGetValue(schemaName, out var r) ? r : null;
 
     /// <summary>
-    /// The privileges of SDK <see cref="RolePrivilege"/>s: <c>PrivilegeId</c>, or (when empty) the id of <c>PrivilegeName</c>
-    /// (<see cref="PrivilegeNames.IdOf"/>); the depth through <see cref="DepthMasks.From"/> (<see cref="DepthMask.None"/>
-    /// for a value that is not an SDK depth, which <see cref="SetRolePrivilegesAsync"/> rejects).
+    /// The privileges of SDK <see cref="RolePrivilege"/>s (<see cref="FromGrants"/> of their model values; the depth is cast by value, so
+    /// one that is not an SDK depth stays undefined and gives <see cref="DepthMask.None"/>).
     /// </summary>
     public static IReadOnlyList<(Guid PrivilegeId, DepthMask Depth)> FromSdk(IEnumerable<RolePrivilege?> privileges)
+    {
+        ArgumentNullException.ThrowIfNull(privileges);
+        return FromGrants(privileges.Select(p => p is null
+            ? null
+            : new PrivilegeGrant(p.PrivilegeId, p.PrivilegeName, p.BusinessUnitId, (PrivilegeScope)(int)p.Depth)));
+    }
+
+    /// <summary>
+    /// The privileges of <see cref="PrivilegeGrant"/>s (S.2e3c1 Task 4: the model overload of <see cref="FromSdk"/>): <c>PrivilegeId</c>,
+    /// or (when empty) the id of <c>PrivilegeName</c> (<see cref="PrivilegeNames.IdOf"/>); the depth through <see cref="DepthMasks.From"/>
+    /// (<see cref="DepthMask.None"/> for a null grant or a value that is not a defined depth, which <see cref="SetRolePrivilegesAsync"/>
+    /// rejects).
+    /// </summary>
+    public static IReadOnlyList<(Guid PrivilegeId, DepthMask Depth)> FromGrants(IEnumerable<PrivilegeGrant?> privileges)
     {
         ArgumentNullException.ThrowIfNull(privileges);
         return privileges.Select(p =>
@@ -107,7 +120,7 @@ public sealed class SecurityAdministration(IMetadataStore store, SecurityCache c
             var id = p.PrivilegeId != Guid.Empty ? p.PrivilegeId
                 : string.IsNullOrEmpty(p.PrivilegeName) ? Guid.Empty
                 : PrivilegeNames.IdOf(p.PrivilegeName);
-            var depth = Enum.IsDefined(p.Depth) ? DepthMasks.From(p.Depth.ToModel()) : DepthMask.None;
+            var depth = Enum.IsDefined(p.Depth) ? DepthMasks.From(p.Depth) : DepthMask.None;
             return (id, depth);
         }).ToList();
     }

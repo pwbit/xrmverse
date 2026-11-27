@@ -70,8 +70,8 @@ public sealed partial class CoreOperations(IMetadataStore store, QueryExecutor q
     private const string IdParameter = "@_id"; // logical names start with a letter: never clashes with a column parameter
 
     /// <summary>The core messages: the eight CRUD messages, dispatched on the model (<see cref="ExecuteCrudAsync"/>, S.2e3b), and the
-    /// messages <see cref="ExecuteCoreSdkAsync"/> implements.</summary>
-    private static readonly HashSet<string> CoreMessages = new(StringComparer.OrdinalIgnoreCase)
+    /// messages <see cref="ExecuteCoreSdkAsync"/> implements, reached through the bridge (<see cref="CoreSdkMessages"/>, S.2e3c1).</summary>
+    internal static readonly HashSet<string> CoreMessages = new(StringComparer.OrdinalIgnoreCase)
     {
         "Create", "Retrieve", "Update", "Delete", "RetrieveMultiple", "Assign", "Associate", "Disassociate",
         "GrantAccess", "ModifyAccess", "RevokeAccess", "AddPrivilegesRole", "ReplacePrivilegesRole", "RemovePrivilegeRole",
@@ -92,10 +92,6 @@ public sealed partial class CoreOperations(IMetadataStore store, QueryExecutor q
 
     /// <summary>The intersect written by the role privilege messages.</summary>
     private const string RolePrivileges = "roleprivileges";
-
-    /// <summary>The rights a share may carry (<c>principalobjectaccess.accessrightsmask</c>); Create is not one of them.</summary>
-    private const AccessRights ShareableRights = AccessRights.ReadAccess | AccessRights.WriteAccess | AccessRights.AppendAccess
-        | AccessRights.AppendToAccess | AccessRights.DeleteAccess | AccessRights.ShareAccess | AccessRights.AssignAccess;
 
     private (Guid Id, string Name)? _organization;
 
@@ -145,7 +141,7 @@ public sealed partial class CoreOperations(IMetadataStore store, QueryExecutor q
 
     /// <summary>The solution messages that xrmverse answers for the organization service's callers only, not for plug-ins
     /// (the upgrade and the promote write metadata in transactions of their own, plan 2.6 ruling M15).</summary>
-    private static readonly string[] CallerOnlyMessages = [.. SolutionJobMessages, "ExportSolution", "StageAndUpgrade", "DeleteAndPromote"];
+    internal static readonly string[] CallerOnlyMessages = [.. SolutionJobMessages, "ExportSolution", "StageAndUpgrade", "DeleteAndPromote"];
 
     /// <summary>The CalculateRollupField message (plan 2.12b, ruling R10).</summary>
     public const string CalculateRollupFieldMessage = "CalculateRollupField";
@@ -158,7 +154,7 @@ public sealed partial class CoreOperations(IMetadataStore store, QueryExecutor q
 
     /// <summary>The messages answered outside the pipeline: these, the access reads (<see cref="AccessMessages"/>), the metadata
     /// messages (<see cref="MetadataOperations"/>) and the audit messages (<see cref="AuditMessages"/>).</summary>
-    private static readonly HashSet<string> NonPipelineMessages = new(
+    internal static readonly HashSet<string> NonPipelineMessages = new(
         ["WhoAmI", "RetrieveUserPrivileges", RetrieveAppComponents, RetrieveUnpublished, InitializeFrom.MessageName, "RetrieveEntity", "RetrieveAttribute", "ImportSolution", "RetrieveFormattedImportJobResults",
             AccessMessages.RetrievePrincipalAccess, AccessMessages.RetrieveSharedPrincipalsAndAccess, .. CallerOnlyMessages,
             .. MetadataOperations.Messages, .. AuditMessages.Messages], StringComparer.OrdinalIgnoreCase);
@@ -169,279 +165,37 @@ public sealed partial class CoreOperations(IMetadataStore store, QueryExecutor q
     /// <inheritdoc />
     public bool IsNonPipelineMessage(string messageName) => NonPipelineMessages.Contains(messageName);
 
-    /// <summary>The SDK handler of <see cref="WrittenEntities(Xrmd.Model.Messages.Request)"/> (S.2e3a: the entry adapter calls it).</summary>
-    /// <remarks>
-    /// Associate/Disassociate over a security relationship: its intersect (<c>systemuserroles</c>, <c>teamroles</c>,
-    /// <c>teammembership</c>, <c>systemuserprofiles</c>, <c>teamprofiles</c>), over a saved many-to-many relationship: its intersect entity; AddPrivilegesRole,
-    /// ReplacePrivilegesRole, RemovePrivilegeRole: <c>roleprivileges</c>; AddUserToRecordTeam, RemoveUserFromRecordTeam: <c>team</c>,
-    /// <c>teammembership</c> and <c>principalobjectaccess</c> (plan 2.16, ruling A9).
-    /// </remarks>
-    private IReadOnlyCollection<string> WrittenEntitiesSdk(OrganizationRequest request)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        switch (CoreMessages.TryGetValue(request.RequestName ?? "", out var canonical) ? canonical : request.RequestName)
-        {
-            case "Associate" or "Disassociate":
-                if (!request.Parameters.TryGetValue("Relationship", out var r) || r is not Relationship relationship) return [];
-                if (SecurityAdministration.FindRelationship(relationship.SchemaName) is { } security) return [security.IntersectEntity];
-                return store.GetRelationship(relationship.SchemaName ?? "") is ManyToManyRelationshipMetadata manyToMany
-                    ? [manyToMany.IntersectEntityName]
-                    : [];
-            case "AddPrivilegesRole" or "ReplacePrivilegesRole" or "RemovePrivilegeRole":
-                return [RolePrivileges];
-            case AccessTeamRules.AddUserToRecordTeam or AccessTeamRules.RemoveUserFromRecordTeam:
-                return [Team, "teammembership", PrincipalObjectAccess];
-            case DuplicateRulePublisher.PublishMessage or DuplicateRulePublisher.UnpublishMessage:
-                return [DuplicateDetectionSchema.Rule];
-            default:
-                return [];
-        }
-    }
-
     /// <summary>
     /// The SDK handler of <see cref="ExecuteNonPipelineAsync(Xrmd.Model.Messages.Request, Caller, DataSession, CancellationToken)"/>
-    /// (S.2e3a: the entry adapter calls it).
+    /// (S.2e3a; S.2e3c1: the bridge <see cref="CoreSdkMessages.ExecuteNonPipelineAsync"/> calls it).
     /// </summary>
     /// <remarks>
-    /// RetrieveFormattedImportJobResults is answered (<see cref="RetrieveFormattedImportJobResultsAsync"/>, a read in the plug-in's
-    /// session); the audit messages are answered by <see cref="AuditMessages"/> in the plug-in's session (so a delete rolls back
-    /// with it); RetrievePrincipalAccess and RetrieveSharedPrincipalsAndAccess by <see cref="AccessMessages"/> in the plug-in's
-    /// session (it sees the plug-in's uncommitted rows); ImportSolutionAsync, ExecuteAsync, UninstallSolutionAsync,
-    /// StageAndUpgrade(Async), DeleteAndPromote(Async) and ExportSolution are refused (400, queueing an import or an uninstall, upgrading and exporting a solution are not
-    /// replicated for plug-ins).
-    /// The metadata reads are answered (<see cref="MetadataOperations.Retrieve"/>); the metadata writes and ImportSolution are refused (400):
-    /// this is a plug-in's call, whose transaction has already written <c>data.*</c> rows, and metadata is always written
-    /// before data in a transaction (the order that keeps the metadata lock and the SQL locks from deadlocking).
+    /// The bridged messages answered outside the pipeline (S.2e3c1 Decision 1): the audit messages, answered by <see cref="AuditMessages"/>
+    /// in the plug-in's session (so a delete rolls back with it), and the metadata reads (RetrieveEntity, RetrieveAttribute,
+    /// <see cref="MetadataOperations.Retrieve"/>). The others run on the model (<see cref="ExecuteNonPipelineMessageAsync"/>): the access
+    /// reads (Task 3), RetrieveUserPrivileges (Task 4), the reads and the refusals of Task 6.
     /// </remarks>
     /// <exception cref="NotSupportedException">Any other message.</exception>
-    private async Task<OrganizationResponse> ExecuteNonPipelineSdkAsync(OrganizationRequest request, Caller caller, DataSession session,
+    internal async Task<OrganizationResponse> ExecuteNonPipelineSdkAsync(OrganizationRequest request, Caller caller, DataSession session,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(caller);
         switch (NonPipelineMessages.TryGetValue(request.RequestName ?? "", out var canonical) ? canonical : request.RequestName)
         {
-            case "WhoAmI":
-                return WhoAmI(caller, (await OrganizationAsync(session, ct)).Id);
-            case "RetrieveUserPrivileges":
-                return await RetrieveUserPrivilegesAsync(request, caller, session, ct);
-            case RetrieveAppComponents:
-                return await RetrieveAppComponentsAsync(request, caller, session, ct);
-            case RetrieveUnpublished:
-                return await RetrieveUnpublishedAsync(request, caller, session, ct);
-            case InitializeFrom.MessageName:
-                return await InitializeFromAsync(request, caller, session, ct);
             case "RetrieveEntity":
                 return RetrieveEntity(request);
             case "RetrieveAttribute":
                 return RetrieveAttribute(request);
-            case "RetrieveFormattedImportJobResults":
-                return await RetrieveFormattedImportJobResultsAsync(request, caller, session, ct);
-            case var name when AccessMessages.IsAccessMessage(name):
-                // In the plug-in's session: the access read sees its uncommitted rows (plan 3.5 UI-1b final review, I3).
-                return await accessMessages.ExecuteAsync(request, caller, session, ct);
             case var name when AuditMessages.IsAuditMessage(name):
                 // In the plug-in's session: the reads see its uncommitted rows, the deletes roll back with it.
                 return await auditMessages.ExecuteAsync(request, caller, session, ct);
-            case var name when MetadataOperations.IsWriteMessage(name) || name == "ImportSolution":
-                throw XrmdFaultException.InvalidArgument(
-                    $"The metadata message '{request.RequestName}' cannot be executed from a plug-in.");
-            case var name when CallerOnlyMessages.Contains(name, StringComparer.OrdinalIgnoreCase):
-                // Not replicated: xrmverse queues solution import jobs and exports solutions only for the organization service's callers.
-                throw XrmdFaultException.InvalidArgument(
-                    $"The message '{request.RequestName}' cannot be executed from a plug-in in xrmverse.");
             case var name when MetadataOperations.IsMetadataMessage(name):
                 return MetadataOperations.Retrieve(store, request);
             default:
                 throw new NotSupportedException($"Request '{request.RequestName}' is not supported yet.");
         }
     }
-
-    /// <summary>
-    /// RetrieveFormattedImportJobResults in <paramref name="session"/>: the <c>data</c> of the <c>importjob</c> (the import log)
-    /// read as a Retrieve of <paramref name="caller"/> (read privilege and access on <c>importjob</c>; 404 when it does not
-    /// exist), as an Excel workbook (<see cref="ImportJobLog.ToSpreadsheet"/>).
-    /// </summary>
-    /// <exception cref="XrmdFaultException">400 without <c>ImportJobId</c>; 404 for an unknown import job; the Retrieve's faults.</exception>
-    public async Task<RetrieveFormattedImportJobResultsResponse> RetrieveFormattedImportJobResultsAsync(OrganizationRequest request,
-        Caller caller, DataSession session, CancellationToken ct)
-    {
-        var job = await RetrieveAsync(session, caller, "importjob", ImportJobIdParameter(request), new ColumnSet("data"), ct);
-        return FormattedImportJobResults(job);
-    }
-
-    /// <summary>The <c>ImportJobId</c> of a RetrieveFormattedImportJobResults request.</summary>
-    /// <exception cref="XrmdFaultException">400 when it is missing or empty.</exception>
-    public static Guid ImportJobIdParameter(OrganizationRequest request) =>
-        request.Parameters.TryGetValue("ImportJobId", out var value) && value is Guid id && id != Guid.Empty
-            ? id
-            : throw XrmdFaultException.InvalidArgument($"Required parameter 'ImportJobId' of request '{request.RequestName}' is missing.");
-
-    /// <summary>The response of RetrieveFormattedImportJobResults for the retrieved <c>importjob</c> <paramref name="job"/>.</summary>
-    public static RetrieveFormattedImportJobResultsResponse FormattedImportJobResults(Entity job) => new()
-    {
-        ResponseName = "RetrieveFormattedImportJobResults",
-        Results = { ["FormattedResults"] = ImportJobLog.ToSpreadsheet(job.GetAttributeValue<string>("data")) },
-    };
-
-    /// <summary>
-    /// RetrieveUserPrivileges (plan 3.5 UI-1a task 3): the user's privileges (<see cref="UserPrivileges"/>) once
-    /// <paramref name="caller"/> has read the <c>systemuser</c> row as a Retrieve would (403 without read access, 404 when the
-    /// user does not exist).
-    /// </summary>
-    /// <exception cref="XrmdFaultException">400 without <c>UserId</c>; the Retrieve's faults.</exception>
-    public async Task<RetrieveUserPrivilegesResponse> RetrieveUserPrivilegesAsync(OrganizationRequest request, Caller caller,
-        DataSession session, CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        var userId = request.Parameters.TryGetValue("UserId", out var value) && value is Guid id && id != Guid.Empty
-            ? id
-            : throw XrmdFaultException.InvalidArgument($"Required parameter 'UserId' of request '{request.RequestName}' is missing.");
-        await RetrieveAsync(session, caller, SystemUser, userId, new ColumnSet(SystemUserIdColumn), ct);
-        return new RetrieveUserPrivilegesResponse
-        {
-            ResponseName = "RetrieveUserPrivileges",
-            Results = { ["RolePrivileges"] = (await UserPrivileges.ForUserAsync(userId, session, ct)).ToArray() },
-        };
-    }
-
-    /// <summary>
-    /// InitializeFrom (#143): the values a new record of <c>TargetEntityName</c> starts with, taken from the record
-    /// <c>EntityMoniker</c> through the maps from its table to the target table: the lookup of each one-to-many relationship between
-    /// them set to the source record (unless <c>SkipParentalRelationshipMapping</c>; derived, see
-    /// <see cref="InitializeFrom.ParentalRelationships"/>), and the imported <c>attributemap</c> rows, each copying a value that is not
-    /// null. Only the target columns that <c>TargetFieldType</c> keeps are set; a map whose column no longer exists is skipped. The
-    /// source is read as a Retrieve of <paramref name="caller"/> (403 without read access, 404 when it does not exist, field security
-    /// applies); the maps are read as <see cref="Caller.Internal"/>. Runs outside the pipeline.
-    /// </summary>
-    /// <exception cref="XrmdFaultException">400 for a missing parameter, an unknown table or a pair of tables without a map; the
-    /// Retrieve's faults.</exception>
-    public async Task<InitializeFromResponse> InitializeFromAsync(OrganizationRequest request, Caller caller, DataSession session,
-        CancellationToken ct)
-    {
-        var parameters = InitializeFrom.Parameters(request);
-        var source = EntityOf(parameters.Source.LogicalName);
-        var target = EntityOf(parameters.Target);
-        var relationships = InitializeFrom.ParentalRelationships(store, source.LogicalName, target.LogicalName);
-
-        var mapQuery = new QueryExpression(AttributeMapSchema.EntityMap) { ColumnSet = new ColumnSet(AttributeMapSchema.SourceEntity) };
-        mapQuery.Criteria.AddCondition(AttributeMapSchema.SourceEntity, ConditionOperator.Equal, source.LogicalName);
-        mapQuery.Criteria.AddCondition(AttributeMapSchema.TargetEntity, ConditionOperator.Equal, target.LogicalName);
-        var mapIds = (await RetrieveMultipleAsync(session, Caller.Internal, ReadQuery(mapQuery), ct)).Entities.Select(e => (object)e.Id).ToArray();
-        if (relationships.Count == 0 && mapIds.Length == 0)
-            throw XrmdFaultException.InvalidArgument($"No map exists from table '{source.LogicalName}' to table '{target.LogicalName}'.");
-        var maps = new List<(AttributeMetadata From, AttributeMetadata To)>();
-        if (mapIds.Length > 0)
-        {
-            var attributeQuery = new QueryExpression(AttributeMapSchema.AttributeMap)
-            {
-                ColumnSet = new ColumnSet(AttributeMapSchema.SourceAttribute, AttributeMapSchema.TargetAttribute),
-            };
-            attributeQuery.Criteria.AddCondition(AttributeMapSchema.EntityMapLookup, ConditionOperator.In, mapIds);
-            foreach (var row in (await RetrieveMultipleAsync(session, Caller.Internal, ReadQuery(attributeQuery), ct)).Entities)
-            {
-                var from = source.Attributes?.FirstOrDefault(a => a.LogicalName == row.GetAttributeValue<string>(AttributeMapSchema.SourceAttribute));
-                var to = target.Attributes?.FirstOrDefault(a => a.LogicalName == row.GetAttributeValue<string>(AttributeMapSchema.TargetAttribute));
-                if (from is not null && to is not null) maps.Add((from, to));
-            }
-        }
-
-        var columns = maps.Select(m => m.From.LogicalName).ToList();
-        if (source.PrimaryNameAttribute is { } primaryName) columns.Add(primaryName);
-        var record = await RetrieveAsync(session, caller, source.LogicalName, parameters.Source.Id, new ColumnSet(columns.Distinct().ToArray()), ct);
-
-        var result = new Entity(target.LogicalName);
-        if (!parameters.SkipParentalRelationshipMapping)
-            foreach (var relationship in relationships)
-            {
-                var lookup = target.Attributes?.FirstOrDefault(a => a.LogicalName == relationship.ReferencingAttribute);
-                if (lookup is null || !InitializeFrom.Keeps(lookup, parameters.FieldType)) continue;
-                result[lookup.LogicalName] = new EntityReference(source.LogicalName, parameters.Source.Id)
-                {
-                    Name = source.PrimaryNameAttribute is { } name ? record.GetAttributeValue<string>(name) : null,
-                };
-            }
-        foreach (var (from, to) in maps)
-        {
-            if (result.Contains(to.LogicalName) || !InitializeFrom.Keeps(to, parameters.FieldType)) continue;
-            if (record.Attributes.TryGetValue(from.LogicalName, out var value) && value is not null) result[to.LogicalName] = value;
-        }
-        return new InitializeFromResponse { ResponseName = InitializeFrom.MessageName, Results = { ["Entity"] = result } };
-    }
-
-    /// <summary>The tables RetrieveUnpublished supports (Learn's bound-function list, narrowed to the tables xrmverse has).</summary>
-    private static readonly string[] UnpublishedTables = ["systemform", "savedquery", "sitemap", "appmodule", "webresource"];
-
-    /// <summary>
-    /// RetrieveAppComponents: the <c>appmodulecomponent</c> rows of the app <c>AppModuleId</c> (<c>AppComponents</c>), once
-    /// <paramref name="caller"/> has read the <c>appmodule</c> row as a Retrieve would (403 without read access, 404 for an unknown
-    /// app). The caller needs no privilege on <c>appmodulecomponent</c>: the rows are read as <see cref="Caller.Internal"/>.
-    /// </summary>
-    /// <exception cref="XrmdFaultException">400 without <c>AppModuleId</c>; the Retrieve's and the query's faults.</exception>
-    public async Task<RetrieveAppComponentsResponse> RetrieveAppComponentsAsync(OrganizationRequest request, Caller caller,
-        DataSession session, CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        var appId = request.Parameters.TryGetValue("AppModuleId", out var value) && value is Guid id && id != Guid.Empty
-            ? id
-            : throw XrmdFaultException.InvalidArgument($"Required parameter 'AppModuleId' of request '{request.RequestName}' is missing.");
-        await RetrieveAsync(session, caller, "appmodule", appId, new ColumnSet("appmoduleid"), ct);
-        var query = new QueryExpression(AppModuleSchema.Component) { ColumnSet = new ColumnSet(true) };
-        query.Criteria.AddCondition("appmoduleidunique", ConditionOperator.Equal, appId);
-        var components = await RetrieveMultipleAsync(session, Caller.Internal, ReadQuery(query), ct);
-        return new RetrieveAppComponentsResponse { ResponseName = RetrieveAppComponents, Results = { ["AppComponents"] = components } };
-    }
-
-    /// <summary>
-    /// The row and columns of a RetrieveUnpublished request (<c>Target</c>, <c>ColumnSet</c>): xrmverse has no unpublished layer,
-    /// so the message is a Retrieve of the published row.
-    /// </summary>
-    /// <exception cref="XrmdFaultException">400 without <c>Target</c> or <c>ColumnSet</c>, or for a table other than systemform,
-    /// savedquery, sitemap, appmodule and webresource.</exception>
-    internal static (EntityReference Target, ColumnSet Columns) UnpublishedTarget(OrganizationRequest request)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        var target = request.Parameters.TryGetValue("Target", out var t) && t is EntityReference reference
-            ? reference
-            : throw XrmdFaultException.InvalidArgument($"Required parameter 'Target' of request '{request.RequestName}' is missing.");
-        var columns = request.Parameters.TryGetValue("ColumnSet", out var c) && c is ColumnSet columnSet
-            ? columnSet
-            : throw XrmdFaultException.InvalidArgument($"Required parameter 'ColumnSet' of request '{request.RequestName}' is missing.");
-        RequireUnpublishedTable(target.LogicalName);
-        return (target, columns);
-    }
-
-    /// <summary>The tables RetrieveUnpublished supports, for the Web API metadata.</summary>
-    public static IReadOnlyList<string> UnpublishedSupportedTables => UnpublishedTables;
-
-    /// <exception cref="XrmdFaultException">400 for a table RetrieveUnpublished does not support.</exception>
-    public static void RequireUnpublishedTable(string logicalName)
-    {
-        if (!UnpublishedTables.Contains(logicalName, StringComparer.OrdinalIgnoreCase))
-            throw XrmdFaultException.InvalidArgument(
-                $"RetrieveUnpublished is not supported for the table '{logicalName}': it supports {string.Join(", ", UnpublishedTables)}.");
-    }
-
-    /// <summary>RetrieveUnpublished in <paramref name="session"/>: the Retrieve of the published row (see <see cref="UnpublishedTarget"/>).</summary>
-    public async Task<RetrieveUnpublishedResponse> RetrieveUnpublishedAsync(OrganizationRequest request, Caller caller,
-        DataSession session, CancellationToken ct)
-    {
-        var (target, columns) = UnpublishedTarget(request);
-        var row = await RetrieveAsync(session, caller, target.LogicalName, target.Id, columns, ct);
-        return new RetrieveUnpublishedResponse { ResponseName = RetrieveUnpublished, Results = { ["Entity"] = row } };
-    }
-
-    /// <summary>The <see cref="WhoAmIResponse"/> of <paramref name="caller"/> in organization <paramref name="organizationId"/>.</summary>
-    public static WhoAmIResponse WhoAmI(Caller caller, Guid organizationId) => new()
-    {
-        ResponseName = "WhoAmI",
-        Results =
-        {
-            ["UserId"] = caller.UserId,
-            ["BusinessUnitId"] = caller.BusinessUnitId,
-            ["OrganizationId"] = organizationId,
-        },
-    };
 
     /// <summary>
     /// RetrieveEntity by <c>LogicalName</c>: a copy of the whole definition whatever the filters, with the relationships
@@ -477,13 +231,11 @@ public sealed partial class CoreOperations(IMetadataStore store, QueryExecutor q
             : throw XrmdFaultException.InvalidArgument($"Required parameter '{name}' of request '{request.RequestName}' is missing.");
 
     /// <summary>
-    /// Stage 30 of Create, Retrieve, Update, Delete, RetrieveMultiple, Assign, Associate, Disassociate, GrantAccess, ModifyAccess,
-    /// RevokeAccess, AddPrivilegesRole (the depth of each privilege listed is set), ReplacePrivilegesRole (the role gets exactly
-    /// these privileges), RemovePrivilegeRole, AddUserToRecordTeam and RemoveUserFromRecordTeam (<see cref="Core.RecordTeams"/>), PublishDuplicateRule and
+    /// Stage 30 of the bridged core messages (S.2e3c1: the CRUD, share, record team, role privilege, exchange rate, change tracking and
+    /// queue messages run on the model, see <see cref="ExecuteMessageAsync"/>): PublishDuplicateRule and
     /// UnpublishDuplicateRule (<see cref="DuplicateRulePublisher"/>), RetrieveDuplicates (<see cref="Duplicates.DuplicateFinder"/>) and
     /// BulkDetectDuplicates (<see cref="BulkDetectDuplicatesJob.EnqueueAsync"/>: the job is queued),
-    /// SendEmail and GetTrackingTokenEmail (<see cref="Core.EmailMessages"/>, plans 2.11 and 4.1b), AddToQueue, RemoveFromQueue, RouteTo, AddPrincipalToQueue,
-    /// PickFromQueue, ReleaseToQueue and RetrieveUserQueues (<see cref="Core.QueueMessages"/>, plan 4.1a), reading the parameters from
+    /// SendEmail and GetTrackingTokenEmail (<see cref="Core.EmailMessages"/>, plans 2.11 and 4.1b), reading the parameters from
     /// <c>request.Parameters</c> (the plug-ins' <c>InputParameters</c>) as they are after the pre-operation stages.
     /// </summary>
     /// <exception cref="XrmdFaultException">400 for a missing parameter, plus the faults of the operation.</exception>
@@ -491,13 +243,13 @@ public sealed partial class CoreOperations(IMetadataStore store, QueryExecutor q
     /// <exception cref="InvalidOperationException">A file message without <paramref name="nested"/> (the pipeline's nested request);
     /// <paramref name="serverSetValues"/> on a message other than Create.</exception>
     /// <remarks>
-    /// The SDK handler of <see cref="ExecuteCoreAsync(Xrmd.Model.Messages.Request, CoreCall, CancellationToken)"/> (S.2e3a: the entry
-    /// adapter calls it). The file messages (<see cref="FileColumnService"/>): InitializeFileBlocksUpload, UploadBlock,
+    /// The SDK handler of <see cref="ExecuteCoreAsync(Xrmd.Model.Messages.Request, CoreCall, CancellationToken)"/> (S.2e3a; S.2e3c1:
+    /// the bridge <see cref="CoreSdkMessages.ExecuteAsync"/> calls it). The file messages (<see cref="FileColumnService"/>): InitializeFileBlocksUpload, UploadBlock,
     /// CommitFileBlocksUpload (which writes the record with an Update run through <paramref name="nested"/>, so the Update steps fire
     /// and the guard checks it) and DeleteFile (the same Update, clearing the column).
     /// </remarks>
     /// <param name="serverSetValues">Plan 4.1c: the columns the server writes on a Create (<see cref="CreateAsync"/>); null otherwise.</param>
-    private async Task<OrganizationResponse> ExecuteCoreSdkAsync(OrganizationRequest request, Caller caller, DataSession session,
+    internal async Task<OrganizationResponse> ExecuteCoreSdkAsync(OrganizationRequest request, Caller caller, DataSession session,
         SdkNestedRequest? nested, IReadOnlyDictionary<string, object?>? serverSetValues, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -512,47 +264,12 @@ public sealed partial class CoreOperations(IMetadataStore store, QueryExecutor q
             case ElasticCosmosQuery.MessageName:
                 UnmaskedData.Refuse(request);
                 return await ElasticCosmosQuery.ExecuteAsync(this, session, caller, request, ct);
-            case "GrantAccess":
-                await ShareAsync(session, caller, Parameter<EntityReference>(request, "Target"), Parameter<PrincipalAccess>(request, "PrincipalAccess"),
-                    replace: false, ct);
-                return new GrantAccessResponse { ResponseName = "GrantAccess" };
-            case "ModifyAccess":
-                await ShareAsync(session, caller, Parameter<EntityReference>(request, "Target"), Parameter<PrincipalAccess>(request, "PrincipalAccess"),
-                    replace: true, ct);
-                return new ModifyAccessResponse { ResponseName = "ModifyAccess" };
-            case "RevokeAccess":
-                await RevokeAccessAsync(session, caller, Parameter<EntityReference>(request, "Target"), Parameter<EntityReference>(request, "Revokee"), ct);
-                return new RevokeAccessResponse { ResponseName = "RevokeAccess" };
-            case AccessTeamRules.AddUserToRecordTeam:
-                return new AddUserToRecordTeamResponse
-                {
-                    ResponseName = AccessTeamRules.AddUserToRecordTeam,
-                    Results = { ["AccessTeamId"] = await RecordTeams.AddUserAsync(session, caller, request, ct) },
-                };
-            case AccessTeamRules.RemoveUserFromRecordTeam:
-                return new RemoveUserFromRecordTeamResponse
-                {
-                    ResponseName = AccessTeamRules.RemoveUserFromRecordTeam,
-                    Results = { ["AccessTeamId"] = await RecordTeams.RemoveUserAsync(session, caller, request, ct) },
-                };
-            case CurrencyMessages.MessageName:
-                return await CurrencyMessages.ExecuteAsync(request, session, ct);
             case CalculateRollupFieldMessage:
                 return await CalculateRollupFieldAsync(request, caller, session, ct);
-            case PipelineExecutor.ExecuteWorkflowMessage:
-                // Stage 30 is IWorkflowPipelineHook.ExecuteWorkflowAsync, which the pipeline runs (plan 2.14, W21).
-                throw new InvalidOperationException("ExecuteWorkflow runs through the pipeline, which hands it to the classic workflows.");
             case EmailMessages.SendEmail:
                 return await EmailMessages.ExecuteAsync(request, caller, session, ct);
             case EmailMessages.GetTrackingTokenEmail:
                 return await EmailMessages.GetTrackingTokenAsync(request, session, ct);
-            case QueueSchema.AddToQueue or QueueSchema.RemoveFromQueue or QueueSchema.RouteTo or QueueSchema.AddPrincipalToQueue
-                or QueueSchema.PickFromQueue or QueueSchema.ReleaseToQueue or QueueSchema.RetrieveUserQueues:
-                // Plan 4.1a: the item and membership writes run through the pipeline, one level deeper (decision 4).
-                return await QueueMessages.ExecuteAsync(request, caller, session, nested, ct);
-            case ChangeTracker.MessageName:
-                UnmaskedData.Refuse(request);
-                return ChangeTracker.ToResponse(await ChangeTracker.RetrieveAsync(session, caller, ChangeTracker.ReadRequest(request), ct));
             case DuplicateRulePublisher.PublishMessage:
                 var jobId = await duplicates.PublishAsync(session, caller, GuidParameter(request, DuplicateRulePublisher.RuleIdParameter), ct);
                 return new PublishDuplicateRuleResponse { ResponseName = DuplicateRulePublisher.PublishMessage, Results = { ["JobId"] = jobId } };
@@ -568,28 +285,6 @@ public sealed partial class CoreOperations(IMetadataStore store, QueryExecutor q
             case DuplicateRulePublisher.UnpublishMessage:
                 await duplicates.UnpublishAsync(session, caller, GuidParameter(request, DuplicateRulePublisher.RuleIdParameter), ct);
                 return new UnpublishDuplicateRuleResponse { ResponseName = DuplicateRulePublisher.UnpublishMessage };
-            case "AddPrivilegesRole":
-            case "ReplacePrivilegesRole":
-                var replace = canonical == "ReplacePrivilegesRole";
-                var roleId = GuidParameter(request, "RoleId");
-                var requested = SecurityAdministration.FromSdk(Parameter<RolePrivilege[]>(request, "Privileges"));
-                await DemandRowUpdateAllowedAsync(session, caller, "role", roleId, ct);
-                var auditRole = await RolePrivilegesBeforeAsync(session, roleId, ct);
-                await security.SetRolePrivilegesAsync(session, roleId, requested, replace, ct);
-                await MarkChangedAsync(session, caller, ComponentType.Role, roleId, ct);
-                await AuditRolePrivilegesAsync(session, caller, roleId, auditRole,
-                    replace ? AuditActions.ReplacePrivilegesInRole : AuditActions.AddPrivilegesToRole, ct);
-                return replace
-                    ? new ReplacePrivilegesRoleResponse { ResponseName = "ReplacePrivilegesRole" }
-                    : new AddPrivilegesRoleResponse { ResponseName = "AddPrivilegesRole" };
-            case "RemovePrivilegeRole":
-                var removedFrom = GuidParameter(request, "RoleId");
-                await DemandRowUpdateAllowedAsync(session, caller, "role", removedFrom, ct);
-                var removeBefore = await RolePrivilegesBeforeAsync(session, removedFrom, ct);
-                await security.RemoveRolePrivilegeAsync(session, removedFrom, GuidParameter(request, "PrivilegeId"), ct);
-                await MarkChangedAsync(session, caller, ComponentType.Role, removedFrom, ct);
-                await AuditRolePrivilegesAsync(session, caller, removedFrom, removeBefore, AuditActions.RemovePrivilegesFromRole, ct);
-                return new RemovePrivilegeRoleResponse { ResponseName = "RemovePrivilegeRole" };
             case "InitializeFileBlocksUpload":
                 var token = await files.InitializeUploadAsync(caller, Parameter<EntityReference>(request, "Target"),
                     OptionalString(request, "FileAttributeName") ?? "", OptionalString(request, "FileName") ?? "", session, ct);
@@ -640,240 +335,12 @@ public sealed partial class CoreOperations(IMetadataStore store, QueryExecutor q
             ? Convert.ToInt64(value, System.Globalization.CultureInfo.InvariantCulture)
             : throw XrmdFaultException.InvalidArgument($"Required parameter '{name}' of request '{request.RequestName}' is missing or not a number.");
 
-    /// <summary>The role's privileges before a change, read only when the <c>role</c> table is audited (null otherwise).</summary>
-    private async Task<IReadOnlyList<RolePrivilege>?> RolePrivilegesBeforeAsync(DataSession s, Guid roleId, CancellationToken ct) =>
-        await audit.IsAuditedAsync(s, EntityOf(Role), ct) ? await security.RolePrivilegesAsync(s, roleId, ct) : null;
-
-    /// <summary>
-    /// The audit row of a role privilege message on the role (ruling A1): the privileges before (<paramref name="old"/>, null when
-    /// the table is not audited) and after; no row when the role's privileges did not change.
-    /// </summary>
-    private async Task AuditRolePrivilegesAsync(DataSession s, Caller caller, Guid roleId, IReadOnlyList<RolePrivilege>? old, int action,
-        CancellationToken ct)
-    {
-        if (old is null) return;
-        var now = await security.RolePrivilegesAsync(s, roleId, ct);
-        var same = old.Count == now.Count && old.Zip(now).All(p => p.First.PrivilegeId == p.Second.PrivilegeId && p.First.Depth == p.Second.Depth);
-        if (same) return;
-        await audit.WriteAsync(s, caller, action, AuditOperations.Update, new EntityReference(Role, roleId), new RolePrivilegesChange(old, now), ct);
-    }
-
-    /// <summary>
-    /// GrantAccess (<paramref name="replace"/> false: the rights are added to the share) and ModifyAccess (true: the share gets
-    /// exactly these rights): the <c>principalobjectaccess</c> row of the record and the principal, created when missing.
-    /// The row is read with UPDLOCK/HOLDLOCK, so concurrent shares of the same pair queue up; an insert that still loses the
-    /// race against the unique index is retried once as an update.
-    /// </summary>
-    /// <exception cref="XrmdFaultException">400 for an entity that is not user or team owned, a principal that is not a
-    /// systemuser or team, or an invalid access mask; 404 when the record or the principal does not exist.</exception>
-    public async Task ShareAsync(DataSession s, Caller caller, EntityReference target, PrincipalAccess access, bool replace, CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(target);
-        ArgumentNullException.ThrowIfNull(access);
-        var principal = access.Principal ?? throw XrmdFaultException.InvalidArgument("Required parameter 'PrincipalAccess.Principal' is missing.");
-        var mask = access.AccessMask;
-        var m = ShareableEntity(target, principal);
-        ElasticWriteRules.DemandShareable(m); // plan 3.4, ruling E9
-        if (mask == 0 || (mask & ~ShareableRights) != 0) throw XrmdFaultException.InvalidArgument($"Invalid access mask {mask}.");
-        await EnsureShareRecordsExistAsync(s, m, target.Id, principal, ct);
-
-        for (var attempt = 0; ; attempt++)
-        {
-            if (await UpdateShareAsync(s, target.Id, m.ObjectTypeCode ?? 0, principal.Id, mask, replace, ct) is { } old)
-            {
-                var now = replace ? mask : old | mask;
-                // A grant of rights the principal already holds changes nothing: no row.
-                if (now != old) await AuditShareAsync(s, caller, replace ? AuditActions.ModifyShare : AuditActions.Share, target, principal, old, now, ct);
-                return;
-            }
-            try
-            {
-                // Plan 2.7a, Task 6: under a savepoint where a failed statement aborts the transaction (the next round reads on).
-                await s.RecoverableAsync(() => ExecuteNonQueryAsync(s, $"""
-                    INSERT INTO {s.DataTable(PrincipalObjectAccess)}
-                        ({s.Quote(PrincipalObjectAccess + "id")}, principalid, principaltypecode, objectid, objecttypecode, accessrightsmask,
-                         inheritedaccessrightsmask, changedon)
-                    VALUES ({s.Dialect.NewGuid}, @principal, @principaltype, {IdParameter}, @otc, @mask, 0, {s.Dialect.UtcNow})
-                    """,
-                    [
-                        new DetachedParameter("@principal", DbType.Guid, principal.Id),
-                        new DetachedParameter("@principaltype", DbType.Int32, principal.LogicalName == Team ? 9 : 8),
-                        new DetachedParameter(IdParameter, DbType.Guid, target.Id),
-                        new DetachedParameter("@otc", DbType.Int32, m.ObjectTypeCode ?? 0),
-                        new DetachedParameter("@mask", DbType.Int32, (int)mask),
-                    ], ct), ct);
-                await AuditShareAsync(s, caller, replace ? AuditActions.ModifyShare : AuditActions.Share, target, principal, AccessRights.None, mask, ct);
-                return;
-            }
-            catch (DbException ex) when (s.Dialect.Classify(ex) == DbErrorKind.UniqueViolation && attempt == 0)
-            {
-                // A concurrent share inserted the row first: the next round updates it.
-            }
-        }
-    }
-
-    /// <summary>RevokeAccess: deletes the share of the record with the principal (nothing to delete is not an error).</summary>
-    /// <exception cref="XrmdFaultException">400 for an entity that is not user or team owned or a principal that is not a
-    /// systemuser or team; 404 when the record or the principal does not exist.</exception>
-    public async Task RevokeAccessAsync(DataSession s, Caller caller, EntityReference target, EntityReference revokee, CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(target);
-        ArgumentNullException.ThrowIfNull(revokee);
-        var m = ShareableEntity(target, revokee);
-        await EnsureShareRecordsExistAsync(s, m, target.Id, revokee, ct);
-        await using var cmd = s.Command(
-            $"DELETE FROM {s.DataTable(PrincipalObjectAccess)}{s.Dialect.ReturningInline(["accessrightsmask"], RowImage.Deleted)} " +
-            $"WHERE objectid = {IdParameter} AND objecttypecode = @otc AND principalid = @principal{s.Dialect.ReturningTrailing(["accessrightsmask"], RowImage.Deleted)}");
-        cmd.AddParameter(IdParameter, DbType.Guid, target.Id);
-        // Final review C2: the record is its id and its table; another table's record with the same id keeps its shares.
-        cmd.AddParameter("@otc", DbType.Int32, m.ObjectTypeCode ?? 0);
-        cmd.AddParameter("@principal", DbType.Guid, revokee.Id);
-        var old = AccessRights.None;
-        await using (var rd = await cmd.ExecuteReaderAsync(ct))
-            while (await rd.ReadAsync(ct)) old |= rd.IsDBNull(0) ? AccessRights.None : (AccessRights)rd.GetInt32(0);
-        // Nothing to revoke is not a change: no row.
-        if (old != AccessRights.None) await AuditShareAsync(s, caller, AuditActions.Unshare, target, revokee, old, AccessRights.None, ct);
-    }
-
-    /// <summary>
-    /// The share's audit row on the shared record (ruling A1): the action follows the message (GrantAccess 14, ModifyAccess 48,
-    /// RevokeAccess 49); the rights before and after are in the <see cref="ShareChange"/>.
-    /// </summary>
-    private Task AuditShareAsync(DataSession s, Caller caller, int action, EntityReference target, EntityReference principal,
-        AccessRights old, AccessRights now, CancellationToken ct) =>
-        audit.WriteAsync(s, caller, action, AuditOperations.Update, target,
-            new ShareChange(new EntityReference(principal.LogicalName, principal.Id), old, now), ct);
-
-    /// <summary>The entity of a shared record: user or team owned, and the principal a systemuser or a team.</summary>
-    /// <exception cref="XrmdFaultException">400 otherwise.</exception>
-    private EntityMetadata ShareableEntity(EntityReference target, EntityReference principal)
-    {
-        var m = EntityOf(target.LogicalName);
-        if (m.OwnershipType is not (OwnershipTypes.UserOwned or OwnershipTypes.TeamOwned))
-            throw XrmdFaultException.InvalidArgument($"Entity '{m.LogicalName}' is not user or team owned and cannot be shared.");
-        if (principal.LogicalName is not (SystemUser or Team))
-            throw XrmdFaultException.InvalidArgument(
-                $"Principal of type '{principal.LogicalName}' is not supported: a share must name a {SystemUser} or a {Team}.");
-        return m;
-    }
-
-    /// <summary>The shared record and the principal must exist (read with HOLDLOCK in the share's transaction).</summary>
-    /// <exception cref="XrmdFaultException">404 for the first one missing.</exception>
-    private async Task EnsureShareRecordsExistAsync(DataSession s, EntityMetadata m, Guid id, EntityReference principal, CancellationToken ct)
-    {
-        if (!await ExistsWhereAsync(s, m.LogicalName, SystemAttributes.PrimaryIdName(m), id, ct))
-            throw XrmdFaultException.ObjectDoesNotExist(m.LogicalName, id);
-        var principalEntity = EntityOf(principal.LogicalName);
-        if (!await ExistsWhereAsync(s, principalEntity.LogicalName, SystemAttributes.PrimaryIdName(principalEntity), principal.Id, ct))
-            throw XrmdFaultException.ObjectDoesNotExist(principalEntity.LogicalName, principal.Id);
-    }
-
     /// <summary>
     /// A unique index other than the primary key rejected the row (SQL Server error 2601; ruling P9): an alternate key or a unique
     /// value of the table, not the record's id.
     /// </summary>
     private static bool IsUniqueIndexViolation(DataSession s, DbException ex) =>
         s.Dialect.Classify(ex) == DbErrorKind.UniqueViolation && !s.Dialect.IsPrimaryKeyViolation(ex);
-
-    /// <summary>
-    /// Locks the share of the pair (UPDLOCK, HOLDLOCK: also the key range when it is missing) and, when it exists, sets its
-    /// mask (<paramref name="replace"/>) or adds <paramref name="mask"/> to it; the mask it had before, or null when there is no share yet.
-    /// The record is its id and its table's <paramref name="objectTypeCode"/> (final review C2): a record of another table with the
-    /// same id has its own share, which this never reads or changes.
-    /// </summary>
-    private static async Task<AccessRights?> UpdateShareAsync(DataSession s, Guid objectId, int objectTypeCode, Guid principalId, AccessRights mask,
-        bool replace, CancellationToken ct)
-    {
-        // Plan 2.7a, Task 6: the batch became the key lock of the share, its locking read, then its update.
-        var d = s.Dialect;
-        var table = s.DataTable(PrincipalObjectAccess);
-        await s.KeyLockAsync(PrincipalObjectAccess, $"{objectId:N}:{objectTypeCode}:{principalId:N}", ct);
-        int? current;
-        await using (var read = s.Command($"""
-            SELECT {d.IsNull("accessrightsmask", "0")} FROM {table}{d.LockHint(RowLock.UpdateRange)}
-            WHERE objectid = {IdParameter} AND objecttypecode = @otc AND principalid = @principal{d.LockClause(RowLock.UpdateRange)}
-            """))
-        {
-            read.AddParameter(IdParameter, DbType.Guid, objectId);
-            read.AddParameter("@otc", DbType.Int32, objectTypeCode);
-            read.AddParameter("@principal", DbType.Guid, principalId);
-            current = await read.ExecuteScalarAsync(ct) is { } value and not DBNull ? Convert.ToInt32(value) : null;
-        }
-        if (current is null) return null;
-        await using var cmd = s.Command($"""
-            UPDATE {table} SET accessrightsmask = @mask, changedon = {d.UtcNow}
-            WHERE objectid = {IdParameter} AND objecttypecode = @otc AND principalid = @principal
-            """);
-        cmd.AddParameter(IdParameter, DbType.Guid, objectId);
-        cmd.AddParameter("@otc", DbType.Int32, objectTypeCode);
-        cmd.AddParameter("@principal", DbType.Guid, principalId);
-        cmd.AddParameter("@mask", DbType.Int32, replace ? (int)mask : current.Value | (int)mask);
-        await cmd.ExecuteNonQueryAsync(ct);
-        return (AccessRights)current.Value;
-    }
-
-    /// <summary>The SDK handler of <see cref="LockExistsAsync(Xrmd.Model.Records.RecordReference, DataSession, CancellationToken)"/>.</summary>
-    private async Task<bool> LockExistsSdkAsync(EntityReference target, DataSession session, CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(target);
-        ArgumentNullException.ThrowIfNull(session);
-        if (session.Transaction is null) throw new InvalidOperationException("LockExistsAsync must run inside a transaction.");
-        var m = EntityOf(target.LogicalName);
-        await session.KeyLockAsync(m.LogicalName, target.Id, ct);
-        // Plan 2.7a, Task 6: the key read with the lock clause, so that an existing row is locked on both engines.
-        var key = session.Quote(SystemAttributes.PrimaryIdName(m));
-        await using var cmd = session.Command(
-            $"SELECT {key} FROM {session.DataTable(m.LogicalName)}{session.Dialect.LockHint(RowLock.UpdateRange)} " +
-            $"WHERE {key} = {IdParameter}{session.Dialect.LockClause(RowLock.UpdateRange)}");
-        cmd.AddParameter(IdParameter, DbType.Guid, target.Id);
-        return await cmd.ExecuteScalarAsync(ct) is not (null or DBNull);
-    }
-
-    /// <summary>
-    /// The record with <paramref name="attributes"/> (null: all; names the entity does not have are ignored); null when
-    /// it does not exist.
-    /// </summary>
-    private async Task<Entity?> RetrieveImageSdkAsync(EntityReference target, string[]? attributes, DataSession session, CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(target);
-        var m = EntityOf(target.LogicalName);
-        // Plan 2.11: the party lists of an activity have no column; they are read from activityparty and added to the image.
-        var partyLists = ActivitySchema.PartyLists(m).Select(p => p.Attribute).ToHashSet(StringComparer.Ordinal);
-        ColumnSet columns;
-        string[] parties;
-        if (attributes is null)
-        {
-            columns = new ColumnSet(true);
-            parties = [.. partyLists];
-        }
-        else
-        {
-            var known = AttributesOf(m);
-            columns = new ColumnSet(attributes.Where(a => known.ContainsKey(a) && !partyLists.Contains(a)).ToArray());
-            parties = attributes.Where(partyLists.Contains).ToArray();
-        }
-
-        Entity image;
-        try
-        {
-            image = await RetrieveAsync(session, Caller.Internal, m.LogicalName, target.Id, columns, ct);
-        }
-        catch (XrmdFaultException ex) when (ex.ErrorCode == ErrorCodes.ObjectDoesNotExist)
-        {
-            return null;
-        }
-        if (attributes is null)
-        {
-            // All columns: the read above already filled the party lists that have rows (ActivityRead) and left out the empty
-            // ones; they are not read a second time (final review M3), the empty ones are added as empty collections.
-            foreach (var name in parties)
-                if (!image.Contains(name)) image[name] = new EntityCollection { EntityName = ActivitySchema.Party };
-        }
-        else if (parties.Length > 0)
-            foreach (var (name, list) in (await _parties.ReadAsync(session, m, [target.Id], parties, ct))[target.Id])
-                image[name] = list;
-        return image;
-    }
 
     /// <summary>The <see cref="Caller"/> of an existing, enabled <c>systemuser</c> (its current business unit).</summary>
     /// <exception cref="XrmdFaultException">ObjectDoesNotExist (404) when the systemuser does not exist; UserDisabled (403,

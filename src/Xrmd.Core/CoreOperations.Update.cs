@@ -152,7 +152,7 @@ public sealed partial class CoreOperations
         await EnsureReferencesExistAsync(s, row, attrs, ct);
         // Plan 4.1a (ruling R15): an item reactivated, or pointed at another record, keeps one active item per record.
         if (m.LogicalName == QueueSchema.QueueItem && !MigrationScope.IsActive)
-            await CoreSdkBridges.DemandQueueItemUpdateAllowedAsync(QueueMessages, s, id, row, ct);
+            await QueueMessages.DemandItemUpdateAllowedAsync(s, id, row, ct);
         // A file column set to null deletes its file (ruling F4); the commit's column gets its file id and name.
         await CoreSdkBridges.ApplyFilesOnUpdateAsync(files, s, m, attrs, id, row, commit, ct);
         // An image set to a byte[] or null (ruling F4), as on Create; null also releases the full image.
@@ -197,7 +197,7 @@ public sealed partial class CoreOperations
         if (activity) await WriteActivityRowsAsync(s, m, id, partyLists!, isCreate: false, ct);
         // Plan 4.1a: a queue-enabled record that leaves the active state deactivates its active items, in this transaction.
         if (m.IsValidForQueue?.Value == true && !MigrationScope.IsActive && row.GetValue<ChoiceValue>("statecode") is { Value: not 0 })
-            await CoreSdkBridges.DeactivateQueueItemsAsync(QueueMessages, s, caller, m, id, row.GetValue<ChoiceValue>("statuscode")?.Value, ct);
+            await QueueMessages.DeactivateItemsAsync(s, caller, m, id, row.GetValue<ChoiceValue>("statuscode")?.Value, ct);
         // Plan 2.15: the row's match codes when a column a rule matches on changed (Assign and SetState come through here too);
         // the organization switch turned off unpublishes every rule (ruling D11), in this transaction.
         InvalidateDuplicateRulesOnWrite(s, m.LogicalName);

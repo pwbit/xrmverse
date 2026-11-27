@@ -1,17 +1,17 @@
 using System.Data;
-using Microsoft.Crm.Sdk.Messages;
-using Microsoft.Xrm.Sdk;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
+using Xrmd.Model.Messages;
 
 namespace Xrmd.Core;
 
 /// <summary>
 /// The currency messages of the core (plan 2.10, ruling X12) and the work the core does after a currency write: RetrieveExchangeRate
 /// (<c>TransactionCurrencyId</c> → <c>ExchangeRate</c>), the copy of the base currency's symbol and precision to the organization
-/// (ruling X2), and the invalidation of the <see cref="ICurrencyCatalog"/>.
+/// (ruling X2), and the invalidation of the <see cref="ICurrencyCatalog"/>. S.2e3c1 (Task 4): RetrieveExchangeRate runs on the model
+/// request; it has no SDK twin, as nothing outside the core calls it (Task 5, ruling 4c).
 /// </summary>
 public static class CurrencyMessages
 {
@@ -47,18 +47,14 @@ public static class CurrencyMessages
         };
     }
 
-    /// <summary>The RetrieveExchangeRate response of the request (its <c>TransactionCurrencyId</c>), read in <paramref name="s"/>.</summary>
+    /// <summary>The RetrieveExchangeRate response of the model request (its <c>TransactionCurrencyId</c>), read in <paramref name="s"/>.</summary>
     /// <exception cref="XrmdFaultException">400 without <c>TransactionCurrencyId</c>; the faults of <see cref="RetrieveExchangeRateAsync"/>.</exception>
-    public static async Task<RetrieveExchangeRateResponse> ExecuteAsync(OrganizationRequest request, DataSession s, CancellationToken ct)
+    public static async Task<Response> ExecuteAsync(Request request, DataSession s, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
         if (!request.Parameters.TryGetValue(CurrencyIdParameter, out var value) || value is not Guid id || id == Guid.Empty)
             throw XrmdFaultException.InvalidArgument($"Required parameter '{CurrencyIdParameter}' of request '{MessageName}' is missing.");
-        return new RetrieveExchangeRateResponse
-        {
-            ResponseName = MessageName,
-            Results = { [RateProperty] = await RetrieveExchangeRateAsync(s, id, ct) },
-        };
+        return new Response { Name = MessageName, Results = { [RateProperty] = await RetrieveExchangeRateAsync(s, id, ct) } };
     }
 
     /// <summary>

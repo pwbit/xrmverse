@@ -357,11 +357,14 @@ internal static class CoreScenarios
             EntityMoniker = new EntityReference("account", await k.Admin.CreateAsync(new Entity("account") { ["name"] = "crg account", ["telephone1"] = "555 0100" })),
             TargetEntityName = "contact", TargetFieldType = TargetFieldType.ValidForCreate,
         }),
+        // The response lists the table's attributes in the cached metadata's order: creation order for a table created in this
+        // process, name order once a metadata reload (by an earlier test of the run, e.g. FileImageMetadataTests) has read it back.
+        // The table is created on a database of its own, so the golden always sees it as created.
         NonPipeline("RetrieveEntity", async k =>
         {
             await k.EnsureTrackedTableAsync();
             return new RetrieveEntityRequest { LogicalName = TrackedTable, EntityFilters = EntityFilters.Entity };
-        }),
+        }) with { OwnDatabase = true },
         NonPipeline("RetrieveAttribute", async k =>
         {
             await k.EnsureTrackedTableAsync();

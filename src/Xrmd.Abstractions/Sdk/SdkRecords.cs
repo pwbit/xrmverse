@@ -1,7 +1,9 @@
+using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Model.Query;
 using Xrmd.Model.Records;
+using Xrmd.Model.Security;
 
 namespace Xrmd.Abstractions.Sdk;
 
@@ -9,7 +11,7 @@ namespace Xrmd.Abstractions.Sdk;
 /// Converters between the Microsoft SDK's record types and our own model (<c>Xrmd.Model.Records</c>). Every conversion
 /// copies into new instances; the model and the SDK object never share a mutable collection.
 /// <para>
-/// Known value types, converted recursively both ways: OptionSetValue, OptionSetValueCollection, Money, EntityReference,
+/// Known value types, converted recursively both ways: AccessRights (to AccessMask), PrincipalAccess, RolePrivilege and their exact arrays (see <c>Xrmd.Model.Security</c>), OptionSetValue, OptionSetValueCollection, Money, EntityReference,
 /// Entity, EntityCollection, EntityReferenceCollection, AliasedValue, ColumnSet (with its AttributeExpressions), QueryExpression, QueryByAttribute and FetchExpression (see <see cref="SdkQueries"/>), Relationship and exact arrays of Entity, EntityReference, OptionSetValue,
 /// Money or object (exact array types only; string[], arrays of other types and subtype arrays pass through). Primitives and anything else (for example BooleanManagedProperty, byte[])
 /// pass through unchanged, as the same instance: byte[], string[] and the other pass-through values are shared by reference between the
@@ -372,6 +374,11 @@ public static class SdkRecords
         FetchExpression q => q.ToModel(),
         Relationship r => r.ToModel(),
         AliasedValue a => new AliasedColumnValue(a.EntityLogicalName, a.AttributeLogicalName, ValueToModel(a.Value)),
+        AccessRights r => (AccessMask)(int)r,
+        PrincipalAccess p => PrincipalToModel(p),
+        RolePrivilege p => PrivilegeToModel(p),
+        PrincipalAccess[] a when a.GetType() == typeof(PrincipalAccess[]) => Array.ConvertAll(a, PrincipalToModel),
+        RolePrivilege[] a when a.GetType() == typeof(RolePrivilege[]) => Array.ConvertAll(a, PrivilegeToModel),
         Entity[] a when a.GetType() == typeof(Entity[]) => Array.ConvertAll(a, e => e.ToModel()),
         EntityReference[] a when a.GetType() == typeof(EntityReference[]) => Array.ConvertAll(a, r => r.ToModel()),
         OptionSetValue[] a when a.GetType() == typeof(OptionSetValue[]) => Array.ConvertAll(a, o => new ChoiceValue(o.Value)),
@@ -397,6 +404,11 @@ public static class SdkRecords
         FetchQuery q => q.ToSdk(),
         RelationshipName r => r.ToSdk(),
         AliasedColumnValue a => new AliasedValue(a.EntityLogicalName, a.AttributeLogicalName, ValueToSdk(a.Value)),
+        AccessMask m => (AccessRights)(int)m,
+        PrincipalAccessValue p => PrincipalToSdk(p),
+        PrivilegeGrant g => PrivilegeToSdk(g),
+        PrincipalAccessValue[] a when a.GetType() == typeof(PrincipalAccessValue[]) => Array.ConvertAll(a, PrincipalToSdk),
+        PrivilegeGrant[] a when a.GetType() == typeof(PrivilegeGrant[]) => Array.ConvertAll(a, PrivilegeToSdk),
         Record[] a when a.GetType() == typeof(Record[]) => Array.ConvertAll(a, e => e.ToSdk()),
         RecordReference[] a when a.GetType() == typeof(RecordReference[]) => Array.ConvertAll(a, r => r.ToSdk()),
         ChoiceValue[] a when a.GetType() == typeof(ChoiceValue[]) => Array.ConvertAll(a, o => new OptionSetValue(o.Value)),
@@ -404,6 +416,27 @@ public static class SdkRecords
         object[] a when a.GetType() == typeof(object[]) => Array.ConvertAll(a, ValueToSdk),
         _ => value,
     };
+
+    // Access and privilege values: the rules of Xrmd.Security.Sdk.SdkSecurityTypes (Abstractions cannot reference Xrmd.Security). The
+    // access flags are cast by int value; the privilege depth is range-checked.
+    private static PrincipalAccessValue PrincipalToModel(PrincipalAccess p) =>
+        new(p.Principal?.ToModel()!, (AccessMask)(int)p.AccessMask);
+
+    private static PrincipalAccess PrincipalToSdk(PrincipalAccessValue p) =>
+        new() { Principal = p.Principal?.ToSdk(), AccessMask = (AccessRights)(int)p.AccessMask };
+
+    private static PrivilegeGrant PrivilegeToModel(RolePrivilege p)
+    {
+        var depth = (PrivilegeScope)(int)p.Depth;
+        if (!Enum.IsDefined(depth)) throw new ArgumentOutOfRangeException(nameof(p), p.Depth, "Not a defined PrivilegeDepth.");
+        return new PrivilegeGrant(p.PrivilegeId, p.PrivilegeName, p.BusinessUnitId, depth);
+    }
+
+    private static RolePrivilege PrivilegeToSdk(PrivilegeGrant g)
+    {
+        if (!Enum.IsDefined(g.Depth)) throw new ArgumentOutOfRangeException(nameof(g), g.Depth, "Not a defined PrivilegeScope.");
+        return new RolePrivilege { PrivilegeId = g.PrivilegeId, PrivilegeName = g.PrivilegeName, BusinessUnitId = g.BusinessUnitId, Depth = (PrivilegeDepth)(int)g.Depth };
+    }
 
     private static ChoiceValues ToChoiceValues(OptionSetValueCollection source)
     {

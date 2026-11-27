@@ -10,16 +10,23 @@ using Xrmd.Pipeline;
 using Xrmd.Query;
 using Xrmd.Query.FetchXml;
 using Xrmd.Query.Model;
+using Xrmd.Security;
 using Xrmd.Solution;
 
 namespace Xrmd.Core;
 
 /// <summary>
+/// S.2e3c1 (Decision 2): the model dispatch every core message enters (<see cref="ExecuteMessageAsync"/>,
+/// <see cref="ExecuteNonPipelineMessageAsync"/>). A message whose body has not moved to the model yet is bridged to its SDK handler
+/// (<see cref="CoreSdkMessages"/>); a name that is no core message goes there too, where the SDK switch refuses it with today's
+/// <see cref="NotSupportedException"/>.
+/// <para>
 /// S.2e3b (Task 8): the eight CRUD messages (Create, Retrieve, Update, Delete, RetrieveMultiple, Assign, Associate, Disassociate)
 /// dispatched on the model request: the parameters are read as model values and the model bodies run, with no conversion of the
 /// request. The answer is a model <see cref="Response"/> with today's results; the entry adapter (<c>Sdk/CoreOperations.Sdk.cs</c>)
 /// pairs it with today's typed SDK response. A helper of another step that is still on the SDK is reached through
 /// <see cref="CoreSdkBridges"/>, which converts only when the helper applies.
+/// </para>
 /// </summary>
 public sealed partial class CoreOperations
 {
@@ -28,6 +35,128 @@ public sealed partial class CoreOperations
     /// adapter's <c>CoreHandOff.HandlerRequest</c> seam, which sees the SDK request of a handler of <c>CoreOperations.cs</c>).
     /// </summary>
     internal static readonly AsyncLocal<Action<Request>?> CrudRequest = new();
+
+    /// <summary>
+    /// Test seam: called with each model request that enters the model dispatch (<see cref="ExecuteMessageAsync"/>,
+    /// <see cref="ExecuteNonPipelineMessageAsync"/>), bridged or not. <see cref="CrudRequest"/> still fires for the CRUD branch
+    /// (ruling P1).
+    /// </summary>
+    internal static readonly AsyncLocal<Action<Request>?> MessageRequest = new();
+
+    /// <summary>
+    /// True for a core message whose body runs on the model (the eight CRUD messages, S.2e3b; the share and record team messages,
+    /// S.2e3c1 Task 3; the role privilege messages, RetrieveExchangeRate and RetrieveEntityChanges, Task 4; the queue messages, Task 5; ExecuteWorkflow, refused, Task 6): a core message of <see cref="CoreMessages"/> that is not bridged (<see cref="CoreSdkMessages.Bridged"/>). The
+    /// entry adapter pairs its model response with today's typed SDK response. Each such name has a model case in
+    /// <see cref="ExecuteMessageAsync"/> and a typed response in <see cref="CoreResponses.Typed"/>.
+    /// </summary>
+    private static bool IsOnModel(string canonicalName) =>
+        CoreMessages.Contains(canonicalName) && !CoreSdkMessages.Bridged.Contains(canonicalName);
+
+    /// <summary>
+    /// True for a message answered outside the pipeline whose body runs on the model (RetrievePrincipalAccess and
+    /// RetrieveSharedPrincipalsAndAccess, S.2e3c1 Task 3; RetrieveUserPrivileges, Task 4; WhoAmI, RetrieveAppComponents,
+    /// RetrieveUnpublished, InitializeFrom, RetrieveFormattedImportJobResults and the refusals from a plug-in, Task 6): one of <see cref="NonPipelineMessages"/> that is not bridged. As
+    /// <see cref="IsOnModel"/>, each has a model case in <see cref="ExecuteNonPipelineMessageAsync"/> and a typed response.
+    /// </summary>
+    private static bool IsNonPipelineOnModel(string canonicalName) =>
+        NonPipelineMessages.Contains(canonicalName) && !CoreSdkMessages.Bridged.Contains(canonicalName);
+
+    /// <summary>
+    /// A core message, named <paramref name="canonicalName"/> (the canonical case of <see cref="CoreMessages"/>, or the request's own
+    /// name when it is no core message), on the model request: a message on the model runs its model body (the CRUD messages,
+    /// <see cref="ExecuteCrudAsync"/>; the access messages, <see cref="ExecuteAccessAsync"/>; the role privilege, currency and change
+    /// tracking messages, <see cref="ExecuteRoleCurrencyOrChangeAsync"/>; the queue messages, <see cref="ExecuteQueueAsync"/>; ExecuteWorkflow, refused); any other name goes to its SDK handler through <see cref="CoreSdkMessages.ExecuteAsync"/>.
+    /// </summary>
+    /// <exception cref="NotSupportedException">A name that is no core message (today's text, from the SDK switch).</exception>
+    private async Task<Response> ExecuteMessageAsync(Request request, string canonicalName, CoreCall call, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(call);
+        MessageRequest.Value?.Invoke(request);
+        if (!IsOnModel(canonicalName)) return await CoreSdkMessages.ExecuteAsync(this, request, call, ct);
+        if (IsAccessMessage(canonicalName)) return await ExecuteAccessAsync(request, canonicalName, call, ct);
+        if (IsRoleCurrencyOrChangeMessage(canonicalName)) return await ExecuteRoleCurrencyOrChangeAsync(request, canonicalName, call, ct);
+        if (QueueSchema.Messages.Contains(canonicalName)) return await ExecuteQueueAsync(request, call, ct);
+        if (canonicalName == PipelineExecutor.ExecuteWorkflowMessage) throw ExecuteWorkflowRefusal(request, call);
+        return await ExecuteCrudAsync(request, canonicalName, call, ct);
+    }
+
+    /// <summary>
+    /// ExecuteWorkflow at the core (S.2e3c1 Task 6): its stage 30 is <c>IWorkflowPipelineHook.ExecuteWorkflowAsync</c>, which the
+    /// pipeline runs (plan 2.14, W21), so the core refuses it with today's texts (the check of server values first, as the SDK handler did).
+    /// </summary>
+    private static InvalidOperationException ExecuteWorkflowRefusal(Request request, CoreCall call) =>
+        call.ServerSetValues is not null
+            ? new InvalidOperationException($"Server values are written on a Create only, not on '{request.Name}'.")
+            : new InvalidOperationException("ExecuteWorkflow runs through the pipeline, which hands it to the classic workflows.");
+
+    /// <summary>
+    /// The queue messages (S.2e3c1 Task 5) on the model request (<see cref="Core.QueueMessages"/>, plan 4.1a): the item and membership
+    /// writes run through the pipeline, one level deeper (decision 4), as model requests the entry adapter pairs with today's request
+    /// classes.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Server values (written on a Create only).</exception>
+    private Task<Response> ExecuteQueueAsync(Request request, CoreCall call, CancellationToken ct)
+    {
+        if (call.ServerSetValues is not null)
+            throw new InvalidOperationException($"Server values are written on a Create only, not on '{request.Name}'.");
+        return QueueMessages.ExecuteAsync(request, call.Caller, call.Session, call.Nested, ct);
+    }
+
+    /// <summary>
+    /// A message answered outside the pipeline, named <paramref name="canonicalName"/> (the canonical case of
+    /// <see cref="NonPipelineMessages"/>, or the request's own name), on the model request: the access reads, RetrieveUserPrivileges and the reads and refusals of <see cref="ExecuteNonPipelineReadAsync"/> run their model body
+    /// (<see cref="AccessMessages"/>, in the caller's session, so a plug-in's call sees its uncommitted rows: plan 3.5 UI-1b final
+    /// review, I3); any other name goes to its SDK handler through <see cref="CoreSdkMessages.ExecuteNonPipelineAsync"/>.
+    /// </summary>
+    /// <exception cref="NotSupportedException">A name that is no such message (today's text, from the SDK switch).</exception>
+    private async Task<Response> ExecuteNonPipelineMessageAsync(Request request, string canonicalName, Caller caller, DataSession session,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        MessageRequest.Value?.Invoke(request);
+        if (!IsNonPipelineOnModel(canonicalName)) return await CoreSdkMessages.ExecuteNonPipelineAsync(this, request, caller, session, ct);
+        ArgumentNullException.ThrowIfNull(caller);
+        return canonicalName switch
+        {
+            AccessMessages.RetrievePrincipalAccess or AccessMessages.RetrieveSharedPrincipalsAndAccess =>
+                await accessMessages.ExecuteAsync(request, caller, session, ct),
+            "RetrieveUserPrivileges" => await RetrieveUserPrivilegesAsync(request, caller, session, ct),
+            _ when IsNonPipelineRead(canonicalName) => await ExecuteNonPipelineReadAsync(request, canonicalName, caller, session, ct),
+            _ => throw new ArgumentOutOfRangeException(nameof(canonicalName), canonicalName, "Not a message answered outside the pipeline on the model."),
+        };
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// S.2e3c1 (Task 4): read on the model request, its name and its <c>Relationship</c> (a <see cref="RelationshipName"/>); no SDK request
+    /// is built. Associate/Disassociate over a security relationship: its intersect (<c>systemuserroles</c>, <c>teamroles</c>,
+    /// <c>teammembership</c>, <c>systemuserprofiles</c>, <c>teamprofiles</c>), over a saved many-to-many relationship: its intersect
+    /// entity; AddPrivilegesRole, ReplacePrivilegesRole, RemovePrivilegeRole: <c>roleprivileges</c>; AddUserToRecordTeam,
+    /// RemoveUserFromRecordTeam: <c>team</c>, <c>teammembership</c> and <c>principalobjectaccess</c> (plan 2.16, ruling A9);
+    /// PublishDuplicateRule, UnpublishDuplicateRule: <c>duplicaterule</c>.
+    /// </remarks>
+    public IReadOnlyCollection<string> WrittenEntities(Request request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        switch (CoreMessages.TryGetValue(request.Name ?? "", out var canonical) ? canonical : request.Name)
+        {
+            case "Associate" or "Disassociate":
+                if (!request.Parameters.TryGetValue("Relationship", out var r) || r is not RelationshipName relationship) return [];
+                if (SecurityAdministration.FindRelationship(relationship.SchemaName) is { } security) return [security.IntersectEntity];
+                return store.GetRelationshipDefinition(relationship.SchemaName ?? "") is Model.Metadata.ManyToManyRelationship manyToMany
+                    ? [manyToMany.IntersectEntityName!]
+                    : [];
+            case "AddPrivilegesRole" or "ReplacePrivilegesRole" or "RemovePrivilegeRole":
+                return [RolePrivileges];
+            case AccessTeamRules.AddUserToRecordTeam or AccessTeamRules.RemoveUserFromRecordTeam:
+                return [Team, "teammembership", PrincipalObjectAccess];
+            case DuplicateRulePublisher.PublishMessage or DuplicateRulePublisher.UnpublishMessage:
+                return [DuplicateDetectionSchema.Rule];
+            default:
+                return [];
+        }
+    }
 
     /// <summary>
     /// One of the eight CRUD messages, named <paramref name="canonicalName"/> (the canonical case of <see cref="CoreMessages"/>), on the
@@ -106,7 +235,7 @@ public sealed partial class CoreOperations
     /// A required parameter of the model <paramref name="request"/>; InvalidArgument (400) when missing or of another type, the type
     /// named as the SDK one a caller passes (<paramref name="sdkTypeName"/>), as the SDK handlers said it.
     /// </summary>
-    private static T Parameter<T>(Request request, string name, string sdkTypeName) where T : class =>
+    internal static T Parameter<T>(Request request, string name, string sdkTypeName) where T : class =>
         request.Parameters.TryGetValue(name, out var value) && value is T typed
             ? typed
             : throw XrmdFaultException.InvalidArgument($"Required parameter '{name}' of request '{request.Name}' is missing or not a {sdkTypeName}.");

@@ -730,6 +730,40 @@ namespace Xrmd.TestPlugins
     }
 
     /// <summary>
+    /// S.2e3c1: records the access value a step sees. Configuration <c>"{entity}[|mask={int}]"</c>. A <c>PrincipalAccess</c> input
+    /// creates a record of the entity named <c>PrincipalAccess|{CLR type}|{principal name}|{principal id}|{mask as int}</c> and, with
+    /// <c>mask</c>, replaces the input with a new <c>PrincipalAccess</c> of the same principal and that mask.
+    /// </summary>
+    public class AccessValuesProbePlugin : IPlugin
+    {
+        private readonly string _entity;
+        private readonly int? _mask;
+
+        public AccessValuesProbePlugin(string unsecure, string secure)
+        {
+            var parts = unsecure.Split(new[] { '|' }, 2);
+            _entity = parts[0];
+            if (parts.Length > 1) _mask = int.Parse(parts[1].Substring("mask=".Length), CultureInfo.InvariantCulture);
+        }
+
+        public void Execute(IServiceProvider serviceProvider)
+        {
+            var context = (IPluginExecutionContext)serviceProvider.GetService(typeof(IPluginExecutionContext));
+            var factory = (IOrganizationServiceFactory)serviceProvider.GetService(typeof(IOrganizationServiceFactory));
+            var service = factory.CreateOrganizationService(context.UserId);
+            if (context.InputParameters.Contains("PrincipalAccess") && context.InputParameters["PrincipalAccess"] is PrincipalAccess access)
+            {
+                var e = new Entity(_entity);
+                e["pb_name"] = string.Format(CultureInfo.InvariantCulture, "PrincipalAccess|{0}|{1}|{2}|{3}", access.GetType().FullName,
+                    access.Principal.LogicalName, access.Principal.Id, (int)access.AccessMask);
+                service.Create(e);
+                if (_mask.HasValue)
+                    context.InputParameters["PrincipalAccess"] = new PrincipalAccess { Principal = access.Principal, AccessMask = (AccessRights)_mask.Value };
+            }
+        }
+    }
+
+    /// <summary>
     /// Calls RetrieveRecordChangeHistory on the Target with the caller's service and sets
     /// <c>Target["pb_data"] = "total={TotalRecordCount}|first={type of the newest detail}|name={its NewValue pb_name}"</c>.
     /// </summary>

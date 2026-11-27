@@ -564,48 +564,6 @@ public sealed class CoreSdkBridgeTests(XrmdFixture fx)
         row["new_parentidpid"].Should().BeNull();
     }
 
-    [Fact]
-    public async Task Bridge_skips_DemandNewQueueItemAllowed_when_inactive_or_without_record()
-    {
-        await using var kit = await CoreScenarioKit.StartAsync(fx, ownDatabase: false);
-        var reference = new RecordReference { LogicalName = "account", Id = Unknown };
-        ShouldBeSkipped(await CrossingsOf(() => CoreSdkBridges.DemandNewQueueItemAllowedAsync(null!, kit.Store,
-            new Record(QueueSchema.QueueItem) { ["statecode"] = new ChoiceValue(1), [QueueSchema.ObjectId] = reference }, default)));
-        ShouldBeSkipped(await CrossingsOf(() => CoreSdkBridges.DemandNewQueueItemAllowedAsync(null!, kit.Store, new Record(QueueSchema.QueueItem), default)));
-    }
-
-    [Fact]
-    public async Task Bridge_runs_DemandNewQueueItemAllowed_when_it_applies()
-    {
-        await using var kit = await CoreScenarioKit.StartAsync(fx, ownDatabase: false);
-        await using var session = await Session.OpenAsync(kit.ConnectionString);
-        ShouldBeRefused(await CrossingsOf(() => CoreSdkBridges.DemandNewQueueItemAllowedAsync(session.S, kit.Store,
-            new Record(QueueSchema.QueueItem) { [QueueSchema.ObjectId] = new RecordReference { LogicalName = "account", Id = Unknown } }, default)), 404);
-    }
-
-    [Fact]
-    public async Task Bridge_skips_DemandQueueItemUpdateAllowed_when_state_and_record_unchanged()
-    {
-        await using var kit = await CoreScenarioKit.StartAsync(fx, ownDatabase: false);
-        await using var scope = kit.Services.CreateAsyncScope();
-        var core = scope.ServiceProvider.GetRequiredService<CoreOperations>();
-        ShouldBeSkipped(await CrossingsOf(() => CoreSdkBridges.DemandQueueItemUpdateAllowedAsync(core.QueueMessages, null!, Unknown,
-            new Record(QueueSchema.QueueItem) { ["title"] = "crb" }, default)));
-        ShouldBeSkipped(await CrossingsOf(() => CoreSdkBridges.DemandQueueItemUpdateAllowedAsync(core.QueueMessages, null!, Unknown,
-            new Record(QueueSchema.QueueItem) { ["statecode"] = new ChoiceValue(1) }, default)));
-    }
-
-    [Fact]
-    public async Task Bridge_runs_DemandQueueItemUpdateAllowed_when_it_applies()
-    {
-        await using var kit = await CoreScenarioKit.StartAsync(fx, ownDatabase: false);
-        await using var scope = kit.Services.CreateAsyncScope();
-        var core = scope.ServiceProvider.GetRequiredService<CoreOperations>();
-        await using var session = await Session.OpenAsync(kit.ConnectionString);
-        ShouldBeRefused(await CrossingsOf(() => CoreSdkBridges.DemandQueueItemUpdateAllowedAsync(core.QueueMessages, session.S, Unknown,
-            new Record(QueueSchema.QueueItem) { ["statecode"] = new ChoiceValue(0) }, default)), 404);
-    }
-
     // ---- Files, duplicates, rollups ----
 
     [Fact]

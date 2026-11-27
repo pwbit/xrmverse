@@ -1,10 +1,12 @@
 using System.Data;
-using Microsoft.Crm.Sdk.Messages;
-using Microsoft.Xrm.Sdk;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
+using Xrmd.Model.Messages;
+using Xrmd.Model.Metadata;
+using Xrmd.Model.Records;
+using Xrmd.Model.Security;
 using Xrmd.Security;
 
 namespace Xrmd.Core;
@@ -20,10 +22,20 @@ namespace Xrmd.Core;
 /// row and the record are locked until commit (<see cref="AccessTeamRules.DemandRecordTeamAsync"/>), so a template Delete, a
 /// mask change or a record Delete waits for the call (or the call for it). The unique index <c>UX_team_record_template</c> is the
 /// backstop: a Create that still loses the race reads the team once more.
+/// <para>
+/// S.2e3c1 (Task 3): on the model request and model values. The checks of <see cref="AccessTeamRules"/> stay on the SDK until S.2e3c2
+/// and are reached through <see cref="CoreSdkBridges"/>.
+/// </para>
 /// </remarks>
 internal sealed class RecordTeams(CoreOperations core, IMetadataStore store, SecurityAdministration security)
 {
     private const string Team = AccessTeamSchema.Team;
+
+    /// <summary>
+    /// A record team message's parameters once checked (the model of <see cref="AccessTeamRules.RecordTeamTarget"/>): the record's
+    /// table, the template's mask now and the record's owning business unit.
+    /// </summary>
+    internal sealed record Target(TableDefinition Table, Guid RecordId, Guid UserId, Guid TemplateId, AccessMask Mask, Guid? OwningBusinessUnit);
 
     /// <summary>Test seam: runs right before the team is created, in the request's session (to force a lost race).</summary>
     internal Func<DataSession, Task>? BeforeCreateTeam { get; set; }
@@ -37,7 +49,7 @@ internal sealed class RecordTeams(CoreOperations core, IMetadataStore store, Sec
     /// <exception cref="XrmdFaultException">400 for a missing parameter; the faults of
     /// <see cref="AccessTeamRules.DemandRecordTeamAsync"/> (404, 400), <see cref="AccessTeamRules.DemandSameAsChecked"/> and
     /// <see cref="AccessTeamRules.DemandTeamShareChecked"/> (400).</exception>
-    public async Task<Guid> AddUserAsync(DataSession s, Caller caller, OrganizationRequest request, CancellationToken ct)
+    public async Task<Guid> AddUserAsync(DataSession s, Caller caller, Request request, CancellationToken ct)
     {
         var target = await LockedTargetAsync(s, caller, request, ct);
         var teamId = await FindOrCreateTeamAsync(s, caller, request, target, ct);
@@ -51,7 +63,7 @@ internal sealed class RecordTeams(CoreOperations core, IMetadataStore store, Sec
     /// </summary>
     /// <returns>The team's id, or <see cref="Guid.Empty"/> when the record has no team for the template yet.</returns>
     /// <exception cref="XrmdFaultException">As <see cref="AddUserAsync"/>.</exception>
-    public async Task<Guid> RemoveUserAsync(DataSession s, Caller caller, OrganizationRequest request, CancellationToken ct)
+    public async Task<Guid> RemoveUserAsync(DataSession s, Caller caller, Request request, CancellationToken ct)
     {
         var target = await LockedTargetAsync(s, caller, request, ct);
         if (await LockTeamAsync(s, target, ct) is not { } teamId) return Guid.Empty;
@@ -63,17 +75,32 @@ internal sealed class RecordTeams(CoreOperations core, IMetadataStore store, Sec
     /// Steps 1–5 of ruling A6 on the final parameters, with the template and the record locked until commit; then what is about to
     /// be written must be what the <c>SecurityGuard</c> checked (steps 6 and 7).
     /// </summary>
-    private async Task<AccessTeamRules.RecordTeamTarget> LockedTargetAsync(DataSession s, Caller caller, OrganizationRequest request,
+    private async Task<Target> LockedTargetAsync(DataSession s, Caller caller, Request request,
         CancellationToken ct)
     {
-        var (record, userId, templateId) = AccessTeamRules.RecordTeamParameters(request);
-        var target = await AccessTeamRules.DemandRecordTeamAsync(s, store, record, userId, templateId, lockRows: true, ct);
-        AccessTeamRules.DemandSameAsChecked(request, caller, target);
+        var (record, userId, templateId) = RecordTeamParameters(request);
+        var target = await CoreSdkBridges.DemandRecordTeamAsync(s, store, record, userId, templateId, ct);
+        CoreSdkBridges.DemandSameAsChecked(request, caller, target);
         return target;
     }
 
-    private async Task<Guid> FindOrCreateTeamAsync(DataSession s, Caller caller, OrganizationRequest request,
-        AccessTeamRules.RecordTeamTarget target, CancellationToken ct)
+    /// <summary>
+    /// The parameters of a record team message (the model of <see cref="AccessTeamRules.RecordTeamParameters"/>): <c>Record</c>
+    /// (a reference), <c>SystemUserId</c> and <c>TeamTemplateId</c> (Guid), read in this order.
+    /// </summary>
+    /// <exception cref="XrmdFaultException">400 when one is missing or of another type (named with today's SDK type).</exception>
+    private static (RecordReference Record, Guid UserId, Guid TemplateId) RecordTeamParameters(Request request) =>
+        (Parameter<RecordReference>(request, "Record", "EntityReference"), Parameter<Guid>(request, "SystemUserId", nameof(Guid)),
+            Parameter<Guid>(request, "TeamTemplateId", nameof(Guid)));
+
+    private static T Parameter<T>(Request request, string name, string sdkTypeName) =>
+        request.Parameters.TryGetValue(name, out var value) && value is T typed
+            ? typed
+            : throw XrmdFaultException.InvalidArgument(
+                $"Required parameter '{name}' of request '{request.Name}' is missing or not a {sdkTypeName}.");
+
+    private async Task<Guid> FindOrCreateTeamAsync(DataSession s, Caller caller, Request request,
+        Target target, CancellationToken ct)
     {
         if (await LockTeamAsync(s, target, ct) is { } existing) return await CheckedTeamAsync(s, caller, request, target, existing, ct);
         if (BeforeCreateTeam is { } hook) await hook(s);
@@ -98,11 +125,11 @@ internal sealed class RecordTeams(CoreOperations core, IMetadataStore store, Sec
     /// An existing team, locked: the member receives its share of the record, so the rights of that share, read under the lock,
     /// must be rights the <c>SecurityGuard</c> checked (<see cref="AccessTeamRules.DemandTeamShareChecked"/>).
     /// </summary>
-    private static async Task<Guid> CheckedTeamAsync(DataSession s, Caller caller, OrganizationRequest request,
-        AccessTeamRules.RecordTeamTarget target, Guid teamId, CancellationToken ct)
+    private static async Task<Guid> CheckedTeamAsync(DataSession s, Caller caller, Request request,
+        Target target, Guid teamId, CancellationToken ct)
     {
-        var share = await AccessTeamRules.TeamShareMaskAsync(s, target, lockRows: true, ct) ?? AccessRights.None;
-        AccessTeamRules.DemandTeamShareChecked(request, caller, target, share);
+        var share = await CoreSdkBridges.TeamShareMaskAsync(s, target, ct) ?? AccessMask.None;
+        CoreSdkBridges.DemandTeamShareChecked(request, caller, target, share);
         return teamId;
     }
 
@@ -112,23 +139,23 @@ internal sealed class RecordTeams(CoreOperations core, IMetadataStore store, Sec
     /// caller; and its share of the record with the template's mask, written as GrantAccess writes it (audited as a share when
     /// auditing is on).
     /// </summary>
-    private async Task<Guid> CreateTeamAsync(DataSession s, Caller caller, AccessTeamRules.RecordTeamTarget target, CancellationToken ct)
+    private async Task<Guid> CreateTeamAsync(DataSession s, Caller caller, Target target, CancellationToken ct)
     {
         var acting = caller == Caller.Internal ? await core.ResolveUserAsync(await core.SystemUserIdAsync(s, ct), s, ct) : caller;
-        var team = new Entity(Team)
+        var team = new Record(Team)
         {
             ["name"] = $"{target.RecordId:D}+{target.TemplateId:D}",
-            ["teamtype"] = new OptionSetValue(1),
+            ["teamtype"] = new ChoiceValue(1),
             ["isdefault"] = false,
             [AccessTeamSchema.SystemManaged] = true,
-            ["administratorid"] = new EntityReference("systemuser", acting.UserId),
-            [AccessTeamSchema.RegardingObjectId] = new EntityReference(target.Table.LogicalName, target.RecordId),
-            [AccessTeamSchema.TeamTemplateId] = new EntityReference(AccessTeamSchema.TeamTemplate, target.TemplateId),
+            ["administratorid"] = Reference("systemuser", acting.UserId),
+            [AccessTeamSchema.RegardingObjectId] = Reference(target.Table.LogicalName!, target.RecordId),
+            [AccessTeamSchema.TeamTemplateId] = Reference(AccessTeamSchema.TeamTemplate, target.TemplateId),
         };
-        if (target.OwningBusinessUnit is { } businessUnit) team["businessunitid"] = new EntityReference("businessunit", businessUnit);
-        var teamId = await core.CreateAsync(s, acting, team, ct);
-        await core.ShareAsync(s, acting, new EntityReference(target.Table.LogicalName, target.RecordId),
-            new PrincipalAccess { Principal = new EntityReference(Team, teamId), AccessMask = target.Mask }, replace: false, ct);
+        if (target.OwningBusinessUnit is { } businessUnit) team["businessunitid"] = Reference("businessunit", businessUnit);
+        var teamId = await core.CreateRecordAsync(s, acting, team, ct);
+        await core.ShareRecordAsync(s, acting, Reference(target.Table.LogicalName!, target.RecordId),
+            new PrincipalAccessValue(Reference(Team, teamId), target.Mask), replace: false, ct);
         return teamId;
     }
 
@@ -136,7 +163,7 @@ internal sealed class RecordTeams(CoreOperations core, IMetadataStore store, Sec
     /// The team of the (record, template), locked (UPDLOCK, HOLDLOCK: also the key range when it is missing, so a concurrent
     /// call waits for this transaction); null when there is none.
     /// </summary>
-    private static async Task<Guid?> LockTeamAsync(DataSession s, AccessTeamRules.RecordTeamTarget target, CancellationToken ct)
+    private static async Task<Guid?> LockTeamAsync(DataSession s, Target target, CancellationToken ct)
     {
         await s.KeyLockAsync(Team, target.RecordId, ct);
         await using var cmd = s.Command($"""
@@ -148,6 +175,8 @@ internal sealed class RecordTeams(CoreOperations core, IMetadataStore store, Sec
         cmd.AddParameter("@_template", DbType.Guid, target.TemplateId);
         return await cmd.ExecuteScalarAsync(ct) as Guid?;
     }
+
+    private static RecordReference Reference(string logicalName, Guid id) => new() { LogicalName = logicalName, Id = id };
 
     private static async Task<bool> IsMemberAsync(DataSession s, Guid teamId, Guid userId, CancellationToken ct)
     {

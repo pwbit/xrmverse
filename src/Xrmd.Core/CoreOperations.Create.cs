@@ -132,7 +132,7 @@ public sealed partial class CoreOperations
         await EnsureReferencesExistAsync(s, row, attrs, ct);
         // Plan 4.1a (ruling R15): one active queue item per record (a received email excepted), under the record's lock. A migration
         // imports the source's items as they are.
-        if (m.LogicalName == QueueSchema.QueueItem && migrated is null) await CoreSdkBridges.DemandNewQueueItemAllowedAsync(s, store, row, ct);
+        if (m.LogicalName == QueueSchema.QueueItem && migrated is null) await QueueMessages.DemandNewItemAllowedAsync(s, store, row, ct);
         // An image set to a byte[] becomes its thumbnail, image id, timestamp and (CanStoreFullImage) full image (ruling F4).
         await CoreSdkBridges.ApplyImagesAsync(files, s, m, attrs, id, row, isCreate: true, ct);
         // Plan 2.15 (ruling D2): before the INSERT, so a refused Create writes neither the row nor its match codes (RF3).

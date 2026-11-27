@@ -1,4 +1,5 @@
 using Microsoft.Xrm.Sdk;
+using PrincipalAccess = Microsoft.Crm.Sdk.Messages.PrincipalAccess;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
@@ -10,12 +11,18 @@ using Xrmd.Metadata;
 using Xrmd.Metadata.Sdk;
 using Xrmd.Model.Metadata;
 using Xrmd.Model.Records;
+using Xrmd.Model.Security;
 using Xrmd.Query.Model;
 
 namespace Xrmd.Core;
 
 /// <summary>
-/// S.2e3b: the SDK twins of the public CRUD members of <see cref="CoreOperations"/> whose bodies moved to the model. Each keeps the old
+/// S.2e3b: the SDK twins of the public CRUD members of <see cref="CoreOperations"/> whose bodies moved to the model (S.2e3c1 Task 3:
+/// and of the share member <see cref="ShareAsync"/>; Task 4: <see cref="RetrieveUserPrivilegesAsync(OrganizationRequest, Caller, DataSession, CancellationToken)"/>; Task 6: the
+/// non-pipeline reads the organization service calls, <see cref="InitializeFromAsync(OrganizationRequest, Caller, DataSession, CancellationToken)"/>,
+/// <see cref="RetrieveAppComponentsAsync(OrganizationRequest, Caller, DataSession, CancellationToken)"/>, <see cref="WhoAmI"/>,
+/// <see cref="ImportJobIdParameter(OrganizationRequest)"/>, <see cref="FormattedImportJobResults(Entity)"/> and
+/// <see cref="UnpublishedTarget(OrganizationRequest)"/>). Each keeps the old
 /// name and signature, so the callers still on the SDK (the other modules, the SDK handlers of <c>CoreOperations.cs</c>) are not edited,
 /// and writes the model answer out once. Transitional: removed with their callers' moves (S.2e3c, S.2f).
 /// </summary>
@@ -203,6 +210,106 @@ public sealed partial class CoreOperations
                 foreach (var name in entity.Attributes.Keys.Where(name => !record.Contains(name)).ToList()) entity.Attributes.Remove(name);
             }
         });
+    }
+
+    /// <summary>
+    /// The SDK twin of <see cref="ShareRecordAsync"/> (the migration's sharing phase calls it): the target and the principal read in as
+    /// copies (the body changes neither), the mask cast to the model enum.
+    /// </summary>
+    /// <exception cref="Errors.XrmdFaultException">As <see cref="ShareRecordAsync"/>.</exception>
+    public async Task ShareAsync(DataSession s, Caller caller, EntityReference target, PrincipalAccess access, bool replace, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(access);
+        await ShareRecordAsync(s, caller, target.ToModel(), new PrincipalAccessValue(access.Principal?.ToModel()!, (AccessMask)(int)access.AccessMask),
+            replace, ct);
+    }
+
+    /// <summary>
+    /// The SDK twin of <see cref="RetrieveUserPrivilegesAsync(Xrmd.Model.Messages.Request, Caller, DataSession, CancellationToken)"/> (the
+    /// organization service calls it): the request read in through a mirror of the call, the answer today's typed response with its
+    /// <c>RolePrivilege[]</c>.
+    /// </summary>
+    /// <exception cref="Errors.XrmdFaultException">As the model member.</exception>
+    public async Task<Microsoft.Crm.Sdk.Messages.RetrieveUserPrivilegesResponse> RetrieveUserPrivilegesAsync(OrganizationRequest request,
+        Caller caller, DataSession session, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var mirror = new SdkMirror();
+        var response = await RetrieveUserPrivilegesAsync(mirror.In(request)!, caller, session, ct);
+        mirror.Pair(response, CoreResponses.Typed(response.Name!));
+        return (Microsoft.Crm.Sdk.Messages.RetrieveUserPrivilegesResponse)mirror.Out(response)!;
+    }
+
+    /// <summary>
+    /// The SDK twin of <see cref="InitializeFromAsync(Xrmd.Model.Messages.Request, Caller, DataSession, CancellationToken)"/> (the
+    /// organization service calls it): the request read in through a mirror of the call, the answer today's typed response.
+    /// </summary>
+    /// <exception cref="Errors.XrmdFaultException">As the model member.</exception>
+    public async Task<Microsoft.Crm.Sdk.Messages.InitializeFromResponse> InitializeFromAsync(OrganizationRequest request, Caller caller,
+        DataSession session, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var mirror = new SdkMirror();
+        return (Microsoft.Crm.Sdk.Messages.InitializeFromResponse)Typed(mirror,
+            await InitializeFromAsync(mirror.In(request)!, caller, session, ct));
+    }
+
+    /// <summary>
+    /// The SDK twin of <see cref="RetrieveAppComponentsAsync(Xrmd.Model.Messages.Request, Caller, DataSession, CancellationToken)"/> (the
+    /// organization service calls it): the request read in through a mirror of the call, the answer today's typed response.
+    /// </summary>
+    /// <exception cref="Errors.XrmdFaultException">As the model member.</exception>
+    public async Task<Microsoft.Crm.Sdk.Messages.RetrieveAppComponentsResponse> RetrieveAppComponentsAsync(OrganizationRequest request,
+        Caller caller, DataSession session, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var mirror = new SdkMirror();
+        return (Microsoft.Crm.Sdk.Messages.RetrieveAppComponentsResponse)Typed(mirror,
+            await RetrieveAppComponentsAsync(mirror.In(request)!, caller, session, ct));
+    }
+
+    /// <summary>The SDK twin of <see cref="WhoAmIOf"/> (the organization service calls it): today's typed response.</summary>
+    public static Microsoft.Crm.Sdk.Messages.WhoAmIResponse WhoAmI(Caller caller, Guid organizationId) =>
+        (Microsoft.Crm.Sdk.Messages.WhoAmIResponse)Typed(new SdkMirror(), WhoAmIOf(caller, organizationId));
+
+    /// <summary>The SDK twin of <see cref="ImportJobIdParameter(Xrmd.Model.Messages.Request)"/> (the organization service calls it).</summary>
+    /// <exception cref="Errors.XrmdFaultException">400 when it is missing or empty.</exception>
+    public static Guid ImportJobIdParameter(OrganizationRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return ImportJobIdParameter(new SdkMirror().In(request)!);
+    }
+
+    /// <summary>The SDK twin of <see cref="FormattedImportJobResults(Record)"/> (the organization service calls it).</summary>
+    public static Microsoft.Crm.Sdk.Messages.RetrieveFormattedImportJobResultsResponse FormattedImportJobResults(Entity job)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        var mirror = new SdkMirror();
+        return (Microsoft.Crm.Sdk.Messages.RetrieveFormattedImportJobResultsResponse)Typed(mirror,
+            FormattedImportJobResults((Record)mirror.In(job)!));
+    }
+
+    /// <summary>
+    /// The SDK twin of <see cref="UnpublishedTarget(Xrmd.Model.Messages.Request)"/> (the organization service calls it): the caller's own
+    /// <c>Target</c> and <c>ColumnSet</c>.
+    /// </summary>
+    /// <exception cref="Errors.XrmdFaultException">As the model member.</exception>
+    internal static (EntityReference Target, ColumnSet Columns) UnpublishedTarget(OrganizationRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var mirror = new SdkMirror();
+        var (target, columns) = UnpublishedTarget(mirror.In(request)!);
+        mirror.TryGetSdk(target, out var sdkTarget);
+        mirror.TryGetSdk(columns, out var sdkColumns);
+        return ((EntityReference)sdkTarget!, (ColumnSet)sdkColumns!);
+    }
+
+    /// <summary>The model <paramref name="response"/> paired in <paramref name="mirror"/> with today's typed response, written out.</summary>
+    private static OrganizationResponse Typed(SdkMirror mirror, Xrmd.Model.Messages.Response response)
+    {
+        mirror.Pair(response, CoreResponses.Typed(response.Name!));
+        return mirror.Out(response)!;
     }
 
     /// <summary>The server values of an SDK caller as model values (<see cref="SdkRecords.ValueToModel"/>).</summary>

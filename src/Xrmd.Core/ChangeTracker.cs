@@ -1,27 +1,27 @@
 using System.Data;
 using System.Globalization;
-using Microsoft.Xrm.Sdk;
-using Microsoft.Xrm.Sdk.Messages;
-using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
+using Xrmd.Model.Messages;
+using Xrmd.Model.Query;
+using Xrmd.Model.Records;
 using Xrmd.Query.Model;
 
 namespace Xrmd.Core;
 
 /// <summary>A change tracking read (plan 2.13): the parameters of RetrieveEntityChanges, also built by the Web API delta.</summary>
 /// <param name="EntityName">The tracked table.</param>
-/// <param name="Columns">The columns of the new or updated rows (<see cref="ColumnSet.AllColumns"/> allowed).</param>
+/// <param name="Columns">The columns of the new or updated rows (<see cref="ColumnSelection.AllColumns"/> allowed).</param>
 /// <param name="DataVersion">The token of the previous sync; null or empty: every row, no deletion (ruling C5).</param>
 /// <param name="PageSize">1 to <see cref="ChangeTracker.MaxPageSize"/>.</param>
 /// <param name="PageNumber">1 or more; above 1, <paramref name="PagingCookie"/> of the page before is required (ruling C7).</param>
-public sealed record ChangeQuery(string EntityName, ColumnSet Columns, string? DataVersion, int PageSize, int PageNumber,
+public sealed record ChangeQuery(string EntityName, ColumnSelection Columns, string? DataVersion, int PageSize, int PageNumber,
     string? PagingCookie, bool GetGlobalMetadataVersion);
 
 /// <summary>One page of changes: the new or updated rows (by version), then the deleted ones (by log version).</summary>
-public sealed record ChangePage(IReadOnlyList<Entity> Updated, IReadOnlyList<EntityReference> Deleted, string DataToken, bool MoreRecords,
+public sealed record ChangePage(IReadOnlyList<Record> Updated, IReadOnlyList<RecordReference> Deleted, string DataToken, bool MoreRecords,
     string? PagingCookie, string? GlobalMetadataVersion);
 
 /// <summary>
@@ -32,7 +32,7 @@ public sealed record ChangePage(IReadOnlyList<Entity> Updated, IReadOnlyList<Ent
 /// (<see cref="ISqlDialect.MinActiveRowVersionAsync"/>, plan 2.7a Task 7).
 /// </summary>
 /// <remarks>
-/// <para>The new or updated rows go through the query path of RetrieveMultiple (<see cref="CoreOperations.RetrieveMultipleAsync"/>)
+/// <para>The new or updated rows go through the query path of RetrieveMultiple (<see cref="CoreOperations.RetrieveRecordsAsync"/>)
 /// with an internal <see cref="VersionRangeNode"/> and an order on <c>versionnumber</c>: the columns, their validation, the read
 /// restriction and the field security masks are the ones RetrieveMultiple applies. The deletions come from <c>meta.deleted_record</c>.
 /// Pages walk the updates, then the deletions (ruling C7), with the cookie <c>{to}!{phase}!{lastVersion}!{issuedUnixSeconds}</c>.</para>
@@ -47,6 +47,10 @@ public sealed record ChangePage(IReadOnlyList<Entity> Updated, IReadOnlyList<Ent
 /// last restore (its time is raised to the whole second after <c>restored_at</c> when the clock is behind it), so the token of
 /// a sync right after a restore is valid.</para>
 /// <para>The caller's Global read on the table is the guard's (<c>SecurityGuard.DemandGlobalReadAsync</c>), not checked here.</para>
+/// <para>S.2e3c1 (Task 4): on the model request and records. The answer's <c>BusinessEntityChanges</c> has no model twin: it is built
+/// by <see cref="CoreSdkBridges.EntityChanges"/> and crosses the mirror as its own twin, as before. <see cref="ReadRequest(Request)"/>
+/// has no SDK twin: nothing outside the core calls it (Task 4 ruling 4c; the Web API delta sends the request through the organization
+/// service).</para>
 /// </remarks>
 public sealed class ChangeTracker(CoreOperations core, IMetadataStore store)
 {
@@ -59,15 +63,16 @@ public sealed class ChangeTracker(CoreOperations core, IMetadataStore store)
     private const char UpdatesPhase = 'u';
     private const char DeletionsPhase = 'd';
 
-    /// <summary>The parameters of a RetrieveEntityChanges request (PageInfo absent or zero: page 1 of 5000).</summary>
+    /// <summary>The parameters of a RetrieveEntityChanges model request (PageInfo absent or zero: page 1 of 5000).</summary>
     /// <exception cref="XrmdFaultException">400 when <c>EntityName</c> or <c>Columns</c> is missing.</exception>
-    public static ChangeQuery ReadRequest(OrganizationRequest request)
+    public static ChangeQuery ReadRequest(Request request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var entity = CoreOperations.Parameter<string>(request, "EntityName");
-        var columns = CoreOperations.Parameter<ColumnSet>(request, "Columns");
+        var entity = CoreOperations.Parameter<string>(request, "EntityName", "String");
+        var columns = CoreOperations.Parameter<ColumnSelection>(request, "Columns", "ColumnSet");
         var token = request.Parameters.TryGetValue("DataVersion", out var v) ? v as string : null;
-        var page = request.Parameters.TryGetValue("PageInfo", out var p) ? p as PagingInfo : null;
+        // A PagingInfo parameter crosses the mirror as its own twin (it is a query part only inside a query).
+        var page = request.Parameters.TryGetValue("PageInfo", out var p) ? p as QueryPaging ?? CoreSdkBridges.Paging(p) : null;
         var metadataVersion = request.Parameters.TryGetValue("GetGlobalMetadataVersion", out var g) && g is true;
         return new ChangeQuery(entity, columns, token,
             page is { Count: not 0 } ? page.Count : MaxPageSize,
@@ -76,25 +81,14 @@ public sealed class ChangeTracker(CoreOperations core, IMetadataStore store)
             metadataVersion);
     }
 
-    /// <summary>The RetrieveEntityChanges response of <paramref name="page"/>: updates as <see cref="NewOrUpdatedItem"/>, then deletions.</summary>
-    public static RetrieveEntityChangesResponse ToResponse(ChangePage page)
+    /// <summary>
+    /// The RetrieveEntityChanges response of <paramref name="page"/>: its <c>EntityChanges</c>, updates as <c>NewOrUpdatedItem</c>,
+    /// then deletions (<see cref="CoreSdkBridges.EntityChanges"/>).
+    /// </summary>
+    public static Response ToResponse(ChangePage page)
     {
         ArgumentNullException.ThrowIfNull(page);
-        var changes = new BusinessEntityChangesCollection();
-        foreach (var entity in page.Updated) changes.Add(new NewOrUpdatedItem(ChangeType.NewOrUpdated, entity));
-        foreach (var deleted in page.Deleted) changes.Add(new RemovedOrDeletedItem(ChangeType.RemoveOrDeleted, deleted));
-        return new RetrieveEntityChangesResponse
-        {
-            ResponseName = MessageName,
-            Results =
-            {
-                ["EntityChanges"] = new BusinessEntityChanges
-                {
-                    Changes = changes, DataToken = page.DataToken, MoreRecords = page.MoreRecords, PagingCookie = page.PagingCookie,
-                    GlobalMetadataVersion = page.GlobalMetadataVersion,
-                },
-            },
-        };
+        return new Response { Name = MessageName, Results = { ["EntityChanges"] = CoreSdkBridges.EntityChanges(page) } };
     }
 
     /// <summary>Reads one page of the changes of <paramref name="q"/> for <paramref name="caller"/> in <paramref name="s"/>.</summary>
@@ -105,7 +99,7 @@ public sealed class ChangeTracker(CoreOperations core, IMetadataStore store)
         ArgumentNullException.ThrowIfNull(s);
         ArgumentNullException.ThrowIfNull(caller);
         ArgumentNullException.ThrowIfNull(q);
-        var entity = core.EntityOf(q.EntityName).LogicalName;
+        var entity = core.TableOf(q.EntityName).LogicalName!;
         if (!store.ChangeTrackingTables.Contains(entity))
             throw XrmdFaultException.InvalidArgument(
                 $"Table '{entity}' does not have change tracking enabled: turn ChangeTrackingEnabled on before reading its changes.");
@@ -147,29 +141,29 @@ public sealed class ChangeTracker(CoreOperations core, IMetadataStore store)
         var after = from ?? 0;
 
         // Updates: from the token (or the cookie's last version) to the bound, by version, one page.
-        var updated = new List<Entity>();
+        var updated = new List<Record>();
         var more = false;
         string? nextCookie = null;
         if (cookie is null || cookie.Phase == UpdatesPhase)
         {
             var start = cookie is null ? after : Math.Max(after, cookie.Last);
-            var collection = await core.RetrieveMultipleAsync(s, caller, UpdatesQuery(entity, q.Columns, start, to, q.PageSize), ct);
-            foreach (var row in collection.Entities) updated.Add(Shaped(row, q.Columns));
+            var collection = await core.RetrieveRecordsAsync(s, caller, UpdatesQuery(entity, q.Columns, start, to, q.PageSize), ct);
+            foreach (var row in collection.Records) updated.Add(Shaped(row, q.Columns));
             if (collection.MoreRecords)
             {
                 more = true;
-                nextCookie = Cookie.Format(to, UpdatesPhase, LastVersion(collection.Entities[^1]), issuedAt);
+                nextCookie = Cookie.Format(to, UpdatesPhase, LastVersion(collection.Records[^1]), issuedAt);
             }
         }
 
         // Deletions (only with a token, ruling C5): after the updates, in the room the page has left.
-        var deleted = new List<EntityReference>();
+        var deleted = new List<RecordReference>();
         if (!more && from is not null)
         {
             var start = cookie is { Phase: DeletionsPhase } ? Math.Max(after, cookie.Last) : after;
             var room = q.PageSize - updated.Count;
             var rows = await DeletionsAsync(s, entity, start, to, room + 1, ct);
-            foreach (var (_, id) in rows.Take(room)) deleted.Add(new EntityReference(entity, id));
+            foreach (var (_, id) in rows.Take(room)) deleted.Add(new RecordReference { LogicalName = entity, Id = id });
             if (rows.Count > room)
             {
                 more = true;
@@ -185,7 +179,7 @@ public sealed class ChangeTracker(CoreOperations core, IMetadataStore store)
     }
 
     /// <summary>The columns asked for, the primary key and <c>versionnumber</c>, in the range, by version, one page (+1 probe row).</summary>
-    private static QueryModel UpdatesQuery(string entity, ColumnSet columns, long afterExclusive, long beforeExclusive, int pageSize)
+    private static QueryModel UpdatesQuery(string entity, ColumnSelection columns, long afterExclusive, long beforeExclusive, int pageSize)
     {
         var root = new EntityNode { EntityName = entity, AllColumns = columns.AllColumns };
         if (!columns.AllColumns)
@@ -198,8 +192,8 @@ public sealed class ChangeTracker(CoreOperations core, IMetadataStore store)
         return new QueryModel { Root = root, PageSize = pageSize, PageNumber = 1 };
     }
 
-    /// <summary>Drops <c>versionnumber</c> when it was only added to carry <see cref="Entity.RowVersion"/>.</summary>
-    private static Entity Shaped(Entity row, ColumnSet columns)
+    /// <summary>Drops <c>versionnumber</c> when it was only added to carry <see cref="Record.RowVersion"/>.</summary>
+    private static Record Shaped(Record row, ColumnSelection columns)
     {
         if (!columns.AllColumns && !columns.Columns.Contains(TypeMapping.VersionNumber))
         {
@@ -209,7 +203,7 @@ public sealed class ChangeTracker(CoreOperations core, IMetadataStore store)
         return row;
     }
 
-    private static long LastVersion(Entity row) =>
+    private static long LastVersion(Record row) =>
         long.TryParse(row.RowVersion, NumberStyles.None, CultureInfo.InvariantCulture, out var version)
             ? version
             : throw new InvalidOperationException($"Row {row.Id} of '{row.LogicalName}' came back without its version.");

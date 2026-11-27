@@ -1110,7 +1110,8 @@ internal static class CoreHandOff
         "Create", "Retrieve", "Update", "Delete", "RetrieveMultiple", "Assign", "Associate", "Disassociate",
     };
 
-    /// <summary>Test seam: called by the core's entry adapter with each image it read and the model record it converted it into.</summary>
+    /// <summary>Test seam: called by the core's entry adapter with each image record it wrote out into the mirror named for it
+    /// (<see cref="ReadImagesWith"/>) and that SDK twin.</summary>
     internal static readonly AsyncLocal<Action<Entity, Record>?> ImageRead = new();
 
     /// <summary>

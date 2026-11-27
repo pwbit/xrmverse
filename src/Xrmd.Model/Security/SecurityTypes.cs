@@ -1,3 +1,5 @@
+using Xrmd.Model.Records;
+
 namespace Xrmd.Model.Security;
 
 // Member names and numeric values are the SDK's public ones (AccessRights, PrivilegeDepth); the CLR names are our own.
@@ -22,3 +24,6 @@ public enum PrivilegeScope { Basic = 0, Local = 1, Deep = 2, Global = 3, RecordF
 
 /// <summary>A privilege granted to a role at a depth within a business unit.</summary>
 public sealed record PrivilegeGrant(Guid PrivilegeId, string? PrivilegeName, Guid BusinessUnitId, PrivilegeScope Depth);
+
+/// <summary>A principal (user or team) together with the access it holds on a record.</summary>
+public sealed record PrincipalAccessValue(RecordReference Principal, AccessMask AccessMask);

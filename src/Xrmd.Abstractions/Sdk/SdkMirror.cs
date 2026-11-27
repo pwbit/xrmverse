@@ -4,6 +4,11 @@ using Microsoft.Xrm.Sdk.Query;
 using Xrmd.Model.Messages;
 using Xrmd.Model.Query;
 using Xrmd.Model.Records;
+using Xrmd.Model.Security;
+using AccessRights = Microsoft.Crm.Sdk.Messages.AccessRights;
+using PrincipalAccess = Microsoft.Crm.Sdk.Messages.PrincipalAccess;
+using PrivilegeDepth = Microsoft.Crm.Sdk.Messages.PrivilegeDepth;
+using RolePrivilege = Microsoft.Crm.Sdk.Messages.RolePrivilege;
 
 namespace Xrmd.Abstractions.Sdk;
 
@@ -20,7 +25,7 @@ namespace Xrmd.Abstractions.Sdk;
 /// order; an SDK container that already holds the same keys in the same order only has its values set, and an SDK list that already
 /// holds the same items is left as it is, so an enumeration a plug-in keeps open across a service call (around which its view is
 /// read back and written again) stays valid. The immutable model values (<see cref="ChoiceValue"/>, <see cref="MoneyValue"/>, <see cref="AliasedColumnValue"/>,
-/// <see cref="RelationshipName"/>) are paired with their mutable SDK counterparts by instance: an SDK value changed in place
+/// <see cref="RelationshipName"/>, <see cref="PrincipalAccessValue"/>, <see cref="PrivilegeGrant"/>) are paired with their mutable SDK counterparts by instance: an SDK value changed in place
 /// yields a new model value that takes over the pairing, a model value that is unchanged writes into its original SDK instance, and
 /// a model value seen under a second slot of one crossing gets a fresh SDK value, so two attributes never share one. Arrays of the
 /// exact known types are twinned by instance and refilled in place while their length stays. Attribute, parameter and condition values
@@ -367,6 +372,26 @@ public sealed class SdkMirror
         MoneyValue m => ValueOut(m, current, hasSlot, () => new Money(), (s, v) => s.Value = v.Value),
         RelationshipName r => ValueOut(r, current, hasSlot, () => new Relationship(), (s, m) => SdkRecords.Fill(m, s)),
         AliasedColumnValue a => AliasedOut(a, current, hasSlot),
+        // S.2e3c1 Task 3 (Decision 3): the access values.
+        AccessMask m => (AccessRights)(int)m,
+        PrincipalAccessValue p => ValueOut(p, current, hasSlot, () => new PrincipalAccess(), (s, v) =>
+        {
+            s.Principal = (EntityReference?)ToSdkValue(v.Principal, null, false);
+            s.AccessMask = (AccessRights)(int)v.AccessMask;
+        }),
+        PrincipalAccessValue[] a when a.GetType() == typeof(PrincipalAccessValue[]) =>
+            ArrayTwin<PrincipalAccessValue, PrincipalAccess>(a, _toSdk, _toModel, (v, c) => ToSdkValue(v, c, true)),
+        // S.2e3c1 Task 4: the role privileges. Only the four members the model carries are written, so a value written back into the
+        // caller's instance keeps its record filter members; the depth is cast by value, unchecked (see ToModelValue).
+        PrivilegeGrant g => ValueOut(g, current, hasSlot, () => new RolePrivilege(), (s, v) =>
+        {
+            s.PrivilegeId = v.PrivilegeId;
+            s.PrivilegeName = v.PrivilegeName;
+            s.BusinessUnitId = v.BusinessUnitId;
+            s.Depth = (PrivilegeDepth)(int)v.Depth;
+        }),
+        PrivilegeGrant[] a when a.GetType() == typeof(PrivilegeGrant[]) =>
+            ArrayTwin<PrivilegeGrant, RolePrivilege>(a, _toSdk, _toModel, (v, c) => ToSdkValue(v, c, true)),
         Record[] a when a.GetType() == typeof(Record[]) => ArrayTwin<Record, Entity>(a, _toSdk, _toModel, (v, _) => ToSdkChild(v)),
         RecordReference[] a when a.GetType() == typeof(RecordReference[]) => ArrayTwin<RecordReference, EntityReference>(a, _toSdk, _toModel, (v, _) => ToSdkChild(v)),
         ChoiceValue[] a when a.GetType() == typeof(ChoiceValue[]) => ArrayTwin<ChoiceValue, OptionSetValue>(a, _toSdk, _toModel, (v, c) => ToSdkValue(v, c, true)),
@@ -391,6 +416,18 @@ public sealed class SdkMirror
         Money m => ValueIn(m, () => new MoneyValue(m.Value)),
         Relationship r => ValueIn(r, () => r.ToModel()),
         AliasedValue a => ValueIn(a, () => new AliasedColumnValue(a.EntityLogicalName, a.AttributeLogicalName, ToModelValue(a.Value))),
+        // S.2e3c1 Task 3 (Decision 3): the access values. A PrincipalAccess is mutable on the SDK side and immutable on the model side,
+        // paired by instance like an option value; its principal is twinned, so an unchanged one keeps its model value.
+        AccessRights r => (AccessMask)(int)r,
+        PrincipalAccess p => ValueIn(p, () => new PrincipalAccessValue((RecordReference)ToModelValue(p.Principal)!, (AccessMask)(int)p.AccessMask)),
+        PrincipalAccess[] a when a.GetType() == typeof(PrincipalAccess[]) =>
+            ArrayTwin<PrincipalAccess, PrincipalAccessValue>(a, _toModel, _toSdk, (v, _) => ToModelValue(v)),
+        // S.2e3c1 Task 4: the role privileges, paired by instance like a PrincipalAccess. Unlike SdkRecords, the depth is cast by value
+        // and not range-checked, and a null element stays null: a request crosses here on its way to the core, which refuses an undefined
+        // depth or a null privilege with today's 400 (SecurityAdministration.FromGrants), not with a conversion error.
+        RolePrivilege p => ValueIn(p, () => new PrivilegeGrant(p.PrivilegeId, p.PrivilegeName, p.BusinessUnitId, (PrivilegeScope)(int)p.Depth)),
+        RolePrivilege[] a when a.GetType() == typeof(RolePrivilege[]) =>
+            ArrayTwin<RolePrivilege, PrivilegeGrant>(a, _toModel, _toSdk, (v, _) => ToModelValue(v)),
         Entity[] a when a.GetType() == typeof(Entity[]) => ArrayTwin<Entity, Record>(a, _toModel, _toSdk, (v, _) => ToModelChild(v)),
         EntityReference[] a when a.GetType() == typeof(EntityReference[]) => ArrayTwin<EntityReference, RecordReference>(a, _toModel, _toSdk, (v, _) => ToModelChild(v)),
         OptionSetValue[] a when a.GetType() == typeof(OptionSetValue[]) => ArrayTwin<OptionSetValue, ChoiceValue>(a, _toModel, _toSdk, (v, _) => ToModelValue(v)),

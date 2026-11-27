@@ -1,9 +1,11 @@
 using System.Runtime.CompilerServices;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Sdk;
 using Xrmd.Abstractions.Storage;
+using AccessRights = Microsoft.Crm.Sdk.Messages.AccessRights;
 using Xrmd.Audit;
 using Xrmd.Core.Duplicates;
 using Xrmd.Core.Elastic;
@@ -14,10 +16,14 @@ using Xrmd.Metadata;
 using Xrmd.Metadata.Computed;
 using Xrmd.Metadata.Sdk;
 using Xrmd.Model.Metadata;
+using Xrmd.Model.Messages;
 using Xrmd.Model.Records;
+using Xrmd.Model.Security;
+using Xrmd.Pipeline;
 using Xrmd.Pipeline.Async;
 using Xrmd.Pipeline.Mail;
 using Xrmd.Security;
+using Xrmd.Security.Sdk;
 
 namespace Xrmd.Core;
 
@@ -40,10 +46,14 @@ internal static class CoreSdkBridges
     /// only passes the cached SDK view of a table or a reference built from a table name and an id (<see cref="FindElasticAsync"/> on
     /// a standard table, the email attachment reads, <see cref="IsAuditedAsync"/>, <see cref="AuditedColumns"/>,
     /// <see cref="RefreshMatchCodesAsync"/>, <see cref="RowsReferencingAsync"/>, <see cref="RefreshManyMatchCodesAsync"/>,
-    /// <see cref="DeactivateQueueItemsAsync"/>, <see cref="InsertMailboxAsync"/>, <see cref="DeleteRecordFilesAsync"/>,
+    /// <see cref="InsertMailboxAsync"/>, <see cref="DeleteRecordFilesAsync"/>,
     /// <see cref="PendingFileCommit"/>, <see cref="ClaimMailSecrets(Entity)"/>, <see cref="WriteRelationshipAuditAsync"/>,
     /// <see cref="SecurityPairs"/>, <see cref="AddRoleAsync"/>, <see cref="RemoveRoleAsync"/>, <see cref="AddProfileAsync"/>,
-    /// <see cref="RemoveProfileAsync"/>).
+    /// <see cref="RemoveProfileAsync"/>; S.2e3c1 Task 3: the access, share and record team bridges, which pass references built from a
+    /// table name and an id, the cached SDK view of a table, access masks cast to the SDK enum, and the request's own SDK twin; Task 4:
+    /// <see cref="RoleGrantsAsync"/> and <see cref="WriteRolePrivilegesAuditAsync"/>, which convert privilege values and a reference built
+    /// from a table name and an id, <see cref="Paging"/>, and <see cref="EntityChanges"/>, which builds an answer; Task 5:
+    /// <see cref="NestedResponse"/>, which reads in an answer; the queue item bridges are gone, their helpers run on the model).
     /// </summary>
     internal static long Crossings => Interlocked.Read(ref _crossings);
 
@@ -494,30 +504,6 @@ internal static class CoreSdkBridges
         return CrossAsync(row, e => ElasticRecords.ApplyLookupPartitionsAsync(s, store, attrs, e, ct));
     }
 
-    /// <summary>
-    /// <see cref="QueueMessages.DemandNewItemAllowedAsync"/>. Guard (the helper's own): an active item whose record is of a known table.
-    /// </summary>
-    public static Task DemandNewQueueItemAllowedAsync(DataSession s, IMetadataStore store, Record row, CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(row);
-        if (row.GetValue<ChoiceValue>("statecode")?.Value is { } state && state != 0) return Task.CompletedTask;
-        if (row.GetValue<RecordReference>(QueueSchema.ObjectId) is not { } record || store.GetTable(record.LogicalName ?? "") is null)
-            return Task.CompletedTask;
-        return CrossAsync(row, e => QueueMessages.DemandNewItemAllowedAsync(s, store, e, ct));
-    }
-
-    /// <summary>
-    /// <see cref="QueueMessages.DemandItemUpdateAllowedAsync"/>. Guard (the helper's own): the row writes the state or the record,
-    /// and not an inactive state.
-    /// </summary>
-    public static Task DemandQueueItemUpdateAllowedAsync(QueueMessages queues, DataSession s, Guid itemId, Record row, CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(row);
-        if (!row.Contains("statecode") && !row.Contains(QueueSchema.ObjectId)) return Task.CompletedTask;
-        if (row.Contains("statecode") && row.GetValue<ChoiceValue>("statecode")?.Value is { } written && written != 0) return Task.CompletedTask;
-        return CrossAsync(row, e => queues.DemandItemUpdateAllowedAsync(s, itemId, e, ct));
-    }
-
     // ---- Files (ruling F4), duplicates (plan 2.15), rollups (plan 2.12b) ----------------------------------------------------
 
     /// <summary>
@@ -694,12 +680,20 @@ internal static class CoreSdkBridges
         return codes.RefreshManyAsync(s, table.SdkView(), ids, ct);
     }
 
-    /// <summary><see cref="QueueMessages.DeactivateItemsAsync"/> (the cached view of the table only).</summary>
-    public static Task DeactivateQueueItemsAsync(QueueMessages queues, DataSession s, Caller caller, TableDefinition table, Guid record,
-        int? status, CancellationToken ct)
+    /// <summary>
+    /// The answer of a request the core issued through the nested delegate (S.2e3c1 Task 5: the <c>queueitem</c> Create of
+    /// AddToQueue), current: when the request's chain mirror holds the SDK twin of <paramref name="response"/> (an unread shell, or a
+    /// response the pipeline answered after its steps), that twin is read in first, so its results are the ones the SDK response holds,
+    /// as the SDK body read them; otherwise <paramref name="response"/> as it is. Not counted in <see cref="Crossings"/>: it converts an
+    /// answer, no row of the core.
+    /// </summary>
+    public static Response NestedResponse(Request request, Response response)
     {
-        ArgumentNullException.ThrowIfNull(queues);
-        return queues.DeactivateItemsAsync(s, caller, table.SdkView(), record, status, ct);
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(response);
+        return SdkMirror.For(request) is { } mirror && mirror.TryGetSdk(response, out var twin) && twin is OrganizationResponse sdk
+            ? mirror.In(sdk)!
+            : response;
     }
 
     /// <summary><see cref="AuditWriter.IsAuditedAsync"/>: whether a write of <paramref name="table"/> is audited now (the cached view only).</summary>
@@ -809,6 +803,168 @@ internal static class CoreSdkBridges
         ArgumentNullException.ThrowIfNull(security);
         return security.RemoveProfileAsync(s, Reference(principal), profileId, ct);
     }
+
+    // ---- access and sharing (S.2e3c1 Task 3: SecurityGuard and AccessTeamRules until S.2e3c2, the audit writer until S.2f) ---------
+
+    /// <summary>
+    /// <see cref="SecurityGuard.DemandAccessAsync"/> of <paramref name="right"/> on <paramref name="record"/> (the guard reads the
+    /// record's table name and id only).
+    /// </summary>
+    public static Task DemandAccessAsync(SecurityGuard guard, Caller caller, RecordReference record, AccessMask right, DataSession s,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(guard);
+        return guard.DemandAccessAsync(caller, Reference(record), (AccessRights)(int)right, s, ct);
+    }
+
+    /// <summary>
+    /// <see cref="SecurityGuard.RetrievePrincipalAccessAsync"/> (it reads the table name and id of the principal and of the record),
+    /// answered as a model mask.
+    /// </summary>
+    public static async Task<AccessMask> RetrievePrincipalAccessAsync(SecurityGuard guard, RecordReference principal, RecordReference record,
+        DataSession s, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(guard);
+        return (AccessMask)(int)await guard.RetrievePrincipalAccessAsync(Reference(principal), Reference(record), s, ct);
+    }
+
+    /// <summary><see cref="SecurityGuard.ShareRowsAsync"/> of <paramref name="table"/> (its cached SDK view), with model masks.</summary>
+    public static async Task<IReadOnlyList<(Guid PrincipalId, int PrincipalType, AccessMask Mask)>> ShareRowsAsync(TableDefinition table,
+        Guid id, Guid? principal, bool userAndTeams, DataSession s, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+        return [.. (await SecurityGuard.ShareRowsAsync(table.SdkView(), id, principal, userAndTeams, s, ct))
+            .Select(r => (r.PrincipalId, r.PrincipalType, (AccessMask)(int)r.Mask))];
+    }
+
+    /// <summary>
+    /// The audit row of a share change on <paramref name="target"/> (<see cref="AuditWriter.WriteAsync"/> of a <see cref="ShareChange"/>):
+    /// the writer takes references built from a table name and an id, as the SDK body built them (it reads nothing else of the
+    /// target), so nothing is converted.
+    /// </summary>
+    public static Task WriteShareAuditAsync(AuditWriter audit, DataSession s, Caller caller, int action, RecordReference target,
+        RecordReference principal, AccessMask old, AccessMask now, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(audit);
+        return audit.WriteAsync(s, caller, action, AuditOperations.Update, Reference(target),
+            new ShareChange(Reference(principal), (AccessRights)(int)old, (AccessRights)(int)now), ct);
+    }
+
+    /// <summary>
+    /// <see cref="AccessTeamRules.DemandRecordTeamAsync"/> with the rows locked until commit (the core's call), on a reference built from
+    /// the record's table name and id; the target it answers as the model one.
+    /// </summary>
+    public static async Task<RecordTeams.Target> DemandRecordTeamAsync(DataSession s, IMetadataStore store, RecordReference record,
+        Guid userId, Guid templateId, CancellationToken ct)
+    {
+        var target = await AccessTeamRules.DemandRecordTeamAsync(s, store, Reference(record), userId, templateId, lockRows: true, ct);
+        return new RecordTeams.Target(target.Table.ToModel(), target.RecordId, target.UserId, target.TemplateId, (AccessMask)(int)target.Mask,
+            target.OwningBusinessUnit);
+    }
+
+    /// <summary>
+    /// <see cref="AccessTeamRules.DemandSameAsChecked"/> on the request the <c>SecurityGuard</c> checked (<see cref="CheckedRequest"/>).
+    /// Guard (the helper's own): no check for <see cref="Caller.Internal"/>.
+    /// </summary>
+    public static void DemandSameAsChecked(Request request, Caller caller, RecordTeams.Target target)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(target);
+        if (caller == Caller.Internal) return;
+        AccessTeamRules.DemandSameAsChecked(CheckedRequest(request), caller, Sdk(target));
+    }
+
+    /// <summary><see cref="AccessTeamRules.TeamShareMaskAsync"/> with the share row locked until commit (the core's call).</summary>
+    public static async Task<AccessMask?> TeamShareMaskAsync(DataSession s, RecordTeams.Target target, CancellationToken ct) =>
+        await AccessTeamRules.TeamShareMaskAsync(s, Sdk(target), lockRows: true, ct) is { } mask ? (AccessMask)(int)mask : null;
+
+    /// <summary>
+    /// <see cref="AccessTeamRules.DemandTeamShareChecked"/> on the request the <c>SecurityGuard</c> checked (<see cref="CheckedRequest"/>).
+    /// Guard (the helper's own): no check for <see cref="Caller.Internal"/>.
+    /// </summary>
+    public static void DemandTeamShareChecked(Request request, Caller caller, RecordTeams.Target target, AccessMask teamShare)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(target);
+        if (caller == Caller.Internal) return;
+        AccessTeamRules.DemandTeamShareChecked(CheckedRequest(request), caller, Sdk(target), (AccessRights)(int)teamShare);
+    }
+
+    /// <summary>
+    /// The SDK request the <c>SecurityGuard</c> marked as checked for <paramref name="request"/> (<see cref="AccessTeamRules.MarkChecked"/>,
+    /// keyed on the SDK request): the one the pipeline holds at the core, else the request's twin in its chain mirror (the pipeline's
+    /// own SDK request, which the guard ran on), with nothing written into it. A model request with no twin was never checked: it gets a
+    /// new request of its name, which holds no check, as the twin the bridge used to write out for it held none.
+    /// </summary>
+    private static OrganizationRequest CheckedRequest(Request request)
+    {
+        if (CoreHandOff.TryGetHeld(request, out var held)) return held!;
+        return SdkMirror.For(request) is { } mirror && mirror.TryGetSdk(request, out var twin) && twin is OrganizationRequest sdk
+            ? sdk
+            : new OrganizationRequest(request.Name);
+    }
+
+    // ---- role privileges, change tracking (S.2e3c1 Task 4: SecurityAdministration's role reads until S.2e3c2, the audit writer
+    // until S.2f; the change tracking answer and paging, which have no model twin as parameter values) ------------------------------
+
+    /// <summary>
+    /// <see cref="SecurityAdministration.RolePrivilegesAsync"/> of <paramref name="roleId"/>, answered as model grants (privilege id,
+    /// depth and the role's business unit, no name): the role's privileges before and after a change, for its audit row.
+    /// </summary>
+    /// <exception cref="Errors.XrmdFaultException">404 when the role does not exist.</exception>
+    public static async Task<IReadOnlyList<PrivilegeGrant>> RoleGrantsAsync(SecurityAdministration security, DataSession s, Guid roleId,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(security);
+        return [.. (await security.RolePrivilegesAsync(s, roleId, ct)).Select(p => p.ToModel())];
+    }
+
+    /// <summary>
+    /// The audit row of a role privilege change on the role <paramref name="roleId"/> (<see cref="AuditWriter.WriteAsync"/> of a
+    /// <see cref="RolePrivilegesChange"/>): the grants of <see cref="RoleGrantsAsync"/> go back to the SDK privileges they were read from
+    /// (no name, no record filter), and the role is a reference built from the table name and the id, as the SDK body built it.
+    /// </summary>
+    public static Task WriteRolePrivilegesAuditAsync(AuditWriter audit, DataSession s, Caller caller, int action, Guid roleId,
+        IReadOnlyList<PrivilegeGrant> old, IReadOnlyList<PrivilegeGrant> now, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(audit);
+        ArgumentNullException.ThrowIfNull(old);
+        ArgumentNullException.ThrowIfNull(now);
+        return audit.WriteAsync(s, caller, action, AuditOperations.Update, new EntityReference("role", roleId),
+            new RolePrivilegesChange([.. old.Select(g => g.ToSdk())], [.. now.Select(g => g.ToSdk())]), ct);
+    }
+
+    /// <summary>
+    /// The paging of a RetrieveEntityChanges <c>PageInfo</c> parameter: an SDK <c>PagingInfo</c> crosses the mirror as its own twin (it
+    /// is a query part only inside a query), so it is read here as a model copy; null for a value of any other type, as the SDK body's
+    /// <c>as PagingInfo</c>.
+    /// </summary>
+    public static Model.Query.QueryPaging? Paging(object? value) => value is Microsoft.Xrm.Sdk.Query.PagingInfo paging ? paging.ToModel() : null;
+
+    /// <summary>
+    /// The <c>EntityChanges</c> result of RetrieveEntityChanges for <paramref name="page"/>: the SDK <c>BusinessEntityChanges</c> (no model
+    /// twin; the mirror carries it as its own twin, as the SDK body's answer was), the updates as <c>NewOrUpdatedItem</c>s of the
+    /// records written out as plain copies (as the read answers are, ruling 8a), then the deletions as <c>RemovedOrDeletedItem</c>s of
+    /// references built from the table name and the id. This builds the answer and runs no helper, so it is not counted in
+    /// <see cref="Crossings"/>.
+    /// </summary>
+    public static object EntityChanges(ChangePage page)
+    {
+        ArgumentNullException.ThrowIfNull(page);
+        var changes = new BusinessEntityChangesCollection();
+        foreach (var record in page.Updated) changes.Add(new NewOrUpdatedItem(ChangeType.NewOrUpdated, record.ToSdk()));
+        foreach (var deleted in page.Deleted)
+            changes.Add(new RemovedOrDeletedItem(ChangeType.RemoveOrDeleted, new EntityReference(deleted.LogicalName, deleted.Id)));
+        return new BusinessEntityChanges
+        {
+            Changes = changes, DataToken = page.DataToken, MoreRecords = page.MoreRecords, PagingCookie = page.PagingCookie,
+            GlobalMetadataVersion = page.GlobalMetadataVersion,
+        };
+    }
+
+    /// <summary>The SDK target of a model one: the cached view of its table, its mask cast to the SDK enum.</summary>
+    private static AccessTeamRules.RecordTeamTarget Sdk(RecordTeams.Target target) =>
+        new(target.Table.SdkView(), target.RecordId, target.UserId, target.TemplateId, (AccessRights)(int)target.Mask, target.OwningBusinessUnit);
 
     /// <summary>A reference built from the table name and the id of <paramref name="reference"/>.</summary>
     private static EntityReference Reference(RecordReference reference)

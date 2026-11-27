@@ -6,6 +6,11 @@ using Xrmd.Abstractions.Sdk;
 using Xrmd.Model.Messages;
 using Xrmd.Model.Query;
 using Xrmd.Model.Records;
+using Xrmd.Model.Security;
+using AccessRights = Microsoft.Crm.Sdk.Messages.AccessRights;
+using PrincipalAccess = Microsoft.Crm.Sdk.Messages.PrincipalAccess;
+using PrivilegeDepth = Microsoft.Crm.Sdk.Messages.PrivilegeDepth;
+using RolePrivilege = Microsoft.Crm.Sdk.Messages.RolePrivilege;
 using Record = Xrmd.Model.Records.Record;
 
 namespace Xrmd.Pipeline.Tests.Sdk;
@@ -309,6 +314,101 @@ public class SdkMirrorTests
         Assert.Same(objects, request["O"]);
         Assert.Equal("changed", entities[0].LogicalName);
         Assert.Same(entities[0], objects[2]);
+    }
+
+    /// <summary>
+    /// S.2e3c1 Task 3: the access values cross like <see cref="SdkRecords.ValueToModel"/> converts them (Decision 3): an
+    /// <c>AccessRights</c> as an <see cref="AccessMask"/>, a <c>PrincipalAccess</c> as a <see cref="PrincipalAccessValue"/> (an immutable
+    /// value paired by instance, as an option value is) and the exact array of them; back out, the caller's own instances are kept.
+    /// </summary>
+    [Fact]
+    public void Access_values_convert_and_keep_the_callers_instances()
+    {
+        var mirror = new SdkMirror();
+        var principal = new EntityReference("systemuser", Guid.NewGuid());
+        var access = new PrincipalAccess { Principal = principal, AccessMask = AccessRights.ReadAccess | AccessRights.ShareAccess };
+        var shares = new[] { new PrincipalAccess { Principal = new EntityReference("team", Guid.NewGuid()), AccessMask = AccessRights.WriteAccess } };
+        var request = new OrganizationRequest("GrantAccess") { ["PrincipalAccess"] = access, ["Rights"] = AccessRights.DeleteAccess, ["Shares"] = shares };
+
+        var model = mirror.In(request)!;
+        var value = Assert.IsType<PrincipalAccessValue>(model.Parameters["PrincipalAccess"]);
+        Assert.Equal(AccessMask.ReadAccess | AccessMask.ShareAccess, value.AccessMask);
+        Assert.Equal(principal.Id, value.Principal.Id);
+        Assert.Equal(AccessMask.DeleteAccess, Assert.IsType<AccessMask>(model.Parameters["Rights"]));
+        var modelShares = Assert.IsType<PrincipalAccessValue[]>(model.Parameters["Shares"]);
+        Assert.Equal(AccessMask.WriteAccess, Assert.Single(modelShares).AccessMask);
+        Assert.Same(value, mirror.In(request)!.Parameters["PrincipalAccess"]);
+
+        mirror.Out(model);
+        Assert.Same(access, request["PrincipalAccess"]);
+        Assert.Same(principal, access.Principal);
+        Assert.Equal(AccessRights.DeleteAccess, Assert.IsType<AccessRights>(request["Rights"]));
+        Assert.Same(shares, request["Shares"]);
+
+        // An SDK change in place is read in; a new model value goes out as a new SDK value (as an option value does), the caller's
+        // instance left as it is.
+        access.AccessMask = AccessRights.AppendAccess;
+        var changed = (PrincipalAccessValue)mirror.In(request)!.Parameters["PrincipalAccess"]!;
+        Assert.Equal(AccessMask.AppendAccess, changed.AccessMask);
+        model.Parameters["PrincipalAccess"] = changed with { AccessMask = AccessMask.WriteAccess };
+        mirror.Out(model);
+        var written = Assert.IsType<PrincipalAccess>(request["PrincipalAccess"]);
+        Assert.NotSame(access, written);
+        Assert.Equal(AccessRights.WriteAccess, written.AccessMask);
+        Assert.Same(principal, written.Principal);
+        Assert.Equal(AccessRights.AppendAccess, access.AccessMask);
+
+        // A response's values go out as the SDK types.
+        var response = new Response { Name = "RetrieveSharedPrincipalsAndAccess", Results = { ["PrincipalAccesses"] = modelShares, ["AccessRights"] = AccessMask.ReadAccess } };
+        var sdk = (OrganizationResponse)mirror.Out(response)!;
+        Assert.IsType<PrincipalAccess[]>(sdk.Results["PrincipalAccesses"]);
+        Assert.Equal(AccessRights.ReadAccess, Assert.IsType<AccessRights>(sdk.Results["AccessRights"]));
+    }
+
+    [Fact]
+    public void Role_privileges_convert_and_keep_the_callers_instances()
+    {
+        var mirror = new SdkMirror();
+        var privilegeId = Guid.NewGuid();
+        var filter = Guid.NewGuid();
+        var privilege = new RolePrivilege(PrivilegeDepth.Local, privilegeId, Guid.Empty) { PrivilegeName = "prvReadAccount", RecordFilterId = filter };
+        var privileges = new[] { privilege, null!, new RolePrivilege((PrivilegeDepth)99, Guid.NewGuid(), Guid.Empty) };
+        var request = new OrganizationRequest("AddPrivilegesRole") { ["Privileges"] = privileges };
+
+        var model = mirror.In(request)!;
+        var grants = Assert.IsType<PrivilegeGrant[]>(model.Parameters["Privileges"]);
+        Assert.Equal(new PrivilegeGrant(privilegeId, "prvReadAccount", Guid.Empty, PrivilegeScope.Local), grants[0]);
+        // A null privilege and an undefined depth cross as they are: the core refuses them with today's 400.
+        Assert.Null(grants[1]);
+        Assert.Equal((PrivilegeScope)99, grants[2].Depth);
+        Assert.Same(grants, mirror.In(request)!.Parameters["Privileges"]);
+
+        mirror.Out(model);
+        Assert.Same(privileges, request["Privileges"]);
+        Assert.Same(privilege, privileges[0]);
+        Assert.Equal(filter, privilege.RecordFilterId);
+        Assert.Equal((PrivilegeDepth)99, privileges[2].Depth);
+
+        // An SDK change in place is read in; a new model value goes out as a new SDK value, the caller's instance left as it is.
+        privilege.Depth = PrivilegeDepth.Global;
+        var changed = ((PrivilegeGrant[])mirror.In(request)!.Parameters["Privileges"]!)[0];
+        Assert.Equal(PrivilegeScope.Global, changed.Depth);
+        grants[0] = changed with { Depth = PrivilegeScope.Deep };
+        mirror.Out(model);
+        Assert.NotSame(privilege, privileges[0]);
+        Assert.Equal(PrivilegeDepth.Deep, privileges[0].Depth);
+        Assert.Equal(PrivilegeDepth.Global, privilege.Depth);
+
+        // A response's privileges go out as today's exact array type.
+        var response = new Response
+        {
+            Name = "RetrieveUserPrivileges",
+            Results = { ["RolePrivileges"] = new[] { new PrivilegeGrant(privilegeId, "prvReadAccount", Guid.NewGuid(), PrivilegeScope.Basic) } },
+        };
+        var sdk = (OrganizationResponse)mirror.Out(response)!;
+        var written = Assert.IsType<RolePrivilege[]>(sdk.Results["RolePrivileges"]);
+        Assert.Equal(PrivilegeDepth.Basic, Assert.Single(written).Depth);
+        Assert.Equal("prvReadAccount", written[0].PrivilegeName);
     }
 
     [Fact]

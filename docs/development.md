@@ -231,9 +231,10 @@ What stays on the SDK, and the step that moves it:
 
 | Still on the SDK | Moves in |
 |---|---|
-| The other core messages, `OrganizationService`, the core entry adapter and the SDK extension methods of `IPipelineCore` | S.2e3c |
-| The Security row rules that the CRUD handlers reach through bridges, and `RetrieveMultipleModelRequest` | S.2e3c |
-| The `StandardUpsert`, `InnerExecution` and `AccessTeamRules` marks, and the stage-20 guard (`SecurityGuard`) | S.2e3c |
+| Security: the stage-20 guard (`SecurityGuard`), `SystemTableRules` and the other Security row rules, and the `StandardUpsert`, `InnerExecution` and `AccessTeamRules` marks | S.2e3c2 |
+| `HoldChecksMayWrite`, the held window of the messages moved in S.2e3c1, and the Security bridges of `CoreSdkBridges`, which are removed | S.2e3c2 |
+| `OrganizationService`, `RetrieveMultipleModelRequest` and `MetadataOperations` (RetrieveEntity, RetrieveAttribute and the metadata reads) | S.2e3c3 |
+| The core entry adapter, and the callers of the `PipelineCoreSdk` extension methods in Workflows, Solution and Admin; the methods are removed | S.2e3c3 |
 | Mail, Elastic, Duplicates, Solutions and Rollups, and their bridges | S.2e4 |
 | Files and Audit, and the bridges that reach them | S.2f |
 | Workflows (`Xrmd.Workflows`), whose hooks the pipeline calls with a lent SDK view | S.2h |
@@ -279,7 +280,7 @@ handler body changes, and every caller sees the same objects, CLR types and in-p
   `CoreOperations`. It converts with the request's chain mirror, so the handler gets the SDK twin of the request: the same instance
   the caller or the pipeline holds, with its CLR type, its early-bound values and the marks keyed on it. A request with no chain
   mirror gets a new mirror for that call, and both directions of the call use it. Such a caller has no mirror to read a shell
-  with, so it gets the response already read in (see the read rule below). S.2e3c removes the adapter.
+  with, so it gets the response already read in (see the read rule below). S.2e3c3 removes the adapter.
 - **The SDK extension methods.** The callers outside the pipeline (Workflows, Solution, Admin, Core.Solutions, the custom API
   authoring, the plug-in organization service and the tests) still hold SDK objects. They call extension methods with the old names
   and SDK signatures, in `src/Xrmd.Pipeline/Sdk/PipelineCoreSdk.cs` (namespace `Xrmd.Pipeline`, so no `using` changes).
@@ -288,7 +289,7 @@ handler body changes, and every caller sees the same objects, CLR types and in-p
   request a caller passes is therefore the twin the core works on, and the response it gets is the core's own typed instance (a
   `CreateResponse` stays a `CreateResponse`). `RetrieveImageAsync` names the call's mirror for the image
   (`CoreHandOff.ReadImagesWith`), so the caller gets the core's own `Entity`. `LockExistsAsync` converts only the reference, and
-  `WrittenEntities` only the message name and the `Relationship` parameter, because the answer depends on nothing else. S.2e3c
+  `WrittenEntities` only the message name and the `Relationship` parameter, because the answer depends on nothing else. S.2e3c3
   moves these callers to their own boundary and removes the methods.
 
 `SdkMirror` gained a registry and response shells for this:
@@ -339,7 +340,7 @@ The cost of a message through the core, measured against the code before S.2e3a 
   806 objects instead of 606, or 2 to 3 more per child. The time stays within noise.
 - **The stage-20 SDK image checks cost one conversion each.** The checks on writes of the custom API, plug-in registration, workflow
   and service endpoint tables, and the owner lookup of real-time workflows, read their image through the model member into a mirror
-  of their own. Each read converts that one row in once, and the checks get the core's `Entity`. S.2e3c can move these
+  of their own. Each read converts that one row in once, and the checks get the core's `Entity`. S.2e3c2 can move these
   checks to `Record`.
 - **Direct SDK callers pay three conversions of the request.** An extension method converts the request in, and the adapter writes
   it out and reads it back, so a caller outside a pipeline pays three times the size of its request. That is what a message pays
@@ -389,7 +390,7 @@ texts that name a value type keep the SDK name they show today.
   converted. Otherwise the bridge converts the row with a mirror of the call, reads it in before writing it out, calls the helper
   and reads the row back into the same `Record`. A Create, Update, Retrieve or Delete of a plain custom table therefore crosses no
   bridge; `CoreSdkBridges.Crossings` and `CountCrossings()` are the test seams that prove it. Each bridge goes away with the step
-  that moves its helper (S.2e3c for Security, S.2e4 for Mail, Elastic, Duplicates and Rollups, S.2f for Files and Audit).
+  that moves its helper (S.2e3c2 for Security, S.2e4 for Mail, Elastic, Duplicates and Rollups, S.2f for Files and Audit).
 - **The mark copies.** `CascadeHint` and `AuditActionHint` have model keys (`Mark(Request)`, `IsMarked(Request)`, `Of(Request)`)
   in SDK-free files; their SDK overloads are in `src/Xrmd.Abstractions/Sdk/RequestHints.Sdk.cs`. The pipeline copies the marks at its
   crossings: an SDK `AuditActionHint` goes onto the model request after the request crosses in, and a model `CascadeHint` goes onto
@@ -431,9 +432,90 @@ The budget is +10%. The SDK twin read is over it in one round of three, and the 
 step meets the budget. Each caller that reads through the SDK twin stops paying it when its own step moves to the model (S.2f for
 the Web API, S.2h for MCP and Host).
 
-The SDK usage count of Core is 55 and that of Abstractions is 8; Pipeline stays 30. S.2e3c moves the other core messages,
-`OrganizationService`, the Security row rules and `RetrieveMultipleModelRequest`, removes the core entry adapter and the SDK extension
-methods, and moves the callers outside the pipeline to their own boundary.
+The SDK usage count of Core is 55 and that of Abstractions is 8; Pipeline stays 30. S.2e3c1 moves the other core messages, S.2e3c2 the Security row rules, and
+S.2e3c3 `OrganizationService` and `RetrieveMultipleModelRequest`, removes the core entry adapter and the SDK extension methods, and
+moves the callers outside the pipeline to their own boundary.
+
+### The other core messages on the model (S.2e3c1)
+
+S.2e3c is split in three: S.2e3c1 moves the other core messages, S.2e3c2 moves Security (the stage-20 guard, the row rules and the
+marks), and S.2e3c3 moves `OrganizationService`, `RetrieveMultipleModelRequest`, `MetadataOperations` and the SDK callers outside the
+pipeline. S.2e3c1 moves the core-owned messages onto `Request`, `Record` and `TableDefinition`. External contracts do not change:
+the response goldens (86 files and `mutation.txt`), the row, plug-in context, remote context, metadata and row parameter goldens are
+byte-identical to the code before S.2e3c1, and so are the fault texts and the CLR types a caller or a plug-in sees.
+
+| Group | Messages | Model body |
+|---|---|---|
+| Access and sharing | GrantAccess, ModifyAccess, RevokeAccess, RetrievePrincipalAccess, RetrieveSharedPrincipalsAndAccess | `CoreOperations.Access.cs`, `AccessMessages` |
+| Record teams | AddUserToRecordTeam, RemoveUserFromRecordTeam | `RecordTeams` |
+| Role privileges | AddPrivilegesRole, ReplacePrivilegesRole, RemovePrivilegeRole, RetrieveUserPrivileges | `CoreOperations.Roles.cs`, `UserPrivileges` |
+| Currency, change tracking | RetrieveExchangeRate, RetrieveEntityChanges | `CurrencyMessages`, `ChangeTracker` |
+| Queues | AddToQueue, RemoveFromQueue, RouteTo, AddPrincipalToQueue, PickFromQueue, ReleaseToQueue, RetrieveUserQueues | `QueueMessages` |
+| Non-pipeline reads | WhoAmI, RetrieveAppComponents, RetrieveUnpublished, InitializeFrom, RetrieveFormattedImportJobResults, and the refusals of the caller-only and metadata-write messages and of ImportSolution from a plug-in | `CoreOperations.NonPipeline.cs`, `InitializeFrom` |
+| Lookups | `WrittenEntities`, `RetrieveImageAsync`, `LockExistsAsync` | `CoreOperations.Messages.cs`, `CoreOperations.NonPipeline.cs` |
+
+- **One model dispatch.** Every core message enters `ExecuteMessageAsync` (pipeline messages) or `ExecuteNonPipelineMessageAsync`
+  (non-pipeline messages) in `src/Xrmd.Core/CoreOperations.Messages.cs`. The CRUD switch of S.2e3b is one branch of it. Each moved
+  branch first runs today's server-values check and then reads its parameters in the order of the SDK branch it replaces, with the
+  same texts (they still name the SDK types, for example "not a EntityReference" or "missing or not a RolePrivilege[]").
+  ExecuteWorkflow keeps its `InvalidOperationException`, and an unknown message keeps its `NotSupportedException` text.
+- **The bridged messages.** `CoreSdkMessages` (`src/Xrmd.Core/Sdk/CoreSdkMessages.cs`) holds the SDK switches for the messages whose
+  bodies belong to later steps, and the `Enter`/`Leave` logic of the held window. `CoreSdkMessages.Bridged` is exactly these 26 names
+  (a test pins the list):
+  - Mail: SendEmail, GetTrackingTokenEmail (S.2e4);
+  - Duplicates: PublishDuplicateRule, UnpublishDuplicateRule, RetrieveDuplicates, BulkDetectDuplicates (S.2e4);
+  - Elastic: the elastic upsert and ExecuteCosmosSqlQuery (S.2e4);
+  - Rollups: CalculateRollupField (S.2e4);
+  - Files: the six file messages (S.2f);
+  - Audit: the audit messages (S.2f);
+  - Metadata: RetrieveEntity, RetrieveAttribute and the metadata reads of `MetadataOperations.Retrieve` (S.2e3c3).
+
+  A bridged message still runs on the held SDK request, with the same response instance and in-place changes as before
+  (`mutation.txt` pins this). `CoreHandOff.HandlerRequest` fires only for bridged messages.
+- **Model values.** Values that crossed the mirror as opaque SDK objects have model twins now. `SdkRecords` and `SdkMirror` convert
+  them:
+
+  | SDK value | Model value |
+  |---|---|
+  | `PrincipalAccess`, `PrincipalAccess[]` | `Xrmd.Model.Security.PrincipalAccessValue(RecordReference Principal, AccessMask AccessMask)`, `PrincipalAccessValue[]` |
+  | `RolePrivilege`, `RolePrivilege[]` | `PrivilegeGrant`, `PrivilegeGrant[]` |
+  | `AccessRights` | `AccessMask` |
+
+  Arrays convert for the exact array type only, as for `Entity[]`. The mirror pairs these values by instance, like any other value,
+  so a plug-in that reads or replaces a `PrincipalAccess` or a `RolePrivilege` sees the same CLR types, values and in-place semantics
+  as before. A `RolePrivilege` that goes back into the caller's own instance keeps its `RecordFilterId` and `RecordFilterUniqueName`,
+  which the model does not carry. Unlike `SdkRecords`, the mirror does not range-check the privilege depth and keeps a null element,
+  so a bad depth or a null privilege still reaches the core and gets today's 400.
+- **Async payloads (note for S.2i).** `SdkRemoteContext.ModelCanCarry` and the model writers (`ContextXml`, `ContextJson`) do not
+  know these three value types. A context that holds one is serialized from the SDK view, as before, so the `asyncoperation.data` of
+  an async step on GrantAccess or AddPrivilegesRole and the body of a webhook on those messages do not change. Before S.2i removes the
+  SDK fallbacks, the own writer and reader must learn `PrincipalAccessValue`, `PrivilegeGrant` and `AccessMask`, with the bytes the SDK
+  serializer writes today.
+- **Typed responses and requests.** `CoreResponses.Typed(name)` covers every moved message (`GrantAccessResponse`,
+  `RetrieveUserQueuesResponse`, `WhoAmIResponse`, `InitializeFromResponse`, ...), with the class each SDK branch returned before. The
+  queue messages write `queueitem` and `queuemembership` rows through the nested delegate as model `Create`, `Update`, `Delete` and
+  `Associate` requests. `CoreResponses.TypedRequest(name)` pairs them with `CreateRequest`, `UpdateRequest`, `DeleteRequest` and
+  `AssociateRequest`, so the pipeline, the guard and the plug-ins on those writes get today's request classes.
+- **SDK twins.** A public member that another module calls keeps an SDK twin with the old name and signature in `src/Xrmd.Core/Sdk/`:
+  `ShareAsync` (the migration `SharingPhase`), `AccessMessages.ExecuteAsync` (the Web API and
+  `OrganizationService`), and `RetrieveUserPrivilegesAsync`, `InitializeFromAsync`, `RetrieveAppComponentsAsync`, `WhoAmI` and the
+  import job and unpublished helpers that `OrganizationService` calls. Each twin reads the request in through a mirror of the call and
+  answers with the typed response. A member that nothing outside the core called lost its SDK form: `CurrencyMessages.ExecuteAsync`,
+  `ChangeTracker.ReadRequest` and `QueueMessages.ExecuteAsync` exist on the model only.
+- **Security stays on the SDK.** The moved code calls `SecurityGuard` and the Security row rules through their model overloads where
+  S.2d made one, and through bridges in `CoreSdkBridges` otherwise (the access checks, the share rows, the record team checks, the role
+  grants, and the share and privilege audit rows). As in S.2e3b, a bridge runs the helper's guard first. S.2e3c2 removes these bridges.
+  `ChangeTracker` still answers with the SDK `BusinessEntityChanges`, built by a bridge, because it has no model twin yet.
+- **The held window.** The model request is current when the core runs a moved message, so the core no longer uses the held SDK
+  request for them. The pipeline still holds a window for the moved messages that go through it, which costs one write and one read
+  of the request, as before; the core ignores it. S.2e3c2 removes it together with stage 20.
+- **Images.** `RetrieveImageAsync` reads the image on the model (`ReadImageAsync`). When the pipeline named a mirror for the read
+  (`CoreHandOff.ReadImagesWith`), the record is written out into that mirror once, so its SDK twin there is the core's own `Entity`
+  and an image still costs one conversion.
+
+The SDK usage count of Core is 51 (55 before S.2e3c1): `RecordTeams.cs`, `AccessMessages.cs`, `CurrencyMessages.cs`,
+`ChangeTracker.cs`, `QueueMessages.cs` and `InitializeFrom.cs` name no SDK type any more, and the new `CoreOperations.Access.cs`,
+`CoreOperations.Roles.cs` and `CoreOperations.NonPipeline.cs` are SDK-free. Abstractions stays 8 and Pipeline 30.
 
 The view is transitional. The other modules move to the model in S.2d to S.2h, and S.2i removes the view, the twins and the bridge.
 
