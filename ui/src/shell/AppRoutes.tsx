@@ -8,6 +8,7 @@ import { UserSettingsGate } from '../apps/userSettings';
 import { AccessGate } from './auth/AccessGate';
 import { useAccess } from './auth/roles';
 import { t } from './i18n/t';
+import { AdminTheme } from './layout/AdminTheme';
 import { NotFound } from './layout/NotFound';
 import { Shell } from './layout/Shell';
 import { PageHeader } from './layout/PageHeader';
@@ -39,9 +40,24 @@ export function AppRoutes() {
         }
       >
         <Route path="/" element={<Navigate to="/apps" replace />} />
-        <Route path="/apps" element={<AppPicker />} />
+        {/* The app picker and the studio follow the environment's look, as the web admin does; an app has its own. */}
+        <Route
+          path="/apps"
+          element={
+            <AdminTheme anyUser>
+              <AppPicker />
+            </AdminTheme>
+          }
+        />
         <Route path="/main.aspx" element={<AppShell />} />
-        <Route path="/studio/*" element={<StudioRoutes />} />
+        <Route
+          path="/studio/*"
+          element={
+            <AdminTheme anyUser>
+              <StudioRoutes />
+            </AdminTheme>
+          }
+        />
       </Route>
       <Route
         element={

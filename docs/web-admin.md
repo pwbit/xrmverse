@@ -100,7 +100,8 @@ weight (300).
 
 The web admin also follows the environment's presentation overlay (the environment value "Model-driven apps look" on the
 Environment page; see [The presentation overlay](model-driven-apps.md#the-presentation-overlay-version-1)). Its brand
-colours, font, density and colour scheme apply to the admin as they do to the apps, whichever look the environment uses.
+colours, font, density and colour scheme apply to the admin as they do to the apps, whichever look the environment uses;
+the app picker (`/apps`) and the workflow studio follow it too.
 An app's own overlay does not apply to the admin, and `whiteLabel` (name, logo, icon) does not either: the header keeps
 the xrmverse name and logo. Because the admin has no per-user colour scheme, the overlay's `colorScheme` wins over the
 operating system's setting, and `system` follows the operating system. The admin renders at once with the xrmverse theme

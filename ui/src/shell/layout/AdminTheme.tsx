@@ -19,9 +19,12 @@ const NoticeContext = createContext<string | undefined>(undefined);
  * its brand ramp, font, density and colour scheme; its white label does not apply, the admin stays xrmverse branded. Without an
  * overlay, while it loads, or when it cannot be read, the children render with the root theme (the xrmverse theme). The scope is
  * always there, so the pages below are not mounted again when the overlay arrives.
+ *
+ * `anyUser` also themes the pages every signed-in user opens outside the web admin (the app picker and the workflow studio):
+ * the environment's overlay is then read for any user (see {@link useEnvironmentOverlay}).
  */
-export function AdminTheme({ children }: { children: ReactNode }) {
-  const { name, error } = useEnvironmentOverlay();
+export function AdminTheme({ children, anyUser = false }: { children: ReactNode; anyUser?: boolean }) {
+  const { name, error } = useEnvironmentOverlay({ anyUser });
   const presentation = usePresentation(name);
   // While the next overlay loads (after a save, say) the previous model's theme stays; it falls back when the next one fails.
   const previous = useRef<PresentationModel>();

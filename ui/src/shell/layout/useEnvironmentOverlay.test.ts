@@ -102,6 +102,24 @@ describe('useEnvironmentOverlay', () => {
     expect(api.get).not.toHaveBeenCalled();
   });
 
+  it('with anyUser, a user who is not an administrator reads the setting (the app picker and the studio)', async () => {
+    answer([{ settingdefinitionid: DEF, uniquename: 'xrmverse_Presentation', defaultvalue: 'x_/default.json' }], []);
+    for (const level of ['customizer', 'denied', 'loading'] as const) {
+      const { result, unmount } = renderHook(() => useEnvironmentOverlay({ anyUser: true }), { wrapper: levelWrapper(level) });
+      await waitFor(() => expect(result.current.name).toBe('x_/default.json'));
+      unmount();
+    }
+  });
+
+  it('with anyUser, a 403 gives no name and no error', async () => {
+    api.get.mockRejectedValue(new XrmError(403, 'Forbidden'));
+    const { result } = renderHook(() => useEnvironmentOverlay({ anyUser: true }), { wrapper: levelWrapper('denied') });
+    await waitFor(() => expect(api.get).toHaveBeenCalled());
+    await act(async () => {});
+    expect(result.current.name).toBeUndefined();
+    expect(result.current.error).toBeUndefined();
+  });
+
   it('reads nothing while access loads, then reads once it is admin', async () => {
     answer([{ settingdefinitionid: DEF, uniquename: 'xrmverse_Presentation', defaultvalue: 'x_/default.json' }], []);
     let level: AccessLevel = 'loading';

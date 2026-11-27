@@ -6,6 +6,7 @@ import { useNavOpen } from '../../apps/useNavOpen';
 import { webResourceUrl } from '../../client-api/scriptHost';
 import { useAuth } from '../../shell/auth/AuthProvider';
 import { SessionCookieWarning } from '../../shell/auth/SessionCookieWarning';
+import { useOnBrandStyles } from '../../shell/layout/BrandBar';
 import { t } from '../../shell/i18n/t';
 import { NavMenuIcon } from '../../shell/icons';
 import { SiteMapNav } from '../classic/SiteMapNav';
@@ -27,12 +28,12 @@ const useStyles = makeStyles({
     columnGap: tokens.spacingHorizontalM,
     padding: `0 ${tokens.spacingHorizontalM}`,
     minHeight: '48px',
-    backgroundColor: tokens.colorNeutralBackground1,
-    color: tokens.colorNeutralForeground1,
-    borderBottom: `${tokens.strokeWidthThin} solid ${tokens.colorNeutralStroke2}`,
+    // The brand bar of the web admin (BrandBar): the overlay's brand colour, as /manage shows it.
+    backgroundColor: tokens.colorBrandBackgroundPressed,
+    color: tokens.colorNeutralForegroundOnBrand,
   },
   logo: { height: '24px', width: 'auto', flexShrink: 0 },
-  name: { flexGrow: 1, fontWeight: tokens.fontWeightSemibold, fontSize: tokens.fontSizeBase400, color: tokens.colorNeutralForeground1 },
+  name: { flexGrow: 1, fontWeight: tokens.fontWeightSemibold, fontSize: tokens.fontSizeBase400, color: tokens.colorNeutralForegroundOnBrand },
   body: { display: 'flex', flexGrow: 1, minHeight: 0 },
   rail: { display: 'flex', flexShrink: 0, overflowY: 'auto' },
   main: { flexGrow: 1, padding: `${tokens.spacingVerticalL} ${tokens.spacingHorizontalXXL}`, minWidth: 0, overflow: 'auto', backgroundColor: tokens.colorNeutralBackground1 },
@@ -67,11 +68,12 @@ function useFavicon(favicon: string | undefined) {
 }
 
 /**
- * The modern app frame (ruling A3): a neutral header with the white-label logo and name (else the xrmverse logo and the
+ * The modern app frame (ruling A3): a header in the brand colour (as the web admin's brand bar) with the white-label logo and name (else the xrmverse logo and the
  * app's name), and the sitemap navigation as a rail that a header button collapses and expands.
  */
 export function ModernAppFrame({ appName, siteMap, lcid, appId, current, children, overlays, whiteLabel, appBar, sidePanes }: AppFrameProps) {
   const styles = useStyles();
+  const onBrand = useOnBrandStyles();
   const { signOut } = useAuth();
   // The rail starts closed on a narrow screen (it would cover the page), else as last remembered in this browser.
   const [open, toggle] = useNavOpen(NARROW_QUERY);
@@ -83,7 +85,8 @@ export function ModernAppFrame({ appName, siteMap, lcid, appId, current, childre
     <div className={styles.root}>
       <header className={styles.header}>
         <Button
-          appearance="subtle"
+          appearance="transparent"
+          className={onBrand.button}
           icon={<NavMenuIcon />}
           aria-label={t('apps.nav.toggle')}
           aria-expanded={open}
@@ -92,8 +95,8 @@ export function ModernAppFrame({ appName, siteMap, lcid, appId, current, childre
         />
         {whiteLabel?.logo ? <img className={styles.logo} src={webResourceUrl(whiteLabel.logo)} alt={name} /> : <XrmverseLogo />}
         <Text className={styles.name}>{name}</Text>
-        <UserMenu appearance="subtle" />
-        <Button appearance="subtle" onClick={signOut}>
+        <UserMenu buttonClassName={onBrand.button} />
+        <Button appearance="transparent" className={onBrand.button} onClick={signOut}>
           {t('auth.signOut')}
         </Button>
       </header>

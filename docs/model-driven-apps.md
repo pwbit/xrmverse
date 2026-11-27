@@ -59,9 +59,10 @@ that names the member.
 - **App picker** at `/apps`: a card per active app the user may open, sorted by name. Each card shows a banner with the
   xrmverse mark, then, centred, the app's name on one line (cut with an ellipsis when too long, the full name as its
   tooltip) and up to two lines of its description; the whole card opens the app. The banner is a gradient of the brand
-  colours of the theme in force on `/apps`: the xrmverse theme in the user's light or dark colour scheme. The
-  environment theme that the web admin (`/manage`, for a System Administrator) and a modern app apply is not applied
-  on `/apps` (see [Known issues](known-issues.md#model-driven-apps)). A second list, **Tools**, holds the
+  colours of the theme in force on `/apps`: the environment's presentation overlay (brand colours, font, density and
+  colour scheme, as the web admin applies it; `whiteLabel` does not apply), else the xrmverse theme in the user's light or
+  dark colour scheme. The overlay is read for every user whose roles can read `organizationsetting`; otherwise the page
+  keeps the xrmverse theme. The [workflow studio](workflow-studio.md) follows the same theme. A second list, **Tools**, holds the
   [workflow studio](workflow-studio.md) tile for users who can read processes. The app's own icon
   (`appmodule.webresourceid`) is not shown yet.
 - **App shell** at `/main.aspx`: a header with the xrmverse logo and name, the app's name, the user and Sign out; the
@@ -236,7 +237,7 @@ dashboards; neither changes them.
 - **Classic** is the look of UI-1 and the default: the xrmverse brand bar, the site map on the left, the page in the
   middle. A classic app ignores any overlay that is configured. Since X.10 its header has a button that collapses and shows
   the site map (see [The navigation toggle](#the-navigation-toggle)); otherwise it looks as it did before UI-2a.
-- **Modern** draws its own app frame: a neutral header with a logo and a name, the site map as a navigation rail that a
+- **Modern** draws its own app frame: a header in the overlay's brand colour (as the web admin's brand bar) with a logo and a name, the site map as a navigation rail that a
   header button collapses and expands (the browser remembers whether it is open; see
   [The navigation toggle](#the-navigation-toggle)), and the theme of the app's **presentation overlay** (brand colours, font, density,
   colour scheme and white-label). Icons are Fluent's filled icons, in menus, dialogs and popups too (classic shows the

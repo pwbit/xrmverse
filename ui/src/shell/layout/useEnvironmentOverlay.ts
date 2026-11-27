@@ -22,10 +22,14 @@ const set = (value: string | null | undefined): string | undefined => (value?.tr
  * failure gives its text as `error`, for the notice of R5. The previous name stays while a re-read is under way. Only a
  * System Administrator reads the setting: other users of the web admin (System Customizer…) get 403 on it, so for them, and
  * while access is still being resolved, nothing is read and there is no name (the xrmverse theme).
+ *
+ * With `anyUser` (the app picker and the workflow studio, which every signed-in user opens) the setting is read whatever the
+ * user's access level: the user's roles decide, and a 403 gives no name, as above.
  */
-export function useEnvironmentOverlay(): { name?: string; error?: string; reload: () => void } {
+export function useEnvironmentOverlay({ anyUser = false }: { anyUser?: boolean } = {}): { name?: string; error?: string; reload: () => void } {
   const { api } = useAuth();
-  const admin = useAccess().level === 'admin';
+  const level = useAccess().level;
+  const reads = anyUser || level === 'admin';
   const [state, setState] = useState<{ name?: string; error?: string }>({});
   const [generation, setGeneration] = useState(0);
   const reload = useCallback(() => setGeneration((g) => g + 1), []);
@@ -38,7 +42,7 @@ export function useEnvironmentOverlay(): { name?: string; error?: string; reload
   }, [reload]);
 
   useEffect(() => {
-    if (!api || !admin) return;
+    if (!api || !reads) return;
     const controller = new AbortController();
     const { signal } = controller;
     (async () => {
@@ -66,7 +70,7 @@ export function useEnvironmentOverlay(): { name?: string; error?: string; reload
       },
     );
     return () => controller.abort();
-  }, [api, admin, generation]);
+  }, [api, reads, generation]);
 
-  return admin ? { ...state, reload } : { reload };
+  return reads ? { ...state, reload } : { reload };
 }
