@@ -8,7 +8,7 @@ namespace Xrmd.Solution.Tests.SourceLayout;
 
 public class SourceComparerTests
 {
-    public static TheoryData<string> Solutions => new() { "XrmSharedTest", "OpenProject365" };
+    public static TheoryData<string> Solutions => new() { "XrmSharedTest", "OpenProject365", "xrmCalcTest" };
 
     private const string ProjectTable = "Entities/op365_Project";
     private const string MainForm = ProjectTable + "/FormXml/main/{a07738a0-2593-486c-a9d7-3ef1ec96515f}.xml";
@@ -176,6 +176,55 @@ public class SourceComparerTests
         SourceComparer.Compare(removed, folder).Items.Select(i => (i.Status, i.Type, i.Name, i.Path, string.Join(",", i.Files))).Should().Equal(
             ("missing", "choice", "new_buttamiscelte", Choice, Choice),
             ("missing", "workflow", "Buttami", WorkflowXaml, WorkflowXaml + "," + WorkflowXaml + ".data.xml"));
+    }
+
+    [SourceLayoutFact]
+    public void Formula_files_are_formula_components()
+    {
+        const string xaml = "Entities/xrmv_Calcorder/Formulas/xrmv_calcorder-xrmv_age.xaml";
+        const string yaml = "Entities/xrmv_Calcorder/Formulas/xrmv_calcorder-FormulaDefinitions.yaml";
+        var folder = Read("xrmCalcTest");
+
+        var reindented = With(folder, files => files[xaml] = Encoding.UTF8.GetBytes(XDocument.Parse(Encoding.UTF8.GetString(files[xaml])).ToString(SaveOptions.DisableFormatting)));
+        SourceComparer.Compare(reindented, folder).Any.Should().BeFalse();
+
+        var changed = With(folder, files => files[yaml] = [.. files[yaml], .. "xrmv_more: =1\n"u8.ToArray()]);
+        SourceComparer.Compare(changed, folder).Items.Should().ContainSingle()
+            .Which.Should().BeEquivalentTo(new ComponentDifference("changed", "formula", "xrmv_calcorder-FormulaDefinitions", yaml, [yaml]));
+    }
+
+    private const string CalcEntity = "Entities/xrmv_Calcorder/Entity.xml";
+
+    private static void SwapFirstTwoColumns(XDocument doc)
+    {
+        var columns = doc.Descendants("attributes").First().Elements("attribute").ToList();
+        columns[1].Remove();
+        columns[0].AddBeforeSelf(columns[1]);
+    }
+
+    [SourceLayoutFact]
+    public void Column_order_in_a_table_is_not_a_difference()
+    {
+        var folder = Read("xrmCalcTest");
+        var reordered = With(folder, files => files[CalcEntity] = EditXml(files[CalcEntity], SwapFirstTwoColumns));
+        reordered[CalcEntity].Should().NotEqual(folder[CalcEntity]);
+
+        SourceComparer.Compare(reordered, folder).Any.Should().BeFalse();
+    }
+
+    [SourceLayoutFact]
+    public void A_changed_column_still_shows_when_columns_are_reordered()
+    {
+        var folder = Read("xrmCalcTest");
+        var changed = With(folder, files => files[CalcEntity] = EditXml(files[CalcEntity], doc =>
+        {
+            SwapFirstTwoColumns(doc);
+            doc.Descendants("attribute").First().Element("RequiredLevel")!.Value = "changed";
+        }));
+
+        SourceComparer.Compare(changed, folder).Items.Should().ContainSingle()
+            .Which.Should().BeEquivalentTo(new ComponentDifference("changed", "table", "xrmv_Calcorder", CalcEntity, [CalcEntity]),
+                o => o.Excluding(d => d.Name));
     }
 
     [SourceLayoutFact]

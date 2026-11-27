@@ -15,7 +15,7 @@ namespace Xrmd.TestSupport;
 public static class SourceLayoutFixtures
 {
     /// <summary>The solutions that have fixtures.</summary>
-    public static readonly string[] Solutions = ["OpenProject365", "XrmSharedTest"];
+    public static readonly string[] Solutions = ["OpenProject365", "XrmSharedTest", "xrmCalcTest"];
 
     private static string Root { get; } =
         Path.Combine(AppContext.BaseDirectory, "fixtures", "solutions", "SourceLayout");
@@ -51,6 +51,12 @@ public static class SourceLayoutFixtures
 
     /// <summary>The unmanaged zip exported at the same version as the clones.</summary>
     public static byte[] Zip(string solution) => File.ReadAllBytes(Path.Combine(Root, solution, solution + ".zip"));
+
+    /// <summary>
+    /// The <c>Other/EntityMaps.xml</c> of a later clone of xrmCalcTest that had one column mapping (account → xrmv_test);
+    /// only this file is kept from that clone.
+    /// </summary>
+    public static byte[] EntityMapsReference => File.ReadAllBytes(Path.Combine(Root, "xrmCalcTest", "entitymap", "EntityMaps.xml"));
 
     /// <summary>A full copy of the XrmSharedTest clone folder, with its .cdsproj file.</summary>
     public static string CdsprojSample { get; } = Path.Combine(Root, "XrmSharedTest", "cdsproj-sample");

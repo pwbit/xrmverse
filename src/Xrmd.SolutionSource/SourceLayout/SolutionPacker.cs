@@ -25,6 +25,7 @@ public static class SolutionPacker
 
         EntityWriter.Read(context);
         RelationshipWriter.Read(context);
+        EntityMapWriter.Read(context);
         SecurityWriter.Read(context);
         WorkflowWriter.Read(context);
         OptionSetWriter.Read(context);

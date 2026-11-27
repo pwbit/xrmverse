@@ -676,10 +676,20 @@ classic workflows: the definition file of each process (the JSON of a cloud flow
 copied byte for byte, with the process record beside it in `<file>.data.xml`. Business rules, business process flows,
 actions and dialogs are refused for now (exit 5; see [Known limits](#known-limits)).
 
+`Other/EntityMaps.xml` holds the column mappings of the solution's relationships (the values copied from a parent row to a
+new child row), all in one file and only when there is at least one. The definitions of formula, calculated and rollup
+columns are kept with their table: `Entities/<table>/Formulas/` holds, byte for byte, the `.xaml` of each calculated or
+rollup column and the `<table>-FormulaDefinitions.yaml` shared by the table's formula columns. `Entity.xml` names them as the
+solution does (`/Formulas/<file>`); `pack` puts them back in the zip and fails (exit 2) when a file a column names is missing
+or when a file in `Formulas/` belongs to no column. The order of the columns inside `Entity.xml` does not count as a
+difference in `diff`.
+
 **Moving a repository to xrmverse.** If the folder was created by Dataverse's tools from a Dataverse environment, run
 `xrmd solution sync` once after the first import into xrmverse and commit the result. Until then `diff` reports
 differences that are only a matter of how the two servers export (some columns, relationships and empty sections); after
-that sync, `diff` is clean.
+that sync, `diff` is clean. The same holds for a folder written by hand or packed from source: on import the server fills in
+some values the folder may lack (for example the display name of the base column of a currency column, or the localized
+names of a site map), as Dataverse does; one `sync` after the first import takes them into the folder.
 
 **Check a folder before an import in a pipeline.** `diff` exits 9 when the folder and the organization differ, so a step can
 stop a deployment that would overwrite changes made directly on the server:

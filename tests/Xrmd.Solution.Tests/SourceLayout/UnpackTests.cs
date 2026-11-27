@@ -9,7 +9,7 @@ namespace Xrmd.Solution.Tests.SourceLayout;
 
 public class UnpackTests
 {
-    public static TheoryData<string> Solutions => new() { "XrmSharedTest", "OpenProject365" };
+    public static TheoryData<string> Solutions => new() { "XrmSharedTest", "OpenProject365", "xrmCalcTest" };
 
     [SourceLayoutTheory]
     [MemberData(nameof(Solutions))]
@@ -119,6 +119,83 @@ public class UnpackTests
         var data = XDocument.Load(new MemoryStream(files[xaml + ".data.xml"])).Root!;
         data.Name.LocalName.Should().Be("Workflow");
         data.Element("XamlFileName")!.Value.Should().Be("/" + xaml);
+    }
+
+    [SourceLayoutFact]
+    public void Formula_files_are_copied_byte_for_byte_into_their_table_folder()
+    {
+        var zip = SourceLayoutFixtures.Zip("xrmCalcTest");
+        var entries = SolutionZip.ReadRaw(zip);
+
+        var files = SolutionUnpacker.Unpack(zip);
+
+        files["Entities/xrmv_Calcorder/Formulas/xrmv_calcorder-FormulaDefinitions.yaml"]
+            .Should().Equal(entries["Formulas/xrmv_calcorder-FormulaDefinitions.yaml"]);
+        files["Entities/Account/Formulas/account-xrmv_ordercount.xaml"]
+            .Should().Equal(entries["Formulas/account-xrmv_ordercount.xaml"]);
+        files.Keys.Should().NotContain(k => k.StartsWith("Formulas/", StringComparison.Ordinal));
+    }
+
+    [SourceLayoutFact]
+    public void Formula_file_outside_the_Formulas_folder_is_refused_with_the_table()
+    {
+        var zip = Rewrite(SourceLayoutFixtures.Zip("xrmCalcTest"), "customizations.xml",
+            bytes => Replace(bytes, "/Formulas/xrmv_calcorder-xrmv_age.xaml", "/Other/xrmv_calcorder-xrmv_age.xaml"));
+
+        var act = () => SolutionUnpacker.Unpack(zip);
+
+        var fault = act.Should().Throw<XrmdFaultException>().Which;
+        fault.ErrorCode.Should().Be(ErrorCodes.UnsupportedComponent);
+        fault.Message.Should().Contain("xrmv_Calcorder");
+    }
+
+    [SourceLayoutFact]
+    public void Formula_file_the_zip_lacks_fails_with_its_name()
+    {
+        var zip = Rewrite(SourceLayoutFixtures.Zip("xrmCalcTest"), "customizations.xml",
+            bytes => Replace(bytes, "/Formulas/xrmv_calcorder-xrmv_age.xaml", "/Formulas/xrmv_calcorder-xrmv_gone.xaml"));
+
+        var act = () => SolutionUnpacker.Unpack(zip);
+
+        act.Should().Throw<XrmdFaultException>().Which.Message.Should().Contain("xrmv_calcorder-xrmv_gone.xaml");
+    }
+
+    /// <summary>The xrmCalcTest zip with the map of the reference <c>Other/EntityMaps.xml</c> in its customizations.</summary>
+    internal static byte[] ZipWithEntityMap()
+    {
+        var maps = XDocument.Parse(Encoding.UTF8.GetString(SourceLayoutFixtures.EntityMapsReference).TrimStart('\uFEFF')).Root!;
+        var inner = string.Concat(maps.Elements().Select(e => e.ToString(SaveOptions.DisableFormatting)));
+        return Rewrite(SourceLayoutFixtures.Zip("xrmCalcTest"), "customizations.xml",
+            bytes => Replace(bytes, "<EntityMaps />", "<EntityMaps>" + inner + "</EntityMaps>"));
+    }
+
+    [SourceLayoutFact]
+    public void Entity_maps_are_written_to_their_own_file_as_the_reference_shows()
+    {
+        var files = SolutionUnpacker.Unpack(ZipWithEntityMap());
+
+        files["Other/EntityMaps.xml"].Should().Equal(SourceLayoutFixtures.EntityMapsReference);
+        XDocument.Parse(Encoding.UTF8.GetString(files["Other/Customizations.xml"]).TrimStart('\uFEFF'))
+            .Root!.Element("EntityMaps")!.HasElements.Should().BeFalse();
+    }
+
+    [SourceLayoutFact]
+    public void Solution_without_entity_maps_has_no_maps_file()
+    {
+        SolutionUnpacker.Unpack(SourceLayoutFixtures.Zip("xrmCalcTest")).Keys.Should().NotContain("Other/EntityMaps.xml");
+    }
+
+    [SourceLayoutFact]
+    public void Unknown_element_among_the_entity_maps_is_refused()
+    {
+        var zip = Rewrite(SourceLayoutFixtures.Zip("xrmCalcTest"), "customizations.xml",
+            bytes => Replace(bytes, "<EntityMaps />", "<EntityMaps><SomethingElse Name=\"x\" /></EntityMaps>"));
+
+        var act = () => SolutionUnpacker.Unpack(zip);
+
+        var fault = act.Should().Throw<XrmdFaultException>().Which;
+        fault.ErrorCode.Should().Be(ErrorCodes.UnsupportedComponent);
+        fault.Message.Should().Contain("SomethingElse");
     }
 
     [SourceLayoutFact]

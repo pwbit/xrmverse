@@ -12,7 +12,7 @@ namespace Xrmd.Solution.SourceLayout;
 /// </summary>
 /// <remarks>
 /// What the reference folders show and this follows: connection references, team templates and the language list stay in
-/// <c>Other/Customizations.xml</c>; custom APIs, environment variable definitions, agents (bots, bot components, skills),
+/// <c>Other/Customizations.xml</c>; entity maps go to <c>Other/EntityMaps.xml</c>; custom APIs, environment variable definitions, agents (bots, bot components, skills),
 /// app actions and assets come as zip entries of their own and keep their zip path (<see cref="LayoutFolders.PassThrough"/>);
 /// an entry in any other folder that no writer places is refused. Every part the reference folders hold nothing for
 /// (business rules, business process flows and other processes that are neither cloud flows nor classic workflows among
@@ -52,6 +52,7 @@ public static class SolutionUnpacker
         var context = new UnpackContext(root, entries);
         EntityWriter.Write(context);
         RelationshipWriter.Write(context);
+        EntityMapWriter.Write(context);
         SecurityWriter.Write(context);
         WorkflowWriter.Write(context);
         OptionSetWriter.Write(context);

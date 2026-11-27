@@ -7,6 +7,9 @@ namespace Xrmd.Solution.SourceLayout.Writers;
 /// Tables: <c>Entities/&lt;name&gt;/Entity.xml</c> keeps the table definition, with each form, view, chart and the ribbon
 /// changes in a file of its own beside it (<c>FormXml/&lt;type&gt;/&lt;id&gt;.xml</c>, <c>SavedQueries/&lt;id&gt;.xml</c>,
 /// <c>Visualizations/&lt;id&gt;.xml</c>, <c>RibbonDiff.xml</c>). The split parts stay in <c>Entity.xml</c> as empty elements.
+/// The definition files of the table's formula, calculated and rollup columns (the zip entries <c>Formulas/&lt;file&gt;</c>
+/// its columns name in <c>FormulaDefinitionFileName</c>) are copied byte for byte to <c>Formulas/&lt;file&gt;</c> in the
+/// table's folder, as the reference folders show; <c>Entity.xml</c> keeps the names unchanged.
 /// </summary>
 internal static class EntityWriter
 {
@@ -32,6 +35,11 @@ internal static class EntityWriter
             WriteForms(context, name, folder, entity.Element("FormXml"));
             WriteViews(context, name, folder, entity.Element("SavedQueries"));
             WriteCharts(context, folder, entity.Element("Visualizations"));
+            foreach (var file in FormulaFiles(entity, name))
+            {
+                var (_, bytes) = context.TakeEntry("/" + FormulasFolder + file, $"the column formulas of table '{name}'");
+                context.Files.Add($"{folder}/{FormulasFolder}{file}", bytes);
+            }
             var ribbon = entity.Element("RibbonDiffXml");
             if (ribbon is not null)
             {
@@ -140,8 +148,38 @@ internal static class EntityWriter
             if (context.Has(ribbonPath))
                 PackContext.Fill(Placeholder(entity, "RibbonDiffXml", entityPath, ribbonPath), context.Load(ribbonPath, "RibbonDiffXml", entityPath));
 
+            foreach (var file in FormulaFiles(entity, name))
+            {
+                var path = folder + FormulasFolder + file;
+                context.AddEntry(FormulasFolder + file, context.Take(path, entityPath), path);
+            }
+
             container.Add(entity);
         }
+    }
+
+    /// <summary>The folder of formula definition files, in the zip and in a table's folder.</summary>
+    private const string FormulasFolder = "Formulas/";
+
+    /// <summary>
+    /// The file names (without folder) the columns of <paramref name="entity"/> name in <c>FormulaDefinitionFileName</c>,
+    /// each once (several formula columns of a table share one definitions file), in ordinal order.
+    /// </summary>
+    /// <exception cref="XrmdFaultException">
+    /// 400 <see cref="ErrorCodes.UnsupportedComponent"/> naming the table when a name is not one file directly in <c>/Formulas/</c>.
+    /// </exception>
+    private static List<string> FormulaFiles(XElement entity, string table)
+    {
+        var files = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var element in entity.Descendants("FormulaDefinitionFileName"))
+        {
+            var value = element.Value.Trim();
+            var file = value.StartsWith("/" + FormulasFolder, StringComparison.OrdinalIgnoreCase) ? value[(FormulasFolder.Length + 1)..] : "";
+            if (!UnpackRules.IsPortableSegment(file))
+                throw UnpackRules.Unsupported($"formula definition file '{value}' of table", table);
+            files.Add(file);
+        }
+        return files.ToList();
     }
 
     /// <summary>The unclaimed <c>.xml</c> files directly in <paramref name="folder"/>.</summary>

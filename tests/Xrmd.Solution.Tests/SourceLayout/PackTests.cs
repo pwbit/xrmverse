@@ -9,7 +9,7 @@ namespace Xrmd.Solution.Tests.SourceLayout;
 
 public class PackTests
 {
-    public static TheoryData<string> Solutions => new() { "XrmSharedTest", "OpenProject365" };
+    public static TheoryData<string> Solutions => new() { "XrmSharedTest", "OpenProject365", "xrmCalcTest" };
 
     /// <summary>
     /// The collections whose order a source folder does not keep (one file per member, read back in file-name order) or
@@ -68,6 +68,65 @@ public class PackTests
         var fault = act.Should().Throw<XrmdFaultException>().Which;
         fault.HttpStatus.Should().Be(400);
         fault.Message.Should().Contain("WebResources/op365_/scripts/purchasing.js");
+    }
+
+    private const string CalcYaml = "Entities/xrmv_Calcorder/Formulas/xrmv_calcorder-FormulaDefinitions.yaml";
+
+    [SourceLayoutFact]
+    public void Formula_files_go_back_to_the_Formulas_folder_of_the_zip()
+    {
+        var files = SourceFolder.Read(SourceLayoutFixtures.Folder("xrmCalcTest", 'a'));
+
+        var entries = SolutionZip.ReadRaw(SolutionPacker.Pack(files));
+
+        entries["Formulas/xrmv_calcorder-FormulaDefinitions.yaml"].Should().Equal(files[CalcYaml]);
+        entries.Keys.Should().Contain("Formulas/account-xrmv_ordercount.xaml");
+    }
+
+    [SourceLayoutFact]
+    public void Pack_fails_when_a_formula_file_is_missing()
+    {
+        var files = Without(SourceFolder.Read(SourceLayoutFixtures.Folder("xrmCalcTest", 'a')), CalcYaml);
+
+        var act = () => SolutionPacker.Pack(files);
+
+        var fault = act.Should().Throw<XrmdFaultException>().Which;
+        fault.HttpStatus.Should().Be(400);
+        fault.Message.Should().Contain(CalcYaml);
+    }
+
+    [SourceLayoutFact]
+    public void Pack_refuses_an_orphan_formula_file()
+    {
+        const string orphan = "Entities/xrmv_Calcorder/Formulas/xrmv_calcorder-nobody.xaml";
+        var files = With(SourceFolder.Read(SourceLayoutFixtures.Folder("xrmCalcTest", 'a')), orphan, "<Activity />"u8.ToArray());
+
+        var act = () => SolutionPacker.Pack(files);
+
+        act.Should().Throw<XrmdFaultException>().Which.Message.Should().Contain(orphan);
+    }
+
+    [SourceLayoutFact]
+    public void Entity_maps_go_back_into_the_customizations()
+    {
+        var zip = UnpackTests.ZipWithEntityMap();
+
+        var packed = SolutionPacker.Pack(SolutionUnpacker.Unpack(zip));
+
+        Canonical(Entries(packed)[SolutionZip.CustomizationsEntry]).Should().Be(Canonical(Entries(zip)[SolutionZip.CustomizationsEntry]));
+    }
+
+    [SourceLayoutFact]
+    public void Entity_maps_in_both_places_fail()
+    {
+        var files = SolutionUnpacker.Unpack(UnpackTests.ZipWithEntityMap());
+        var customizations = Encoding.UTF8.GetString(files["Other/Customizations.xml"]).Replace(
+            "<EntityMaps />", "<EntityMaps><EntityMap><EntitySource>account</EntitySource><EntityTarget>xrmv_test</EntityTarget></EntityMap></EntityMaps>");
+        files = With(Without(files, "Other/Customizations.xml"), "Other/Customizations.xml", Encoding.UTF8.GetBytes(customizations));
+
+        var act = () => SolutionPacker.Pack(files);
+
+        act.Should().Throw<XrmdFaultException>().Which.Message.Should().Contain("Other/EntityMaps.xml");
     }
 
     [SourceLayoutFact]

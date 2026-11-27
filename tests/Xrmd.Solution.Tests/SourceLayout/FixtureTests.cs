@@ -8,7 +8,7 @@ public class FixtureTests
 {
     public static TheoryData<string, char> Copies => new()
     {
-        { "OpenProject365", 'a' }, { "OpenProject365", 'b' }, { "XrmSharedTest", 'a' }, { "XrmSharedTest", 'b' },
+        { "OpenProject365", 'a' }, { "OpenProject365", 'b' }, { "XrmSharedTest", 'a' }, { "XrmSharedTest", 'b' }, { "xrmCalcTest", 'a' }, { "xrmCalcTest", 'b' },
     };
 
     private static (string Name, string Version) Manifest(XDocument doc)

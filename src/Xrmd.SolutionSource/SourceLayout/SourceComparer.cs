@@ -86,7 +86,27 @@ public static class SourceComparer
         var document = TryLoad(path, bytes);
         if (document?.Root is null) return null;
         VolatileValues.Remove(path, document);
+        SortColumns(path, document);
         return Canonical(document.Root).ToString(SaveOptions.DisableFormatting);
+    }
+
+    /// <summary>
+    /// In a table's <c>Entity.xml</c>, puts the columns (<c>Entity/EntityInfo/entity/attributes/attribute</c>) in order of
+    /// their <c>PhysicalName</c>, ignoring case: the order of the columns means nothing to Dataverse and differs between an
+    /// export and the file that was imported, so it is not a difference. Each column still compares in full.
+    /// </summary>
+    private static void SortColumns(string path, XDocument document)
+    {
+        var parts = path.Split('/');
+        if (parts is not ["Entities", _, "Entity.xml"] || document.Root is not { } root) return;
+        foreach (var attributes in root.Elements("EntityInfo").Elements("entity").Elements("attributes"))
+        {
+            var columns = attributes.Elements("attribute").ToList();
+            if (columns.Count < 2) continue;
+            var sorted = columns.OrderBy(c => (string?)c.Attribute("PhysicalName") ?? "", StringComparer.OrdinalIgnoreCase).ToList();
+            foreach (var column in columns) column.Remove();
+            attributes.Add(sorted);
+        }
     }
 
     private static XElement Canonical(XElement element) => new(element.Name,
@@ -135,6 +155,8 @@ public static class SourceComparer
                 return new("form", path, path, stem);
             case "Entities" when parts.Length == 4 && parts[2] == "SavedQueries":
                 return new("view", path, path, stem);
+            case "Entities" when parts.Length == 4 && parts[2] == "Formulas":
+                return new("formula", path, null, stem);
             case "Entities" when parts.Length == 4 && parts[2] == "Visualizations":
                 return new("chart", path, path, stem);
             case "OptionSets" when parts.Length == 2:
