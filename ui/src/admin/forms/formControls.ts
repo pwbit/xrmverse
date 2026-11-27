@@ -203,7 +203,7 @@ function setAttribute(el: Element, name: string, value: string) {
 export function writeControl(doc: Document, el: Element | undefined, spec: ControlSpec, before?: ControlSpec): Element {
   let control = el;
   if (!control) {
-    control = doc.createElement('control');
+    control = doc.createElementNS(null, 'control');
     control.setAttribute('id', spec.controlId);
     control.setAttribute('classid', CLASS[spec.kind]);
     if (spec.kind === 'subgrid') control.setAttribute('indicationOfSubgrid', 'true');
@@ -219,7 +219,7 @@ export function writeControl(doc: Document, el: Element | undefined, spec: Contr
   if (changes.length === 0) return control;
   let holder = childElements(control, 'parameters')[0];
   if (!holder) {
-    holder = doc.createElement('parameters');
+    holder = doc.createElementNS(null, 'parameters');
     append(control, holder);
   }
   for (const [name, value] of changes) {
@@ -228,7 +228,7 @@ export function writeControl(doc: Document, el: Element | undefined, spec: Contr
       if (found.textContent !== value) found.textContent = value;
       continue;
     }
-    const p = doc.createElement(name);
+    const p = doc.createElementNS(null, name);
     if (value !== '') p.textContent = value;
     append(holder, p);
   }

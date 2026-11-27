@@ -66,6 +66,20 @@ public static class SourceComparer
         return new SourceDiff(items);
     }
 
+    /// <summary>
+    /// Whether two versions of the file <paramref name="path"/> carry the same content: byte for byte, or for an XML file
+    /// the same meaning as <see cref="Compare"/> reads it (formatting, attribute order and the order of a table's columns do
+    /// not count) with every value kept, the ones <see cref="Compare"/> leaves out included. Sync leaves such a file as it is.
+    /// </summary>
+    public static bool SameContent(string path, byte[] a, byte[] b)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        if (a.AsSpan().SequenceEqual(b)) return true;
+        if (!XmlExtensions.Any(e => path.EndsWith(e, StringComparison.OrdinalIgnoreCase))) return false;
+        var canonicalA = Canonical(path, a, dropVolatile: false);
+        return canonicalA is not null && canonicalA == Canonical(path, b, dropVolatile: false);
+    }
+
     private static bool SameFile(string path, SourceFiles organization, SourceFiles folder)
     {
         if (!organization.TryGetValue(path, out var a) || !folder.TryGetValue(path, out var b)) return false;
@@ -81,11 +95,11 @@ public static class SourceComparer
     /// writer, comments and processing instructions dropped, text and CDATA as text, and no formatting. Null when the
     /// bytes are not XML.
     /// </summary>
-    private static string? Canonical(string path, byte[] bytes)
+    private static string? Canonical(string path, byte[] bytes, bool dropVolatile = true)
     {
         var document = TryLoad(path, bytes);
         if (document?.Root is null) return null;
-        VolatileValues.Remove(path, document);
+        if (dropVolatile) VolatileValues.Remove(path, document);
         SortColumns(path, document);
         return Canonical(document.Root).ToString(SaveOptions.DisableFormatting);
     }

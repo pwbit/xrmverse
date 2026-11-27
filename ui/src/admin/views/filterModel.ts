@@ -117,7 +117,7 @@ export type FilterSources = ReadonlyMap<string, Element>;
 function writeCondition(node: FilterCondition, doc: Document, base: Element | undefined): Element {
   const original = base?.tagName === 'condition' ? readCondition(base, node.key) : undefined;
   if (base && original && sameCondition(original, node)) return doc.importNode(base, true);
-  const c = base && original ? (doc.importNode(base, false) as Element) : doc.createElement('condition');
+  const c = base && original ? (doc.importNode(base, false) as Element) : doc.createElementNS(null, 'condition');
   if (original && !sameCondition({ ...original, operator: node.operator }, node)) {
     // The display hints of a lookup value describe the old value.
     for (const hint of ['uiname', 'uitype', 'uitypename']) c.removeAttribute(hint);
@@ -127,7 +127,7 @@ function writeCondition(node: FilterCondition, doc: Document, base: Element | un
   if (MULTI_VALUE_OPERATORS.has(node.operator) || noValueOperator(node.operator)) c.removeAttribute('value');
   if (MULTI_VALUE_OPERATORS.has(node.operator)) {
     for (const v of node.values) {
-      const value = doc.createElement('value');
+      const value = doc.createElementNS(null, 'value');
       value.textContent = v;
       c.appendChild(value);
     }
@@ -151,7 +151,7 @@ export function writeNode(node: FilterNode, doc: Document, sources?: FilterSourc
 /** Writes a group as a `<filter type>`; with `sources`, a known group keeps its unknown attributes. */
 export function writeFilter(node: FilterGroup, doc: Document, sources?: FilterSources): Element {
   const base = sources?.get(node.key);
-  const f = base?.tagName === 'filter' ? (doc.importNode(base, false) as Element) : doc.createElement('filter');
+  const f = base?.tagName === 'filter' ? (doc.importNode(base, false) as Element) : doc.createElementNS(null, 'filter');
   // A source `<filter>` without `type` is an `and`: it stays without one.
   if (!base || f.hasAttribute('type') || node.type !== 'and') f.setAttribute('type', node.type);
   for (const child of node.children) f.appendChild(writeNode(child, doc, sources));

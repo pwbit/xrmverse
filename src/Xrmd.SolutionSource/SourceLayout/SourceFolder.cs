@@ -57,8 +57,9 @@ public static class SourceFolder
     }
 
     /// <summary>
-    /// Compares <paramref name="wanted"/> with the folder: Write holds the keys whose bytes differ from or are missing on
-    /// disk, Remove the files in the component folders (never <c>*_managed.xml</c>) that are not wanted. Both are sorted ordinally.
+    /// Compares <paramref name="wanted"/> with the folder: Write holds the keys missing on disk or whose content differs
+    /// (<see cref="SourceComparer.SameContent"/>: a file that differs only in formatting or in the order of a table's columns
+    /// is left as it is, so a sync after a clean diff writes nothing), Remove the files in the component folders (never <c>*_managed.xml</c>) that are not wanted. Both are sorted ordinally.
     /// </summary>
     public static SyncPlan Plan(string dir, SourceFiles wanted)
     {
@@ -71,7 +72,7 @@ public static class SourceFolder
         foreach (var (key, bytes) in wanted)
         {
             if (IsManaged(key)) continue;
-            if (!onDisk.Contains(key) || !File.ReadAllBytes(ToPath(root, key)).AsSpan().SequenceEqual(bytes)) write.Add(key);
+            if (!onDisk.Contains(key) || !SourceComparer.SameContent(key, File.ReadAllBytes(ToPath(root, key)), bytes)) write.Add(key);
         }
         // A file that differs from a wanted key only by case is the same file on a case-insensitive file system: Apply renames it.
         var remove = onDisk.Where(k => !wantedFolded.Contains(k)).ToList();

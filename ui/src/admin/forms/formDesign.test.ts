@@ -68,6 +68,16 @@ describe('writeForm', () => {
     expect(writeForm(read(RICH_FORM))).toBe(RICH_FORM);
   });
 
+  it('writes no XHTML namespace: new elements have none and an edit drops one a source element carried', () => {
+    const xhtml = RICH_FORM.replace('<tab ', '<tab xmlns="http://www.w3.org/1999/xhtml" ');
+    expect(xhtml).not.toBe(RICH_FORM);
+    const d = addTab(read(xhtml));
+    const out = writeForm(addSection(d, d.tabs[d.tabs.length - 1].key, 0));
+    expect(out).not.toContain('1999/xhtml');
+    expect(out).not.toContain('xmlns=""');
+    expect(parseXml(out).getElementsByTagName('tab').length).toBe(d.tabs.length);
+  });
+
   it('gives back the same string after an edit that is undone', () => {
     const added = addTab(read());
     expect(writeForm(removeTab(added, added.tabs[2].key))).toBe(RICH_FORM);

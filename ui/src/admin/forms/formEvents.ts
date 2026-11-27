@@ -244,7 +244,7 @@ export function moveHandler(d: FormDesign, key: string, by: -1 | 1): FormDesign 
 // Writing
 
 function create(doc: Document, tag: string, attributes: Record<string, string>): Element {
-  const el = doc.createElement(tag);
+  const el = doc.createElementNS(null, tag);
   for (const [name, value] of Object.entries(attributes)) el.setAttribute(name, value);
   return el;
 }
@@ -288,7 +288,7 @@ function afterBody(form: Element): Element | null {
 function block(form: Element, tag: string, ref: () => Element | null): Element {
   const found = childElements(form, tag)[0];
   if (found) return found;
-  const el = form.ownerDocument.createElement(tag);
+  const el = form.ownerDocument.createElementNS(null, tag);
   insertBlock(form, el, ref());
   return el;
 }
@@ -370,7 +370,7 @@ export function writeEvents(form: Element, d: Pick<FormDesign, 'libraries' | 'ev
       const wanted = e.handlers.map((h) => writeHandler(doc, elements.get(h.key), h));
       let holder = current[0]?.parentNode as Element | undefined ?? childElements(el, 'Handlers')[0];
       if (!holder) {
-        holder = doc.createElement('Handlers');
+        holder = doc.createElementNS(null, 'Handlers');
         append(el, holder);
       }
       sync(holder, current, wanted);
@@ -379,7 +379,7 @@ export function writeEvents(form: Element, d: Pick<FormDesign, 'libraries' | 'ev
     const added = create(doc, 'event', {
       name: e.name, application: 'false', active: 'false', ...(e.attribute ? { attribute: e.attribute } : {}),
     });
-    const handlers = doc.createElement('Handlers');
+    const handlers = doc.createElementNS(null, 'Handlers');
     for (const h of e.handlers) handlers.appendChild(writeHandler(doc, undefined, h));
     added.appendChild(handlers);
     const holder = block(form, 'events', () => {

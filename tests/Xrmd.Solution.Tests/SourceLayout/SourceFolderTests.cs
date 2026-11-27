@@ -135,6 +135,37 @@ public class SourceFolderTests : IDisposable
         Directory.Exists(Path.Combine(_root, "fresh")).Should().BeTrue();
     }
 
+    private const string TwoColumns =
+        "<Entity><Name>t</Name><EntityInfo><entity Name=\"t\"><attributes>" +
+        "<attribute PhysicalName=\"a\"><Type>int</Type></attribute><attribute PhysicalName=\"b\"><Type>int</Type></attribute>" +
+        "</attributes></entity></EntityInfo></Entity>";
+
+    [Fact]
+    public void Plan_leaves_a_table_whose_columns_only_changed_order()
+    {
+        var swapped = TwoColumns.Replace("<attribute PhysicalName=\"a\"><Type>int</Type></attribute><attribute PhysicalName=\"b\"><Type>int</Type></attribute>",
+            "<attribute PhysicalName=\"b\"><Type>int</Type></attribute>\n  <attribute PhysicalName=\"a\"><Type>int</Type></attribute>");
+        var dir = Make(("Other/Solution.xml", "<s/>"), ("Entities/t/Entity.xml", swapped));
+        var wanted = new SourceFiles { { "Other/Solution.xml", B("<s/>") }, { "Entities/t/Entity.xml", B(TwoColumns) } };
+
+        SourceFolder.Plan(dir, wanted).Write.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Plan_writes_a_changed_column_and_a_changed_solution_version()
+    {
+        var dir = Make(
+            ("Other/Solution.xml", "<ImportExportXml><SolutionManifest><Version>1.0.0.0</Version></SolutionManifest></ImportExportXml>"),
+            ("Entities/t/Entity.xml", TwoColumns));
+        var wanted = new SourceFiles
+        {
+            { "Other/Solution.xml", B("<ImportExportXml><SolutionManifest><Version>1.0.0.1</Version></SolutionManifest></ImportExportXml>") },
+            { "Entities/t/Entity.xml", B(TwoColumns.Replace("<Type>int</Type></attribute></attributes>", "<Type>bigint</Type></attribute></attributes>")) },
+        };
+
+        SourceFolder.Plan(dir, wanted).Write.Should().BeEquivalentTo("Other/Solution.xml", "Entities/t/Entity.xml");
+    }
+
     [Fact]
     public void Plan_on_empty_existing_folder_and_cdsproj_folder_use_expected_roots()
     {

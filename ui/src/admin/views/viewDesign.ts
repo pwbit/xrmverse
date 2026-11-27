@@ -1,4 +1,4 @@
-import { childElements, parseXml } from '../../parsers/xml';
+import { childElements, parseXml, serializeXml } from '../../parsers/xml';
 import { indexFilter, readFilter, writeFilter, writeNode, type FilterGroup, type FilterNode } from './filterModel';
 
 export interface DesignColumn { name: string; attribute: string; alias?: string; width: number }
@@ -28,7 +28,7 @@ const MAX_WIDTH = 1000;
 const DEFAULT_WIDTH = 100;
 const PRIMARY_NAME_WIDTH = 150;
 
-const serialize = (doc: Node) => new XMLSerializer().serializeToString(doc);
+const serialize = (doc: Node) => serializeXml(doc);
 
 function entityOf(doc: Document): Element {
   const fetch = doc.documentElement;
@@ -153,7 +153,7 @@ function writeFilters(d: ViewDesign, doc: Document, entity: Element) {
     if (child.kind === 'condition') {
       // Conditions added at the root go into one `<filter type="and">`.
       if (!loose) {
-        loose = doc.createElement('filter');
+        loose = doc.createElementNS(null, 'filter');
         loose.setAttribute('type', 'and');
         written.push(loose);
       }
@@ -178,12 +178,12 @@ function writeQuickFind(d: ViewDesign, doc: Document, entity: Element) {
   for (const attribute of d.findColumns) {
     if (have.has(attribute)) continue;
     if (!qf) {
-      qf = doc.createElement('filter');
+      qf = doc.createElementNS(null, 'filter');
       qf.setAttribute('type', 'or');
       qf.setAttribute('isquickfindfields', '1');
       entity.appendChild(qf);
     }
-    const c = doc.createElement('condition');
+    const c = doc.createElementNS(null, 'condition');
     c.setAttribute('attribute', attribute);
     c.setAttribute('operator', 'like');
     c.setAttribute('value', '{0}');
@@ -200,7 +200,7 @@ function writeOrders(d: ViewDesign, doc: Document, entity: Element) {
     && current.every((o, i) => o.attribute === d.orders[i].attribute && o.descending === d.orders[i].descending)) return;
   const anchor = old[0] ?? childElements(entity, 'filter')[0] ?? directLinks(entity)[0];
   for (const o of d.orders) {
-    const order = doc.createElement('order');
+    const order = doc.createElementNS(null, 'order');
     order.setAttribute('attribute', o.attribute);
     order.setAttribute('descending', String(o.descending));
     insert(entity, order, anchor);
@@ -234,7 +234,7 @@ function writeFetchColumns(d: ViewDesign, doc: Document, entity: Element, source
   for (const column of d.columns) {
     if (!column.alias) {
       if (rootAttribute(column.name)) continue;
-      const a = doc.createElement('attribute');
+      const a = doc.createElementNS(null, 'attribute');
       a.setAttribute('name', column.attribute);
       insertAfterLast(entity, a, 'attribute');
       continue;
@@ -243,7 +243,7 @@ function writeFetchColumns(d: ViewDesign, doc: Document, entity: Element, source
     if (!link) {
       const def = d.links.find((l) => l.alias === column.alias);
       if (!def) continue;
-      link = doc.createElement('link-entity');
+      link = doc.createElementNS(null, 'link-entity');
       link.setAttribute('name', def.entity);
       link.setAttribute('from', def.from);
       link.setAttribute('to', def.to);
@@ -252,7 +252,7 @@ function writeFetchColumns(d: ViewDesign, doc: Document, entity: Element, source
       entity.appendChild(link);
     }
     if (linkAttribute(link, column.attribute)) continue;
-    const a = doc.createElement('attribute');
+    const a = doc.createElementNS(null, 'attribute');
     a.setAttribute('name', column.attribute);
     insertAfterLast(link, a, 'attribute');
   }
@@ -288,7 +288,7 @@ function writeLayout(d: ViewDesign): string {
   const anchor = cells[0];
   for (const column of d.columns) {
     const source = byName.get(column.name);
-    const cell = source ? (source.cloneNode(true) as Element) : layout.createElement('cell');
+    const cell = source ? (source.cloneNode(true) as Element) : layout.createElementNS(null, 'cell');
     if (!source) cell.setAttribute('name', column.name);
     if (!source || widthOf(source) !== column.width) cell.setAttribute('width', String(column.width));
     insert(row, cell, anchor);
@@ -314,7 +314,7 @@ export function newView(table: string, entity: EntityKeys, name: string): ViewDe
   const fetch = parseXml('<fetch version="1.0" mapping="logical"><entity/></fetch>');
   const ent = entityOf(fetch);
   const add = (parent: Element, tag: string, attributes: Record<string, string>) => {
-    const el = parent.ownerDocument.createElement(tag);
+    const el = parent.ownerDocument.createElementNS(null, tag);
     for (const [k, v] of Object.entries(attributes)) el.setAttribute(k, v);
     parent.appendChild(el);
     return el;

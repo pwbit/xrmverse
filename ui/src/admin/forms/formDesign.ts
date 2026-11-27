@@ -1,5 +1,5 @@
 import { CLASS_ID, controlKind } from '../../parsers/controlClass';
-import { childElements, parseXml } from '../../parsers/xml';
+import { childElements, parseXml, serializeXml } from '../../parsers/xml';
 import { newGuid } from './formIds';
 import { allCells, bodyCells, bodySections, clampSpan, lower } from './formCells';
 import { uiLocale } from '../../shell/i18n/t';
@@ -155,7 +155,7 @@ export { newGuid } from './formIds';
 // ---------------------------------------------------------------------------------------------------------------------
 // Reading
 
-const serialize = (node: Node) => new XMLSerializer().serializeToString(node);
+const serialize = (node: Node) => serializeXml(node);
 
 const flag = (el: Element, name: string, fallback: boolean): boolean => {
   const v = el.getAttribute(name)?.trim().toLowerCase();
@@ -372,7 +372,7 @@ function setLabels(el: Element, labels: Record<number, string>) {
   const holders = childElements(el, 'labels');
   let holder = holders[0];
   if (!holder) {
-    holder = doc.createElement('labels');
+    holder = doc.createElementNS(null, 'labels');
     el.insertBefore(holder, el.firstChild);
   }
   const all = holders.flatMap((h) => childElements(h, 'label'));
@@ -391,7 +391,7 @@ function setLabels(el: Element, labels: Record<number, string>) {
       for (const l of found) if (l.getAttribute('description') !== text) l.setAttribute('description', text);
       continue;
     }
-    const label = doc.createElement('label');
+    const label = doc.createElementNS(null, 'label');
     label.setAttribute('description', text);
     label.setAttribute('languagecode', lcid);
     holder.appendChild(label);
@@ -402,7 +402,7 @@ function setLabels(el: Element, labels: Record<number, string>) {
 function container(parent: Element, tag: string): Element {
   const found = childElements(parent, tag)[0];
   if (found) return found;
-  const el = parent.ownerDocument.createElement(tag);
+  const el = parent.ownerDocument.createElementNS(null, tag);
   parent.appendChild(el);
   return el;
 }
@@ -421,7 +421,7 @@ function place(target: Element, current: Element[], wanted: Element[]) {
 }
 
 function element(doc: Document, tag: string, attributes: Record<string, string>): Element {
-  const el = doc.createElement(tag);
+  const el = doc.createElementNS(null, tag);
   for (const [name, value] of Object.entries(attributes)) el.setAttribute(name, value);
   return el;
 }
@@ -683,7 +683,7 @@ class Writer {
     let el = this.index.get(t.key);
     if (!el) {
       el = element(this.doc, 'tab', { name: t.name, id: t.id, expanded: 'true', showlabel: String(t.showLabel), verticallayout: 'true' });
-      el.appendChild(this.doc.createElement('labels'));
+      el.appendChild(this.doc.createElementNS(null, 'labels'));
     }
     setFlag(el, 'showlabel', t.showLabel, true);
     setFlag(el, 'visible', t.visible, true);
@@ -707,8 +707,8 @@ class Writer {
       el = element(this.doc, 'section', {
         name: s.name, id: s.id, showlabel: String(s.showLabel), showbar: 'false', columns: '1'.repeat(s.columns),
       });
-      el.appendChild(this.doc.createElement('labels'));
-      el.appendChild(this.doc.createElement('rows'));
+      el.appendChild(this.doc.createElementNS(null, 'labels'));
+      el.appendChild(this.doc.createElementNS(null, 'rows'));
     }
     setFlag(el, 'showlabel', s.showLabel, true);
     setFlag(el, 'visible', s.visible, true);
@@ -739,7 +739,7 @@ class Writer {
         el.setAttribute('colspan', String(c.colSpan));
         el.setAttribute('auto', 'false');
       }
-      el.appendChild(this.doc.createElement('labels'));
+      el.appendChild(this.doc.createElementNS(null, 'labels'));
       if (c.attribute) {
         el.appendChild(element(this.doc, 'control', {
           id: header ? `header_${c.attribute}` : c.attribute, classid: c.classId ?? CLASS_ID.text, datafieldname: c.attribute,
@@ -782,7 +782,7 @@ class Writer {
     const wanted = rows.map((row) => {
       const reuse = row.from !== undefined && old[row.from] && !used.has(row.from);
       if (reuse) used.add(row.from!);
-      const rowEl = reuse ? old[row.from!] : this.doc.createElement('row');
+      const rowEl = reuse ? old[row.from!] : this.doc.createElementNS(null, 'row');
       for (const c of row.cells) rowEl.appendChild(byKey.get(c.key)!);
       return rowEl;
     });

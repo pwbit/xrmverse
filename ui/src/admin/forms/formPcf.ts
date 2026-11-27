@@ -239,7 +239,7 @@ export function pcfMissing(d: FormDesign, rows: PcfControlRow[], attributes: Att
 // Writing
 
 function create(doc: Document, tag: string, attributes: Record<string, string> = {}, text = ''): Element {
-  const el = doc.createElement(tag);
+  const el = doc.createElementNS(null, tag);
   for (const [name, value] of Object.entries(attributes)) el.setAttribute(name, value);
   if (text !== '') el.textContent = text;
   return el;
@@ -270,7 +270,7 @@ function writeEntry(entry: Element, b: PcfBinding) {
   if ((entry.getAttribute('name') ?? '').trim() !== b.name) entry.setAttribute('name', b.name);
   let holder = childElements(entry, 'parameters')[0];
   if (!holder) {
-    holder = doc.createElement('parameters');
+    holder = doc.createElementNS(null, 'parameters');
     append(entry, holder);
   }
   const holders = childElements(entry, 'parameters');
@@ -308,9 +308,9 @@ function newDescription(doc: Document, forControl: string, control: Element, cel
   const classic = create(doc, 'customControl', { id: control.getAttribute('classid') ?? '' });
   const params = childElements(control, 'parameters')[0];
   if (cell.control?.kind === 'subgrid') {
-    classic.appendChild(params ? params.cloneNode(true) : doc.createElement('parameters'));
+    classic.appendChild(params ? params.cloneNode(true) : doc.createElementNS(null, 'parameters'));
   } else {
-    const holder = doc.createElement('parameters');
+    const holder = doc.createElementNS(null, 'parameters');
     holder.appendChild(create(doc, 'datafieldname', {}, control.getAttribute('datafieldname') ?? cell.attribute ?? ''));
     classic.appendChild(holder);
   }
@@ -381,7 +381,7 @@ export function writePcfs(form: Element, written: WrittenCell[], sourceIds: Set<
     if (description) removeAll(id);
     let holder = childElements(form, 'controlDescriptions')[0];
     if (!holder) {
-      holder = doc.createElement('controlDescriptions');
+      holder = doc.createElementNS(null, 'controlDescriptions');
       insertBlock(form, holder, childElements(form, 'DisplayConditions')[0] ?? null);
     }
     append(holder, newDescription(doc, forControl, control, cell, cell.pcf));

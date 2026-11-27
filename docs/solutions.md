@@ -659,7 +659,7 @@ xrmd solution sync MySolution --folder ./src/MySolution
 git diff
 ```
 
-`sync` writes the changed and new files and removes the files of components the solution no longer holds. An empty or new
+`sync` writes the changed and new files and removes the files of components the solution no longer holds. A file whose content is the same and differs only in formatting, attribute order or the order of a table's columns is left as it is, so a `sync` after a clean `diff` writes nothing. An empty or new
 folder receives a first copy. Files ending in `_managed.xml`, a `.cdsproj` and everything outside the component folders
 (`Other/`, `Entities/`, `OptionSets/`, `WebResources/`, `Workflows/`, `PluginAssemblies/`, `SdkMessageProcessingSteps/`, `Dashboards/`,
 `Roles/`, `AppModules/`, `AppModuleSiteMaps/`, `Controls/`, `bots/`, `botcomponents/`, `skills/`, `customapis/`,
