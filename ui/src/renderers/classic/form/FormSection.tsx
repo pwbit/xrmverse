@@ -11,6 +11,8 @@ export const SECTION_COLLAPSE_WIDTH = '32rem';
 
 const useStyles = makeStyles({
   section: { containerType: 'inline-size', containerName: 'xrmverse-section' },
+  // An app form's section is drawn as its header card (the owner's choice, 2026-11-27): the same border, shadow and corners.
+  card: { border: `1px solid ${tokens.colorNeutralStroke2}`, borderRadius: tokens.borderRadiusLarge, boxShadow: tokens.shadow4 },
   row: {
     display: 'grid',
     columnGap: tokens.spacingHorizontalL,
@@ -40,7 +42,7 @@ export function FormSection({ section, env, readOnly = false, renderControl }: {
   const fieldBackground = (cell: Cell) => (cell.control?.kind === 'field' ? env.backgrounds?.field(cell.control.attribute) : undefined);
   return (
     <div
-      className={mergeClasses(surface.section, styles.section)}
+      className={mergeClasses(surface.section, styles.card, styles.section)}
       style={background ? { backgroundColor: background } : undefined}
       data-background={background ? 'true' : undefined}
       role="group"
