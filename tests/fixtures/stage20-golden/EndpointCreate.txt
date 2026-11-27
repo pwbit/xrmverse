@@ -1,0 +1,47 @@
+=== PipelineExecutor.ExecuteAsync as the System Administrator ===
+--- request ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(serviceendpoint)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[5]
+        name: String:"s20 hook"
+        contract: OptionSetValue
+          Value: Int32:8
+        authtype: OptionSetValue
+          Value: Int32:4
+        url: String:"https://hooks.example.invalid/receive"
+        authvalue: String:"s20-k3y"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- fault ---
+none
+--- request after ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(serviceendpoint)
+      Id: Guid:{id1}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[5]
+        name: String:"s20 hook"
+        contract: OptionSetValue
+          Value: Int32:8
+        authtype: OptionSetValue
+          Value: Int32:4
+        url: String:"https://hooks.example.invalid/receive"
+        isauthvalueset: Boolean:True
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- rows ---
+service endpoints: name="s20 hook", contract=8, authtype=4, url="https://hooks.example.invalid/receive", isauthvalueset=true
+--- secrets ---
+meta.serviceendpoint_secret: serviceendpointid={id1}, authvalue="s20-k3y"

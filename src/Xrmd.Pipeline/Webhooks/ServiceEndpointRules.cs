@@ -1,10 +1,11 @@
 using System.Xml;
 using System.Xml.Linq;
-using Microsoft.Xrm.Sdk;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
+using Xrmd.Model.Records;
+using Xrmd.Security;
 
 namespace Xrmd.Pipeline.Webhooks;
 
@@ -15,7 +16,7 @@ namespace Xrmd.Pipeline.Webhooks;
 /// Azure Service Bus columns. Checked on Create and on Update as the row will be (400 <c>InvalidArgument</c>). No message repeats
 /// the url or the authvalue: they may carry secrets.
 /// </summary>
-public static class ServiceEndpointRules
+public static partial class ServiceEndpointRules
 {
     private const string Name = "name", Contract = "contract", AuthType = "authtype", Url = "url";
 
@@ -57,14 +58,15 @@ public static class ServiceEndpointRules
 
     /// <summary>
     /// The refusal of <paramref name="record"/>, the endpoint as it will be stored (with its <c>authvalue</c>), or null when it
-    /// is an accepted webhook. The message names the endpoint and never repeats the url or the authvalue.
+    /// is an accepted webhook. The message names the endpoint and never repeats the url or the authvalue. A read of a column of
+    /// another type throws today's <see cref="InvalidCastException"/> text, with the SDK type names (S.2e3c2b, Decision 1).
     /// </summary>
     /// <param name="record">The endpoint: the Create target, or the stored row overlaid with the Update target and the secret.</param>
     /// <param name="allowAnyPort">Accept a url on any port (<c>Pipeline:WebhookAllowAnyPort</c>, tests and development).</param>
-    public static string? EndpointProblem(Entity record, bool allowAnyPort)
+    public static string? EndpointProblem(Record record, bool allowAnyPort)
     {
         ArgumentNullException.ThrowIfNull(record);
-        var name = record.GetAttributeValue<string>(Name) ?? "";
+        var name = record.SdkValue<string>(Name) ?? "";
 
         if (Choice(record, Contract) is not { } contract) return $"Service endpoint '{name}' needs a contract.";
         if (contract != ServiceEndpointSchema.WebhookContract)
@@ -77,7 +79,7 @@ public static class ServiceEndpointRules
             return $"Webhook '{name}': authtype {authType} ({Label(AuthTypeLabels, authType)}) is not supported; " +
                    "use 4 (Webhook Key), 5 (Http Header) or 6 (Http Query String).";
 
-        if (UrlProblem(record.GetAttributeValue<string>(Url), allowAnyPort) is { } url) return $"Webhook '{name}': url {url}.";
+        if (UrlProblem(record.SdkValue<string>(Url), allowAnyPort) is { } url) return $"Webhook '{name}': url {url}.";
 
         var authValue = record.Attributes.TryGetValue(ServiceEndpointSchema.AuthValue, out var v) ? v as string : null;
         if (string.IsNullOrWhiteSpace(authValue)) return NeedsAuthValue(name);
@@ -155,14 +157,14 @@ public static class ServiceEndpointRules
     /// be is <paramref name="existing"/> overlaid with <paramref name="target"/>; on an Update that sends no <c>authvalue</c>, the
     /// stored one (<see cref="WebhookSecrets.ReadAsync"/>) is part of it.
     /// </summary>
-    /// <exception cref="XrmdFaultException">400 <c>InvalidArgument</c> with <see cref="EndpointProblem"/>.</exception>
-    public static async Task ValidateAsync(Entity target, Entity? existing, bool allowAnyPort, WebhookSecrets secrets, DataSession s,
+    /// <exception cref="XrmdFaultException">400 <c>InvalidArgument</c> with <see cref="EndpointProblem(Record, bool)"/>.</exception>
+    public static async Task ValidateAsync(Record target, Record? existing, bool allowAnyPort, WebhookSecrets secrets, DataSession s,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(secrets);
         ArgumentNullException.ThrowIfNull(s);
-        var record = new Entity(ServiceEndpointSchema.Table, target.Id);
+        var record = new Record(ServiceEndpointSchema.Table, target.Id);
         if (existing is not null)
             foreach (var (attribute, value) in existing.Attributes) record[attribute] = value;
         foreach (var (attribute, value) in target.Attributes) record[attribute] = value;
@@ -215,10 +217,10 @@ public static class ServiceEndpointRules
 
     private static string Label(Dictionary<int, string> labels, int value) => labels.GetValueOrDefault(value, "unknown");
 
-    private static int? Choice(Entity record, string column) =>
+    private static int? Choice(Record record, string column) =>
         record.Attributes.TryGetValue(column, out var value) ? value switch
         {
-            OptionSetValue o => o.Value,
+            ChoiceValue o => o.Value,
             int i => i,
             _ => null,
         } : null;

@@ -1,0 +1,33 @@
+=== PipelineExecutor.ExecuteAsync as the System Administrator ===
+--- request ---
+Request: UpdateRequest
+  RequestName: String:"Update"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(plugintype)
+      Id: Guid:{a:type}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[1]
+        isworkflowactivity: String:"true"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- fault ---
+Fault: InvalidCastException "Unable to cast object of type 'System.String' to type 'System.Nullable`1[System.Boolean]'."
+--- request after ---
+Request: UpdateRequest
+  RequestName: String:"Update"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(plugintype)
+      Id: Guid:{a:type}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[1]
+        isworkflowactivity: String:"true"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- rows ---
+the plug-in type: typename="Xrmd.TestPlugins.SetAttributePlugin", isworkflowactivity=null

@@ -2,15 +2,16 @@ using System.Data;
 using System.Data.Common;
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
-using Microsoft.Xrm.Sdk;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Sdk;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
-using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Messages;
+using Xrmd.Model.Records;
 using Xrmd.Pipeline.CustomApis;
 using Xrmd.Pipeline.Sandbox;
+using Xrmd.Security;
 
 namespace Xrmd.Pipeline.Registration;
 
@@ -20,7 +21,7 @@ namespace Xrmd.Pipeline.Registration;
 /// <list type="bullet">
 /// <item><c>pluginassembly</c>: <c>content</c> must be a .NET assembly (read with a <see cref="MetadataReader"/>, no code
 /// runs); on Create, missing <c>name</c>/<c>version</c>/<c>culture</c>/<c>publickeytoken</c> are filled from its metadata.</item>
-/// <item><c>plugintype</c>: <c>typename</c> must be an <see cref="IPlugin"/> of the assembly, or a custom workflow activity (a
+/// <item><c>plugintype</c>: <c>typename</c> must be an <c>IPlugin</c> of the assembly, or a custom workflow activity (a
 /// class deriving from <c>System.Activities.CodeActivity</c>, read from the metadata; plan 2.14, W17), for which
 /// <c>isworkflowactivity</c> is set; a type marked <c>isworkflowactivity</c> must be one.</item>
 /// <item><c>sdkmessageprocessingstep</c>: stage 10/20/40, asynchronous only on 40, a filter of its own message,
@@ -34,11 +35,15 @@ namespace Xrmd.Pipeline.Registration;
 /// <item>No Associate or Disassociate over the relationships of <c>sdkmessageprocessingstep.eventhandler</c>
 /// (<see cref="DemandNotEventHandlerAssociate"/>).</item>
 /// </list>
-/// An Update is checked on the record as it will be (<paramref name="existing"/> overlaid with the target).
+/// An Update is checked on the record as it will be (the stored record overlaid with the target).
+/// S.2e3c2b (Decision 2): the rules read model records (<see cref="Record"/>, <see cref="RecordReference"/>, <see cref="ChoiceValue"/>);
+/// every read that replaced a <c>GetAttributeValue</c> goes through <see cref="SdkTypeNames.SdkValue{T}"/>, so a wrong-typed value
+/// keeps the <see cref="InvalidCastException"/> text with the SDK type names. The SDK twin of <c>ValidateAsync</c>, for the solution
+/// import, is in <c>Sdk/StageChecks.Sdk.cs</c>.
 /// On an SDK-free server (plan S.2a) a Create or Update of a <c>pluginassembly</c> and a Create of a <c>plugintype</c> are refused
 /// (400 <c>FeatureNotAvailable</c>) before any other check: such a server cannot load a plug-in built on the Microsoft SDK.
 /// </summary>
-public sealed class RegistrationValidator(IMetadataStore store, CustomApiRegistry customApis, PluginAssemblyLoader loader, SdkModeInfo? sdkMode = null)
+public sealed partial class RegistrationValidator(IMetadataStore store, CustomApiRegistry customApis, PluginAssemblyLoader loader, SdkModeInfo? sdkMode = null)
 {
     private const int PreImage = 0;
     private const int PostImage = 1;
@@ -48,7 +53,9 @@ public sealed class RegistrationValidator(IMetadataStore store, CustomApiRegistr
 
     /// <summary>
     /// Validates <paramref name="target"/> of <paramref name="entity"/> (any other entity is ignored); on a Create of a
-    /// <c>pluginassembly</c> (<paramref name="existing"/> null) adds the missing assembly attributes to it.
+    /// <c>pluginassembly</c> (<paramref name="existing"/> null) adds the missing assembly attributes to it, and on a write of a
+    /// <c>plugintype</c> sets its <c>isworkflowactivity</c> when the type is (or no longer is) a custom workflow activity.
+    /// Returns true when it changed <paramref name="target"/>.
     /// </summary>
     /// <param name="entity">The logical name of the target.</param>
     /// <param name="target">The record sent by the caller (Create or Update).</param>
@@ -56,7 +63,8 @@ public sealed class RegistrationValidator(IMetadataStore store, CustomApiRegistr
     /// <param name="s">The session (and transaction) of the message: lookups are read through it.</param>
     /// <param name="ct">Cancellation.</param>
     /// <exception cref="XrmdFaultException">400 <c>InvalidArgument</c> with the reason.</exception>
-    public async Task ValidateAsync(string entity, Entity target, Entity? existing, DataSession s, CancellationToken ct)
+    /// <exception cref="InvalidCastException">A checked column holds a value of another type (the SDK's text).</exception>
+    public async Task<bool> ValidateAsync(string entity, Record target, Record? existing, DataSession s, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(entity);
         ArgumentNullException.ThrowIfNull(target);
@@ -67,18 +75,19 @@ public sealed class RegistrationValidator(IMetadataStore store, CustomApiRegistr
         switch (name)
         {
             case "pluginassembly":
-                ValidateAssembly(target, existing is null);
+                var filled = ValidateAssembly(target, existing is null);
                 await DemandUniqueAssemblyNameAsync(target, existing, s, ct);
-                break;
+                return filled;
             case "plugintype":
-                await ValidateTypeAsync(target, existing, s, ct);
-                break;
+                return await ValidateTypeAsync(target, existing, s, ct);
             case "sdkmessageprocessingstep":
                 await ValidateStepAsync(target, existing, s, ct);
-                break;
+                return false;
             case "sdkmessageprocessingstepimage":
                 await ValidateImageAsync(target, existing, s, ct);
-                break;
+                return false;
+            default:
+                return false;
         }
     }
 
@@ -94,29 +103,35 @@ public sealed class RegistrationValidator(IMetadataStore store, CustomApiRegistr
     /// goes through them.
     /// </summary>
     /// <exception cref="XrmdFaultException">400 <c>InvalidArgument</c>.</exception>
-    public static void DemandNotEventHandlerAssociate(OrganizationRequest request)
+    public static void DemandNotEventHandlerAssociate(Request request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        if (request.RequestName is not { } name
-            || !name.Equals("Associate", StringComparison.OrdinalIgnoreCase) && !name.Equals("Disassociate", StringComparison.OrdinalIgnoreCase)
-            || !request.Parameters.TryGetValue("Relationship", out var r) || r is not Relationship { SchemaName: { } schema }
+        if (!IsAssociation(request.Name)
+            || !request.Parameters.TryGetValue("Relationship", out var r) || r is not RelationshipName { SchemaName: { } schema }
             || !EventHandlerRelationships.Contains(schema)) return;
         throw XrmdFaultException.InvalidArgument(
             $"Relationship '{schema}' cannot be used with Associate or Disassociate: update the step's eventhandler instead.");
     }
 
-    private static void ValidateAssembly(Entity target, bool create)
+    /// <summary>True for an Associate or Disassociate (any case): the only messages <see cref="DemandNotEventHandlerAssociate"/> reads.</summary>
+    private static bool IsAssociation(string? name) =>
+        name is not null
+        && (name.Equals("Associate", StringComparison.OrdinalIgnoreCase) || name.Equals("Disassociate", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>The assembly's content check; on Create, the missing identity columns filled. True when it filled one.</summary>
+    private static bool ValidateAssembly(Record target, bool create)
     {
-        if (!target.Attributes.TryGetValue("content", out var value) || value is null) return;
+        if (!target.Attributes.TryGetValue("content", out var value) || value is null) return false;
         var name = ReadAssemblyName(value as string)
                    ?? throw XrmdFaultException.InvalidArgument("The assembly content is not a valid plug-in assembly.");
-        if (!create) return;
+        if (!create) return false;
 
-        FillIfMissing(target, "name", name.Name);
-        FillIfMissing(target, "version", name.Version?.ToString());
-        FillIfMissing(target, "culture", string.IsNullOrEmpty(name.CultureName) ? "neutral" : name.CultureName);
+        var filled = FillIfMissing(target, "name", name.Name);
+        filled |= FillIfMissing(target, "version", name.Version?.ToString());
+        filled |= FillIfMissing(target, "culture", string.IsNullOrEmpty(name.CultureName) ? "neutral" : name.CultureName);
         var token = name.GetPublicKeyToken();
-        FillIfMissing(target, "publickeytoken", token is { Length: > 0 } ? Convert.ToHexString(token).ToLowerInvariant() : null);
+        filled |= FillIfMissing(target, "publickeytoken", token is { Length: > 0 } ? Convert.ToHexString(token).ToLowerInvariant() : null);
+        return filled;
     }
 
     /// <summary>
@@ -125,11 +140,11 @@ public sealed class RegistrationValidator(IMetadataStore store, CustomApiRegistr
     /// collation, which may be case-sensitive, so the names are compared with <c>LOWER</c>; two concurrent registrations of
     /// one name are serialized by a transaction applock on that name (<see cref="NameLockResource"/>), not by locking the table.
     /// </summary>
-    private static async Task DemandUniqueAssemblyNameAsync(Entity target, Entity? existing, DataSession s, CancellationToken ct)
+    private static async Task DemandUniqueAssemblyNameAsync(Record target, Record? existing, DataSession s, CancellationToken ct)
     {
-        var name = target.GetAttributeValue<string>("name");
+        var name = target.SdkValue<string>("name");
         if (string.IsNullOrWhiteSpace(name)) return;
-        if (existing is not null && string.Equals(existing.GetAttributeValue<string>("name"), name, StringComparison.OrdinalIgnoreCase)) return;
+        if (existing is not null && string.Equals(existing.SdkValue<string>("name"), name, StringComparison.OrdinalIgnoreCase)) return;
         if (s.Transaction is not null)
         {
             try
@@ -162,9 +177,12 @@ public sealed class RegistrationValidator(IMetadataStore store, CustomApiRegistr
             : Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(lower))));
     }
 
-    private static void FillIfMissing(Entity target, string attribute, string? value)
+    /// <summary>Sets <paramref name="attribute"/> to <paramref name="value"/> when the target has no text in it; true when it did.</summary>
+    private static bool FillIfMissing(Record target, string attribute, string? value)
     {
-        if (value is not null && string.IsNullOrWhiteSpace(target.GetAttributeValue<string>(attribute))) target[attribute] = value;
+        if (value is null || !string.IsNullOrWhiteSpace(target.SdkValue<string>(attribute))) return false;
+        target[attribute] = value;
+        return true;
     }
 
     /// <summary>The identity of the assembly in base64 <paramref name="content"/>; null when it is not a .NET assembly.</summary>
@@ -184,14 +202,15 @@ public sealed class RegistrationValidator(IMetadataStore store, CustomApiRegistr
         }
     }
 
-    private async Task ValidateTypeAsync(Entity target, Entity? existing, DataSession s, CancellationToken ct)
+    /// <summary>The checks of a plug-in type; true when it set <c>isworkflowactivity</c> on the target.</summary>
+    private async Task<bool> ValidateTypeAsync(Record target, Record? existing, DataSession s, CancellationToken ct)
     {
         // An Update that touches none of these keeps a type that was valid when it was registered.
         if (existing is not null && !new[] { "typename", "pluginassemblyid", "isworkflowactivity" }.Any(target.Attributes.ContainsKey))
-            return;
+            return false;
 
         var typeName = Value(target, existing, "typename") as string;
-        if (RefId(Value(target, existing, "pluginassemblyid")) is not { } assemblyId || string.IsNullOrWhiteSpace(typeName)) return;
+        if (RefId(Value(target, existing, "pluginassemblyid")) is not { } assemblyId || string.IsNullOrWhiteSpace(typeName)) return false;
 
         string? assemblyName = null;
         string? content = null;
@@ -209,12 +228,8 @@ public sealed class RegistrationValidator(IMetadataStore store, CustomApiRegistr
         var bytes = Decode(content);
         // Plan 2.14, W17: a custom workflow activity is recognised from the metadata only (it is not loaded for the check), and
         // marked as one, as Dataverse does whether or not the caller sent the flag.
-        if (bytes is not null && PluginAssemblyLoader.IsWorkflowActivityType(bytes, typeName))
-        {
-            target["isworkflowactivity"] = true;
-            return;
-        }
-        if (target.GetAttributeValue<bool?>("isworkflowactivity") is true)
+        if (bytes is not null && PluginAssemblyLoader.IsWorkflowActivityType(bytes, typeName)) return SetFlag(target, "isworkflowactivity", true);
+        if (target.SdkValue<bool?>("isworkflowactivity") is true)
             throw XrmdFaultException.InvalidArgument(
                 $"Plug-in type '{typeName}' is marked as a workflow activity but does not derive from {PluginAssemblyLoader.CodeActivityTypeName}.");
 
@@ -222,7 +237,15 @@ public sealed class RegistrationValidator(IMetadataStore store, CustomApiRegistr
             throw XrmdFaultException.InvalidArgument(
                 $"Plug-in type '{typeName}' was not found in assembly '{assemblyName ?? assemblyId.ToString()}' or does not implement IPlugin.");
         // A type that was an activity and now names a plug-in is a plug-in.
-        if (existing?.GetAttributeValue<bool?>("isworkflowactivity") is true) target["isworkflowactivity"] = false;
+        return existing?.SdkValue<bool?>("isworkflowactivity") is true && SetFlag(target, "isworkflowactivity", false);
+    }
+
+    /// <summary>Sets a yes/no column of the target; true when it did not already hold that value.</summary>
+    private static bool SetFlag(Record target, string attribute, bool value)
+    {
+        var changed = !(target.Attributes.TryGetValue(attribute, out var held) && held is bool flag && flag == value);
+        target[attribute] = value;
+        return changed;
     }
 
     /// <summary>The bytes of a base64 assembly content; null when there is none or it is not base64.</summary>
@@ -233,7 +256,7 @@ public sealed class RegistrationValidator(IMetadataStore store, CustomApiRegistr
         catch (FormatException) { return null; }
     }
 
-    private async Task ValidateStepAsync(Entity target, Entity? existing, DataSession s, CancellationToken ct)
+    private async Task ValidateStepAsync(Record target, Record? existing, DataSession s, CancellationToken ct)
     {
         ValidateWebhookStep(target, existing);
         var stage = Int(Value(target, existing, "stage"));
@@ -276,10 +299,10 @@ public sealed class RegistrationValidator(IMetadataStore store, CustomApiRegistr
             && !string.Equals(messageName, "UpdateMultiple", StringComparison.OrdinalIgnoreCase))
             throw XrmdFaultException.InvalidArgument("Filtering attributes are supported only for the Update and UpdateMultiple messages.");
 
-        if (entity is null || store.GetEntity(entity) is not { } metadata) return; // no entity to check against
+        if (entity is null || store.GetTable(entity) is not { } metadata) return; // no entity to check against
         foreach (var attribute in filtering)
         {
-            if (!metadata.Attributes.Any(a => string.Equals(a.LogicalName, attribute, StringComparison.OrdinalIgnoreCase)))
+            if (!(metadata.Attributes ?? []).Any(a => string.Equals(a.LogicalName, attribute, StringComparison.OrdinalIgnoreCase)))
                 throw XrmdFaultException.InvalidArgument($"Attribute '{attribute}' not found on entity '{entity}'.");
         }
     }
@@ -297,7 +320,7 @@ public sealed class RegistrationValidator(IMetadataStore store, CustomApiRegistr
         if (bulk is null && !isUpsert) return;
         if (bulk is not null && !filterGiven)
             throw XrmdFaultException.InvalidArgument($"Plug-in steps on '{bulk}' must name a table (sdkmessagefilterid).");
-        if (entity is null || store.GetEntity(entity) is not { } metadata) return;
+        if (entity is null || store.GetTable(entity) is not { } metadata) return;
         if (ElasticTables.IsElastic(metadata))
         {
             if (bulk is not null)
@@ -314,9 +337,9 @@ public sealed class RegistrationValidator(IMetadataStore store, CustomApiRegistr
     /// Plan 3.2: a step whose <c>eventhandler</c> is a <c>serviceendpoint</c> (a webhook step) names no plug-in type
     /// (<c>plugintypeid</c> null) and has no <c>configuration</c>; the other step rules apply to it as to a plug-in step.
     /// </summary>
-    private static void ValidateWebhookStep(Entity target, Entity? existing)
+    private static void ValidateWebhookStep(Record target, Record? existing)
     {
-        if (Value(target, existing, "eventhandler") is not EntityReference { LogicalName: ServiceEndpointSchema.Table }) return;
+        if (Value(target, existing, "eventhandler") is not RecordReference { LogicalName: ServiceEndpointSchema.Table }) return;
         var name = Value(target, existing, "name") as string;
         if (Value(target, existing, "plugintypeid") is not null)
             throw XrmdFaultException.InvalidArgument($"Step '{name}' names both a plug-in type and a service endpoint.");
@@ -364,7 +387,7 @@ public sealed class RegistrationValidator(IMetadataStore store, CustomApiRegistr
         }
     }
 
-    private static async Task ValidateImageAsync(Entity target, Entity? existing, DataSession s, CancellationToken ct)
+    private static async Task ValidateImageAsync(Record target, Record? existing, DataSession s, CancellationToken ct)
     {
         if (Int(Value(target, existing, "imagetype")) is not { } type
             || RefId(Value(target, existing, "sdkmessageprocessingstepid")) is not { } stepId) return;
@@ -410,21 +433,21 @@ public sealed class RegistrationValidator(IMetadataStore store, CustomApiRegistr
     }
 
     /// <summary>The attribute as the record will be: the target's value when it sends one, else the stored one.</summary>
-    private static object? Value(Entity target, Entity? existing, string attribute) =>
+    private static object? Value(Record target, Record? existing, string attribute) =>
         target.Attributes.TryGetValue(attribute, out var value) ? value
         : existing is not null && existing.Attributes.TryGetValue(attribute, out var stored) ? stored
         : null;
 
     private static int? Int(object? value) => value switch
     {
-        OptionSetValue o => o.Value,
+        ChoiceValue o => o.Value,
         int i => i,
         _ => null,
     };
 
     private static Guid? RefId(object? value) => value switch
     {
-        EntityReference r => r.Id,
+        RecordReference r => r.Id,
         Guid g => g,
         _ => null,
     };

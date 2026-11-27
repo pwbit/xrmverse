@@ -1,0 +1,108 @@
+=== PipelineExecutor.ExecuteAsync as the System Administrator ===
+--- request ---
+Request: CreateMultipleRequest
+  RequestName: String:"CreateMultiple"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Targets: EntityCollection
+      EntityName: String:"mailbox"
+      Entities: DataCollection[2]
+        [0]: Entity(mailbox)
+          Id: Guid:{empty}
+          EntityState: null
+          RowVersion: null
+          Attributes: AttributeCollection[5]
+            name: String:"s20 mailbox 1"
+            emailaddress: String:"s20@example.com"
+            username: String:"s20@example.com"
+            password: String:"s20-mult1-one"
+            regardingobjectid: EntityReference
+              LogicalName: String:"queue"
+              Id: Guid:{a:queue}
+              Name: null
+              KeyAttributes: KeyAttributeCollection[0]
+              RowVersion: null
+          FormattedValues: FormattedValueCollection[0]
+          KeyAttributes: KeyAttributeCollection[0]
+          RelatedEntities: RelatedEntityCollection[0]
+        [1]: Entity(mailbox)
+          Id: Guid:{empty}
+          EntityState: null
+          RowVersion: null
+          Attributes: AttributeCollection[5]
+            name: String:"s20 mailbox 2"
+            emailaddress: String:"s20@example.com"
+            username: String:"s20@example.com"
+            password: String:"s20-mult1-two"
+            regardingobjectid: EntityReference
+              LogicalName: String:"queue"
+              Id: Guid:{a:queue}
+              Name: null
+              KeyAttributes: KeyAttributeCollection[0]
+              RowVersion: null
+          FormattedValues: FormattedValueCollection[0]
+          KeyAttributes: KeyAttributeCollection[0]
+          RelatedEntities: RelatedEntityCollection[0]
+      MoreRecords: Boolean:False
+      PagingCookie: null
+      TotalRecordCount: Int32:0
+      TotalRecordCountLimitExceeded: Boolean:False
+--- fault ---
+none
+--- request after ---
+Request: CreateMultipleRequest
+  RequestName: String:"CreateMultiple"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Targets: EntityCollection
+      EntityName: String:"mailbox"
+      Entities: DataCollection[2]
+        [0]: Entity(mailbox)
+          Id: Guid:{empty}
+          EntityState: null
+          RowVersion: null
+          Attributes: AttributeCollection[4]
+            name: String:"s20 mailbox 1"
+            emailaddress: String:"s20@example.com"
+            username: String:"s20@example.com"
+            regardingobjectid: EntityReference
+              LogicalName: String:"queue"
+              Id: Guid:{a:queue}
+              Name: null
+              KeyAttributes: KeyAttributeCollection[0]
+              RowVersion: null
+          FormattedValues: FormattedValueCollection[0]
+          KeyAttributes: KeyAttributeCollection[0]
+          RelatedEntities: RelatedEntityCollection[0]
+        [1]: Entity(mailbox)
+          Id: Guid:{empty}
+          EntityState: null
+          RowVersion: null
+          Attributes: AttributeCollection[4]
+            name: String:"s20 mailbox 2"
+            emailaddress: String:"s20@example.com"
+            username: String:"s20@example.com"
+            regardingobjectid: EntityReference
+              LogicalName: String:"queue"
+              Id: Guid:{a:queue}
+              Name: null
+              KeyAttributes: KeyAttributeCollection[0]
+              RowVersion: null
+          FormattedValues: FormattedValueCollection[0]
+          KeyAttributes: KeyAttributeCollection[0]
+          RelatedEntities: RelatedEntityCollection[0]
+      MoreRecords: Boolean:False
+      PagingCookie: null
+      TotalRecordCount: Int32:0
+      TotalRecordCountLimitExceeded: Boolean:False
+--- rows ---
+mailboxes named 's20 ...': name="s20 mailbox 1", username="s20@example.com", ispasswordset=true
+mailboxes named 's20 ...': name="s20 mailbox 2", username="s20@example.com", ispasswordset=true
+--- secrets ---
+meta.mail_secret of the mailboxes: mailbox="s20 mailbox 1", name="password", value="s20-mult1-one"
+meta.mail_secret of the mailboxes: mailbox="s20 mailbox 2", name="password", value="s20-mult1-two"
+--- stage 40 ---
+step Create|40|0|1: target=emailaddress,name,regardingobjectid,username; targets=; parent=CreateMultiple; parenttarget=
+step Create|40|0|1: target=emailaddress,name,regardingobjectid,username; targets=; parent=CreateMultiple; parenttarget=
+job: Create|40 target=emailaddress,name,regardingobjectid,username; CreateMultiple|30 target= targets=emailaddress,name,regardingobjectid,username;emailaddress,name,regardingobjectid,username;
+job: Create|40 target=emailaddress,name,regardingobjectid,username; CreateMultiple|30 target= targets=emailaddress,name,regardingobjectid,username;emailaddress,name,regardingobjectid,username;

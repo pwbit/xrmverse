@@ -26,7 +26,8 @@ namespace Xrmd.Integration.Tests;
 /// says it does nothing (no crossing counted, the row untouched) and otherwise crosses once, the helper's change read back into the
 /// same <see cref="Record"/> (or its fault raised). The crossings are counted for this test's flow only
 /// (<see cref="CoreSdkBridges.CountCrossings"/>), so tests running in parallel do not disturb them. Task 5 adds the bridges after the write
-/// (mail, audit) and the claim of the mail secrets.
+/// (mail, audit) and the claim of the mail secrets; S.2e3c2b Task 4 removes the claim bridges (their tests move to
+/// <see cref="Stage20ModelTests"/>, on <see cref="PendingMailSecrets.Claim"/>) and takes the secrets on the model.
 /// </summary>
 [Collection("xrmd")]
 public sealed class CoreSdkBridgeTests(XrmdFixture fx)
@@ -158,14 +159,18 @@ public sealed class CoreSdkBridgeTests(XrmdFixture fx)
         record.Should().BeSameAs(original);
     }
 
+    /// <summary>
+    /// S.2e3c2b (Decision 6): the helper runs on the model (<see cref="PendingMailSecrets.Extract"/> of a copy of the record), so taking
+    /// the secrets converts nothing.
+    /// </summary>
     [Fact]
-    public async Task Bridge_runs_TakeMailSecrets_when_it_applies()
+    public async Task Bridge_runs_TakeMailSecrets_on_the_model_when_it_applies()
     {
         await using var kit = await CoreScenarioKit.StartAsync(fx, ownDatabase: false);
         var record = new Record(MailSchema.Mailbox) { ["name"] = "crb", ["password"] = "crb-secret" };
         var original = record;
         IReadOnlyDictionary<string, string?> taken = null!;
-        ShouldHaveRun(await CrossingsOf(() =>
+        ShouldBeSkipped(await CrossingsOf(() =>
         {
             taken = CoreSdkBridges.TakeMailSecrets(kit.Store.GetTable(MailSchema.Mailbox)!, ref record, new Dictionary<string, string?>());
         }));
@@ -173,36 +178,6 @@ public sealed class CoreSdkBridgeTests(XrmdFixture fx)
         record.Should().NotBeSameAs(original);
         record.Attributes.Keys.Should().Equal("name");
         original.Contains("password").Should().BeTrue();
-    }
-
-    /// <summary>
-    /// S.2e3b Task 5: the claim of the secrets the pipeline stripped from a Target, by the SDK instance (the SDK twins) or by the model
-    /// record a mirror paired with it (the seam for the model dispatch), once; nothing is converted.
-    /// </summary>
-    [Fact]
-    public async Task Bridge_claims_mail_secrets_by_the_sdk_instance()
-    {
-        await using var kit = await CoreScenarioKit.StartAsync(fx, ownDatabase: false);
-        var view = kit.Store.GetTable(MailSchema.Mailbox)!.SdkView();
-        var stripped = new Entity(MailSchema.Mailbox) { ["name"] = "crb", ["password"] = "crb-secret" };
-        PendingMailSecrets.Strip(stripped, view);
-        var mirror = new SdkMirror();
-        var record = (Record)mirror.In(stripped)!;
-        IReadOnlyDictionary<string, string?> none = null!, claimed = null!, again = null!;
-        ShouldBeSkipped(await CrossingsOf(() =>
-        {
-            none = CoreSdkBridges.ClaimMailSecrets(record, null);
-            claimed = CoreSdkBridges.ClaimMailSecrets(record, mirror);
-            again = CoreSdkBridges.ClaimMailSecrets(stripped);
-        }));
-        none.Should().BeEmpty("without the mirror the SDK instance is unknown");
-        claimed.Should().Equal(new Dictionary<string, string?> { ["password"] = "crb-secret" });
-        again.Should().BeEmpty("the values are claimed once");
-
-        var direct = new Entity(MailSchema.Mailbox) { ["password"] = "crb-direct" };
-        PendingMailSecrets.Strip(direct, view);
-        CoreSdkBridges.ClaimMailSecrets(direct).Should().Equal(new Dictionary<string, string?> { ["password"] = "crb-direct" });
-        CoreSdkBridges.ClaimMailSecrets(new Entity("contact")).Should().BeEmpty();
     }
 
     [Fact]

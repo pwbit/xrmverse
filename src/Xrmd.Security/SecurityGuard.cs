@@ -400,9 +400,10 @@ public sealed partial class SecurityGuard(SecurityCache cache, IMetadataStore st
     /// <summary>
     /// True when <see cref="AuthorizeAsync(Request, Caller, DataSession, CancellationToken)"/> may change <paramref name="request"/>, also
     /// on the way to a refusal: a Create whose Target is a field share record (its rules fill <c>objectid</c>, <c>objecttypecode</c> and
-    /// the access flags before their last checks).
+    /// the access flags before their last checks). Shared with the pipeline's create-only Upsert, which runs the guard on a model Create
+    /// of its Target (S.2e3c2b).
     /// </summary>
-    private static bool MayChange(Request request) =>
+    internal static bool MayChange(Request request) =>
         string.Equals(request.Name, "Create", StringComparison.OrdinalIgnoreCase)
         && request.Parameters.TryGetValue(Target, out var target) && target is Record { LogicalName: FieldSecurityTables.Share };
 

@@ -16,9 +16,10 @@ namespace Xrmd.Security;
 /// without <c>prvActOnBehalfOfAnotherUser</c>. Only requests are concerned: the internal writers (async queue, trace
 /// writer, bootstrap) write these tables with their own SQL.
 /// <para>
-/// S.2e3c2a (Task 4): on model values (Decision 1). The SDK twins of <see cref="EnforceAsync(Request, Caller, Guid, SecurityCache, IMetadataStore, DataSession, CancellationToken)"/>,
-/// <see cref="EnforceFieldSharesAsync(Request, Caller, FieldSecurity, IMetadataStore, DataSession, Func{RecordReference, CancellationToken, Task}, CancellationToken)"/>
-/// and <see cref="DemandValidProcessWrite(string, Record, Caller)"/>, for the callers still on the SDK, are in <c>Sdk/SecurityRules.Sdk.cs</c>.
+/// S.2e3c2a (Task 4): on model values (Decision 1). The SDK twins of <see cref="EnforceAsync(Request, Caller, Guid, SecurityCache, IMetadataStore, DataSession, CancellationToken)"/>
+/// and <see cref="EnforceFieldSharesAsync(Request, Caller, FieldSecurity, IMetadataStore, DataSession, Func{RecordReference, CancellationToken, Task}, CancellationToken)"/>,
+/// for the callers still on the SDK, are in <c>Sdk/SecurityRules.Sdk.cs</c>; the pipeline calls
+/// <see cref="DemandValidProcessWrite(string, Record, Caller)"/> on its model request (S.2e3c2b).
 /// </para>
 /// </summary>
 public static partial class SystemTableRules

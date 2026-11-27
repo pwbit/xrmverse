@@ -22,7 +22,9 @@ namespace Xrmd.Abstractions.Sdk;
 /// <para>
 /// A twin is paired before its contents are written, so cycles map to cycles, and an object reachable twice in one crossing is
 /// written once. Containers (attribute and parameter collections, entity lists, query parts) are cleared and refilled in source
-/// order; an SDK container that already holds the same keys in the same order only has its values set, and an SDK list that already
+/// order, except a keyed SDK container (attributes, parameters) that keeps some of its keys: it loses the keys the source lacks and
+/// has the rest set by key, so a kept key stays in place and a new one takes a freed slot, as a direct write on the SDK object did;
+/// an SDK container that already holds the same keys in the same order only has its values set, and an SDK list that already
 /// holds the same items is left as it is, so an enumeration a plug-in keeps open across a service call (around which its view is
 /// read back and written again) stays valid. The immutable model values (<see cref="ChoiceValue"/>, <see cref="MoneyValue"/>, <see cref="AliasedColumnValue"/>,
 /// <see cref="RelationshipName"/>, <see cref="PrincipalAccessValue"/>, <see cref="PrivilegeGrant"/>) are paired with their mutable SDK counterparts by instance: an SDK value changed in place

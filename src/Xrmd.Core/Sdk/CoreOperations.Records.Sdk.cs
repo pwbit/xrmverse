@@ -75,7 +75,8 @@ public sealed partial class CoreOperations
     /// <summary>
     /// The SDK twin of <see cref="CreateRecordAsync(DataSession, Caller, Record, CancellationToken, bool, IReadOnlyDictionary{string, object?}?)"/>:
     /// the caller's entity read in as a copy (<see cref="WriteTwin"/>, which leaves the entity as before: only the validation changes it
-    /// in place), the server values converted, the mail secrets claimed by the entity, and the model body run.
+    /// in place), the server values converted, and the model body run. S.2e3c2b (Decision 6): no mail secret is claimed here, as only
+    /// the pipeline strips, from its model Target (a secret still in the entity is taken out of the copy by the body).
     /// </summary>
     /// <exception cref="Errors.XrmdFaultException">As the model member.</exception>
     /// <exception cref="InvalidOperationException"><paramref name="serverSetValues"/> names a column the table does not have.</exception>
@@ -84,16 +85,12 @@ public sealed partial class CoreOperations
     {
         var (record, validate) = WriteTwin(entity, isCreate: true);
         var (m, attrs) = validate(record);
-        // Plan 4.1b: the secrets the pipeline took out of the caller's entity are claimed by that instance. This runs before the post,
-        // parent and table checks of the body (it ran after them before S.2e3b): harmless, as a Create refused by them fails as a whole
-        // and nothing else ever claims the values kept for this instance.
-        var claimed = CoreSdkBridges.ClaimMailSecrets(entity);
-        return await CreateValidatedAsync(s, caller, m, attrs, record, claimed, ct, detectDuplicates, ModelValues(serverSetValues));
+        return await CreateValidatedAsync(s, caller, m, attrs, record, NoMailSecrets, ct, detectDuplicates, ModelValues(serverSetValues));
     }
 
     /// <summary>
     /// The SDK twin of <see cref="UpdateRecordAsync(DataSession, Caller, Record, CancellationToken, bool)"/>: the caller's entity read in
-    /// as a copy (<see cref="WriteTwin"/>), the mail secrets claimed by the entity, and the model body run.
+    /// as a copy (<see cref="WriteTwin"/>) and the model body run (no mail secret claimed, as for the Create twin).
     /// </summary>
     /// <exception cref="Errors.XrmdFaultException">As the model member.</exception>
     public Task UpdateAsync(DataSession s, Caller caller, Entity entity, CancellationToken ct, bool detectDuplicates = false) =>
@@ -108,11 +105,7 @@ public sealed partial class CoreOperations
         bool detectDuplicates = false)
     {
         var (record, validate) = WriteTwin(entity, isCreate: false);
-        // Plan 4.1b: the secrets the pipeline took out of the entity are claimed by that instance. This runs before the post, contact and
-        // managed checks of the body (it ran after them before S.2e3b): harmless, as an Update refused by them fails as a whole and
-        // nothing else ever claims the values kept for this instance.
-        var claimed = CoreSdkBridges.ClaimMailSecrets(entity);
-        return UpdateRecordAsync(s, caller, record, auditAction, server, claimed, validate, ct, detectDuplicates);
+        return UpdateRecordAsync(s, caller, record, auditAction, server, NoMailSecrets, validate, ct, detectDuplicates);
     }
 
     /// <summary>

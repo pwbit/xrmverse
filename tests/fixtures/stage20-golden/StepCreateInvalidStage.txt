@@ -1,0 +1,91 @@
+=== PipelineExecutor.ExecuteAsync as the System Administrator ===
+--- request ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(sdkmessageprocessingstep)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[8]
+        name: String:"s20 step"
+        sdkmessageid: EntityReference
+          LogicalName: String:"sdkmessage"
+          Id: Guid:{id1}
+          Name: null
+          KeyAttributes: KeyAttributeCollection[0]
+          RowVersion: null
+        sdkmessagefilterid: EntityReference
+          LogicalName: String:"sdkmessagefilter"
+          Id: Guid:{id2}
+          Name: null
+          KeyAttributes: KeyAttributeCollection[0]
+          RowVersion: null
+        plugintypeid: EntityReference
+          LogicalName: String:"plugintype"
+          Id: Guid:{a:type}
+          Name: null
+          KeyAttributes: KeyAttributeCollection[0]
+          RowVersion: null
+        eventhandler: EntityReference
+          LogicalName: String:"plugintype"
+          Id: Guid:{a:type}
+          Name: null
+          KeyAttributes: KeyAttributeCollection[0]
+          RowVersion: null
+        stage: OptionSetValue
+          Value: Int32:30
+        mode: OptionSetValue
+          Value: Int32:0
+        rank: Int32:1
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- fault ---
+Fault: XrmdFaultException 0x80040203 400 "Invalid stage 30."
+--- request after ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(sdkmessageprocessingstep)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[8]
+        name: String:"s20 step"
+        sdkmessageid: EntityReference
+          LogicalName: String:"sdkmessage"
+          Id: Guid:{id1}
+          Name: null
+          KeyAttributes: KeyAttributeCollection[0]
+          RowVersion: null
+        sdkmessagefilterid: EntityReference
+          LogicalName: String:"sdkmessagefilter"
+          Id: Guid:{id2}
+          Name: null
+          KeyAttributes: KeyAttributeCollection[0]
+          RowVersion: null
+        plugintypeid: EntityReference
+          LogicalName: String:"plugintype"
+          Id: Guid:{a:type}
+          Name: null
+          KeyAttributes: KeyAttributeCollection[0]
+          RowVersion: null
+        eventhandler: EntityReference
+          LogicalName: String:"plugintype"
+          Id: Guid:{a:type}
+          Name: null
+          KeyAttributes: KeyAttributeCollection[0]
+          RowVersion: null
+        stage: OptionSetValue
+          Value: Int32:30
+        mode: OptionSetValue
+          Value: Int32:0
+        rank: Int32:1
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- rows ---
+steps named 's20 step': steps=0

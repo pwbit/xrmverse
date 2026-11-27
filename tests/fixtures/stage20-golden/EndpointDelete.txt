@@ -1,0 +1,29 @@
+=== PipelineExecutor.ExecuteAsync as the System Administrator ===
+--- request ---
+Request: DeleteRequest
+  RequestName: String:"Delete"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: EntityReference
+      LogicalName: String:"serviceendpoint"
+      Id: Guid:{a:endpoint}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- fault ---
+none
+--- request after ---
+Request: DeleteRequest
+  RequestName: String:"Delete"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: EntityReference
+      LogicalName: String:"serviceendpoint"
+      Id: Guid:{a:endpoint}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- rows ---
+service endpoints: none
+--- secrets ---
+meta.serviceendpoint_secret: none

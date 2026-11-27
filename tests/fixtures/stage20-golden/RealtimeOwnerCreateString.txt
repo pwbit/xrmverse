@@ -1,0 +1,35 @@
+=== PipelineExecutor.ExecuteAsync as the System Administrator ===
+--- request ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(xrmv_order)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[2]
+        xrmv_name: String:"s20 order created"
+        ownerid: String:"s20 owner"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- fault ---
+Fault: InvalidCastException "Unable to cast object of type 'System.String' to type 'Microsoft.Xrm.Sdk.EntityReference'."
+--- request after ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(xrmv_order)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[2]
+        xrmv_name: String:"s20 order created"
+        ownerid: String:"s20 owner"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- rows ---
+orders named 's20 order created': orders=0

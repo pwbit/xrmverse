@@ -44,7 +44,7 @@ public sealed partial class CoreOperations
     /// <summary>
     /// <see cref="CreateRecordAsync(DataSession, Caller, Record, CancellationToken, bool, IReadOnlyDictionary{string, object?}?)"/> with
     /// the mail secrets the pipeline took out of the request's Target, claimed by the caller
-    /// (<see cref="CoreSdkBridges.ClaimMailSecrets(Record, Abstractions.Sdk.SdkMirror?)"/>).
+    /// (<see cref="Pipeline.Mail.PendingMailSecrets.Claim"/>).
     /// </summary>
     internal Task<Guid> CreateRecordAsync(DataSession s, Caller caller, Record record, IReadOnlyDictionary<string, string?> claimedSecrets,
         CancellationToken ct, bool detectDuplicates = false, IReadOnlyDictionary<string, object?>? serverSetValues = null)

@@ -1,0 +1,49 @@
+=== PipelineExecutor.ExecuteAsync as the System Administrator ===
+--- request ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(serviceendpoint)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[5]
+        name: String:"s20 choice url"
+        contract: OptionSetValue
+          Value: Int32:8
+        authtype: OptionSetValue
+          Value: Int32:4
+        url: OptionSetValue
+          Value: Int32:1
+        authvalue: String:"s20-k3y"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- fault ---
+Fault: InvalidCastException "Unable to cast object of type 'Microsoft.Xrm.Sdk.OptionSetValue' to type 'System.String'."
+--- request after ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(serviceendpoint)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[5]
+        name: String:"s20 choice url"
+        contract: OptionSetValue
+          Value: Int32:8
+        authtype: OptionSetValue
+          Value: Int32:4
+        url: OptionSetValue
+          Value: Int32:1
+        authvalue: String:"s20-k3y"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- rows ---
+service endpoints: none
+--- secrets ---
+meta.serviceendpoint_secret: none

@@ -1,0 +1,50 @@
+=== PipelineExecutor.ExecuteAsync as the System Administrator ===
+--- request ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(customapi)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[2]
+        uniquename: String:"new_S20Ping"
+        name: String:"new_S20Ping"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- fault ---
+none
+--- request after ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(customapi)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[8]
+        uniquename: String:"new_S20Ping"
+        name: String:"new_S20Ping"
+        isprivate: Boolean:False
+        workflowsdkstepenabled: Boolean:False
+        isfunction: Boolean:False
+        bindingtype: OptionSetValue
+          Value: Int32:0
+        allowedcustomprocessingsteptype: OptionSetValue
+          Value: Int32:0
+        sdkmessageid: EntityReference
+          LogicalName: String:"sdkmessage"
+          Id: Guid:{id1}
+          Name: null
+          KeyAttributes: KeyAttributeCollection[0]
+          RowVersion: null
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- rows ---
+custom API: uniquename="new_S20Ping", name="new_S20Ping", isprivate=false, isfunction=false, bindingtype=0, allowedcustomprocessingsteptype=0, workflowsdkstepenabled=false, sdkmessageid={id1}
+message: name="new_S20Ping", categoryname="CustomAPI", isprivate=false
+filters of the message: filters=1

@@ -1,0 +1,55 @@
+=== PipelineExecutor.ExecuteAsync as the System Administrator ===
+--- request ---
+Request: UpsertRequest
+  RequestName: String:"Upsert"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(mailbox)
+      Id: Guid:{a:mailbox}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[5]
+        name: String:"s20 mailbox upserted"
+        emailaddress: String:"s20@example.com"
+        username: String:"s20@example.com"
+        password: String:"s20-upd4te"
+        regardingobjectid: EntityReference
+          LogicalName: String:"queue"
+          Id: Guid:{a:queue}
+          Name: null
+          KeyAttributes: KeyAttributeCollection[0]
+          RowVersion: null
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- fault ---
+none
+--- request after ---
+Request: UpsertRequest
+  RequestName: String:"Upsert"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(mailbox)
+      Id: Guid:{a:mailbox}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[4]
+        name: String:"s20 mailbox upserted"
+        emailaddress: String:"s20@example.com"
+        username: String:"s20@example.com"
+        regardingobjectid: EntityReference
+          LogicalName: String:"queue"
+          Id: Guid:{a:queue}
+          Name: null
+          KeyAttributes: KeyAttributeCollection[0]
+          RowVersion: null
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- rows ---
+mailboxes named 's20 ...': name="s20 mailbox upserted", username="s20@example.com", ispasswordset=true
+--- secrets ---
+meta.mail_secret of the mailboxes: mailbox="s20 mailbox upserted", name="password", value="s20-upd4te"
+--- stage 40 ---
+step Update|40|0|1: target=emailaddress,name,regardingobjectid,username; targets=; parent=Upsert; parenttarget=emailaddress,name,regardingobjectid,username
+job: Update|40 target=emailaddress,name,regardingobjectid,username; Upsert|30 target=emailaddress,name,regardingobjectid,username;

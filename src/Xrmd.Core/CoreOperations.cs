@@ -163,6 +163,9 @@ public sealed partial class CoreOperations(IMetadataStore store, QueryExecutor q
     public bool IsCoreMessage(string messageName) => CoreMessages.Contains(messageName);
 
     /// <inheritdoc />
+    public bool AnswersOnModel(string messageName) => IsOnModel(messageName);
+
+    /// <inheritdoc />
     public bool IsNonPipelineMessage(string messageName) => NonPipelineMessages.Contains(messageName);
 
     /// <summary>

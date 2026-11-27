@@ -129,6 +129,58 @@ public class SdkMirrorTests
         Assert.Equal(["m", "b", "k"], entity.Attributes.Select(a => a.Key).ToArray());
     }
 
+    /// <summary>
+    /// S.2e3c2b fix round 1: a write-out that removes some keys and adds others keeps the kept keys where they are and puts a new key in
+    /// the slot a removed one freed, as the same writes made directly on the SDK object do (a check on the model must not reorder the
+    /// caller's attributes).
+    /// </summary>
+    [Fact]
+    public void Out_places_new_keys_as_direct_sdk_writes_do()
+    {
+        Entity Caller()
+        {
+            var e = new Entity("serviceendpoint") { ["name"] = "n", ["description"] = "d", ["authvalue"] = "s", ["url"] = "u", ["contract"] = 8 };
+            e.Attributes.Remove("description");
+            return e;
+        }
+
+        var direct = Caller();
+        direct.Attributes.Remove("authvalue");
+        direct["isauthvalueset"] = true;
+        direct["solutionid"] = 1;
+
+        var mirror = new SdkMirror();
+        var entity = Caller();
+        var attributes = entity.Attributes;
+        var record = (Record)mirror.In(entity)!;
+        record.Attributes.Remove("authvalue");
+        record["isauthvalueset"] = true;
+        record["solutionid"] = 1;
+        record["url"] = "v";
+        mirror.Out(record);
+
+        Assert.Same(attributes, entity.Attributes);
+        Assert.Equal(["name", "solutionid", "isauthvalueset", "url", "contract"], direct.Attributes.Select(a => a.Key).ToArray());
+        Assert.Equal(direct.Attributes.Select(a => a.Key).ToArray(), entity.Attributes.Select(a => a.Key).ToArray());
+        Assert.Equal("v", entity["url"]);
+    }
+
+    /// <summary>A key the model removed and set again stays where the caller had it (a direct remove and set reuses its own slot).</summary>
+    [Fact]
+    public void Out_keeps_a_key_removed_and_set_again_in_place()
+    {
+        var mirror = new SdkMirror();
+        var entity = new Entity("account") { ["a"] = 1, ["b"] = 2, ["c"] = 3 };
+        var record = (Record)mirror.In(entity)!;
+        record.Attributes.Remove("a");
+        record["d"] = 4;
+        record["a"] = 5;
+        mirror.Out(record);
+
+        Assert.Equal(["a", "b", "c", "d"], entity.Attributes.Select(a => a.Key).ToArray());
+        Assert.Equal(5, entity["a"]);
+    }
+
     [Fact]
     public void Same_value_twice_maps_to_one_twin()
     {

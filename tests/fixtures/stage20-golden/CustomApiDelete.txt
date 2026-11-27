@@ -1,0 +1,29 @@
+=== PipelineExecutor.ExecuteAsync as the System Administrator ===
+--- request ---
+Request: DeleteRequest
+  RequestName: String:"Delete"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: EntityReference
+      LogicalName: String:"customapi"
+      Id: Guid:{a:api}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- fault ---
+none
+--- request after ---
+Request: DeleteRequest
+  RequestName: String:"Delete"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: EntityReference
+      LogicalName: String:"customapi"
+      Id: Guid:{a:api}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- rows ---
+custom API: none
+message: none
+filters of the message: filters=0

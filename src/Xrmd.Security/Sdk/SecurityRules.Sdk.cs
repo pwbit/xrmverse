@@ -14,8 +14,8 @@ using Xrmd.Security.Sdk;
 
 namespace Xrmd.Security;
 
-// S.2e3c2a Decision 3: the SDK twins of the Security rules, for the callers still on the SDK (the solution import and delete, the pipeline
-// and the workflows until S.2e3c2b, the migration's SecurityPhase, and tests). Each converts its arguments in with a mirror of the call and
+// S.2e3c2a Decision 3: the SDK twins of the Security rules, for the callers still on the SDK (the solution import and delete, the workflows
+// until S.2e3c2b, the migration's SecurityPhase, and tests). Each converts its arguments in with a mirror of the call and
 // runs the model member. Transitional: a twin goes when nothing outside Security calls it with SDK types (Task 5 removed those only the
 // SDK SecurityGuard called). Decision 6: a record team mark a direct SDK caller of the core leaves on its SDK request is carried onto the
 // model request at the crossing (AccessTeamRules.CopyMark).
@@ -38,19 +38,6 @@ public static partial class SystemTableRules
         ArgumentNullException.ThrowIfNull(session);
         if (!Messages.ContainsKey(request.RequestName?.ToLowerInvariant() ?? "")) return Task.CompletedTask;
         return EnforceAsync(new SdkMirror().In(request)!, caller, systemUserId, cache, store, session, ct);
-    }
-
-    /// <summary>
-    /// The SDK twin of <see cref="DemandValidProcessWrite(string, Record, Caller)"/> (the pipeline's stage 20 until S.2e3c2b). A row the
-    /// rule does not read (<see cref="Caller.Internal"/>, a table other than <c>workflow</c> and <c>processtrigger</c>: the model
-    /// member's own first checks) is passed without being read in.
-    /// </summary>
-    /// <exception cref="XrmdFaultException">As the model member.</exception>
-    public static void DemandValidProcessWrite(string message, Entity target, Caller caller)
-    {
-        ArgumentNullException.ThrowIfNull(target);
-        if (caller == Caller.Internal || target.LogicalName is not (WorkflowSchema.Table or WorkflowSchema.TriggerTable)) return;
-        DemandValidProcessWrite(message, (Record)new SdkMirror().In(target)!, caller);
     }
 }
 

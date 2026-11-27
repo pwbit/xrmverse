@@ -283,11 +283,24 @@ public static class SdkRecords
     /// <summary>
     /// Writes <paramref name="values"/> into a keyed SDK container: when it holds exactly these keys in this order only the values are
     /// set, which keeps valid an enumeration a plug-in has open on it (across a call of its organization service, around which its
-    /// view is read back and written again); otherwise it is cleared and refilled in source order.
+    /// view is read back and written again); otherwise the keys missing from <paramref name="values"/> are removed and the rest set in
+    /// source order, so a key the container still holds keeps its position and a new key takes the slot a removed one freed, as a direct
+    /// write on the SDK object (remove a column, set another) placed it. When none of its keys is kept it is cleared, and the values
+    /// go in in source order.
     /// </summary>
     internal static void Refill<TKey, TValue>(DataCollection<TKey, TValue> into, IReadOnlyList<KeyValuePair<TKey, TValue>> values)
     {
-        if (!SameKeys(into, values)) into.Clear();
+        if (!SameKeys(into, values))
+        {
+            var keep = new HashSet<TKey>(values.Count);
+            foreach (var p in values) keep.Add(p.Key);
+            List<TKey>? gone = null;
+            foreach (var p in into)
+                if (!keep.Contains(p.Key)) (gone ??= []).Add(p.Key);
+            if (gone is not null && gone.Count == into.Count) into.Clear();
+            else if (gone is not null)
+                foreach (var key in gone) into.Remove(key);
+        }
         foreach (var p in values) into[p.Key] = p.Value;
     }
 

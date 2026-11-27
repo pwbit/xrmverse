@@ -1,5 +1,5 @@
 using System.Runtime.CompilerServices;
-using Microsoft.Xrm.Sdk;
+using Xrmd.Model.Messages;
 
 namespace Xrmd.Pipeline.Merge;
 
@@ -19,20 +19,22 @@ internal enum InnerKind
 /// same transaction, with the outer context as <c>ParentContext</c>. The mark records its <see cref="InnerKind"/>: only a
 /// <see cref="InnerKind.Bulk"/> inner skips the single-to-bulk merge (its bulk steps already fired at the bulk level). The mark
 /// lives beside the request (as <c>AuditActionHint</c>), so plug-ins see the same <c>InputParameters</c> and cannot set or clear it.
+/// S.2e3c2b (Decision 7): the mark is keyed on the model request the pipeline runs, set right after the inner request crossed into
+/// the model.
 /// </summary>
 internal static class InnerExecution
 {
-    private static readonly ConditionalWeakTable<OrganizationRequest, StrongBox<InnerKind>> Marks = new();
+    private static readonly ConditionalWeakTable<Request, StrongBox<InnerKind>> Marks = new();
 
     /// <summary>Marks <paramref name="request"/> as an inner execution of <paramref name="kind"/>.</summary>
-    public static void Mark(OrganizationRequest request, InnerKind kind)
+    public static void Mark(Request request, InnerKind kind)
     {
         ArgumentNullException.ThrowIfNull(request);
         Marks.AddOrUpdate(request, new StrongBox<InnerKind>(kind));
     }
 
     /// <summary>The kind <paramref name="request"/> was marked with; null when it is not an inner execution.</summary>
-    public static InnerKind? KindOf(OrganizationRequest request)
+    public static InnerKind? KindOf(Request request)
     {
         ArgumentNullException.ThrowIfNull(request);
         return Marks.TryGetValue(request, out var box) ? box.Value : null;

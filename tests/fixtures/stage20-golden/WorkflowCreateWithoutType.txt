@@ -1,0 +1,60 @@
+=== PipelineExecutor.ExecuteAsync as the System Administrator ===
+--- request ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(workflow)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[8]
+        name: String:"s20 untyped"
+        category: OptionSetValue
+          Value: Int32:0
+        mode: OptionSetValue
+          Value: Int32:1
+        scope: OptionSetValue
+          Value: Int32:4
+        primaryentity: String:"xrmv_order"
+        triggeroncreate: Boolean:True
+        createstage: OptionSetValue
+          Value: Int32:40
+        xaml: String:{xaml of the parity export's OnCreate}
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- fault ---
+none
+--- request after ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(workflow)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[9]
+        name: String:"s20 untyped"
+        type: OptionSetValue
+          Value: Int32:1
+        category: OptionSetValue
+          Value: Int32:0
+        mode: OptionSetValue
+          Value: Int32:1
+        scope: OptionSetValue
+          Value: Int32:4
+        primaryentity: String:"xrmv_order"
+        triggeroncreate: Boolean:True
+        createstage: OptionSetValue
+          Value: Int32:40
+        xaml: String:{xaml of the parity export's OnCreate}
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- rows ---
+processes named 's20 untyped': name="s20 untyped", type=1, statecode=0, statuscode=1, category=0, parentworkflowid=null
+--- stage 40 ---
+step Create|40|0|1: target=category,createstage,mode,name,primaryentity,scope,triggeroncreate,type,xaml; targets=; parent=; parenttarget=
+job: Create|40 target=category,createstage,mode,name,primaryentity,scope,triggeroncreate,type,xaml;

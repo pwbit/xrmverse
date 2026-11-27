@@ -1,0 +1,47 @@
+=== PipelineExecutor.ExecuteAsync as the System Administrator ===
+--- request ---
+Request: AssociateRequest
+  RequestName: String:"Associate"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    RelatedEntities: EntityReferenceCollection[1]
+      [0]: EntityReference
+        LogicalName: String:"sdkmessageprocessingstep"
+        Id: Guid:{a:step}
+        Name: null
+        KeyAttributes: KeyAttributeCollection[0]
+        RowVersion: null
+    Relationship: Relationship
+      SchemaName: String:"plugintype_sdkmessageprocessingstep"
+      PrimaryEntityRole: null
+    Target: EntityReference
+      LogicalName: String:"plugintype"
+      Id: Guid:{a:type}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- fault ---
+Fault: XrmdFaultException 0x80040203 400 "Relationship 'plugintype_sdkmessageprocessingstep' cannot be used with Associate or Disassociate: update the step's eventhandler instead."
+--- request after ---
+Request: AssociateRequest
+  RequestName: String:"Associate"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    RelatedEntities: EntityReferenceCollection[1]
+      [0]: EntityReference
+        LogicalName: String:"sdkmessageprocessingstep"
+        Id: Guid:{a:step}
+        Name: null
+        KeyAttributes: KeyAttributeCollection[0]
+        RowVersion: null
+    Relationship: Relationship
+      SchemaName: String:"plugintype_sdkmessageprocessingstep"
+      PrimaryEntityRole: null
+    Target: EntityReference
+      LogicalName: String:"plugintype"
+      Id: Guid:{a:type}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- rows ---
+the step: name="Create:account:40:1", stage=40, eventhandler={a:type}, eventhandlertype=4602, plugintypeid={a:type}

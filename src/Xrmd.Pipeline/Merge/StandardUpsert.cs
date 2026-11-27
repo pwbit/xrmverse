@@ -1,6 +1,5 @@
 using System.Runtime.CompilerServices;
 using Microsoft.Xrm.Sdk;
-using Xrmd.Pipeline.Mail;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
@@ -20,6 +19,9 @@ public static class StandardUpsert
 {
     private static readonly ConditionalWeakTable<OrganizationRequest, object> CreateOnly = new();
 
+    /// <summary>The create-only marks of the model requests the pipeline runs (S.2e3c2b, Decision 7).</summary>
+    private static readonly ConditionalWeakTable<Xrmd.Model.Messages.Request, object> ModelCreateOnly = new();
+
     /// <summary>The message name.</summary>
     public const string MessageName = "Upsert";
 
@@ -33,7 +35,7 @@ public static class StandardUpsert
     /// keeps the given id (a target without one is created with a new id). Key attributes are left on the inner target, whose
     /// core operation refuses them on a standard table.
     /// </summary>
-    /// <param name="createOnly">True when the request was marked by <see cref="MarkCreateOnly"/>: an existing row is then a 412
+    /// <param name="createOnly">True when the request was marked by <see cref="MarkCreateOnly(OrganizationRequest)"/>: an existing row is then a 412
     /// DuplicateRecord, raised inside the Upsert's transaction after the lock (no race with a concurrent create).</param>
     /// <param name="runInner">Runs the inner <c>Create</c> or <c>Update</c> through the pipeline as an inner execution.</param>
     /// <returns><c>RecordCreated</c> and <c>Target</c> (a reference to the record).</returns>
@@ -83,8 +85,32 @@ public static class StandardUpsert
         CreateOnly.AddOrUpdate(request, new object());
     }
 
-    /// <summary>True when <paramref name="request"/> was marked by <see cref="MarkCreateOnly"/>.</summary>
+    /// <summary>True when <paramref name="request"/> was marked by <see cref="MarkCreateOnly(OrganizationRequest)"/>.</summary>
     public static bool IsCreateOnly(OrganizationRequest request) => CreateOnly.TryGetValue(request, out _);
+
+    /// <summary>
+    /// Marks the model request <paramref name="request"/> (an <c>Upsert</c>) as create-only (S.2e3c2b, Decision 7): the mark the
+    /// pipeline reads at stage 30, beside the request as the SDK one.
+    /// </summary>
+    public static void MarkCreateOnly(Xrmd.Model.Messages.Request request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ModelCreateOnly.AddOrUpdate(request, new object());
+    }
+
+    /// <summary>True when the model request <paramref name="request"/> was marked by <see cref="MarkCreateOnly(Xrmd.Model.Messages.Request)"/>.</summary>
+    public static bool IsCreateOnly(Xrmd.Model.Messages.Request request) => ModelCreateOnly.TryGetValue(request, out _);
+
+    /// <summary>
+    /// At the crossing of <paramref name="sdk"/> into its model twin <paramref name="model"/> (S.2e3c2b, Decision 7): the create-only
+    /// mark of the SDK request, set by its caller (<see cref="MarkCreateOnly(OrganizationRequest)"/>), follows onto the model request.
+    /// </summary>
+    internal static void CopyCreateOnly(OrganizationRequest sdk, Xrmd.Model.Messages.Request model)
+    {
+        ArgumentNullException.ThrowIfNull(sdk);
+        ArgumentNullException.ThrowIfNull(model);
+        if (IsCreateOnly(sdk)) MarkCreateOnly(model);
+    }
 
     /// <summary>
     /// A copy of <paramref name="source"/> with the id <paramref name="id"/>, without the attribute <paramref name="without"/> and
@@ -102,8 +128,8 @@ public static class StandardUpsert
                 copy[name] = value;
         if (source.KeyAttributes is { Count: > 0 } keys)
             foreach (var (name, value) in keys) copy.KeyAttributes[name] = value;
-        // Plan 4.1b: the mail secrets the outer Upsert's stage 20 took out of its Target belong to the inner Create or Update.
-        PendingMailSecrets.Carry(source, copy);
+        // Plan 4.1b: the mail secrets the outer Upsert's stage 20 took out of its Target belong to the inner Create or Update; S.2e3c2b
+        // (Decision 6): they are keyed on the model Target, so the pipeline hands them over when the inner request crosses in.
         return copy;
     }
 

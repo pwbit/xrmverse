@@ -1,0 +1,45 @@
+=== PipelineExecutor.ExecuteAsync as the System Administrator ===
+--- request ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(pluginassembly)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[3]
+        content: String:"{content of Xrmd.TestPlugins.dll}"
+        sourcetype: OptionSetValue
+          Value: Int32:0
+        isolationmode: OptionSetValue
+          Value: Int32:2
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- fault ---
+none
+--- request after ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(pluginassembly)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[7]
+        content: String:"{content of Xrmd.TestPlugins.dll}"
+        sourcetype: OptionSetValue
+          Value: Int32:0
+        isolationmode: OptionSetValue
+          Value: Int32:2
+        name: String:"Xrmd.TestPlugins"
+        version: String:"1.0.0.0"
+        culture: String:"neutral"
+        publickeytoken: String:"a15f04ad73430aaf"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- rows ---
+plug-in assemblies: name="Xrmd.TestPlugins", version="1.0.0.0", culture="neutral", publickeytoken="a15f04ad73430aaf", sourcetype=0, isolationmode=2

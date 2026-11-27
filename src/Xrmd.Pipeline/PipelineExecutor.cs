@@ -195,8 +195,9 @@ public sealed partial class PipelineExecutor(IPipelineCore core, StepRegistry re
 
     /// <summary>
     /// The stages of one message on its model context (<see cref="Run.Context"/>): PreValidation, the transaction, the images, the
-    /// PreOperation steps and real-time workflows, the stage-20/30 boundary (<see cref="HoldAtCoreAsync"/> to
-    /// <see cref="ReleaseCore"/>: the core works on the SDK request, the model takes its state back once after it), the
+    /// PreOperation steps and real-time workflows, the stage-20/30 boundary (<see cref="HoldAtCoreAsync"/>: the internal checks of stage
+    /// 20 on the model request; then, for a message the core does not answer on the model, up to <see cref="ReleaseCore"/>, the core
+    /// works on the SDK request and the model takes its state back once after it), the
     /// PostOperation steps and workflows, the background workflows and asynchronous steps queued, the commit or rollback. The
     /// response is finished by the caller (<see cref="FinishResponse"/>).
     /// </summary>

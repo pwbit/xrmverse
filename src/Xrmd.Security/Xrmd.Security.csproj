@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Xrmd.Security.Tests" />
+    <InternalsVisibleTo Include="Xrmd.Pipeline" />
     <InternalsVisibleTo Include="Xrmd.Integration.Tests" />
   </ItemGroup>
 

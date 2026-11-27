@@ -59,6 +59,13 @@ public interface IPipelineCore
     bool IsCoreMessage(string messageName);
 
     /// <summary>
+    /// True for a core message whose body runs on the model request (S.2e3c2b, Decision 8): a message of <see cref="IsCoreMessage"/>
+    /// that is not bridged to an SDK handler (any case, as <see cref="IsCoreMessage"/>). The pipeline holds no window at the core for
+    /// such a message: the core never works on its SDK request.
+    /// </summary>
+    bool AnswersOnModel(string messageName);
+
+    /// <summary>
     /// The entities a write message changes besides its primary entity (e.g. the intersect of a security relationship), so
     /// that the caches built on them are invalidated after the commit; empty when there are none.
     /// </summary>

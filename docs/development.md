@@ -236,8 +236,8 @@ What stays on the SDK, and the step that moves it:
 
 | Still on the SDK | Moves in |
 |---|---|
-| Stage 20: the internal checks on `Record` (custom API authoring, registration validation, process writes, service endpoints, mail secrets), with the Workflows hook behind its lent view, and the `StandardUpsert` and `InnerExecution` marks on model keys | S.2e3c2b |
-| `HoldChecksMayWrite` and the held window of the messages moved in S.2e3c1 | S.2e3c2b |
+| The held window of the bridged messages | With their bodies (S.2e3c3, S.2e4, S.2f) |
+| The held window of custom actions and APIs, XAML actions, `ExecuteWorkflow`, standard Upsert and bulk | S.2e3c3 (Upsert, bulk), S.2h (workflow hooks) |
 | `PrivilegeCatalog` and `SecurityCache`, which implement the SDK-typed metadata hooks `IEntityCreatedHandler` and `IEntityDeletedHandler` | With the metadata writes |
 | `OrganizationService`, `RetrieveMultipleModelRequest` and `MetadataOperations` (RetrieveEntity, RetrieveAttribute and the metadata reads) | S.2e3c3 |
 | The core entry adapter, and the callers of the `PipelineCoreSdk` extension methods in Workflows, Solution and Admin; the methods are removed | S.2e3c3 |
@@ -347,7 +347,7 @@ The cost of a message through the core, measured against the code before S.2e3a 
 - **The stage-20 SDK image checks cost one conversion each.** The checks on writes of the custom API, plug-in registration, workflow
   and service endpoint tables, and the owner lookup of real-time workflows, read their image through the model member into a mirror
   of their own. Each read converts that one row in once, and the checks get the core's `Entity`. S.2e3c2b moves these
-  checks to `Record`.
+  checks to `Record`: they read the stored image through `RetrieveImageAsync` with no mirror named and convert nothing.
 - **Direct SDK callers pay three conversions of the request.** An extension method converts the request in, and the adapter writes
   it out and reads it back, so a caller outside a pipeline pays three times the size of its request. That is what a message pays
   through the pipeline too (one read at entry, one write and one read at the core): an Associate of 5 objects converts 15 there, as
@@ -410,7 +410,7 @@ texts that name a value type keep the SDK name they show today.
   place (validation strips calculated values, a write by key fills key ids and `partitionid`), and `KeepCallerTarget` copies exactly
   those changes onto the caller's `Entity`, so the SDK request is not written out for stage 30. The pipeline writes the request out and reads it back only for the tables in
   `HoldChecksMayWrite` (the custom API, registration, workflow, service endpoint and mail-secret tables), whose stage-20 checks may
-  change it. The core no longer holds a plug-in's early-bound `Entity`: it works on the `Record`, and the stored row and the async
+  change it (until S.2e3c2b, which removed it: see Stage 20 on the model). The core no longer holds a plug-in's early-bound `Entity`: it works on the `Record`, and the stored row and the async
   payload are unchanged.
 
 The read path shapes `Record`s, and that moves the cost of a read. A direct SDK caller (the TDS endpoint, MCP, Host and Admin
@@ -438,7 +438,7 @@ The budget is +10%. The SDK twin read is over it in one round of three, and the 
 step meets the budget. Each caller that reads through the SDK twin stops paying it when its own step moves to the model (S.2f for
 the Web API, S.2h for MCP and Host).
 
-The SDK usage count of Core is 55 and that of Abstractions is 8; Pipeline stays 30. S.2e3c1 moves the other core messages, S.2e3c2a the guard and the Security row rules (S.2e3c2b the rest of stage 20), and
+The SDK usage count of Core is 55 and that of Abstractions is 8; Pipeline stays 30. S.2e3c1 moves the other core messages, S.2e3c2a the guard and the Security row rules (S.2e3c2b the rest of stage 20, done), and
 S.2e3c3 `OrganizationService` and `RetrieveMultipleModelRequest`, removes the core entry adapter and the SDK extension methods, and
 moves the callers outside the pipeline to their own boundary.
 
@@ -514,7 +514,7 @@ byte-identical to the code before S.2e3c1, and so are the fault texts and the CL
   `ChangeTracker` still answers with the SDK `BusinessEntityChanges`, built by a bridge, because it has no model twin yet.
 - **The held window.** The model request is current when the core runs a moved message, so the core no longer uses the held SDK
   request for them. The pipeline still holds a window for the moved messages that go through it, which costs one write and one read
-  of the request, as before; the core ignores it. S.2e3c2b removes it together with stage 20.
+  of the request, as before; the core ignores it. S.2e3c2b removed it for the core's model messages (see below).
 - **Images.** `RetrieveImageAsync` reads the image on the model (`ReadImageAsync`). When the pipeline named a mirror for the read
   (`CoreHandOff.ReadImagesWith`), the record is written out into that mirror once, so its SDK twin there is the core's own `Entity`
   and an image still costs one conversion.
@@ -528,7 +528,7 @@ The SDK usage count of Core is 51 (55 before S.2e3c1): `RecordTeams.cs`, `Access
 S.2e3c2 is split in two. S.2e3c2a moves the stage-20 guard (`SecurityGuard`) and the Security row rules (`SystemTableRules`,
 `CurrencyRules`, `DuplicateRuleRules`, `EnvironmentVariableRules`, `OrganizationSettingRules`, `RollupJobRules`, `AccessTeamRules`
 and `SecurityAdministration`) onto `Request`, `Record`, `RecordReference` and `TableDefinition`, runs the guard on the pipeline's
-model request and removes the Security bridges of `CoreSdkBridges`. S.2e3c2b moves the rest of stage 20 (see the table above).
+model request and removes the Security bridges of `CoreSdkBridges`. S.2e3c2b moved the rest of stage 20 (see below).
 External contracts do not change: the response, row, plug-in context, remote context, metadata and row parameter goldens are
 byte-identical to the code before S.2e3c2a, and so are the new guard fault goldens in `tests/fixtures/guard-fault-golden/` (45
 scenarios, written on the code before the move by `GuardFaultGoldenTests`: the fault, the request after the call and the rows written,
@@ -562,10 +562,10 @@ on SQL Server and PostgreSQL).
 
   | SDK twin | Why it stays |
   |---|---|
-  | `SecurityGuard.AuthorizeAsync(OrganizationRequest, …)` | `SolutionCascadeDeleter`, `SolutionUninstaller` and the pipeline's create-only Upsert (until S.2e3c2b); it also carries the request's `CascadeHint` onto the model request |
+  | `SecurityGuard.AuthorizeAsync(OrganizationRequest, …)` | `SolutionCascadeDeleter` and `SolutionUninstaller` only (the pipeline's create-only Upsert guards the model request since S.2e3c2b); it also carries the request's `CascadeHint` onto the model request |
   | `SecurityGuard.AuthorizeAsync(Request, SdkMirror, …)` | The pipeline's crossing form (below) |
   | `SecurityGuard.DemandAccessAsync(Caller, EntityReference, AccessRights, …)` | The workflows (`WorkflowActivation`, `ExecuteWorkflow`), `IncomingEmailImporter`, `SolutionUninstaller`, `SolutionCascadeDeleter` |
-  | `SystemTableRules.EnforceAsync(OrganizationRequest, …)`, `DemandValidProcessWrite(string, Entity, Caller)` | `SolutionImporter`, `SolutionCascadeDeleter`, the stage-20 process write check of the pipeline and `IWorkflowPipelineHook` (until S.2e3c2b), tests |
+  | `SystemTableRules.EnforceAsync(OrganizationRequest, …)` | `SolutionImporter`, `SolutionCascadeDeleter`, tests (the `DemandValidProcessWrite` twin was removed in S.2e3c2b: its only caller, the pipeline, runs the model member) |
   | `CurrencyRules.DemandRateInRange(Entity)` | Tests |
   | `AccessTeamRules.MarkChecked(OrganizationRequest, …)`, `CopyMark`, the `RecordTeamTarget(EntityMetadata, …, AccessRights, …)` constructor | The handshake test of `RecordTeamTests`, which marks an SDK request |
   | `SecurityAdministration.AddRoleAsync`, `RemoveRoleAsync`, `AddProfileAsync` (`EntityReference`), `RolePrivilegesAsync` (`RolePrivilege`), `FromSdk` | The migration `SecurityPhase`, tests. `RolePrivilegesAsync` keeps its SDK form because C# cannot overload on the return type; the model member is `RoleGrantsAsync` |
@@ -613,8 +613,8 @@ on SQL Server and PostgreSQL).
   Rollups and Files bridges stay.
 
 The pipeline path converts nothing more: the counts of `PipelineModelBoundaryTests` do not change. The SDK twins convert one small
-request (a Delete of one reference, a Create of one target) for the solution uninstall and create-only Upsert callers, and the
-workflow Target for `DemandValidProcessWrite` (until S.2e3c2b). Three more twin conversions are new on callers that ran the SDK rules
+request (a Delete of one reference, a Create of one target) for the solution uninstall callers, and the
+workflow Target for `DemandValidProcessWrite` (until S.2e3c2b, which removed that twin). Three more twin conversions are new on callers that ran the SDK rules
 without one before: `SystemTableRules.EnforceAsync(OrganizationRequest, …)` reads in each request of a known message, once per imported
 row in `SolutionImporter` and, together with the `AuthorizeAsync` twin, twice per delete in `SolutionCascadeDeleter`, and the
 `DemandAccessAsync` twin reads in one reference for Workflows and incoming mail.
@@ -622,6 +622,87 @@ row in `SolutionImporter` and, together with the `AuthorizeAsync` twin, twice pe
 The SDK usage count of Security is 6 (13 before S.2e3c2a): `PrivilegeCatalog` and `SecurityCache` (the SDK-typed metadata hooks),
 `Sdk/SdkSecurityTwins.cs`, `Sdk/SdkSecurityTypes.cs`, `Sdk/SecurityRules.Sdk.cs` and `Sdk/SecurityGuard.Sdk.cs`. Core stays 51,
 Abstractions 8 and Pipeline 30.
+
+### Stage 20 on the model (S.2e3c2b)
+
+S.2e3c2b moves the rest of stage 20 onto the model request: the custom API authoring, the registration validation, the process
+writes, the service endpoint checks and the mail secrets run on `Request`, `Record`, `RecordReference` and `ChoiceValue`, as the
+guard has since S.2e3c2a, and the held window of the core's model messages is gone. External contracts do not change: the Web API,
+SOAP, webhook and `asyncoperation.data` bytes, the stored rows, the audit rows, the fault codes and texts and the in-place changes to
+the caller's request are the same as before. The response, row, plug-in context, remote context, metadata, row parameter and guard
+fault goldens are byte-identical, and 33 new goldens in `tests/fixtures/stage20-golden/` (`Stage20GoldenTests`, written on the code
+before the step) pin each check's request after, rows, secrets and fault. They cover the custom API, registration, process, service
+endpoint and mail scenarios and the real-time workflow owner.
+
+- **Model members.** Every check reads and sets model values. A read that replaced a `GetAttributeValue<T>` uses
+  `SdkValue<T>(this Record, string)` (see S.2e3c2a), so a wrong-typed value keeps the `InvalidCastException` text with the SDK type
+  names that reaches a plug-in through the sandbox gate. A member that answers `bool` answers true when it changed its Target.
+
+  | Check | Model member |
+  |---|---|
+  | Custom API authoring | `CustomApiAuthoring.BeforeCreateAsync(Request, Record, DataSession, …) : Task<bool>`, `BeforeUpdateAsync(Record, Record, …) : Task<bool>`, `BeforeDeleteAsync(RecordReference, …) : Task<Guid?>`; its own writes are model requests through `ExecuteCoreAsync` with `CoreCall(Caller.Internal, …)` |
+  | Registration validation | `RegistrationValidator.ValidateAsync(string, Record, Record?, DataSession, …) : Task<bool>`, `DemandNotEventHandlerAssociate(Request)` |
+  | Process writes | `SystemTableRules.DemandValidProcessWrite(string, Record, Caller)`, the workflow `type` default as `ChoiceValue(1)`, the Workflows hook (below) |
+  | Service endpoints | `ServiceEndpointRules.ValidateAsync(Record, Record?, bool, WebhookSecrets, DataSession, …)`, `EndpointProblem(Record, bool)`; `WebhookSecrets.TakeAsync(Record, DataSession, …) : Task<Guid?>` (a non-null answer means the Target changed) |
+  | Mail secrets | `PendingMailSecrets.Extract(Record, TableDefinition)`, `Strip(Record, TableDefinition) : bool`, `StripRequest(Request, TableDefinition) : bool`, `Claim(Record)`, `Carry(Record, Record)`, `Carries(Record)` |
+
+  The stored images the checks read, and the owner lookup of real-time workflows, come from `RetrieveImageAsync` with no mirror named
+  and convert nothing. `SdkImageAsync` is removed.
+- **SDK twins.** The classes are `partial` and their SDK twins are in `src/Xrmd.Pipeline/Sdk/StageChecks.Sdk.cs`. A twin keeps the
+  old name and signature, reads its arguments in with a mirror of its own, calls the model member and writes back into the caller's
+  objects what the member changed. Twins stay only for callers outside the pipeline:
+
+  | Twin | Callers |
+  |---|---|
+  | `RegistrationValidator.ValidateAsync(string, Entity, Entity?, …)` | `SolutionImporter` (S.2g) |
+  | `ServiceEndpointRules.EndpointProblem(Entity, bool)` | `ServiceEndpointRulesTests` |
+  | `WebhookSecrets.TakeAsync(Entity, …)` | `UpsertInterleavingTests` (PostgreSQL) |
+  | `StandardUpsert.MarkCreateOnly(OrganizationRequest)`, `IsCreateOnly(OrganizationRequest)` | `OrganizationService` (S.2e3c3) |
+
+  The twins only the pipeline called are removed, including the SDK `DemandValidProcessWrite` and the SDK forms of the custom API
+  `Before*` members. `CustomApiAuthoring.AfterDeleteAsync` sends model requests and has no twin.
+- **Write-back after the checks.** `HoldChecksMayWrite`, which wrote the request out before the checks of its tables and read it back
+  after them, is removed. The checks run on `run.Request`; when one answers true, the pipeline writes the model request out once
+  (`mirror.Out`), so the caller's Target holds what it held before: the custom API defaults and `sdkmessageid`, the registration
+  fills, a workflow's `type` 1, an endpoint's id and `isauthvalueset` without `authvalue`, and the Targets without their mail
+  secrets. When a check refuses, the model is written out if the table is one a check writes (the private `StageCheckTables`: the
+  custom API and registration tables, `workflow`, `processtrigger`, `serviceendpoint` and the tables with mail secret columns), so a
+  refusal after a partial change leaves the caller's Target as before. Nothing is written out for another table, and a check that
+  changed nothing crosses nothing, except the Workflows hook, which is always called through its lent view. The write-out keeps the caller's column order: `SdkRecords.Refill` of a `DataCollection` removes the
+  keys the model lacks and sets the others in the model's order, so kept columns stay where they were and a new column takes a freed
+  slot, as a direct write on the `Entity` did (`Checks_keep_the_caller_column_order` pins it).
+- **The Workflows hook behind its lent view.** `IWorkflowPipelineHook` keeps its SDK signatures (S.2h). The pipeline calls
+  `ValidateWriteAsync` through a lend of the context (`LentAsync`) with the view's `Target`: the caller's own `Entity`, written from
+  the model by the lend and read back on return, as for every other hook. `OnSetStateAsync` and `OnAssignedAsync` take ids and are
+  called directly. The lend is new on `workflow` writes only.
+- **Mail secrets keyed on the `Record`.** `PendingMailSecrets` keys its pending values on the model Target. The core claims them with
+  `PendingMailSecrets.Claim(Record)` in its model Create and Update (`CoreOperations.Messages.cs`); only the pipeline strips, and it
+  strips the model request (`StripRequest`) after the other checks of stage 20. `CoreSdkBridges.TakeMailSecrets` calls the model `Extract` without
+  crossing. The SDK twins `CoreOperations.CreateAsync` and `UpdateAsync` no longer claim. The secrets are carried at the crossing: a
+  bulk inner execution's Target is the same `Record` the outer Targets held, and an Upsert's inner Create or Update gets the outer
+  Target's values when its request crosses in (`PendingMailSecrets.Carry`), not in `StandardUpsert.Copy`. A write of a mail table
+  that carries no secret no longer crosses at all.
+- **Marks on the model request.** `InnerExecution.Mark(Request, InnerKind)` and `KindOf(Request)` and
+  `StandardUpsert.MarkCreateOnly(Request)` and `IsCreateOnly(Request)` key the model request; `InnerExecution.cs` names no SDK type.
+  `RunInnerAsync` passes an `InnerRun(Kind, SecretsFrom)` to a private `ExecuteAsync`, and `RunAsync` marks the model request right
+  after the crossing. The SDK form of the create-only mark keeps its own table, and `RunAsync` copies it onto the model request at the
+  crossing (`StandardUpsert.CopyCreateOnly`), as it copies `AuditActionHint`. The create-only guard of an Upsert runs
+  `AuthorizeAsync(Request, …)` on the model Target after the stage-20 checks and writes that Target out when the guard changed it.
+- **`AnswersOnModel`.** `IPipelineCore.AnswersOnModel(string messageName)` is true for a core message that is not in
+  `CoreSdkMessages.Bridged` (`CoreOperations`, case-insensitive; the test wrappers delegate). `Run.CoreOnModel` is computed once in
+  `RunAsync`: it is false for a custom action or API, an Upsert, a bulk message and `ExecuteWorkflow`, whose stage 30 is not the core's
+  model dispatch. The checks run first, then the held window opens (one `Out`) only when `CoreOnModel` is false: the window carries
+  what the checks wrote, and a message the core answers on the model has no window at all, so the SDK request is no longer written and
+  read for it.
+- **Conversions removed.** A message the core answers on the model loses the window's `Out` and `In` of its request. A write of a
+  check table loses the `Out` before the checks and the `In` after them; one `Out` remains when a check wrote. Each stage-20 image and
+  the real-time owner lookup convert nothing. The counts of `PipelineModelBoundaryTests` do not change.
+- **Other changes.** `SecurityGuard.MayChange` is internal and shared with the create-only guard, which runs on the model Target after the
+  checks, as the SDK guard read the SDK Target after them before. `Xrmd.Security` gives `InternalsVisibleTo` to `Xrmd.Pipeline` for `SdkValue<T>`.
+
+The SDK usage counts are Core 51, Abstractions 8, Pipeline 25 (30 before S.2e3c2b: `InnerExecution.cs`, `CustomApiAuthoring.cs`,
+`RegistrationValidator.cs`, `ServiceEndpointRules.cs`, `WebhookSecrets.cs` and `PendingMailSecrets.cs` name no SDK type any more, and
+the twins are the new `Sdk/StageChecks.Sdk.cs`) and Security 6.
 
 The view is transitional. The other modules move to the model in S.2d to S.2h, and S.2i removes the view, the twins and the bridge.
 

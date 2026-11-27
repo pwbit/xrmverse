@@ -1,0 +1,29 @@
+=== PipelineExecutor.ExecuteAsync as the System Administrator ===
+--- request ---
+Request: DeleteRequest
+  RequestName: String:"Delete"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: EntityReference
+      LogicalName: String:"customapi"
+      Id: Guid:{a:api}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- fault ---
+Fault: XrmdFaultException 0x80040203 400 "Custom API 'new_S20Stepped' cannot be deleted: the step 'new_S20Stepped::40:1' ({a:step}) is registered on its message. Delete the step first."
+--- request after ---
+Request: DeleteRequest
+  RequestName: String:"Delete"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: EntityReference
+      LogicalName: String:"customapi"
+      Id: Guid:{a:api}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- rows ---
+custom API: uniquename="new_S20Stepped", name="new_S20Stepped", isprivate=false, isfunction=false, bindingtype=0, allowedcustomprocessingsteptype=2, workflowsdkstepenabled=false, sdkmessageid={id1}
+message: name="new_S20Stepped", categoryname="CustomAPI", isprivate=false
+filters of the message: filters=1

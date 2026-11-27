@@ -1,0 +1,52 @@
+=== PipelineExecutor.ExecuteAsync as the System Administrator ===
+--- request ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(customapirequestparameter)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[4]
+        uniquename: String:"Text"
+        name: String:"Text"
+        type: OptionSetValue
+          Value: Int32:10
+        customapiid: EntityReference
+          LogicalName: String:"customapi"
+          Id: Guid:{a:api}
+          Name: null
+          KeyAttributes: KeyAttributeCollection[0]
+          RowVersion: null
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- fault ---
+none
+--- request after ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(customapirequestparameter)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[5]
+        uniquename: String:"Text"
+        name: String:"Text"
+        type: OptionSetValue
+          Value: Int32:10
+        customapiid: EntityReference
+          LogicalName: String:"customapi"
+          Id: Guid:{a:api}
+          Name: null
+          KeyAttributes: KeyAttributeCollection[0]
+          RowVersion: null
+        isoptional: Boolean:False
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- rows ---
+request parameters of the API: uniquename="Text", type=10, isoptional=false, customapiid={a:api}

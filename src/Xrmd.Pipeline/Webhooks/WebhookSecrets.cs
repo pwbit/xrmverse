@@ -1,9 +1,10 @@
 using System.Data;
-using Microsoft.Xrm.Sdk;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
+using Xrmd.Model.Records;
+using Xrmd.Security;
 
 namespace Xrmd.Pipeline.Webhooks;
 
@@ -13,7 +14,7 @@ namespace Xrmd.Pipeline.Webhooks;
 /// set. The value is read back only to deliver a webhook (and to check an Update as the row will be). It never appears in a log or
 /// a fault.
 /// </summary>
-public sealed class WebhookSecrets
+public sealed partial class WebhookSecrets
 {
     private const string SecretTable = "meta.serviceendpoint_secret";
 
@@ -23,9 +24,10 @@ public sealed class WebhookSecrets
     /// write a read-only column: <see cref="MarkSetAsync"/> writes it after the core operation). A Create without an id is given one,
     /// the key of the secret row. Nothing happens when the target has no <c>authvalue</c> (an Update keeps the stored value).
     /// </summary>
-    /// <returns>The endpoint id whose value was taken, or null when the target had none.</returns>
+    /// <returns>The endpoint id whose value was taken, or null when the target had none. A non-null answer means the target changed
+    /// (S.2e3c2b, ruling P6); a refusal changes nothing in it.</returns>
     /// <exception cref="XrmdFaultException">400 <c>InvalidArgument</c> "needs an authvalue" for an empty or blank value.</exception>
-    public async Task<Guid?> TakeAsync(Entity target, DataSession s, CancellationToken ct)
+    public async Task<Guid?> TakeAsync(Record target, DataSession s, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(s);
@@ -34,7 +36,7 @@ public sealed class WebhookSecrets
             : target.Attributes.TryGetValue(SystemAttributes.PrimaryIdName(ServiceEndpointSchema.Table), out var given) && given is Guid g ? g
             : Guid.NewGuid();
         if (raw is not string value || string.IsNullOrWhiteSpace(value))
-            throw XrmdFaultException.InvalidArgument(ServiceEndpointRules.NeedsAuthValue(target.GetAttributeValue<string>("name") ?? id.ToString()));
+            throw XrmdFaultException.InvalidArgument(ServiceEndpointRules.NeedsAuthValue(target.SdkValue<string>("name") ?? id.ToString()));
 
         target.Attributes.Remove(ServiceEndpointSchema.AuthValue);
         target.Id = id;
@@ -56,7 +58,7 @@ public sealed class WebhookSecrets
         return id;
     }
 
-    /// <summary>Writes <c>isauthvalueset</c> = 1 on the stored endpoint, after the core operation of a <see cref="TakeAsync"/>.</summary>
+    /// <summary>Writes <c>isauthvalueset</c> = 1 on the stored endpoint, after the core operation of a <see cref="TakeAsync(Record, DataSession, CancellationToken)"/>.</summary>
     public async Task MarkSetAsync(Guid endpointId, DataSession s, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(s);

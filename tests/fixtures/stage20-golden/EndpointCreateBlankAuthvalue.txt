@@ -1,0 +1,47 @@
+=== PipelineExecutor.ExecuteAsync as the System Administrator ===
+--- request ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(serviceendpoint)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[5]
+        name: String:"s20 blank"
+        contract: OptionSetValue
+          Value: Int32:8
+        authtype: OptionSetValue
+          Value: Int32:4
+        url: String:"https://hooks.example.invalid/receive"
+        authvalue: String:""
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- fault ---
+Fault: XrmdFaultException 0x80040203 400 "Webhook 's20 blank' needs an authvalue."
+--- request after ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(serviceendpoint)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[5]
+        name: String:"s20 blank"
+        contract: OptionSetValue
+          Value: Int32:8
+        authtype: OptionSetValue
+          Value: Int32:4
+        url: String:"https://hooks.example.invalid/receive"
+        authvalue: String:""
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- rows ---
+service endpoints: none
+--- secrets ---
+meta.serviceendpoint_secret: none

@@ -1,0 +1,59 @@
+=== PipelineExecutor.ExecuteAsync as the System Administrator ===
+--- request ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(workflow)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[9]
+        name: String:"s20 type 2"
+        type: OptionSetValue
+          Value: Int32:2
+        category: OptionSetValue
+          Value: Int32:0
+        mode: OptionSetValue
+          Value: Int32:1
+        scope: OptionSetValue
+          Value: Int32:4
+        primaryentity: String:"xrmv_order"
+        triggeroncreate: Boolean:True
+        createstage: OptionSetValue
+          Value: Int32:40
+        xaml: String:{xaml of the parity export's OnCreate}
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- fault ---
+Fault: XrmdFaultException 0x80040203 400 "Create of 'workflow' is refused: Only a definition (type 1) is written, not type 2: activations are made by SetState."
+--- request after ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(workflow)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[9]
+        name: String:"s20 type 2"
+        type: OptionSetValue
+          Value: Int32:2
+        category: OptionSetValue
+          Value: Int32:0
+        mode: OptionSetValue
+          Value: Int32:1
+        scope: OptionSetValue
+          Value: Int32:4
+        primaryentity: String:"xrmv_order"
+        triggeroncreate: Boolean:True
+        createstage: OptionSetValue
+          Value: Int32:40
+        xaml: String:{xaml of the parity export's OnCreate}
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- rows ---
+processes named 's20 type 2': none

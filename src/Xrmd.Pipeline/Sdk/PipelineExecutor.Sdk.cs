@@ -32,9 +32,10 @@ namespace Xrmd.Pipeline;
 /// <summary>
 /// The SDK side of the <see cref="PipelineExecutor"/> (S.2e2c, Decision 4): the public entry on an <see cref="OrganizationRequest"/>,
 /// which crosses the request into the model through the chain's <see cref="SdkMirror"/> and back; the checks that work on SDK values
-/// (the guard, the custom API and action validation, the primary entity); the boundary of stages 20 and 30, where the core, the internal
-/// checks and the hooks work on the SDK request (<see cref="HoldAtCoreAsync"/> writes the model into it once, <see cref="ReleaseCore"/>
-/// reads it back once); the images the core reads; the response.
+/// (the custom API and action validation, the primary entity); the boundary of stages 20 and 30, where the internal checks run on the
+/// model request (S.2e3c2b) and, for a message the core does not answer on the model, the core and the hooks work on the SDK request
+/// (<see cref="HoldAtCoreAsync"/> writes the model into it once, <see cref="ReleaseCore"/> reads it back once); the images the core
+/// reads; the response.
 /// </summary>
 public sealed partial class PipelineExecutor
 {
@@ -81,10 +82,12 @@ public sealed partial class PipelineExecutor
         public Response? ModelResponse { get; set; }
 
         /// <summary>
-        /// S.2e3b (Decision 8): true for a CRUD message the core answers on the model request (<see cref="CoreHandOff.IsModelMessage"/>):
-        /// no window is held at the core for it.
+        /// S.2e3b (Decision 8), S.2e3c2b (Decision 8): true when stage 30 is the core's dispatch of a message it answers on the model
+        /// request (<see cref="IPipelineCore.AnswersOnModel"/>: the CRUD messages and the messages S.2e3c1 moved): no window is held at
+        /// the core for it. Not for a custom action or API, an Upsert or bulk message on a standard table, or <c>ExecuteWorkflow</c>,
+        /// whose stage 30 is not the core's dispatch (pre-flight ruling P3).
         /// </summary>
-        public bool CoreOnModel => !CustomAction && UpsertTable is null && BulkTable is null && CoreHandOff.IsModelMessage(Message);
+        public required bool CoreOnModel { get; init; }
 
         /// <summary>The model response the core answered with (<see cref="CoreOperationAsync"/>); null for any other stage 30.</summary>
         public Response? CoreResponse { get; set; }
@@ -132,7 +135,22 @@ public sealed partial class PipelineExecutor
     /// <exception cref="InvalidOperationException"><see cref="InvocationContext.Parent"/> is set without
     /// <see cref="InvocationContext.Mirror"/> (a server bug), server values on a message other than Create, or a migration scope is
     /// active.</exception>
-    public async Task<OrganizationResponse> ExecuteAsync(OrganizationRequest request, InvocationContext invocation, CancellationToken ct)
+    public Task<OrganizationResponse> ExecuteAsync(OrganizationRequest request, InvocationContext invocation, CancellationToken ct) =>
+        ExecuteAsync(request, invocation, null, ct);
+
+    /// <summary>
+    /// What makes a run an inner execution (#76, ruling B4; S.2e3c2b, Decision 7): its <see cref="InnerKind"/>, marked on the model request
+    /// right after the crossing (<see cref="InnerExecution.Mark"/>), and the model Target whose pending mail secrets the inner Target gets
+    /// (an Upsert's; null for any other run).
+    /// </summary>
+    private sealed record InnerRun(InnerKind Kind, Record? SecretsFrom);
+
+    /// <summary>
+    /// <see cref="ExecuteAsync(OrganizationRequest, InvocationContext, CancellationToken)"/>, as the inner execution <paramref name="inner"/>
+    /// (<see cref="RunInnerAsync"/>) or as an ordinary one (null).
+    /// </summary>
+    private async Task<OrganizationResponse> ExecuteAsync(OrganizationRequest request, InvocationContext invocation, InnerRun? inner,
+        CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(invocation);
@@ -183,9 +201,9 @@ public sealed partial class PipelineExecutor
         if (parent is not null) PluginContextAdapter.Sync(parent, mirror);
         try
         {
-            if (invocation.Session is { } session) return await RunAsync(request, invocation, session, customAction, api, action, ct);
+            if (invocation.Session is { } session) return await RunAsync(request, invocation, session, customAction, api, action, inner, ct);
             await using var conn = await factory.OpenAsync(ct);
-            return await RunAsync(request, invocation, new DataSession(conn, null), customAction, api, action, ct);
+            return await RunAsync(request, invocation, new DataSession(conn, null), customAction, api, action, inner, ct);
         }
         finally
         {
@@ -232,7 +250,7 @@ public sealed partial class PipelineExecutor
     /// whose output arguments are the response. <c>ExecuteWorkflow</c>'s stage 30 is <see cref="IWorkflowPipelineHook.ExecuteWorkflowAsync"/> (W21).
     /// </remarks>
     private async Task<OrganizationResponse> RunAsync(OrganizationRequest request, InvocationContext invocation,
-        DataSession session, bool customAction, CustomApiDefinition? api, ActionDefinition? action, CancellationToken ct)
+        DataSession session, bool customAction, CustomApiDefinition? api, ActionDefinition? action, InnerRun? inner, CancellationToken ct)
     {
         // Plan 4.1c: a plug-in or workflow that changed a reserved shared variable makes no request with it changed (its own step fails
         // after it returns; a request it makes before that, outside a transaction at stage 10, would otherwise be written).
@@ -246,6 +264,12 @@ public sealed partial class PipelineExecutor
         var model = mirror.In(request)!;
         // S.2e3b (Decision 6): the audit action is a mark on the SDK request; the core on the model reads it on the model request.
         if (AuditActionHint.Of(request) is { } auditAction) AuditActionHint.Mark(model, auditAction);
+        // S.2e3c2b (Decision 7): so are the create-only mark of an Upsert (set by its caller on the SDK request) and the inner kind.
+        StandardUpsert.CopyCreateOnly(request, model);
+        if (inner is not null) InnerExecution.Mark(model, inner.Kind);
+        // Decision 6: the mail secrets an Upsert's stage 20 took out of its model Target belong to its inner Create or Update.
+        if (inner?.SecretsFrom is { } secretsFrom && model.Parameters.TryGetValue(Target, out var innerTarget) && innerTarget is Record carried)
+            PendingMailSecrets.Carry(secretsFrom, carried);
         // S.2e3a: the model request carries its chain mirror, so the core converts with it (twins and typed responses keep their identity).
         SdkMirror.Register(model, mirror);
         // The request's own collection is the SDK side of its parameters: every view's InputParameters is that collection. A request
@@ -306,8 +330,10 @@ public sealed partial class PipelineExecutor
             BulkTable = bulkTable,
             // #76, ruling B5: a Create/Update on a standard table also runs the steps of its bulk message (MergedSteps).
             StandardTable = messageTable is not null && !ElasticTables.IsElastic(messageTable),
-            BulkInner = InnerExecution.KindOf(request) == InnerKind.Bulk,
+            BulkInner = InnerExecution.KindOf(model) == InnerKind.Bulk,
             MapsOutput = ReadMessages.Contains(message),
+            CoreOnModel = !customAction && upsertTable is null && bulkTable is null
+                          && !string.Equals(message, ExecuteWorkflowMessage, StringComparison.OrdinalIgnoreCase) && core.AnswersOnModel(message),
         };
         await RunStagesAsync(run, ct);
         return FinishResponse(run);
@@ -319,66 +345,111 @@ public sealed partial class PipelineExecutor
 
     // ---- the stage-20/30 boundary -----------------------------------------------------------------------------------------------
 
+    /// <summary>Test seam: called with each model request the internal checks of stage 20 run on (<see cref="HoldAtCoreAsync"/>).</summary>
+    internal static readonly AsyncLocal<Action<Request>?> StageChecked = new();
+
     /// <summary>
-    /// The check of a public write of a process before the pre-operation plug-ins see it (plan 2.21, A16), on the SDK request (which
-    /// the views of stage 10 left current); what it set in the Target is read back into the model.
+    /// The check of a public write of a process before the pre-operation plug-ins see it (plan 2.21, A16), on the model request (which
+    /// the views of stage 10 left current). S.2e3c2b (Decision 4): the model is written out once when the check changed its Target (a
+    /// workflow's <c>type</c> 1), and on a refusal (<see cref="StageCheckTables"/>), so the caller's Target holds what it holds today.
     /// </summary>
     private async Task ValidateProcessWriteAsync(Run run, CancellationToken ct)
     {
-        if (await ValidateWorkflowWriteAsync(run.Sdk, run.Invocation.Caller, run.EntityName, run.Session, ct) is not null)
-            run.Mirror.In(run.Sdk);
+        bool wrote;
+        try
+        {
+            (_, wrote) = await ValidateWorkflowWriteAsync(run, ct);
+        }
+        catch (Exception) when (StageCheckTables.Contains(run.EntityName))
+        {
+            run.Mirror.Out(run.Request);
+            throw;
+        }
+        if (wrote) run.Mirror.Out(run.Request);
     }
 
     /// <summary>
-    /// The start of the boundary (Decision 4), after the pre-operation steps: the model request is written into the SDK request once,
-    /// which the core holds from here, then the internal checks of stage 20 run on it (custom API authoring, registration, process
-    /// writes, service endpoints, the mail secrets).
+    /// The start of the boundary (Decision 4), after the pre-operation steps: the internal checks of stage 20 run on the model request
+    /// (custom API authoring, registration, process writes, service endpoints, then the mail secrets leave it), then the window of a
+    /// message the core does not answer on the model opens: the model request is written into the SDK request once, which the core holds
+    /// from here.
     /// </summary>
     /// <remarks>
-    /// S.2e3b (Decision 8): a CRUD message (<see cref="Run.CoreOnModel"/>) runs on the model request, so no window is held for it. The SDK
-    /// request is current here (every view's <c>InputParameters</c> is its collection, read back after each step), so the checks run on
-    /// it as it is. A check that writes the request (the tables of <see cref="HoldChecksMayWrite"/>) gets it written out first and read
-    /// back after, as today; for any other table the request does not cross here.
+    /// S.2e3c2b (Decisions 2 and 4): the model request is current here (every view's <c>InputParameters</c> is read back after each
+    /// step), so the checks run on it as it is, in today's order, the first fault winning. When a check changed it (the custom API
+    /// defaults and <c>sdkmessageid</c>, the registration fills, a workflow's <c>type</c>, an endpoint's id and <c>isauthvalueset</c>
+    /// without <c>authvalue</c>, a Target without its mail secrets), the model is written out once, so the caller's request holds
+    /// what it holds today, its attributes in today's order (the write-out removes and sets by key: <c>SdkRecords.Refill</c>); on a refusal it is written out for a table a check writes (<see cref="StageCheckTables"/>: a refusal after a
+    /// partial change leaves the caller's Target as today), and for no other table. A check that changed nothing crosses nothing; the
+    /// stored rows the checks read are read by the core with no mirror (<see cref="StoredImageAsync"/>).
+    /// S.2e3b and S.2e3c2b (Decision 8): a message the core answers on the model (<see cref="Run.CoreOnModel"/>: the CRUD messages and
+    /// the messages S.2e3c1 moved) runs on the model request, so no window is held for it. For any other message the window opens after
+    /// the checks, with the one <c>Out</c> that also carries what they changed, so the SDK request the core holds (stage 30 of Upsert
+    /// and bulk) carries no secret.
     /// </remarks>
     private async Task HoldAtCoreAsync(Run run, CancellationToken ct)
     {
-        var onModel = run.CoreOnModel;
-        var crosses = !onModel || HoldChecksMayWrite(run.EntityName);
-        if (crosses) run.Mirror.Out(run.Request);
-        if (!onModel)
-        {
-            // A nested request on the caller's own collection shares the caller's bag: only the execution that registered it removes it.
-            run.HeldAtCore = true;
-            run.OwnsAtCore = !AtCore.TryGetValue(run.Request.Parameters, out _);
-            if (run.OwnsAtCore) AtCore.Add(run.Request.Parameters, run.Sdk.Parameters);
-            run.OwnsHeld = CoreHandOff.Hold(run.Request, run.Sdk);
-        }
-        if (run.CustomAction) return;
-        var request = run.Sdk;
-        var caller = run.Invocation.Caller;
-        run.ApiMessage = await AuthorCustomApiAsync(request, caller, run.EntityName, run.EntityId, run.Session, ct);
-        await ValidateRegistrationAsync(request, run.EntityName, run.EntityId, run.Session, ct);
-        await CheckWorkflowWriteAsync(request, caller, run.EntityName, run.EntityId, run.Session, ct);
-        run.WebhookSecret = await AuthorServiceEndpointAsync(request, run.EntityName, run.EntityId, run.Session, ct);
-        // Plan 4.1b: a mail secret leaves the Target (or the Targets of a bulk message) for good here, whatever the message that
-        // writes it: the stage-40, asynchronous and webhook contexts, and the ParentContext of an inner Create, Update or Upsert,
-        // never hold it (an Upsert's inner Create or Update gets the value through PendingMailSecrets.Carry).
-        if (run.EntityName is not null && metadata.GetEntity(run.Session, run.EntityName) is { } mailTable)
-            PendingMailSecrets.StripRequest(request, mailTable);
-        if (onModel && crosses) run.Mirror.In(run.Sdk);
+        if (!run.CustomAction) await StageChecksAsync(run, ct);
+        if (run.CoreOnModel) return;
+        run.Mirror.Out(run.Request);
+        // A nested request on the caller's own collection shares the caller's bag: only the execution that registered it removes it.
+        run.HeldAtCore = true;
+        run.OwnsAtCore = !AtCore.TryGetValue(run.Request.Parameters, out _);
+        if (run.OwnsAtCore) AtCore.Add(run.Request.Parameters, run.Sdk.Parameters);
+        run.OwnsHeld = CoreHandOff.Hold(run.Request, run.Sdk);
     }
 
     /// <summary>
-    /// True for a table whose internal checks of stage 20 may write the request (<see cref="HoldAtCoreAsync"/>): the custom API tables
+    /// The internal checks of stage 20 on <see cref="Run.Request"/> (<see cref="HoldAtCoreAsync"/>), with the write-back of Decision 4:
+    /// one <c>Out</c> of the model when a check changed it and the core answers on the model (the window's own <c>Out</c> carries it
+    /// otherwise), one on a refusal of a request of <see cref="StageCheckTables"/>.
+    /// </summary>
+    private async Task StageChecksAsync(Run run, CancellationToken ct)
+    {
+        StageChecked.Value?.Invoke(run.Request);
+        bool changed;
+        try
+        {
+            changed = await AuthorCustomApiAsync(run, ct);
+            changed |= await ValidateRegistrationAsync(run, ct);
+            changed |= await CheckWorkflowWriteAsync(run, ct);
+            changed |= await AuthorServiceEndpointAsync(run, ct);
+            changed |= StripMailSecrets(run);
+        }
+        catch (Exception) when (StageCheckTables.Contains(run.EntityName))
+        {
+            run.Mirror.Out(run.Request);
+            throw;
+        }
+        if (changed && run.CoreOnModel) run.Mirror.Out(run.Request);
+    }
+
+    /// <summary>
+    /// Plan 4.1b: a mail secret leaves the Target (or the Targets of a bulk message) for good here, whatever the message that writes it:
+    /// the stage-40, asynchronous and webhook contexts, and the <c>ParentContext</c> of an inner Create, Update or Upsert, never hold it
+    /// (an Upsert's inner Create or Update gets the value when its request crosses in, <see cref="PendingMailSecrets.Carry"/>). S.2e3c2b
+    /// (Decision 6): the strip runs on the model request. Returns true when a Target changed.
+    /// </summary>
+    /// <exception cref="Core.Errors.XrmdFaultException">A secret that is not a string or is too long (<see cref="PendingMailSecrets.Extract"/>).</exception>
+    private bool StripMailSecrets(Run run) =>
+        run.EntityName is not null && metadata.GetTable(run.Session, run.EntityName) is { } mailTable
+        && PendingMailSecrets.StripRequest(run.Request, mailTable);
+
+    /// <summary>
+    /// The tables whose internal checks of stage 20 may change the Target (Decision 4, pre-flight ruling P5): the custom API tables
     /// (<see cref="AuthorCustomApiAsync"/>), the registration entities (<see cref="ValidateRegistrationAsync"/>), <c>workflow</c> and
     /// <c>processtrigger</c> (<see cref="CheckWorkflowWriteAsync"/>), <c>serviceendpoint</c> (<see cref="AuthorServiceEndpointAsync"/>)
-    /// and a table with mail secret columns (<see cref="PendingMailSecrets.StripRequest"/>). The other checks only read the request.
+    /// and every table with mail secret columns (<see cref="StripMailSecrets"/>). A refusal of a write of one of them writes the model out
+    /// (a check may change the Target before it refuses); the other checks only read the request.
     /// </summary>
-    private static bool HoldChecksMayWrite(string? entityName) =>
-        entityName is not null
-        && (CustomApiTables.All.Contains(entityName) || StepRegistry.RegistrationEntities.Contains(entityName)
-            || entityName is WorkflowSchema.Table or WorkflowSchema.TriggerTable or ServiceEndpointSchema.Table
-            || MailSchema.SecretColumns.Keys.Any(k => k.StartsWith(entityName + ".", StringComparison.Ordinal)));
+    private static class StageCheckTables
+    {
+        public static bool Contains(string? entityName) =>
+            entityName is not null
+            && (CustomApiTables.All.Contains(entityName) || StepRegistry.RegistrationEntities.Contains(entityName)
+                || entityName is WorkflowSchema.Table or WorkflowSchema.TriggerTable or ServiceEndpointSchema.Table
+                || MailSchema.SecretColumns.Keys.Any(k => k.StartsWith(entityName + ".", StringComparison.Ordinal)));
+    }
 
     /// <summary>
     /// The end of the boundary, after stage 30 and its follow-ups (also when they failed): the model reads the SDK request back once.
@@ -446,10 +517,10 @@ public sealed partial class PipelineExecutor
             : run.UpsertTable is { } upsertTable
             ? await StandardUpsert.ExecuteAsync(await CreateOnlyGuardedAsync(request.Parameters.TryGetValue(Target, out var t) && t is Entity upsertTarget ? upsertTarget
                     : throw XrmdFaultException.InvalidArgument($"Required parameter '{Target}' of request '{message}' is missing or not a {nameof(Entity)}."),
-                    StandardUpsert.IsCreateOnly(request), invocation, session, ct),
+                    run, ct),
                 upsertTable, core, session,
                 inner => RunInnerAsync(StandardUpsert.CarryParameters(request, inner), InnerKind.Upsert, run, ct),
-                StandardUpsert.IsCreateOnly(request), ct)
+                StandardUpsert.IsCreateOnly(run.Request), ct)
             : await CoreOperationAsync(run, ct);
         // Plan 2.14 (final review I2): the activation of an assigned definition follows its owner, in the same transaction;
         // so does it after an Update of ownerid, which plan 2.21 (A16) accepts on an Activated definition.
@@ -510,23 +581,38 @@ public sealed partial class PipelineExecutor
     /// <paramref name="kind"/> (<see cref="InnerExecution"/>), in its session and transaction (which it never commits or rolls back:
     /// the outer execution owns it), at the <b>same</b> depth (unlike a plug-in's call), with the outer context as its
     /// <c>ParentContext</c> (a copy that reports the outer's current stage, <see cref="MainOperation"/>: inner runs only happen
-    /// there). Its failure propagates to the outer execution, which rolls the whole transaction back.
+    /// there). Its failure propagates to the outer execution, which rolls the whole transaction back. An Upsert's inner run gets the
+    /// outer model Target, whose mail secrets its own Target takes when it crosses in (Decision 6).
     /// </summary>
-    private Task<OrganizationResponse> RunInnerAsync(OrganizationRequest inner, InnerKind kind, Run run, CancellationToken ct)
-    {
-        InnerExecution.Mark(inner, kind);
-        return ExecuteAsync(inner, run.Invocation with { Session = run.Session, Parent = run.Context.Clone(MainOperation), ServerSetValues = null }, ct);
-    }
+    private Task<OrganizationResponse> RunInnerAsync(OrganizationRequest inner, InnerKind kind, Run run, CancellationToken ct) =>
+        ExecuteAsync(inner, run.Invocation with { Session = run.Session, Parent = run.Context.Clone(MainOperation), ServerSetValues = null },
+            new InnerRun(kind, kind == InnerKind.Upsert && run.Request.Parameters.TryGetValue(Target, out var t) ? t as Record : null), ct);
 
     /// <summary>
-    /// A create-only Upsert (Web API <c>If-None-Match: *</c>) may answer 412 for an existing row, so the caller first passes the
-    /// guard of the Create it would otherwise run: one without the right gets the same 403 whether the row exists or not.
-    /// Returns <paramref name="target"/>.
+    /// A create-only Upsert (Web API <c>If-None-Match: *</c>, its model request marked, <see cref="StandardUpsert.IsCreateOnly(Request)"/>)
+    /// may answer 412 for an existing row, so the caller first passes the guard of the Create it would otherwise run: one without the
+    /// right gets the same 403 whether the row exists or not. S.2e3c2b (Decision 7): the guard runs on a model Create of the Upsert's
+    /// model Target, as the checks of stage 20 left it (they ran on the model, and the window's <c>Out</c> wrote it into
+    /// <paramref name="target"/>, its SDK twin); what the guard changes is written out into <paramref name="target"/>, once when it
+    /// answers true and on a refusal of a request it may have changed first (<see cref="SecurityGuard.MayChange"/>, as the guard's
+    /// crossing form). Returns <paramref name="target"/>.
     /// </summary>
-    private async Task<Entity> CreateOnlyGuardedAsync(Entity target, bool createOnly, InvocationContext invocation, DataSession session,
-        CancellationToken ct)
+    private async Task<Entity> CreateOnlyGuardedAsync(Entity target, Run run, CancellationToken ct)
     {
-        if (createOnly) await guard.AuthorizeAsync(new CreateRequest { Target = target }, invocation.Caller, session, ct);
+        if (!StandardUpsert.IsCreateOnly(run.Request)) return target;
+        var model = (Record)run.Request.Parameters[Target]!;
+        var create = new Request { Name = "Create", Parameters = { [Target] = model } };
+        bool changed;
+        try
+        {
+            changed = await guard.AuthorizeAsync(create, run.Invocation.Caller, run.Session, ct);
+        }
+        catch (Exception) when (SecurityGuard.MayChange(create))
+        {
+            run.Mirror.Out(model);
+            throw;
+        }
+        if (changed) run.Mirror.Out(model);
         return target;
     }
 
@@ -607,73 +693,79 @@ public sealed partial class PipelineExecutor
 
     /// <summary>
     /// The custom API rules of stage 20 (<see cref="CustomApiAuthoring"/>, plan 3.1), for every caller but
-    /// <see cref="Caller.Internal"/>: before a Create, Update or Delete of the custom API tables. Returns the message of a
-    /// custom API being deleted, which <see cref="CustomApiAuthoring.AfterDeleteAsync"/> removes after the core Delete; null
-    /// otherwise. An Update of a missing record is left to the core operation's 404.
+    /// <see cref="Caller.Internal"/>: before a Create, Update or Delete of the custom API tables, on the model request. A Delete of an API
+    /// keeps its message in <see cref="Run.ApiMessage"/>, which <see cref="CustomApiAuthoring.AfterDeleteAsync"/> removes after the core
+    /// Delete. An Update of a missing record is left to the core operation's 404. Returns true when the Target changed.
     /// </summary>
-    private async Task<Guid?> AuthorCustomApiAsync(OrganizationRequest request, Caller caller, string? entityName, Guid entityId,
-        DataSession session, CancellationToken ct)
+    private async Task<bool> AuthorCustomApiAsync(Run run, CancellationToken ct)
     {
-        if (caller == Caller.Internal || entityName is null || !CustomApiTables.All.Contains(entityName)
-            || !request.Parameters.TryGetValue(Target, out var target)) return null;
-        switch (request.RequestName?.ToLowerInvariant())
+        var entityName = run.EntityName;
+        if (run.Invocation.Caller == Caller.Internal || entityName is null || !CustomApiTables.All.Contains(entityName)
+            || !run.Request.Parameters.TryGetValue(Target, out var target)) return false;
+        switch (run.Request.Name?.ToLowerInvariant())
         {
-            case "create" when target is Entity created:
-                await customApiAuthoring.BeforeCreateAsync(request, created, session, ct);
-                return null;
-            case "update" when target is Entity updated && entityId != Guid.Empty
-                               && await SdkImageAsync(entityName, entityId, null, session, ct) is { } existing:
-                await customApiAuthoring.BeforeUpdateAsync(updated, existing, session, ct);
-                return null;
-            case "delete" when target is EntityReference deleted:
-                return await customApiAuthoring.BeforeDeleteAsync(deleted, session, ct);
+            case "create" when target is Record created:
+                return await customApiAuthoring.BeforeCreateAsync(run.Request, created, run.Session, ct);
+            case "update" when target is Record updated && run.EntityId != Guid.Empty
+                               && await StoredImageAsync(entityName, run.EntityId, null, run.Session, ct) is { } existing:
+                return await customApiAuthoring.BeforeUpdateAsync(updated, existing, run.Session, ct);
+            case "delete" when target is RecordReference deleted:
+                run.ApiMessage = await customApiAuthoring.BeforeDeleteAsync(deleted, run.Session, ct);
+                return false;
             default:
-                return null;
+                return false;
         }
     }
 
     /// <summary>
-    /// The internal check of stage 20: a Create/Update of a registration entity goes through the
+    /// The internal check of stage 20 on the model request: a Create/Update of a registration entity goes through the
     /// <see cref="RegistrationValidator"/> (an Update on the stored record overlaid with the target; a missing record is
-    /// left to the core operation's 404); an Associate or Disassociate over <c>eventhandler</c> is refused.
+    /// left to the core operation's 404); an Associate or Disassociate over <c>eventhandler</c> is refused. Returns true when the Target
+    /// changed.
     /// </summary>
-    private async Task ValidateRegistrationAsync(OrganizationRequest request, string? entityName, Guid entityId, DataSession session,
-        CancellationToken ct)
+    private async Task<bool> ValidateRegistrationAsync(Run run, CancellationToken ct)
     {
-        RegistrationValidator.DemandNotEventHandlerAssociate(request);
+        RegistrationValidator.DemandNotEventHandlerAssociate(run.Request);
+        var entityName = run.EntityName;
         if (entityName is null || !StepRegistry.RegistrationEntities.Contains(entityName)
-            || !request.Parameters.TryGetValue(Target, out var t) || t is not Entity target) return;
-        if (string.Equals(request.RequestName, "Create", StringComparison.OrdinalIgnoreCase))
-        {
-            await validator.ValidateAsync(entityName, target, null, session, ct);
-        }
-        else if (string.Equals(request.RequestName, "Update", StringComparison.OrdinalIgnoreCase) && entityId != Guid.Empty
-                 && await SdkImageAsync(entityName, entityId, null, session, ct) is { } existing)
-        {
-            await validator.ValidateAsync(entityName, target, existing, session, ct);
-        }
+            || !run.Request.Parameters.TryGetValue(Target, out var t) || t is not Record target) return false;
+        if (string.Equals(run.Request.Name, "Create", StringComparison.OrdinalIgnoreCase))
+            return await validator.ValidateAsync(entityName, target, null, run.Session, ct);
+        if (string.Equals(run.Request.Name, "Update", StringComparison.OrdinalIgnoreCase) && run.EntityId != Guid.Empty
+            && await StoredImageAsync(entityName, run.EntityId, null, run.Session, ct) is { } existing)
+            return await validator.ValidateAsync(entityName, target, existing, run.Session, ct);
+        return false;
     }
 
     /// <summary>
-    /// The checks of a public Create or Update of <c>workflow</c> or <c>processtrigger</c> (plan 2.21, ruling A16) on the request's
-    /// Target as it is now: <see cref="SystemTableRules.DemandValidProcessWrite(string, Entity, Caller)"/>, then <see cref="IWorkflowPipelineHook.ValidateWriteAsync"/>
+    /// The checks of a public Create or Update of <c>workflow</c> or <c>processtrigger</c> (plan 2.21, ruling A16) on the model Target as
+    /// it is now: <see cref="SystemTableRules.DemandValidProcessWrite(string, Record, Caller)"/>, then <see cref="IWorkflowPipelineHook.ValidateWriteAsync"/>
     /// (the stored row, the XAML). A Create of <c>workflow</c> without a <c>type</c> is a definition: the Target gets <c>type</c> 1 (Dataverse's
-    /// default from memory, checklist 1a), so the registry and the activation, which read definitions by their type, find it. Returns the message (Create
-    /// or Update) of a <c>workflow</c> write, else null. <see cref="Caller.Internal"/> is exempt from every rule.
+    /// default from memory, checklist 1a), so the registry and the activation, which read definitions by their type, find it.
+    /// <see cref="Caller.Internal"/> is exempt from every rule.
     /// </summary>
-    private async Task<string?> ValidateWorkflowWriteAsync(OrganizationRequest request, Caller caller, string? entityName, DataSession session,
-        CancellationToken ct)
+    /// <remarks>
+    /// S.2e3c2b (Decision 5): the hook keeps its SDK signature (S.2h) and is called behind its lent view, as every other hook: its Target
+    /// is the view's, the caller's <see cref="Entity"/>, written from the model by the lend and read back when the hook returns or throws.
+    /// The <c>type</c> 1 (<see cref="ChoiceValue"/> 1) is set on the model before the lend; the write-out keeps the caller's attributes in
+    /// today's order (<c>SdkRecords.Refill</c> removes and sets by key, so <c>type</c> takes a slot the caller freed, as a direct write did).
+    /// </remarks>
+    /// <returns>The message (Create or Update) of a <c>workflow</c> write, else null; and whether the Target changed (<c>type</c> 1).</returns>
+    private async Task<(string? Message, bool Wrote)> ValidateWorkflowWriteAsync(Run run, CancellationToken ct)
     {
+        var entityName = run.EntityName;
         if (entityName is not (WorkflowSchema.Table or WorkflowSchema.TriggerTable)
-            || !request.Parameters.TryGetValue(Target, out var t) || t is not Entity target) return null;
-        var message = request.RequestName?.ToLowerInvariant() switch { "create" => "Create", "update" => "Update", _ => null };
-        if (message is null) return null;
+            || !run.Request.Parameters.TryGetValue(Target, out var t) || t is not Record target) return (null, false);
+        var message = run.Request.Name?.ToLowerInvariant() switch { "create" => "Create", "update" => "Update", _ => null };
+        if (message is null) return (null, false);
+        var caller = run.Invocation.Caller;
         SystemTableRules.DemandValidProcessWrite(message, target, caller);
-        if (entityName != WorkflowSchema.Table) return null;
-        if (caller != Caller.Internal && message == "Create" && !target.Contains(WorkflowSchema.TypeColumn))
-            target[WorkflowSchema.TypeColumn] = new OptionSetValue((int)WorkflowSchema.Type.Definition);
-        await _workflows.ValidateWriteAsync(session, caller, message, target, ct);
-        return message;
+        if (entityName != WorkflowSchema.Table) return (null, false);
+        var wrote = caller != Caller.Internal && message == "Create" && !target.Contains(WorkflowSchema.TypeColumn);
+        if (wrote) target[WorkflowSchema.TypeColumn] = new ChoiceValue((int)WorkflowSchema.Type.Definition);
+        await LentAsync(run.Context.Clone(run.Context.Stage), run.Mirror,
+            view => _workflows.ValidateWriteAsync(run.Session, caller, message, (Entity)view.InputParameters[Target], ct));
+        return (message, wrote);
     }
 
     /// <summary>
@@ -681,51 +773,55 @@ public sealed partial class PipelineExecutor
     /// again (<see cref="ValidateWorkflowWriteAsync"/>: a plug-in may have widened the Target), then an Update of <c>workflow</c>
     /// (SetState arrives as one) whose <c>statecode</c> differs from the stored one activates or deactivates the definition through
     /// the <see cref="IWorkflowPipelineHook"/> (plan 2.14, ruling W4), in the Update's transaction. A missing record is left to the
-    /// core operation's 404.
+    /// core operation's 404. Returns true when the Target changed.
     /// </summary>
-    private async Task CheckWorkflowWriteAsync(OrganizationRequest request, Caller caller, string? entityName, Guid entityId,
-        DataSession session, CancellationToken ct)
+    private async Task<bool> CheckWorkflowWriteAsync(Run run, CancellationToken ct)
     {
-        if (await ValidateWorkflowWriteAsync(request, caller, entityName, session, ct) != "Update" || entityId == Guid.Empty) return;
-        var target = (Entity)request.Parameters[Target];
-        if (!target.Contains("statecode") && !target.Contains("statuscode")) return;
-        if (await SdkImageAsync(entityName!, entityId, ["statecode", WorkflowSchema.TypeColumn], session, ct)
-            is not { } stored) return;
+        var (message, wrote) = await ValidateWorkflowWriteAsync(run, ct);
+        if (message != "Update" || run.EntityId == Guid.Empty
+            || run.Request.Parameters[Target] is not Record target
+            || (!target.Contains("statecode") && !target.Contains("statuscode"))) return wrote;
+        if (await StoredImageAsync(run.EntityName!, run.EntityId, ["statecode", WorkflowSchema.TypeColumn], run.Session, ct)
+            is not { } stored) return wrote;
         // Only a definition changes state: a state or status Update of an activation (or any other type) is 400, even when it asks
         // for the state the row already has (final review M5).
-        if (stored.GetAttributeValue<OptionSetValue>(WorkflowSchema.TypeColumn)?.Value is { } type and not (int)WorkflowSchema.Type.Definition)
+        if (stored.SdkValue<ChoiceValue>(WorkflowSchema.TypeColumn)?.Value is { } type and not (int)WorkflowSchema.Type.Definition)
             throw XrmdFaultException.InvalidArgument(
-                $"The process {entityId} is not a definition (type {type}): only a definition (type 1) is activated or deactivated.");
-        if (target.GetAttributeValue<OptionSetValue>("statecode") is not { } state
-            || stored.GetAttributeValue<OptionSetValue>("statecode")?.Value == state.Value) return;
-        await _workflows.OnSetStateAsync(session, caller, entityId, state.Value, ct);
+                $"The process {run.EntityId} is not a definition (type {type}): only a definition (type 1) is activated or deactivated.");
+        if (target.SdkValue<ChoiceValue>("statecode") is not { } state
+            || stored.SdkValue<ChoiceValue>("statecode")?.Value == state.Value) return wrote;
+        await _workflows.OnSetStateAsync(run.Session, run.Invocation.Caller, run.EntityId, state.Value, ct);
+        return wrote;
     }
 
     /// <summary>
-    /// The internal check of stage 20 for <c>serviceendpoint</c> (plan 3.2), for every caller: a Create or Update must give an
-    /// accepted webhook as the row will be (<see cref="ServiceEndpointRules.ValidateAsync"/>), then its <c>authvalue</c> is taken
-    /// out of the target into the secret table (<see cref="WebhookSecrets.TakeAsync"/>); a Delete removes the secret (its steps
-    /// and their images go through the Delete Cascade relationship). Returns the endpoint whose value was taken, or null. An
-    /// Update of a missing record is left to the core operation's 404.
+    /// The internal check of stage 20 for <c>serviceendpoint</c> (plan 3.2), for every caller, on the model request: a Create or Update
+    /// must give an accepted webhook as the row will be (<see cref="ServiceEndpointRules.ValidateAsync(Record, Record?, bool, WebhookSecrets, DataSession, CancellationToken)"/>),
+    /// then its <c>authvalue</c> is taken out of the target into the secret table (<see cref="WebhookSecrets.TakeAsync(Record, DataSession, CancellationToken)"/>),
+    /// the endpoint kept in <see cref="Run.WebhookSecret"/>; a Delete removes the secret (its steps and their images go through the Delete
+    /// Cascade relationship). An Update of a missing record is left to the core operation's 404. Returns true when the Target changed:
+    /// when a value was taken (pre-flight ruling P6).
     /// </summary>
-    private async Task<Guid?> AuthorServiceEndpointAsync(OrganizationRequest request, string? entityName, Guid entityId, DataSession session,
-        CancellationToken ct)
+    private async Task<bool> AuthorServiceEndpointAsync(Run run, CancellationToken ct)
     {
-        if (entityName != ServiceEndpointSchema.Table || !request.Parameters.TryGetValue(Target, out var target)) return null;
-        switch (request.RequestName?.ToLowerInvariant())
+        var entityName = run.EntityName;
+        if (entityName != ServiceEndpointSchema.Table || !run.Request.Parameters.TryGetValue(Target, out var target)) return false;
+        switch (run.Request.Name?.ToLowerInvariant())
         {
-            case "create" when target is Entity created:
-                await ServiceEndpointRules.ValidateAsync(created, null, Options.WebhookAllowAnyPort, webhookSecrets, session, ct);
-                return await webhookSecrets.TakeAsync(created, session, ct);
-            case "update" when target is Entity updated && entityId != Guid.Empty
-                               && await SdkImageAsync(entityName, entityId, null, session, ct) is { } existing:
-                await ServiceEndpointRules.ValidateAsync(updated, existing, Options.WebhookAllowAnyPort, webhookSecrets, session, ct);
-                return await webhookSecrets.TakeAsync(updated, session, ct);
-            case "delete" when target is EntityReference deleted:
-                await webhookSecrets.DeleteAsync(deleted.Id, session, ct);
-                return null;
+            case "create" when target is Record created:
+                await ServiceEndpointRules.ValidateAsync(created, null, Options.WebhookAllowAnyPort, webhookSecrets, run.Session, ct);
+                run.WebhookSecret = await webhookSecrets.TakeAsync(created, run.Session, ct);
+                return run.WebhookSecret is not null;
+            case "update" when target is Record updated && run.EntityId != Guid.Empty
+                               && await StoredImageAsync(entityName, run.EntityId, null, run.Session, ct) is { } existing:
+                await ServiceEndpointRules.ValidateAsync(updated, existing, Options.WebhookAllowAnyPort, webhookSecrets, run.Session, ct);
+                run.WebhookSecret = await webhookSecrets.TakeAsync(updated, run.Session, ct);
+                return run.WebhookSecret is not null;
+            case "delete" when target is RecordReference deleted:
+                await webhookSecrets.DeleteAsync(deleted.Id, run.Session, ct);
+                return false;
             default:
-                return null;
+                return false;
         }
     }
 
@@ -890,16 +986,11 @@ public sealed partial class PipelineExecutor
     }
 
     /// <summary>
-    /// The image the internal checks of stage 20 read on the SDK side: the core's own <c>Entity</c>, the twin of the record it converted
-    /// once (<see cref="ImageAsync"/>, in a mirror of this read).
+    /// A stored row the internal checks of stage 20 and the owner lookup of the real-time workflows read (S.2e3c2b, Decision 2): read by
+    /// the core on the model with no mirror named, so nothing is converted.
     /// </summary>
-    private async Task<Entity?> SdkImageAsync(string entityName, Guid id, string[]? attributes, DataSession session, CancellationToken ct)
-    {
-        var mirror = new SdkMirror();
-        return await ImageAsync(entityName, id, attributes, mirror, session, ct) is { } record && mirror.TryGetSdk(record, out var sdk)
-            ? (Entity)sdk!
-            : null;
-    }
+    private Task<Record?> StoredImageAsync(string entityName, Guid id, string[]? attributes, DataSession session, CancellationToken ct) =>
+        core.RetrieveImageAsync(new RecordReference { LogicalName = entityName, Id = id }, attributes, session, ct);
 
     /// <summary>
     /// The image of each record of <paramref name="ids"/>, in order, for the image collections of a bulk execution (#76, ruling
@@ -981,16 +1072,16 @@ public sealed partial class PipelineExecutor
     /// <summary>
     /// The <see cref="WorkflowTrigger"/> of a write, or null when no activated real-time workflow, server-side business rule or
     /// background workflow has the table as its primary entity: then nothing is read (<see cref="IWorkflowPipelineHook.HasRealtimeAsync"/>
-    /// and <see cref="IWorkflowPipelineHook.HasBackgroundAsync"/> answer from memory). Read on the SDK request, which the views of
-    /// stage 10 left current.
+    /// and <see cref="IWorkflowPipelineHook.HasBackgroundAsync"/> answer from memory). Read on the model request (S.2e3c2b), which the
+    /// views of stage 10 left current.
     /// </summary>
     private async Task<WorkflowTrigger?> WorkflowTriggerAsync(Run run, CancellationToken ct)
     {
-        var request = run.Sdk;
+        var request = run.Request;
         var entityName = run.EntityName;
-        if (entityName is null || !WorkflowMessages.TryGetValue(request.RequestName, out var message)
+        if (entityName is null || !WorkflowMessages.TryGetValue(request.Name!, out var message)
             || !(await _workflows.HasRealtimeAsync(entityName, ct) || await _workflows.HasBackgroundAsync(entityName, ct))) return null;
-        var target = request.Parameters.TryGetValue(Target, out var t) ? t as Entity : null;
+        var target = request.Parameters.TryGetValue(Target, out var t) ? t as Record : null;
         // W5: a SetState triggers as SetState (its columns are statecode and statuscode), not as an Update of any column.
         if (message == "Update" && AuditActionHint.Of(request) == AuditActions.SetState) message = "SetState";
         IReadOnlyCollection<string> columns = target is null ? [] : target.Attributes.Keys.ToList();
@@ -1000,29 +1091,30 @@ public sealed partial class PipelineExecutor
 
     /// <summary>
     /// The owner of the record and its business unit, as the scope of a workflow compares them (W5): on a Create the <c>ownerid</c>
-    /// the request sets (else the caller), otherwise the stored owner. Null for a table without owner or a missing record (the core
-    /// operation reports it).
+    /// the model Target sets (else the caller), otherwise the stored owner, read by the core with no mirror. Null for a table without
+    /// owner or a missing record (the core operation reports it). A wrong-typed <c>ownerid</c> or <c>owningbusinessunit</c> fails with
+    /// the SDK's cast text (<c>SdkValue</c>, S.2e3c2a Decision 2).
     /// </summary>
-    private async Task<RecordOwner?> RecordOwnerAsync(string message, string entityName, Guid entityId, Entity? target, Caller caller,
+    private async Task<RecordOwner?> RecordOwnerAsync(string message, string entityName, Guid entityId, Record? target, Caller caller,
         DataSession session, CancellationToken ct)
     {
         var entity = metadata.GetEntity(session, entityName);
         if (entity?.OwnershipType is not { } ownership || (ownership & (OwnershipTypes.UserOwned | OwnershipTypes.TeamOwned)) == 0) return null;
         if (message == "Create")
         {
-            var owner = target?.GetAttributeValue<EntityReference>("ownerid") ?? new EntityReference("systemuser", caller.UserId);
-            if (target?.GetAttributeValue<EntityReference>("owningbusinessunit") is { } unit) return new RecordOwner(owner.Id, unit.Id);
+            var owner = target?.SdkValue<RecordReference>("ownerid") ?? new RecordReference { LogicalName = "systemuser", Id = caller.UserId };
+            if (target?.SdkValue<RecordReference>("owningbusinessunit") is { } unit) return new RecordOwner(owner.Id, unit.Id);
             if (owner.Id == caller.UserId) return new RecordOwner(owner.Id, caller.BusinessUnitId);
-            var principal = await SdkImageAsync(owner.LogicalName, owner.Id, ["businessunitid"], session, ct);
-            return new RecordOwner(owner.Id, principal?.GetAttributeValue<EntityReference>("businessunitid")?.Id ?? Guid.Empty);
+            var principal = await StoredImageAsync(owner.LogicalName, owner.Id, ["businessunitid"], session, ct);
+            return new RecordOwner(owner.Id, principal?.SdkValue<RecordReference>("businessunitid")?.Id ?? Guid.Empty);
         }
         // No owner can be read (no id, or the record does not exist): the matcher then applies no scope. That is safe: a write of a
         // missing record fails in the core operation (404) and rolls back what a stage 20 workflow did before it; a Create has no id
         // here but takes the branch above.
         if (entityId == Guid.Empty
-            || await SdkImageAsync(entityName, entityId, ["ownerid", "owningbusinessunit"], session, ct) is not { } stored
-            || stored.GetAttributeValue<EntityReference>("ownerid") is not { } storedOwner) return null;
-        return new RecordOwner(storedOwner.Id, stored.GetAttributeValue<EntityReference>("owningbusinessunit")?.Id ?? Guid.Empty);
+            || await StoredImageAsync(entityName, entityId, ["ownerid", "owningbusinessunit"], session, ct) is not { } stored
+            || stored.SdkValue<RecordReference>("ownerid") is not { } storedOwner) return null;
+        return new RecordOwner(storedOwner.Id, stored.SdkValue<RecordReference>("owningbusinessunit")?.Id ?? Guid.Empty);
     }
 
     // ---- the step's SDK parts ----------------------------------------------------------------------------------------------------
@@ -1089,7 +1181,10 @@ public sealed partial class PipelineExecutor
 internal static class CoreHandOff
 {
     /// <summary>The model request of each execution the pipeline holds at the core, with its SDK request.</summary>
-    private static readonly ConditionalWeakTable<Request, OrganizationRequest> Held = new();
+    private static readonly ConditionalWeakTable<Request, OrganizationRequest> HeldRequests = new();
+
+    /// <summary>Test seam: called by <see cref="Hold"/> with each model request a run holds at the core (S.2e3c2b, Decision 8).</summary>
+    internal static readonly AsyncLocal<Action<Request>?> Held = new();
 
     /// <summary>The mirror the core converts the image of a target into (<see cref="ReadImagesWith"/>).</summary>
     private static readonly ConditionalWeakTable<RecordReference, SdkMirror> ImageMirrors = new();
@@ -1098,18 +1193,6 @@ internal static class CoreHandOff
     /// Test seam: called by the core's entry adapter with the SDK request its handler runs on (early-bound identity tests).
     /// </summary>
     internal static readonly AsyncLocal<Action<OrganizationRequest>?> HandlerRequest = new();
-
-    /// <summary>
-    /// The eight CRUD messages (Create, Retrieve, Update, Delete, RetrieveMultiple, Assign, Associate, Disassociate; any case, as the
-    /// step registry matches names), which the core answers on the model request (S.2e3b, Decision 8): the pipeline holds no window for
-    /// them and the adapter's <see cref="HandlerRequest"/> seam never fires for them. The core's own list is <c>CoreResponses.IsCrud</c>.
-    /// </summary>
-    internal static bool IsModelMessage(string? message) => message is not null && ModelMessages.Contains(message);
-
-    private static readonly HashSet<string> ModelMessages = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "Create", "Retrieve", "Update", "Delete", "RetrieveMultiple", "Assign", "Associate", "Disassociate",
-    };
 
     /// <summary>Test seam: called by the core's entry adapter with each image record it wrote out into the mirror named for it
     /// (<see cref="ReadImagesWith"/>) and that SDK twin.</summary>
@@ -1122,7 +1205,7 @@ internal static class CoreHandOff
     internal static bool TryGetHeld(Request request, out OrganizationRequest? sdk)
     {
         ArgumentNullException.ThrowIfNull(request);
-        lock (Held) return Held.TryGetValue(request, out sdk);
+        lock (HeldRequests) return HeldRequests.TryGetValue(request, out sdk);
     }
 
     /// <summary>
@@ -1132,7 +1215,8 @@ internal static class CoreHandOff
     /// </summary>
     internal static bool Hold(Request request, OrganizationRequest sdk)
     {
-        lock (Held) return Held.TryAdd(request, sdk);
+        Held.Value?.Invoke(request);
+        lock (HeldRequests) return HeldRequests.TryAdd(request, sdk);
     }
 
     /// <summary>
@@ -1142,7 +1226,7 @@ internal static class CoreHandOff
     internal static void Release(Request request, bool owns)
     {
         if (!owns) return;
-        lock (Held) Held.Remove(request);
+        lock (HeldRequests) HeldRequests.Remove(request);
     }
 
     /// <summary>Makes the core read the image of <paramref name="target"/> into <paramref name="mirror"/> (see the class remarks).</summary>

@@ -1,0 +1,39 @@
+=== PipelineExecutor.ExecuteAsync as the System Administrator ===
+--- request ---
+Request: UpdateRequest
+  RequestName: String:"Update"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(customapi)
+      Id: Guid:{a:api}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[2]
+        bindingtype: OptionSetValue
+          Value: Int32:1
+        displayname: String:"s20"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- fault ---
+Fault: XrmdFaultException 0x80040203 400 "bindingtype of custom API 'new_S20Fixed' cannot be changed once created."
+--- request after ---
+Request: UpdateRequest
+  RequestName: String:"Update"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(customapi)
+      Id: Guid:{a:api}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[2]
+        bindingtype: OptionSetValue
+          Value: Int32:1
+        displayname: String:"s20"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- rows ---
+custom API: uniquename="new_S20Fixed", name="new_S20Fixed", isprivate=false, isfunction=false, bindingtype=0, allowedcustomprocessingsteptype=0, workflowsdkstepenabled=false, sdkmessageid={id1}
+message: name="new_S20Fixed", categoryname="CustomAPI", isprivate=false
+filters of the message: filters=1

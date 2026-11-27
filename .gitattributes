@@ -6,3 +6,4 @@ tests/fixtures/core-row-golden/** -text
 tests/fixtures/guard-fault-golden/** -text
 tests/fixtures/row-parameters-golden/** -text
 tests/fixtures/solutions/SourceLayout/** -text
+tests/fixtures/stage20-golden/** -text

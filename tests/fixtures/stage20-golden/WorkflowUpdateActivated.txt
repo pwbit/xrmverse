@@ -1,0 +1,35 @@
+=== PipelineExecutor.ExecuteAsync as the System Administrator ===
+--- request ---
+Request: UpdateRequest
+  RequestName: String:"Update"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(workflow)
+      Id: Guid:{a:definition}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[1]
+        name: String:"s20 renamed"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- fault ---
+Fault: XrmdFaultException 0x80040203 400 "The process 's20 activated' is Activated: a process is edited only while Draft; deactivate it with SetState first."
+--- request after ---
+Request: UpdateRequest
+  RequestName: String:"Update"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(workflow)
+      Id: Guid:{a:definition}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[1]
+        name: String:"s20 renamed"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- rows ---
+processes named 's20 activated': name="s20 activated", type=1, statecode=1, statuscode=2, category=0, parentworkflowid=null
+processes named 's20 activated': name="s20 activated", type=2, statecode=1, statuscode=2, category=0, parentworkflowid={a:definition}
+processes named 's20 renamed': none

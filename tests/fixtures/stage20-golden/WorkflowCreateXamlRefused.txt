@@ -1,0 +1,57 @@
+=== PipelineExecutor.ExecuteAsync as the System Administrator ===
+--- request ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(workflow)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[8]
+        name: String:"s20 malformed"
+        category: OptionSetValue
+          Value: Int32:0
+        mode: OptionSetValue
+          Value: Int32:1
+        scope: OptionSetValue
+          Value: Int32:4
+        primaryentity: String:"xrmv_order"
+        triggeroncreate: Boolean:True
+        createstage: OptionSetValue
+          Value: Int32:40
+        xaml: String:"<Activity>\n  <Sequence>\n</Activity>"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- fault ---
+Fault: XrmdFaultException 0x80040203 400 "The Create of the process 's20 malformed' is refused: The workflow XAML is not well-formed (line 3, position 3): The 'Sequence' start tag on line 2 position 4 does not match the end tag of 'Activity'. Line 3, position 3."
+--- request after ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(workflow)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[9]
+        name: String:"s20 malformed"
+        type: OptionSetValue
+          Value: Int32:1
+        category: OptionSetValue
+          Value: Int32:0
+        mode: OptionSetValue
+          Value: Int32:1
+        scope: OptionSetValue
+          Value: Int32:4
+        primaryentity: String:"xrmv_order"
+        triggeroncreate: Boolean:True
+        createstage: OptionSetValue
+          Value: Int32:40
+        xaml: String:"<Activity>\n  <Sequence>\n</Activity>"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- rows ---
+processes named 's20 malformed': none

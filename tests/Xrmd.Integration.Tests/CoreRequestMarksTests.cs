@@ -207,6 +207,7 @@ public sealed class CoreRequestMarksTests(XrmdFixture fx)
         }
 
         public bool IsCoreMessage(string messageName) => inner.IsCoreMessage(messageName);
+        public bool AnswersOnModel(string messageName) => inner.AnswersOnModel(messageName);
         public IReadOnlyCollection<string> WrittenEntities(ModelRequest request) => inner.WrittenEntities(request);
         public bool IsNonPipelineMessage(string messageName) => inner.IsNonPipelineMessage(messageName);
         public Task<ModelResponse> ExecuteNonPipelineAsync(ModelRequest request, Caller caller, DataSession session, CancellationToken ct) =>

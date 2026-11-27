@@ -44,7 +44,7 @@ public static class SdkMessages
         return result;
     }
 
-    // Fill: see SdkRecords. The parameter containers are cleared and refilled in source order.
+    // Fill: see SdkRecords. The parameter containers are written by key (SdkRecords.Refill).
 
     internal static void Fill(OrganizationRequest from, Request into, IFillMap map)
     {

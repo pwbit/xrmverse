@@ -11,16 +11,17 @@ using Xrmd.Security.Sdk;
 namespace Xrmd.Security;
 
 // S.2e3c2a Decision 3 (Task 5): the SDK twins of the SecurityGuard, for the callers still on the SDK: AuthorizeAsync for the solution
-// uninstall and cascade delete and the pipeline's create-only Upsert (until S.2e3c2b), DemandAccessAsync for the workflows, the incoming
-// mail and the solution uninstall and cascade delete. Each reads its arguments in with a mirror of the call and runs the model member.
+// uninstall and cascade delete (the pipeline's create-only Upsert authorizes its model request since S.2e3c2b), DemandAccessAsync for
+// the workflows, the incoming mail and the solution uninstall and cascade delete. Each reads its arguments in with a mirror of the
+// call and runs the model member.
 // Decision 5: the pipeline crosses its request itself and runs the guard on the model request through the crossing form below.
 
 public sealed partial class SecurityGuard
 {
     /// <summary>
     /// The SDK twin of <see cref="AuthorizeAsync(Request, Caller, DataSession, CancellationToken)"/> (the solution uninstall and cascade
-    /// delete, the pipeline's create-only Upsert): the request, and its cascade mark, are read in with a mirror of the call, and what the
-    /// guard changed in it is written back into the caller's request (<see cref="AuthorizeAsync(Request, SdkMirror, Caller, DataSession, CancellationToken)"/>),
+    /// delete): the request, and its cascade mark, are read in with a mirror of the call, and what the guard changed in it is written
+    /// back into the caller's request (<see cref="AuthorizeAsync(Request, SdkMirror, Caller, DataSession, CancellationToken)"/>),
     /// as the guard changed the SDK request in place.
     /// </summary>
     /// <exception cref="XrmdFaultException">As the model member.</exception>

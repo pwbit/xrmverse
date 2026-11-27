@@ -48,7 +48,7 @@ internal static class CoreSdkBridges
     /// a standard table, the email attachment reads, <see cref="IsAuditedAsync"/>, <see cref="AuditedColumns"/>,
     /// <see cref="RefreshMatchCodesAsync"/>, <see cref="RowsReferencingAsync"/>, <see cref="RefreshManyMatchCodesAsync"/>,
     /// <see cref="InsertMailboxAsync"/>, <see cref="DeleteRecordFilesAsync"/>,
-    /// <see cref="PendingFileCommit"/>, <see cref="ClaimMailSecrets(Entity)"/>, <see cref="WriteRelationshipAuditAsync"/>;
+    /// <see cref="PendingFileCommit"/>, <see cref="WriteRelationshipAuditAsync"/>;
     /// S.2e3c1 Task 3: the access, share and record team bridges, which pass references built from a table name and an id, the cached
     /// SDK view of a table, access masks cast to the SDK enum, and the request's own SDK twin; Task 4:
     /// <see cref="WriteRolePrivilegesAuditAsync"/>, which converts privilege values and a reference built from a table name and an id, <see cref="Paging"/>, and <see cref="EntityChanges"/>, which builds an answer; Task 5:
@@ -274,9 +274,10 @@ internal static class CoreSdkBridges
     // ---- Mail (plan 4.1b, 4.1c) --------------------------------------------------------------------------------------------
 
     /// <summary>
-    /// <see cref="MailSecrets.Take"/> on the model: the secrets <paramref name="claimed"/> from the pipeline (claimed at the SDK edge,
-    /// keyed on the caller's entity) and those still in <paramref name="record"/>, which becomes a copy without them. Guard (the
-    /// helper's own, <see cref="PendingMailSecrets.Carries"/>): the record carries a secret column.
+    /// <see cref="MailSecrets.Take"/> on the model: the secrets <paramref name="claimed"/> from the pipeline (S.2e3c2b, Decision 6: claimed
+    /// by the core's model Create or Update, keyed on the model Target, <see cref="PendingMailSecrets.Claim"/>) and those still in
+    /// <paramref name="record"/>, which becomes a copy without them. The model <see cref="PendingMailSecrets.Extract"/> runs on the copy,
+    /// so nothing crosses. Guard (the helper's own, <see cref="PendingMailSecrets.Carries"/>): the record carries a secret column.
     /// </summary>
     public static IReadOnlyDictionary<string, string?> TakeMailSecrets(TableDefinition table, ref Record record,
         IReadOnlyDictionary<string, string?> claimed)
@@ -287,10 +288,7 @@ internal static class CoreSdkBridges
         if (!record.Attributes.Keys.Any(k => MailSchema.SecretColumns.ContainsKey(name + "." + k))) return taken;
         var copy = new Record(record.LogicalName, record.Id);
         foreach (var (column, value) in record.Attributes) copy[column] = value;
-        Cross(copy, e =>
-        {
-            foreach (var (column, value) in PendingMailSecrets.Extract(e, table.SdkView())) taken[column] = value;
-        });
+        foreach (var (column, value) in PendingMailSecrets.Extract(copy, table)) taken[column] = value;
         record = copy;
         return taken;
     }
@@ -502,47 +500,6 @@ internal static class CoreSdkBridges
     }
 
     // ---- after the write: mail (plan 4.1b, 4.1c), match codes (plan 2.15), queues (plan 4.1a), audit (plan 13) -------------------
-
-    private static readonly IReadOnlyDictionary<string, string?> NoSecrets = new Dictionary<string, string?>(StringComparer.Ordinal);
-
-    /// <summary>
-    /// <see cref="PendingMailSecrets.Claim"/>: the secrets the pipeline took out of <paramref name="target"/>, the Create or Update
-    /// Target it stripped (the claim is keyed by that SDK instance), once. Guard (<see cref="PendingMailSecrets.Strip"/> keeps values only
-    /// for them): a table with secret columns.
-    /// </summary>
-    public static IReadOnlyDictionary<string, string?> ClaimMailSecrets(Entity target)
-    {
-        ArgumentNullException.ThrowIfNull(target);
-        return HasSecretColumns(target.LogicalName) ? PendingMailSecrets.Claim(target) : NoSecrets;
-    }
-
-    /// <summary>
-    /// <see cref="ClaimMailSecrets(Entity)"/> for a model Target: the claim of the SDK instance <paramref name="mirror"/> paired with
-    /// <paramref name="target"/> (the request's chain mirror, <c>SdkMirror.For(request)</c>), none without one. The seam for a model
-    /// request that reaches the core with its Target already twinned (S.2e3b Task 8): the adapter claims with it and passes the result
-    /// to the model Create or Update, the same values the SDK twins claim.
-    /// </summary>
-    public static IReadOnlyDictionary<string, string?> ClaimMailSecrets(Record target, SdkMirror? mirror)
-    {
-        ArgumentNullException.ThrowIfNull(target);
-        if (!HasSecretColumns(target.LogicalName) || mirror is null || !mirror.TryGetSdk(target, out var sdk) || sdk is not Entity entity)
-            return NoSecrets;
-        return PendingMailSecrets.Claim(entity);
-    }
-
-    /// <summary>
-    /// <see cref="ClaimMailSecrets(Record, SdkMirror?)"/> with the chain mirror of <paramref name="request"/>, the model request whose
-    /// Target <paramref name="target"/> is (S.2e3b Task 8: the dispatch of Create and Update on the model).
-    /// </summary>
-    public static IReadOnlyDictionary<string, string?> ClaimRequestMailSecrets(Record target, Xrmd.Model.Messages.Request request)
-    {
-        ArgumentNullException.ThrowIfNull(target);
-        ArgumentNullException.ThrowIfNull(request);
-        return HasSecretColumns(target.LogicalName) ? ClaimMailSecrets(target, SdkMirror.For(request)) : NoSecrets;
-    }
-
-    private static bool HasSecretColumns(string? table) =>
-        MailSchema.SecretColumns.Keys.Any(k => k.StartsWith(table + ".", StringComparison.Ordinal));
 
     /// <summary>
     /// <see cref="FileColumnService.PendingCommit"/>, keyed by the table and id of <paramref name="target"/> only (the helper reads nothing

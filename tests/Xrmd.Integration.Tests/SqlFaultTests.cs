@@ -278,6 +278,7 @@ public sealed class SqlFaultTests(XrmdFixture fx)
         }
 
         public bool IsCoreMessage(string messageName) => inner.IsCoreMessage(messageName);
+        public bool AnswersOnModel(string messageName) => inner.AnswersOnModel(messageName);
         public IReadOnlyCollection<string> WrittenEntities(Xrmd.Model.Messages.Request request) => inner.WrittenEntities(request);
         public bool IsNonPipelineMessage(string messageName) => inner.IsNonPipelineMessage(messageName);
         public Task<Xrmd.Model.Messages.Response> ExecuteNonPipelineAsync(Xrmd.Model.Messages.Request request, Caller caller, DataSession session,

@@ -1,0 +1,36 @@
+=== PipelineExecutor.ExecuteAsync as the System Administrator ===
+--- request ---
+Request: SetStateRequest
+  RequestName: String:"SetState"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    EntityMoniker: EntityReference
+      LogicalName: String:"workflow"
+      Id: Guid:{a:activation}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+    State: OptionSetValue
+      Value: Int32:0
+    Status: OptionSetValue
+      Value: Int32:1
+--- fault ---
+Fault: XrmdFaultException 0x80040203 400 "The process {a:activation} is not a definition (type 2): only a definition (type 1) is activated or deactivated."
+--- request after ---
+Request: SetStateRequest
+  RequestName: String:"SetState"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    EntityMoniker: EntityReference
+      LogicalName: String:"workflow"
+      Id: Guid:{a:activation}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+    State: OptionSetValue
+      Value: Int32:0
+    Status: OptionSetValue
+      Value: Int32:1
+--- rows ---
+processes named 's20 activation': name="s20 activation", type=1, statecode=1, statuscode=2, category=0, parentworkflowid=null
+processes named 's20 activation': name="s20 activation", type=2, statecode=1, statuscode=2, category=0, parentworkflowid={a:definition}

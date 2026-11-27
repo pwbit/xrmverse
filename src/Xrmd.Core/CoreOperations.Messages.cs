@@ -7,6 +7,7 @@ using Xrmd.Model.Messages;
 using Xrmd.Model.Query;
 using Xrmd.Model.Records;
 using Xrmd.Pipeline;
+using Xrmd.Pipeline.Mail;
 using Xrmd.Query;
 using Xrmd.Query.FetchXml;
 using Xrmd.Query.Model;
@@ -178,7 +179,7 @@ public sealed partial class CoreOperations
             case "Create":
                 var created = Parameter<Record>(request, "Target", "Entity");
                 var detectOnCreate = DetectDuplicates(request);
-                var id = await CreateRecordAsync(session, caller, created, CoreSdkBridges.ClaimRequestMailSecrets(created, request), ct,
+                var id = await CreateRecordAsync(session, caller, created, PendingMailSecrets.Claim(created), ct,
                     detectOnCreate, call.ServerSetValues);
                 if (ComponentTypeOf(created) is { } componentType)
                     await tracker.TrackAsync(session, componentType, id, SolutionUniqueName(request), ct, markActive: caller != Caller.Internal);
@@ -200,7 +201,7 @@ public sealed partial class CoreOperations
                 // SetState runs as an Update the pipeline marks with its own audit action (ruling A6).
                 var detectOnUpdate = DetectDuplicates(request);
                 await UpdateRecordAsync(session, caller, updated, AuditActionHint.Of(request) ?? AuditActions.Update, null,
-                    CoreSdkBridges.ClaimRequestMailSecrets(updated, request), null, ct, detectOnUpdate);
+                    PendingMailSecrets.Claim(updated), null, ct, detectOnUpdate);
                 return await WithSessionTokenAsync(session, updatedTable, UpdateId(updated, updatedTable, SystemAttributes.PrimaryIdName(updatedTable)),
                     new Response { Name = "Update" }, ct);
             case "Delete":

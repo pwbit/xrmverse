@@ -1,13 +1,13 @@
 using System.Data;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Xrm.Sdk;
-using Microsoft.Xrm.Sdk.Messages;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
-using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Messages;
+using Xrmd.Model.Records;
+using Xrmd.Security;
 
 namespace Xrmd.Pipeline.CustomApis;
 
@@ -37,6 +37,13 @@ namespace Xrmd.Pipeline.CustomApis;
 /// <item>A Create of any of the three tables with <c>RelatedEntities</c> (deep insert) is refused.</item>
 /// </list>
 /// Every refusal is a 400 InvalidArgument naming the API (and the parameter or property).
+/// <para>
+/// S.2e3c2b (Decision 2): the rules read and write model records (<see cref="Record"/>, <see cref="RecordReference"/>,
+/// <see cref="ChoiceValue"/>), and the API's own writes (its message, its filter, <c>isprivate</c>, their Delete) are model
+/// <see cref="Request"/>s to the core as <see cref="Caller.Internal"/>. Every read that replaced a <c>GetAttributeValue</c> goes through
+/// <see cref="SdkTypeNames.SdkValue{T}"/>, so a wrong-typed value keeps the <see cref="InvalidCastException"/> text with the SDK type
+/// names. The pipeline calls the model members on its model request (S.2e3c2b, Task 5); no SDK twin is left.
+/// </para>
 /// </summary>
 /// <remarks>
 /// Where each check lives: a lookup that must exist, or a column that must not be given, is checked first by
@@ -48,7 +55,7 @@ namespace Xrmd.Pipeline.CustomApis;
 /// a response property, <c>iscustomizable</c>) is the usual 400 for an unknown attribute, which the organization service
 /// gives before any of these; the <see cref="CustomApiRules.FieldProblem"/> check of <c>isoptional</c> stays as a second line.
 /// </remarks>
-public sealed class CustomApiAuthoring(IPipelineCore core, IMetadataStore store, PublisherPrefixRule prefixes,
+public sealed partial class CustomApiAuthoring(IPipelineCore core, IMetadataStore store, PublisherPrefixRule prefixes,
     ILogger<CustomApiAuthoring>? logger = null)
 {
     private readonly ILogger _logger = (ILogger?)logger ?? NullLogger.Instance;
@@ -79,20 +86,23 @@ public sealed class CustomApiAuthoring(IPipelineCore core, IMetadataStore store,
     /// <summary>
     /// Before the core Create of <paramref name="target"/>: refuses a deep insert on the three tables, checks a new API and
     /// writes its message and filter (on <paramref name="s"/>, in its transaction), then sets <c>sdkmessageid</c> on the target.
-    /// Nothing for any other table.
+    /// Nothing for any other table. Returns true when it changed <paramref name="target"/> (the defaults of what is left out, a
+    /// table name lower-cased, <c>sdkmessageid</c>). A refusal may come after such a change.
     /// </summary>
     /// <param name="request">The Create request (its target is <paramref name="target"/>).</param>
     /// <exception cref="XrmdFaultException">400 InvalidArgument naming the API.</exception>
-    public async Task BeforeCreateAsync(OrganizationRequest request, Entity target, DataSession s, CancellationToken ct)
+    /// <exception cref="InvalidCastException">A checked column holds a value of another type (the SDK's text).</exception>
+    public async Task<bool> BeforeCreateAsync(Request request, Record target, DataSession s, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(target);
-        if (!CustomApiTables.All.Contains(target.LogicalName)) return;
-        if (target.RelatedEntities.Count > 0)
+        if (!CustomApiTables.All.Contains(target.LogicalName)) return false;
+        if (target.RelatedRecords.Count > 0)
             throw XrmdFaultException.InvalidArgument(
                 $"Creating related records in the same request is not supported for {target.LogicalName}: create the request parameters and response properties with their own Create.");
-        if (target.LogicalName == CustomApiTables.Api) await BeforeCreateApiAsync(target, s, ct);
-        else await BeforeCreateFieldAsync(target, s, ct);
+        return target.LogicalName == CustomApiTables.Api
+            ? await BeforeCreateApiAsync(target, s, ct)
+            : await BeforeCreateFieldAsync(target, s, ct);
     }
 
     /// <summary>
@@ -101,32 +111,34 @@ public sealed class CustomApiAuthoring(IPipelineCore core, IMetadataStore store,
     /// ordinally, so a change of case is a change; the two table-name columns, <c>boundentitylogicalname</c> and
     /// <c>logicalentityname</c>, are lower-cased and an empty one is null first, as on Create); a new <c>isprivate</c> of an API
     /// is written to its message; an <c>executeprivilegename</c> that names no privilege is logged as a warning. Nothing for any
-    /// other table.
+    /// other table. Returns true when it changed <paramref name="target"/>: never (the answer keeps the shape of the other stage-20
+    /// checks).
     /// </summary>
     /// <exception cref="XrmdFaultException">400 InvalidArgument naming the API (and the parameter or property) and the column.</exception>
-    public async Task BeforeUpdateAsync(Entity target, Entity existing, DataSession s, CancellationToken ct)
+    /// <exception cref="InvalidCastException">A checked column holds a value of another type (the SDK's text).</exception>
+    public async Task<bool> BeforeUpdateAsync(Record target, Record existing, DataSession s, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(existing);
         if (target.LogicalName is CustomApiTables.RequestParameter or CustomApiTables.ResponseProperty)
         {
             await BeforeUpdateFieldAsync(target, existing, s, ct);
-            return;
+            return false;
         }
-        if (target.LogicalName != CustomApiTables.Api) return;
-        var name = existing.GetAttributeValue<string>(CustomApiTables.UniqueName) ?? existing.Id.ToString("D");
+        if (target.LogicalName != CustomApiTables.Api) return false;
+        var name = existing.SdkValue<string>(CustomApiTables.UniqueName) ?? existing.Id.ToString("D");
         if (await IsManagedAsync(existing.Id, s, ct)) throw ManagedApi(name);
         foreach (var column in ImmutableApiColumns)
             if (target.Attributes.TryGetValue(column, out var given) && !SameValue(Canonical(column, given), Canonical(column, ValueOf(existing, column))))
                 throw XrmdFaultException.InvalidArgument($"{column} of custom API '{name}' cannot be changed once created.");
-        if (target.GetAttributeValue<EntityReference>(CustomApiTables.PluginTypeId) is { } type)
+        if (target.SdkValue<RecordReference>(CustomApiTables.PluginTypeId) is { } type)
             await DemandPluginTypeAsync(name, "updated", type.Id, s, ct);
 
         if (target.Attributes.TryGetValue(CustomApiTables.IsPrivate, out var isPrivate)
-            && existing.GetAttributeValue<EntityReference>(CustomApiTables.SdkMessageId) is { } message)
-            await core.ExecuteCoreAsync(new UpdateRequest { Target = new Entity(Message, message.Id) { ["isprivate"] = isPrivate as bool? ?? false } },
-                Caller.Internal, s, ct);
+            && existing.SdkValue<RecordReference>(CustomApiTables.SdkMessageId) is { } message)
+            await InternalAsync("Update", new Record(Message, message.Id) { ["isprivate"] = isPrivate as bool? ?? false }, s, ct);
         await WarnUnknownPrivilegeAsync(target, name, s, ct);
+        return false;
     }
 
     /// <summary>
@@ -136,7 +148,7 @@ public sealed class CustomApiAuthoring(IPipelineCore core, IMetadataStore store,
     /// parameter or property, or an API that does not exist (the core answers 404) or has no message.
     /// </summary>
     /// <exception cref="XrmdFaultException">400 InvalidArgument naming the API and the step.</exception>
-    public async Task<Guid?> BeforeDeleteAsync(EntityReference target, DataSession s, CancellationToken ct)
+    public async Task<Guid?> BeforeDeleteAsync(RecordReference target, DataSession s, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(target);
         if (target.LogicalName is CustomApiTables.RequestParameter or CustomApiTables.ResponseProperty)
@@ -177,7 +189,10 @@ public sealed class CustomApiAuthoring(IPipelineCore core, IMetadataStore store,
         return messageId;
     }
 
-    /// <summary>After the core Delete of an API: deletes its filters, then its message (<paramref name="messageId"/>).</summary>
+    /// <summary>
+    /// After the core Delete of an API: deletes its filters, then its message (<paramref name="messageId"/>), as model Deletes to the
+    /// core as <see cref="Caller.Internal"/>.
+    /// </summary>
     public async Task AfterDeleteAsync(Guid messageId, DataSession s, CancellationToken ct)
     {
         var filters = new List<Guid>();
@@ -188,78 +203,81 @@ public sealed class CustomApiAuthoring(IPipelineCore core, IMetadataStore store,
             while (await rd.ReadAsync(ct)) filters.Add(rd.GetGuid(0));
         }
         foreach (var filter in filters)
-            await core.ExecuteCoreAsync(new DeleteRequest { Target = new EntityReference(Filter, filter) }, Caller.Internal, s, ct);
-        await core.ExecuteCoreAsync(new DeleteRequest { Target = new EntityReference(Message, messageId) }, Caller.Internal, s, ct);
+            await InternalAsync("Delete", new RecordReference { LogicalName = Filter, Id = filter }, s, ct);
+        await InternalAsync("Delete", new RecordReference { LogicalName = Message, Id = messageId }, s, ct);
     }
+
+    /// <summary>
+    /// A write of the API's own rows (its message, its filter): the model request <paramref name="message"/> of
+    /// <paramref name="target"/> to the core, as <see cref="Caller.Internal"/>, on <paramref name="s"/> (its transaction).
+    /// </summary>
+    private Task<Response> InternalAsync(string message, object target, DataSession s, CancellationToken ct) =>
+        core.ExecuteCoreAsync(new Request { Name = message, Parameters = { ["Target"] = target } }, new CoreCall(Caller.Internal, s), ct);
 
     // ---- Create of an API -------------------------------------------------------------------------------------------
 
     /// <summary>
     /// The checks of a new API, in the import's order (C1, the entity sets, then C2: reserved name, existing message,
-    /// characters, publisher prefix), its unique name, its plug-in type (C5); then its message and filter.
+    /// characters, publisher prefix), its unique name, its plug-in type (C5); then its message and filter. Always changes the
+    /// target when it returns (<c>sdkmessageid</c>), so it answers true.
     /// </summary>
-    private async Task BeforeCreateApiAsync(Entity target, DataSession s, CancellationToken ct)
+    private async Task<bool> BeforeCreateApiAsync(Record target, DataSession s, CancellationToken ct)
     {
-        var name = target.GetAttributeValue<string>(CustomApiTables.UniqueName);
+        var name = target.SdkValue<string>(CustomApiTables.UniqueName);
         if (string.IsNullOrEmpty(name)) throw XrmdFaultException.InvalidArgument("A custom API cannot be created without a uniquename.");
         if (target.Attributes.ContainsKey(CustomApiTables.SdkMessageId))
             throw Refused(name, "sdkmessageid is set by the server, which creates the API's message; leave it out");
 
-        if (target.GetAttributeValue<string>(CustomApiTables.BoundEntityLogicalName) is { } given)
+        if (target.SdkValue<string>(CustomApiTables.BoundEntityLogicalName) is { } given)
             target[CustomApiTables.BoundEntityLogicalName] = Canonical(CustomApiTables.BoundEntityLogicalName, given);
         // Dataverse stores false and 0 for what is left out; an import writes them too, so an authored API reads back as an imported one.
         foreach (var flag in new[] { CustomApiTables.IsPrivate, CustomApiTables.WorkflowSdkStepEnabled, CustomApiTables.IsFunction })
-            if (target.GetAttributeValue<object>(flag) is null) target[flag] = false;
+            if (target.SdkValue<object>(flag) is null) target[flag] = false;
         foreach (var option in new[] { CustomApiTables.BindingType, CustomApiTables.AllowedCustomProcessingStepType })
-            if (target.GetAttributeValue<object>(option) is null) target[option] = new OptionSetValue(0);
+            if (target.SdkValue<object>(option) is null) target[option] = new ChoiceValue(0);
         var shape = new CustomApiShape(name, Int(target, CustomApiTables.BindingType),
-            target.GetAttributeValue<string>(CustomApiTables.BoundEntityLogicalName), Bool(target, CustomApiTables.IsFunction),
+            target.SdkValue<string>(CustomApiTables.BoundEntityLogicalName), Bool(target, CustomApiTables.IsFunction),
             Bool(target, CustomApiTables.WorkflowSdkStepEnabled), Int(target, CustomApiTables.AllowedCustomProcessingStepType), [], []);
-        if (CustomApiRules.ApiProblem(shape, table => store.GetEntity(table.ToLowerInvariant()) is not null) is { } problem)
+        if (CustomApiRules.ApiProblem(shape, table => store.GetTable(table.ToLowerInvariant()) is not null) is { } problem)
             throw Refused(name, problem);
         var entitySets = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var entity in store.GetAllEntities())
-            if (entity.EntitySetName is { } set) entitySets[set] = entity.LogicalName;
+        foreach (var entity in store.GetAllTables())
+            if (entity.EntitySetName is { } set) entitySets[set] = entity.LogicalName!;
         if (CustomApiRules.EntitySetProblem(shape, entitySets) is { } setProblem) throw Refused(name, setProblem);
 
         // An API of that name (ignoring case) first: it passed the name rules, so this is the refusal that says what is wrong.
         await DemandNewNameAsync(name, s, ct);
         await DemandNameAsync(name, s, ct);
-        if (target.GetAttributeValue<EntityReference>(CustomApiTables.PluginTypeId) is { } type)
+        if (target.SdkValue<RecordReference>(CustomApiTables.PluginTypeId) is { } type)
             await DemandPluginTypeAsync(name, Created, type.Id, s, ct);
 
         var messageId = SdkMessageCatalog.MessageId(name);
-        await core.ExecuteCoreAsync(new CreateRequest
+        await InternalAsync("Create", new Record(Message, messageId)
         {
-            Target = new Entity(Message, messageId)
-            {
-                ["name"] = name, ["categoryname"] = CustomApiTables.MessageCategory, ["isprivate"] = Bool(target, CustomApiTables.IsPrivate),
-            },
-        }, Caller.Internal, s, ct);
+            ["name"] = name, ["categoryname"] = CustomApiTables.MessageCategory, ["isprivate"] = Bool(target, CustomApiTables.IsPrivate),
+        }, s, ct);
         var entityName = shape.BoundEntity ?? NoEntity;
-        await core.ExecuteCoreAsync(new CreateRequest
+        await InternalAsync("Create", new Record(Filter, SdkMessageCatalog.FilterId(name, entityName))
         {
-            Target = new Entity(Filter, SdkMessageCatalog.FilterId(name, entityName))
-            {
-                ["name"] = $"{name}:{entityName}",
-                ["sdkmessageid"] = new EntityReference(Message, messageId),
-                ["primaryobjecttypecode"] = entityName,
-                ["secondaryobjecttypecode"] = NoEntity,
-                ["isvisible"] = true,
-                ["iscustomprocessingstepallowed"] = shape.AllowedStepType != 0,
-            },
-        }, Caller.Internal, s, ct);
-        target[CustomApiTables.SdkMessageId] = new EntityReference(Message, messageId);
+            ["name"] = $"{name}:{entityName}",
+            ["sdkmessageid"] = new RecordReference { LogicalName = Message, Id = messageId },
+            ["primaryobjecttypecode"] = entityName,
+            ["secondaryobjecttypecode"] = NoEntity,
+            ["isvisible"] = true,
+            ["iscustomprocessingstepallowed"] = shape.AllowedStepType != 0,
+        }, s, ct);
+        target[CustomApiTables.SdkMessageId] = new RecordReference { LogicalName = Message, Id = messageId };
         await WarnUnknownPrivilegeAsync(target, name, s, ct);
+        return true;
     }
 
     /// <summary>
     /// Logs the warning the import logs when the target's <c>executeprivilegename</c> names no privilege of the organization
     /// (nobody holds it, so only System Administrators and internal calls pass). Never a failure.
     /// </summary>
-    private async Task WarnUnknownPrivilegeAsync(Entity target, string name, DataSession s, CancellationToken ct)
+    private async Task WarnUnknownPrivilegeAsync(Record target, string name, DataSession s, CancellationToken ct)
     {
-        if (target.GetAttributeValue<string>(CustomApiTables.ExecutePrivilegeName) is not { Length: > 0 } privilege) return;
+        if (target.SdkValue<string>(CustomApiTables.ExecutePrivilegeName) is not { Length: > 0 } privilege) return;
         await using var cmd = s.Command(s.Dialect.Limit($"SELECT 1 FROM {s.Quote(Data)}.{s.Quote("privilege")} WHERE {s.Dialect.TextKey("name")} = {s.Dialect.TextKey("@name")}", "1"));
         cmd.AddParameter("@name", DbType.String, privilege, 256);
         if (await cmd.ExecuteScalarAsync(ct) is not null) return;
@@ -333,16 +351,17 @@ public sealed class CustomApiAuthoring(IPipelineCore core, IMetadataStore store,
 
     /// <summary>
     /// The checks of a new request parameter or response property: its API (given, existing, not managed, read with UPDLOCK
-    /// and HOLDLOCK), its unique name and type, the import's field rules and no duplicate unique name of its kind on the API.
+    /// and HOLDLOCK), its unique name and type, the import's field rules and no duplicate unique name of its kind on the API. True
+    /// when it changed the target (<c>logicalentityname</c> lower-cased or emptied, <c>isoptional</c> filled).
     /// </summary>
-    private async Task BeforeCreateFieldAsync(Entity target, DataSession s, CancellationToken ct)
+    private async Task<bool> BeforeCreateFieldAsync(Record target, DataSession s, CancellationToken ct)
     {
         var request = target.LogicalName == CustomApiTables.RequestParameter;
         var what = request ? "request parameter" : "response property";
-        var field = target.GetAttributeValue<string>(CustomApiTables.UniqueName);
+        var field = target.SdkValue<string>(CustomApiTables.UniqueName);
         if (string.IsNullOrEmpty(field))
             throw XrmdFaultException.InvalidArgument($"A custom API {what} cannot be created without a uniquename.");
-        if (target.GetAttributeValue<EntityReference>(CustomApiTables.ApiId) is not { } apiRef)
+        if (target.SdkValue<RecordReference>(CustomApiTables.ApiId) is not { } apiRef)
             throw XrmdFaultException.InvalidArgument($"Custom API {what} '{field}' cannot be created: customapiid is required.");
         var api = await LoadApiAsync(apiRef.Id, target.LogicalName, s, ct)
             ?? throw XrmdFaultException.InvalidArgument(
@@ -350,31 +369,41 @@ public sealed class CustomApiAuthoring(IPipelineCore core, IMetadataStore store,
         if (api.Managed) throw ManagedApi(api.Name);
         if (ValueOf(target, CustomApiTables.Type) is null)
             throw FieldRefused(api.Name, what, field, "type is required");
-        if (target.GetAttributeValue<string>(CustomApiTables.LogicalEntityName) is { } table)
-            target[CustomApiTables.LogicalEntityName] = Canonical(CustomApiTables.LogicalEntityName, table);
-        if (request && target.GetAttributeValue<object>(CustomApiTables.IsOptional) is null) target[CustomApiTables.IsOptional] = false;
+        var changed = false;
+        if (target.SdkValue<string>(CustomApiTables.LogicalEntityName) is { } table)
+        {
+            var canonical = Canonical(CustomApiTables.LogicalEntityName, table);
+            changed = !string.Equals(canonical as string, table, StringComparison.Ordinal);
+            target[CustomApiTables.LogicalEntityName] = canonical;
+        }
+        if (request && target.SdkValue<object>(CustomApiTables.IsOptional) is null)
+        {
+            target[CustomApiTables.IsOptional] = false;
+            changed = true;
+        }
 
         var shape = new CustomApiFieldShape(field, Int(target, CustomApiTables.Type),
-            target.GetAttributeValue<string>(CustomApiTables.LogicalEntityName),
+            target.SdkValue<string>(CustomApiTables.LogicalEntityName),
             target.Attributes.ContainsKey(CustomApiTables.IsOptional));
         var fields = (request ? api.Shape.RequestParameters : api.Shape.ResponseProperties).Append(shape).ToList();
         var withField = request ? api.Shape with { RequestParameters = fields } : api.Shape with { ResponseProperties = fields };
-        var problem = CustomApiRules.FieldProblem(withField, shape, request, name => store.GetEntity(name.ToLowerInvariant()) is not null)
+        var problem = CustomApiRules.FieldProblem(withField, shape, request, name => store.GetTable(name.ToLowerInvariant()) is not null)
             ?? CustomApiRules.DuplicateFieldProblem(withField);
         if (problem is not null) throw FieldRefused(api.Name, what, field, problem);
+        return changed;
     }
 
     /// <summary>
     /// The checks of an Update of a request parameter or response property (<paramref name="existing"/>): its API is not
     /// managed; an immutable column only repeats its stored value.
     /// </summary>
-    private async Task BeforeUpdateFieldAsync(Entity target, Entity existing, DataSession s, CancellationToken ct)
+    private async Task BeforeUpdateFieldAsync(Record target, Record existing, DataSession s, CancellationToken ct)
     {
         var request = target.LogicalName == CustomApiTables.RequestParameter;
-        var field = existing.GetAttributeValue<string>(CustomApiTables.UniqueName) ?? existing.Id.ToString("D");
+        var field = existing.SdkValue<string>(CustomApiTables.UniqueName) ?? existing.Id.ToString("D");
         var api = await FieldApiAsync(target.LogicalName, existing.Id, s, ct);
         if (api is { } stored && stored.Managed) throw ManagedApi(stored.Name);
-        var apiName = api?.Name ?? existing.GetAttributeValue<EntityReference>(CustomApiTables.ApiId)?.Id.ToString("D");
+        var apiName = api?.Name ?? existing.SdkValue<RecordReference>(CustomApiTables.ApiId)?.Id.ToString("D");
         var subject = $"'{apiName}' {(request ? "request parameter" : "response property")} '{field}'";
         foreach (var column in request ? ImmutableParameterColumns : ImmutablePropertyColumns)
             if (target.Attributes.TryGetValue(column, out var given) && !SameValue(Canonical(column, given), Canonical(column, ValueOf(existing, column))))
@@ -452,10 +481,10 @@ public sealed class CustomApiAuthoring(IPipelineCore core, IMetadataStore store,
         XrmdFaultException.InvalidArgument($"Custom API '{name}' cannot be {verb}: {reason}.");
 
     /// <summary>An option or whole-number value of the target (0 when absent or null).</summary>
-    private static int Int(Entity target, string column) => Normalize(ValueOf(target, column)) as int? ?? 0;
+    private static int Int(Record target, string column) => Normalize(ValueOf(target, column)) as int? ?? 0;
 
     /// <summary>A yes/no value of the target (false when absent or null).</summary>
-    private static bool Bool(Entity target, string column) => ValueOf(target, column) as bool? ?? false;
+    private static bool Bool(Record target, string column) => ValueOf(target, column) as bool? ?? false;
 
     /// <summary>
     /// True when a given value equals the stored one: a lookup by id (null equals null), a choice by value, a string ordinally
@@ -480,12 +509,12 @@ public sealed class CustomApiAuthoring(IPipelineCore core, IMetadataStore store,
             ? (text.Length == 0 ? null : text.ToLowerInvariant())
             : value;
 
-    private static object? ValueOf(Entity entity, string column) => entity.Attributes.TryGetValue(column, out var value) ? value : null;
+    private static object? ValueOf(Record entity, string column) => entity.Attributes.TryGetValue(column, out var value) ? value : null;
 
     private static object? Normalize(object? value) => value switch
     {
-        EntityReference reference => reference.Id,
-        OptionSetValue option => option.Value,
+        RecordReference reference => reference.Id,
+        ChoiceValue option => option.Value,
         _ => value,
     };
 }
