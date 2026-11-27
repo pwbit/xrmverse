@@ -11,6 +11,7 @@ behaves as it does.
 | Topic | In one line |
 |---|---|
 | [Overview](#overview) | A modular monolith: one process, clear module boundaries |
+| [Platform and applications](#platform-and-applications) | Core features live in xrmverse; applications extend it only through solutions |
 | [Modules](#modules) | Web API, Core, Metadata, Query, Pipeline, Solution, Files, Security, Admin API/CLI/MCP |
 | [The path of a request](#the-path-of-a-request) | Security, then the pipeline stages in one transaction |
 | [Plugins](#plugins) | Same context as Dataverse, isolated per assembly |
@@ -49,6 +50,70 @@ It is a **modular monolith**: a single process, with modules that have clear bou
 | **Files** | File and image columns: the blob store (file system, S3-compatible or Azure Blob) behind `IFileStore`, upload and download sessions, thumbnails, the cleanup sweep. |
 | **Security** | Roles, privileges with depth, business units, teams, sharing. |
 | **Admin API, CLI, MCP** | Environment management, diagnostics, access for AI agents. |
+
+## Platform and applications
+
+xrmverse is the **platform**: every core feature lives in xrmverse itself. An **application** built on it (a sales app, a
+contact center, a customer project) is delivered as one or more **solutions** and extends the platform only through the
+components a solution carries. An application never changes the platform: no patch to the server, its modules, its
+database schema or its UI renderer.
+
+```mermaid
+flowchart TB
+    subgraph APPS[Applications: delivered as solutions]
+        A1[Sales app]
+        A2[Contact center]
+        A3[Customer project]
+    end
+    subgraph EXT[What a solution may add]
+        E1[Tables, columns, choices, relationships]
+        E2[Plug-ins and custom APIs]
+        E3[Workflows and cloud flows]
+        E4[Web resources and PCF controls]
+        E5[Apps, forms, views, charts, dashboards, roles]
+    end
+    subgraph CORE[xrmverse platform: all core features]
+        C1[Web API, Core, Metadata, Query, Pipeline]
+        C2[Solution, Security, Files, UI renderer]
+        C3[Admin API, CLI, MCP]
+    end
+    APPS --> EXT
+    EXT -- solution import --> CORE
+    X[External services, e.g. telephony or routing] -. public APIs only: Web API, webhooks .-> CORE
+```
+
+| Rule | What it means |
+|---|---|
+| Core in the platform | A capability that is general (queues, email, side panes, solution tooling, plug-in SDK…) is built in xrmverse, documented and tested there, available to every application. |
+| Applications are solutions | An application ships tables, columns, plug-ins, workflows and flows, web resources, PCF controls, apps, forms, views and roles, and nothing else inside the platform. |
+| No changes to the platform | An application does not patch, fork or reconfigure the server, its database or its UI renderer, and does not depend on internals that are not part of the public surface. |
+| A missing capability goes to the platform | When an application needs something xrmverse cannot do, the capability is added to xrmverse as a core feature (a roadmap item), then the application uses it. No workaround inside the application. |
+| Services stay outside | An application may run its own services next to xrmverse; they are clients and talk to it only through the public APIs (Web API, webhooks). |
+
+```mermaid
+flowchart LR
+    N[An application needs a capability] --> Q{Does xrmverse<br/>provide it?}
+    Q -- yes --> S[Use it from the solution]
+    Q -- no --> R[Request it as a core feature of xrmverse]
+    R --> B[Built, documented and tested in xrmverse]
+    B --> S
+```
+
+### Deployment lifecycle of an application
+
+Every application is installed the same way, on any organization (dev, test, production):
+
+```mermaid
+flowchart LR
+    O[1. Create the organization] --> D[2. Import the default solution, if the application has one] --> S[3. Import the application's solution]
+```
+
+1. **Create the organization**: `xrmd server init --org <name>` or `xrmd server org add <name>` (see [CLI](cli.md)). It
+   starts with the platform only.
+2. **Import the default solution, if there is one**: the shared base that the application's solution depends on.
+3. **Import the specific solution** of the application (`xrmd solution import`), then run its setup step if it has one.
+
+Nothing is customized by hand in between: every change reaches an organization through a solution.
 
 ## The path of a request
 
@@ -138,5 +203,6 @@ See [Model-driven apps](model-driven-apps.md).
 ## See also
 
 - [Philosophy](philosophy.md)
+- [Solutions](solutions.md), [Plug-ins](plugins.md), [Model-driven apps](model-driven-apps.md): the components an application ships
 - [Plug-ins](plugins.md), [Supported queries](queries.md), [Security](security.md), [Solutions](solutions.md)
 - [Multiple organizations](multiple-organizations.md), [Local identity provider](local-idp.md)
