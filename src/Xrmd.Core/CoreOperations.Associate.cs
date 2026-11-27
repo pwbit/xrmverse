@@ -208,8 +208,8 @@ public sealed partial class CoreOperations
     private async Task AssociateSecurityAsync(DataSession s, Caller caller, SecurityRelationship relationship, RecordReference target,
         RecordReferenceCollection related, bool associate, CancellationToken ct)
     {
-        var pairs = CoreSdkBridges.SecurityPairs(relationship, target, related)
-            ?? throw XrmdFaultException.InvalidArgument(
+        if (!relationship.TryGetPairs(target, related, out var pairs))
+            throw XrmdFaultException.InvalidArgument(
                 $"Relationship '{relationship.SchemaName}' associates a '{relationship.Entity1}' with a '{relationship.Entity2}'.");
         var changed = new List<RecordReference>();
         foreach (var (first, second) in pairs)
@@ -222,15 +222,15 @@ public sealed partial class CoreOperations
             else if (SecurityAdministration.IsProfileRelationship(relationship.SchemaName))
             {
                 // The principal (systemuser or team) is Entity1, the field security profile Entity2.
-                if (associate) await CoreSdkBridges.AddProfileAsync(security, s, first, second.Id, ct);
-                else await CoreSdkBridges.RemoveProfileAsync(security, s, first, second.Id, ct);
+                if (associate) await security.AddProfileAsync(s, first, second.Id, ct);
+                else await security.RemoveProfileAsync(s, first, second.Id, ct);
             }
             else if (associate)
             {
-                await CoreSdkBridges.AddRoleAsync(security, s, first, second.Id, ct);
+                await security.AddRoleAsync(s, first, second.Id, ct);
                 changed.Add(Other(first, second));
             }
-            else if (await CoreSdkBridges.RemoveRoleAsync(security, s, first, second.Id, ct))
+            else if (await security.RemoveRoleAsync(s, first, second.Id, ct))
             {
                 changed.Add(Other(first, second));
             }

@@ -1,0 +1,33 @@
+=== PipelineExecutor.ExecuteAsync as a user with Basic User ===
+--- request ---
+Request: UpdateRequest
+  RequestName: String:"Update"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(principalobjectattributeaccess)
+      Id: Guid:{a:share}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[1]
+        attributeid: Guid:{id1}
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- fault ---
+Fault: XrmdFaultException 0x80040203 400 "Only readaccess and updateaccess of a field share can be changed; delete the share and create another one instead."
+--- request after ---
+Request: UpdateRequest
+  RequestName: String:"Update"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(principalobjectattributeaccess)
+      Id: Guid:{a:share}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[1]
+        attributeid: Guid:{id1}
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- rows ---
+field shares moved to the second column: 0

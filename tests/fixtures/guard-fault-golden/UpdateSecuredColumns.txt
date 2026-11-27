@@ -1,0 +1,35 @@
+=== PipelineExecutor.ExecuteAsync as a user with Basic User and prvReadnew_GfgSecure Global, prvWritenew_GfgSecure Global ===
+--- request ---
+Request: UpdateRequest
+  RequestName: String:"Update"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(new_gfgsecure)
+      Id: Guid:{a:record}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[2]
+        new_gfgs2: String:"two changed"
+        new_gfgs1: String:"one changed"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- fault ---
+Fault: XrmdFaultException 0x8004F507 403 "User {a:caller} has no field security permission to update the secured column new_gfgs2 of new_gfgsecure."
+--- request after ---
+Request: UpdateRequest
+  RequestName: String:"Update"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(new_gfgsecure)
+      Id: Guid:{a:record}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[2]
+        new_gfgs2: String:"two changed"
+        new_gfgs1: String:"one changed"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- rows ---
+rows with a changed secured column: 0

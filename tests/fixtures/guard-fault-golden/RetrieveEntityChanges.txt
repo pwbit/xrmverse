@@ -1,0 +1,51 @@
+=== PipelineExecutor.ExecuteAsync as a user with Basic User ===
+--- request ---
+Request: RetrieveEntityChangesRequest
+  RequestName: String:"RetrieveEntityChanges"
+  RequestId: null
+  Parameters: ParameterCollection[4]
+    Columns: ColumnSet
+      AllColumns: Boolean:False
+      AttributeExpressions: DataCollection[0]
+      Columns: DataCollection[1]
+        [0]: String:"name"
+      HasLazyFileAttribute: Boolean:False
+      LazyFileAttributeEntityName: null
+      LazyFileAttributeKey: null
+      LazyFileAttributeSizeLimit: Int32:0
+      LazyFileAttributeValue: null
+    DataVersion: null
+    EntityName: String:"account"
+    PageInfo: PagingInfo
+      Count: Int32:10
+      PageNumber: Int32:1
+      PagingCookie: null
+      ReturnRecordCountLessThanMarv: Boolean:False
+      ReturnTotalRecordCount: Boolean:False
+--- fault ---
+Fault: XrmdFaultException 0x80040220 403 "Principal user (Id={a:caller}, type=8) is missing prvReadAccount privilege (Id={id1}) on OTC=1 for entity 'account'. Consider adding missing privilege to one of the principal (user/team) roles for the request to succeed."
+--- request after ---
+Request: RetrieveEntityChangesRequest
+  RequestName: String:"RetrieveEntityChanges"
+  RequestId: null
+  Parameters: ParameterCollection[4]
+    Columns: ColumnSet
+      AllColumns: Boolean:False
+      AttributeExpressions: DataCollection[0]
+      Columns: DataCollection[1]
+        [0]: String:"name"
+      HasLazyFileAttribute: Boolean:False
+      LazyFileAttributeEntityName: null
+      LazyFileAttributeKey: null
+      LazyFileAttributeSizeLimit: Int32:0
+      LazyFileAttributeValue: null
+    DataVersion: null
+    EntityName: String:"account"
+    PageInfo: PagingInfo
+      Count: Int32:10
+      PageNumber: Int32:1
+      PagingCookie: null
+      ReturnRecordCountLessThanMarv: Boolean:False
+      ReturnTotalRecordCount: Boolean:False
+--- rows ---
+rows written: 0

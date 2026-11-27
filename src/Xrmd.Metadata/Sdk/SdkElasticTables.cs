@@ -71,13 +71,7 @@ public static partial class ElasticTables
         ArgumentNullException.ThrowIfNull(target);
         if (!IsElastic(e)) return;
         var pk = SystemAttributes.PrimaryIdName(e);
-        var attribute = target.Attributes.TryGetValue(pk, out var value) && value is Guid g ? g : Guid.Empty;
-        var key = target.KeyAttributes is { } keys && keys.TryGetValue(pk, out var k)
-            ? k switch { Guid kg => kg, string text when Guid.TryParse(text, out var parsed) => parsed, _ => Guid.Empty }
-            : Guid.Empty;
-        var given = new[] { target.Id, attribute, key }.Where(id => id != Guid.Empty).Distinct().ToList();
-        if (given.Count > 1)
-            throw XrmdFaultException.InvalidArgument(
-                $"The record of entity '{e.LogicalName}' is named by different ids ({string.Join(", ", given)}): the record id, the {pk} value and the key attribute {pk} must agree.");
+        DemandOneRowId(e.LogicalName, pk, target.Id, target.Attributes.TryGetValue(pk, out var value) ? value : null,
+            target.KeyAttributes is { } keys && keys.TryGetValue(pk, out var key) ? key : null);
     }
 }

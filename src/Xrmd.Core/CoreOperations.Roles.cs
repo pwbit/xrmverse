@@ -102,7 +102,7 @@ public sealed partial class CoreOperations
 
     /// <summary>The role's privileges before a change, read only when the <c>role</c> table is audited (null otherwise).</summary>
     private async Task<IReadOnlyList<PrivilegeGrant>?> RolePrivilegesBeforeAsync(DataSession s, Guid roleId, CancellationToken ct) =>
-        await CoreSdkBridges.IsAuditedAsync(audit, s, TableOf(Role), ct) ? await CoreSdkBridges.RoleGrantsAsync(security, s, roleId, ct) : null;
+        await CoreSdkBridges.IsAuditedAsync(audit, s, TableOf(Role), ct) ? await security.RoleGrantsAsync(s, roleId, ct) : null;
 
     /// <summary>
     /// The audit row of a role privilege message on the role (ruling A1): the privileges before (<paramref name="old"/>, null when
@@ -112,7 +112,7 @@ public sealed partial class CoreOperations
         CancellationToken ct)
     {
         if (old is null) return;
-        var now = await CoreSdkBridges.RoleGrantsAsync(security, s, roleId, ct);
+        var now = await security.RoleGrantsAsync(s, roleId, ct);
         var same = old.Count == now.Count && old.Zip(now).All(p => p.First.PrivilegeId == p.Second.PrivilegeId && p.First.Depth == p.Second.Depth);
         if (same) return;
         await CoreSdkBridges.WriteRolePrivilegesAuditAsync(audit, s, caller, action, roleId, old, now, ct);

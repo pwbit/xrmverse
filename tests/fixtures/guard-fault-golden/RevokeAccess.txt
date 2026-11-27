@@ -1,0 +1,39 @@
+=== PipelineExecutor.ExecuteAsync as a user with Basic User ===
+--- request ---
+Request: RevokeAccessRequest
+  RequestName: String:"RevokeAccess"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    Revokee: EntityReference
+      LogicalName: String:"systemuser"
+      Id: Guid:{a:principal}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+    Target: EntityReference
+      LogicalName: String:"account"
+      Id: Guid:{a:account}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- fault ---
+Fault: XrmdFaultException 0x80040220 403 "Principal user (Id={a:caller}, type=8) is missing prvShareAccount privilege (Id={id1}) on OTC=1 for entity 'account'. Consider adding missing privilege to one of the principal (user/team) roles for the request to succeed."
+--- request after ---
+Request: RevokeAccessRequest
+  RequestName: String:"RevokeAccess"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    Revokee: EntityReference
+      LogicalName: String:"systemuser"
+      Id: Guid:{a:principal}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+    Target: EntityReference
+      LogicalName: String:"account"
+      Id: Guid:{a:account}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- rows ---
+shares of the account revoked: 0

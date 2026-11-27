@@ -29,8 +29,9 @@ namespace Xrmd.Core;
 
 /// <summary>
 /// S.2e3b (plan Decision 5): the only place where the CRUD bodies on the model reach the SDK-typed helpers owned by later steps
-/// (Security row rules, Mail, Elastic, Duplicates, Rollups, Files). Each row bridge first runs the helper's own guard, copied from
-/// the helper (the comment names it): when the guard says the helper does nothing, nothing is converted and nothing is counted.
+/// (Mail, Elastic, Duplicates, Rollups, Files; the Security ones went with S.2e3c2a). Each row bridge first runs the helper's own
+/// guard, copied from the helper (the comment names it): when the guard says the helper does nothing, nothing is converted and
+/// nothing is counted.
 /// Otherwise it counts one crossing in <see cref="Crossings"/>, writes the row out through a mirror of the call, runs the helper
 /// on the SDK twin and reads the twin back into the same <see cref="Record"/>, so the helper's changes land in place, in the order
 /// the helper made them. The metadata a helper takes is the cached SDK view of the table (<see cref="SdkMetadataView.SdkView(TableDefinition)"/>,
@@ -47,12 +48,10 @@ internal static class CoreSdkBridges
     /// a standard table, the email attachment reads, <see cref="IsAuditedAsync"/>, <see cref="AuditedColumns"/>,
     /// <see cref="RefreshMatchCodesAsync"/>, <see cref="RowsReferencingAsync"/>, <see cref="RefreshManyMatchCodesAsync"/>,
     /// <see cref="InsertMailboxAsync"/>, <see cref="DeleteRecordFilesAsync"/>,
-    /// <see cref="PendingFileCommit"/>, <see cref="ClaimMailSecrets(Entity)"/>, <see cref="WriteRelationshipAuditAsync"/>,
-    /// <see cref="SecurityPairs"/>, <see cref="AddRoleAsync"/>, <see cref="RemoveRoleAsync"/>, <see cref="AddProfileAsync"/>,
-    /// <see cref="RemoveProfileAsync"/>; S.2e3c1 Task 3: the access, share and record team bridges, which pass references built from a
-    /// table name and an id, the cached SDK view of a table, access masks cast to the SDK enum, and the request's own SDK twin; Task 4:
-    /// <see cref="RoleGrantsAsync"/> and <see cref="WriteRolePrivilegesAuditAsync"/>, which convert privilege values and a reference built
-    /// from a table name and an id, <see cref="Paging"/>, and <see cref="EntityChanges"/>, which builds an answer; Task 5:
+    /// <see cref="PendingFileCommit"/>, <see cref="ClaimMailSecrets(Entity)"/>, <see cref="WriteRelationshipAuditAsync"/>;
+    /// S.2e3c1 Task 3: the access, share and record team bridges, which pass references built from a table name and an id, the cached
+    /// SDK view of a table, access masks cast to the SDK enum, and the request's own SDK twin; Task 4:
+    /// <see cref="WriteRolePrivilegesAuditAsync"/>, which converts privilege values and a reference built from a table name and an id, <see cref="Paging"/>, and <see cref="EntityChanges"/>, which builds an answer; Task 5:
     /// <see cref="NestedResponse"/>, which reads in an answer; the queue item bridges are gone, their helpers run on the model).
     /// </summary>
     internal static long Crossings => Interlocked.Read(ref _crossings);
@@ -264,74 +263,12 @@ internal static class CoreSdkBridges
         Cross(record, e => ElasticRecordKey.Normalize(table.SdkView(), e, isCreate, store.GetEntity));
     }
 
-    /// <summary>
-    /// <see cref="CurrencyRules.DemandRateInRange"/>. Guard (the helper's own): a currency that carries an exchange rate.
-    /// </summary>
-    public static void DemandRateInRange(Record record)
-    {
-        ArgumentNullException.ThrowIfNull(record);
-        if (record.LogicalName != CurrencySchema.Table || !record.Contains(CurrencySchema.ExchangeRate)) return;
-        Cross(record, CurrencyRules.DemandRateInRange);
-    }
-
     /// <summary><see cref="ElasticWriteRules.DemandWrite"/>. Guard (the helper's own): an elastic table.</summary>
     public static void DemandElasticWrite(TableDefinition table, Record record, bool isCreate)
     {
         ArgumentNullException.ThrowIfNull(table);
         if (!ElasticTables.IsElastic(table)) return;
         Cross(record, e => ElasticWriteRules.DemandWrite(table.SdkView(), e, isCreate));
-    }
-
-    // ---- Security row rules ----------------------------------------------------------------------------------------------
-
-    /// <summary>
-    /// <see cref="CurrencyRules.EnforceRowAsync"/>. Guard (the helper's own): a currency, the organization or a user's settings.
-    /// </summary>
-    public static Task EnforceCurrencyRulesAsync(Record row, Guid id, bool isCreate, IMetadataStore store, DataSession s, CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(row);
-        if (row.LogicalName is not (CurrencySchema.Table or "organization" or CurrencySchema.UserSettings)) return Task.CompletedTask;
-        return CrossAsync(row, e => CurrencyRules.EnforceRowAsync(e, id, isCreate, store, s, ct));
-    }
-
-    /// <summary>
-    /// <see cref="AccessTeamRules.DemandTemplateAsync"/>. Guard: an access team template (the caller's own branch).
-    /// </summary>
-    public static Task DemandAccessTeamTemplateAsync(DataSession s, IMetadataStore store, Record row, bool isCreate, Guid id, CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(row);
-        if (row.LogicalName != AccessTeamSchema.TeamTemplate) return Task.CompletedTask;
-        return CrossAsync(row, e => AccessTeamRules.DemandTemplateAsync(s, store, e, isCreate, id, ct));
-    }
-
-    /// <summary>
-    /// <see cref="DuplicateRuleRules.ApplyServerColumnsAsync"/>. Guard (the helper's own): a duplicate rule or a rule condition.
-    /// </summary>
-    public static Task ApplyDuplicateRuleColumnsAsync(DataSession s, IMetadataStore store, string table, Record row, bool isCreate, Guid id,
-        CancellationToken ct)
-    {
-        if (table is not (DuplicateDetectionSchema.Rule or DuplicateDetectionSchema.Condition)) return Task.CompletedTask;
-        return CrossAsync(row, e => DuplicateRuleRules.ApplyServerColumnsAsync(s, store, table, e, isCreate, id, ct));
-    }
-
-    /// <summary>
-    /// <see cref="EnvironmentVariableRules.ApplyRowAsync"/>. Guard (the helper's own): an environment variable definition or value.
-    /// </summary>
-    public static Task ApplyEnvironmentVariableRowAsync(DataSession s, string table, Record row, bool isCreate, Guid id, CancellationToken ct)
-    {
-        if (table is not (EnvironmentVariableSchema.Definition or EnvironmentVariableSchema.Value)) return Task.CompletedTask;
-        return CrossAsync(row, e => EnvironmentVariableRules.ApplyRowAsync(s, table, e, isCreate, id, ct));
-    }
-
-    /// <summary>
-    /// <see cref="OrganizationSettingRules.ApplyRowAsync"/>. Guard (the helper's own): an organization setting, on Create or with its
-    /// definition.
-    /// </summary>
-    public static Task ApplyOrganizationSettingRowAsync(DataSession s, string table, Record row, bool isCreate, Guid id, CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(row);
-        if (table != AppModuleSchema.OrganizationSetting || (!isCreate && !row.Contains("settingdefinitionid"))) return Task.CompletedTask;
-        return CrossAsync(row, e => OrganizationSettingRules.ApplyRowAsync(s, table, e, isCreate, id, ct));
     }
 
     // ---- Mail (plan 4.1b, 4.1c) --------------------------------------------------------------------------------------------
@@ -748,94 +685,7 @@ internal static class CoreSdkBridges
             new RelationshipChange(relationship, changed.Select(e => new EntityReference(e.LogicalName, e.Id)).ToList()), ct);
     }
 
-    /// <summary>
-    /// <see cref="SecurityRelationship.TryGetPairs"/> on references built from the table name and the id of <paramref name="target"/>
-    /// and of each related record (the pairing reads the table names only), answered with the caller's own references; null when a record
-    /// is not of the relationship's entities.
-    /// </summary>
-    public static IReadOnlyList<(RecordReference First, RecordReference Second)>? SecurityPairs(SecurityRelationship relationship,
-        RecordReference target, RecordReferenceCollection related)
-    {
-        ArgumentNullException.ThrowIfNull(relationship);
-        ArgumentNullException.ThrowIfNull(target);
-        ArgumentNullException.ThrowIfNull(related);
-        var model = new Dictionary<EntityReference, RecordReference>(ReferenceEqualityComparer.Instance);
-        EntityReference Sdk(RecordReference reference)
-        {
-            var twin = new EntityReference(reference.LogicalName, reference.Id);
-            model[twin] = reference;
-            return twin;
-        }
-        var sdkTarget = Sdk(target);
-        var sdkRelated = new EntityReferenceCollection(related.Select(Sdk).ToList());
-        return relationship.TryGetPairs(sdkTarget, sdkRelated, out var pairs)
-            ? pairs.Select(p => (model[p.First], model[p.Second])).ToList()
-            : null;
-    }
-
-    /// <summary><see cref="SecurityAdministration.AddRoleAsync"/> (it reads the principal's table name and id only).</summary>
-    public static Task AddRoleAsync(SecurityAdministration security, DataSession s, RecordReference principal, Guid roleId, CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(security);
-        return security.AddRoleAsync(s, Reference(principal), roleId, ct);
-    }
-
-    /// <summary><see cref="SecurityAdministration.RemoveRoleAsync"/> (it reads the principal's table name and id only).</summary>
-    public static Task<bool> RemoveRoleAsync(SecurityAdministration security, DataSession s, RecordReference principal, Guid roleId,
-        CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(security);
-        return security.RemoveRoleAsync(s, Reference(principal), roleId, ct);
-    }
-
-    /// <summary><see cref="SecurityAdministration.AddProfileAsync"/> (it reads the principal's table name and id only).</summary>
-    public static Task AddProfileAsync(SecurityAdministration security, DataSession s, RecordReference principal, Guid profileId,
-        CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(security);
-        return security.AddProfileAsync(s, Reference(principal), profileId, ct);
-    }
-
-    /// <summary><see cref="SecurityAdministration.RemoveProfileAsync"/> (it reads the principal's table name and id only).</summary>
-    public static Task RemoveProfileAsync(SecurityAdministration security, DataSession s, RecordReference principal, Guid profileId,
-        CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(security);
-        return security.RemoveProfileAsync(s, Reference(principal), profileId, ct);
-    }
-
-    // ---- access and sharing (S.2e3c1 Task 3: SecurityGuard and AccessTeamRules until S.2e3c2, the audit writer until S.2f) ---------
-
-    /// <summary>
-    /// <see cref="SecurityGuard.DemandAccessAsync"/> of <paramref name="right"/> on <paramref name="record"/> (the guard reads the
-    /// record's table name and id only).
-    /// </summary>
-    public static Task DemandAccessAsync(SecurityGuard guard, Caller caller, RecordReference record, AccessMask right, DataSession s,
-        CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(guard);
-        return guard.DemandAccessAsync(caller, Reference(record), (AccessRights)(int)right, s, ct);
-    }
-
-    /// <summary>
-    /// <see cref="SecurityGuard.RetrievePrincipalAccessAsync"/> (it reads the table name and id of the principal and of the record),
-    /// answered as a model mask.
-    /// </summary>
-    public static async Task<AccessMask> RetrievePrincipalAccessAsync(SecurityGuard guard, RecordReference principal, RecordReference record,
-        DataSession s, CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(guard);
-        return (AccessMask)(int)await guard.RetrievePrincipalAccessAsync(Reference(principal), Reference(record), s, ct);
-    }
-
-    /// <summary><see cref="SecurityGuard.ShareRowsAsync"/> of <paramref name="table"/> (its cached SDK view), with model masks.</summary>
-    public static async Task<IReadOnlyList<(Guid PrincipalId, int PrincipalType, AccessMask Mask)>> ShareRowsAsync(TableDefinition table,
-        Guid id, Guid? principal, bool userAndTeams, DataSession s, CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(table);
-        return [.. (await SecurityGuard.ShareRowsAsync(table.SdkView(), id, principal, userAndTeams, s, ct))
-            .Select(r => (r.PrincipalId, r.PrincipalType, (AccessMask)(int)r.Mask))];
-    }
+    // ---- sharing (S.2e3c1 Task 3: the audit writer until S.2f) --------------------------------------------------------------------
 
     /// <summary>
     /// The audit row of a share change on <paramref name="target"/> (<see cref="AuditWriter.WriteAsync"/> of a <see cref="ShareChange"/>):
@@ -850,78 +700,12 @@ internal static class CoreSdkBridges
             new ShareChange(Reference(principal), (AccessRights)(int)old, (AccessRights)(int)now), ct);
     }
 
-    /// <summary>
-    /// <see cref="AccessTeamRules.DemandRecordTeamAsync"/> with the rows locked until commit (the core's call), on a reference built from
-    /// the record's table name and id; the target it answers as the model one.
-    /// </summary>
-    public static async Task<RecordTeams.Target> DemandRecordTeamAsync(DataSession s, IMetadataStore store, RecordReference record,
-        Guid userId, Guid templateId, CancellationToken ct)
-    {
-        var target = await AccessTeamRules.DemandRecordTeamAsync(s, store, Reference(record), userId, templateId, lockRows: true, ct);
-        return new RecordTeams.Target(target.Table.ToModel(), target.RecordId, target.UserId, target.TemplateId, (AccessMask)(int)target.Mask,
-            target.OwningBusinessUnit);
-    }
-
-    /// <summary>
-    /// <see cref="AccessTeamRules.DemandSameAsChecked"/> on the request the <c>SecurityGuard</c> checked (<see cref="CheckedRequest"/>).
-    /// Guard (the helper's own): no check for <see cref="Caller.Internal"/>.
-    /// </summary>
-    public static void DemandSameAsChecked(Request request, Caller caller, RecordTeams.Target target)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        ArgumentNullException.ThrowIfNull(target);
-        if (caller == Caller.Internal) return;
-        AccessTeamRules.DemandSameAsChecked(CheckedRequest(request), caller, Sdk(target));
-    }
-
-    /// <summary><see cref="AccessTeamRules.TeamShareMaskAsync"/> with the share row locked until commit (the core's call).</summary>
-    public static async Task<AccessMask?> TeamShareMaskAsync(DataSession s, RecordTeams.Target target, CancellationToken ct) =>
-        await AccessTeamRules.TeamShareMaskAsync(s, Sdk(target), lockRows: true, ct) is { } mask ? (AccessMask)(int)mask : null;
-
-    /// <summary>
-    /// <see cref="AccessTeamRules.DemandTeamShareChecked"/> on the request the <c>SecurityGuard</c> checked (<see cref="CheckedRequest"/>).
-    /// Guard (the helper's own): no check for <see cref="Caller.Internal"/>.
-    /// </summary>
-    public static void DemandTeamShareChecked(Request request, Caller caller, RecordTeams.Target target, AccessMask teamShare)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        ArgumentNullException.ThrowIfNull(target);
-        if (caller == Caller.Internal) return;
-        AccessTeamRules.DemandTeamShareChecked(CheckedRequest(request), caller, Sdk(target), (AccessRights)(int)teamShare);
-    }
-
-    /// <summary>
-    /// The SDK request the <c>SecurityGuard</c> marked as checked for <paramref name="request"/> (<see cref="AccessTeamRules.MarkChecked"/>,
-    /// keyed on the SDK request): the one the pipeline holds at the core, else the request's twin in its chain mirror (the pipeline's
-    /// own SDK request, which the guard ran on), with nothing written into it. A model request with no twin was never checked: it gets a
-    /// new request of its name, which holds no check, as the twin the bridge used to write out for it held none.
-    /// </summary>
-    private static OrganizationRequest CheckedRequest(Request request)
-    {
-        if (CoreHandOff.TryGetHeld(request, out var held)) return held!;
-        return SdkMirror.For(request) is { } mirror && mirror.TryGetSdk(request, out var twin) && twin is OrganizationRequest sdk
-            ? sdk
-            : new OrganizationRequest(request.Name);
-    }
-
-    // ---- role privileges, change tracking (S.2e3c1 Task 4: SecurityAdministration's role reads until S.2e3c2, the audit writer
-    // until S.2f; the change tracking answer and paging, which have no model twin as parameter values) ------------------------------
-
-    /// <summary>
-    /// <see cref="SecurityAdministration.RolePrivilegesAsync"/> of <paramref name="roleId"/>, answered as model grants (privilege id,
-    /// depth and the role's business unit, no name): the role's privileges before and after a change, for its audit row.
-    /// </summary>
-    /// <exception cref="Errors.XrmdFaultException">404 when the role does not exist.</exception>
-    public static async Task<IReadOnlyList<PrivilegeGrant>> RoleGrantsAsync(SecurityAdministration security, DataSession s, Guid roleId,
-        CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(security);
-        return [.. (await security.RolePrivilegesAsync(s, roleId, ct)).Select(p => p.ToModel())];
-    }
+    // ---- role privileges, change tracking (S.2e3c1 Task 4: the audit writer until S.2f; the change tracking answer and paging, which
+    // have no model twin as parameter values) ------------------------------------------------------------------------------------------
 
     /// <summary>
     /// The audit row of a role privilege change on the role <paramref name="roleId"/> (<see cref="AuditWriter.WriteAsync"/> of a
-    /// <see cref="RolePrivilegesChange"/>): the grants of <see cref="RoleGrantsAsync"/> go back to the SDK privileges they were read from
+    /// <see cref="RolePrivilegesChange"/>): the grants of <see cref="SecurityAdministration.RoleGrantsAsync"/> go back to the SDK privileges they were read from
     /// (no name, no record filter), and the role is a reference built from the table name and the id, as the SDK body built it.
     /// </summary>
     public static Task WriteRolePrivilegesAuditAsync(AuditWriter audit, DataSession s, Caller caller, int action, Guid roleId,
@@ -961,10 +745,6 @@ internal static class CoreSdkBridges
             GlobalMetadataVersion = page.GlobalMetadataVersion,
         };
     }
-
-    /// <summary>The SDK target of a model one: the cached view of its table, its mask cast to the SDK enum.</summary>
-    private static AccessTeamRules.RecordTeamTarget Sdk(RecordTeams.Target target) =>
-        new(target.Table.SdkView(), target.RecordId, target.UserId, target.TemplateId, (AccessRights)(int)target.Mask, target.OwningBusinessUnit);
 
     /// <summary>A reference built from the table name and the id of <paramref name="reference"/>.</summary>
     private static EntityReference Reference(RecordReference reference)

@@ -8,6 +8,7 @@ using Xrmd.Core.Mail;
 using Xrmd.Metadata;
 using Xrmd.Model.Metadata;
 using Xrmd.Model.Records;
+using Xrmd.Security;
 using Xrmd.Solution;
 
 namespace Xrmd.Core;
@@ -122,15 +123,15 @@ public sealed partial class CoreOperations
         var deliveryChanged = mailboxTracked ? await CoreSdkBridges.ChangedDeliveryColumnsAsync(s, m.LogicalName!, id, row, ct) : null;
         ApplyIsManaged(m, attrs, record, row, caller, isCreate: false);
         await ApplyAccessTeamRulesAsync(s, m, attrs, row, isCreate: false, id, ct);
-        await CoreSdkBridges.ApplyDuplicateRuleColumnsAsync(s, store, m.LogicalName!, row, isCreate: false, id, ct);
+        await DuplicateRuleRules.ApplyServerColumnsAsync(s, store, m.LogicalName!, row, isCreate: false, id, ct);
         // #167 (ruling E2): unique and fixed definition names, one value per definition, the value's default name.
-        await CoreSdkBridges.ApplyEnvironmentVariableRowAsync(s, m.LogicalName!, row, isCreate: false, id, ct);
-        await CoreSdkBridges.ApplyOrganizationSettingRowAsync(s, m.LogicalName!, row, isCreate: false, id, ct);
+        await EnvironmentVariableRules.ApplyRowAsync(s, m.LogicalName!, row, isCreate: false, id, ct);
+        await OrganizationSettingRules.ApplyRowAsync(s, m.LogicalName!, row, isCreate: false, id, ct);
         CompleteStateAndStatus(m, attrs, row, id);
         if (activity && !MigrationScope.IsActive)
             await ApplyActivityStateOnUpdateAsync(s, m, attrs, row, partyLists!, commit?.Attribute, id, auditAction, server?.Attributes.Keys, ct);
         // Plan 2.10, final review I1: the currency rules on the final row (after the plug-ins), in the transaction.
-        await CoreSdkBridges.EnforceCurrencyRulesAsync(row, id, isCreate: false, store, s, ct);
+        await CurrencyRules.EnforceRowAsync(row, id, isCreate: false, store, s, ct);
         SetIfDefined(row, attrs, "modifiedon", DateTime.UtcNow);
         SetIfDefined(row, attrs, "modifiedby", Reference(SystemUser, caller.UserId));
         // Migration spec §7.5: inside a migration scope the record keeps the system columns it carries.

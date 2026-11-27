@@ -1,0 +1,31 @@
+=== PipelineExecutor.ExecuteAsync as a user with Basic User ===
+--- request ---
+Request: AddUserToRecordTeamRequest
+  RequestName: String:"AddUserToRecordTeam"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    Record: EntityReference
+      LogicalName: String:"account"
+      Id: Guid:{a:account}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+    SystemUserId: Guid:{a:disabled}
+    TeamTemplateId: Guid:{a:template}
+--- fault ---
+Fault: XrmdFaultException 0x80040203 400 "The user {a:disabled} is disabled and cannot be a member of an access team."
+--- request after ---
+Request: AddUserToRecordTeamRequest
+  RequestName: String:"AddUserToRecordTeam"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    Record: EntityReference
+      LogicalName: String:"account"
+      Id: Guid:{a:account}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+    SystemUserId: Guid:{a:disabled}
+    TeamTemplateId: Guid:{a:template}
+--- rows ---
+access teams of the record: 0

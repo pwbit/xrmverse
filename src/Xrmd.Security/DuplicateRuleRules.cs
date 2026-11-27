@@ -1,11 +1,11 @@
 using System.Data;
-using Microsoft.Xrm.Sdk;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Computed;
 using Xrmd.Model.Metadata;
+using Xrmd.Model.Records;
 using static Xrmd.Metadata.DuplicateDetectionSchema;
 
 namespace Xrmd.Security;
@@ -16,7 +16,7 @@ namespace Xrmd.Security;
 /// jobs write the state of a rule as Internal); the core fills the server columns at stage 30
 /// (<see cref="ApplyServerColumnsAsync"/>). Write on the parent rule of a condition is the <c>SecurityGuard</c>'s (D6).
 /// </summary>
-public static class DuplicateRuleRules
+public static partial class DuplicateRuleRules
 {
     private const string StateCode = "statecode", StatusCode = "statuscode";
 
@@ -32,7 +32,7 @@ public static class DuplicateRuleRules
     /// A missing rule on Update is left to the core operation's 404.
     /// </summary>
     /// <exception cref="XrmdFaultException">400 InvalidArgument.</exception>
-    public static async Task DemandRuleWriteAsync(DataSession s, IMetadataStore store, Entity target, bool isCreate, Guid id, CancellationToken ct)
+    public static async Task DemandRuleWriteAsync(DataSession s, IMetadataStore store, Record target, bool isCreate, Guid id, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(s);
         ArgumentNullException.ThrowIfNull(store);
@@ -44,8 +44,8 @@ public static class DuplicateRuleRules
         {
             if (OptionValue(target, StateCode) is not (null or 0) || OptionValue(target, StatusCode) is not (null or 0))
                 throw StatusFixed();
-            var baseName = target.GetAttributeValue<string>(BaseEntityName);
-            var matchingName = target.GetAttributeValue<string>(MatchingEntityName);
+            var baseName = target.SdkValue<string>(BaseEntityName);
+            var matchingName = target.SdkValue<string>(MatchingEntityName);
             DemandEnabledTable(store, BaseEntityName, baseName);
             DemandEnabledTable(store, MatchingEntityName, matchingName);
             return;
@@ -71,7 +71,7 @@ public static class DuplicateRuleRules
     /// operation's 404.
     /// </summary>
     /// <exception cref="XrmdFaultException">400 InvalidArgument; 404 ObjectDoesNotExist for a missing rule.</exception>
-    public static async Task DemandConditionWriteAsync(DataSession s, IMetadataStore store, Entity target, bool isCreate, Guid id,
+    public static async Task DemandConditionWriteAsync(DataSession s, IMetadataStore store, Record target, bool isCreate, Guid id,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(s);
@@ -135,10 +135,10 @@ public static class DuplicateRuleRules
         return (await StoredConditionAsync(s, conditionId, ct))?.ParentRule;
     }
 
-    /// <summary>The id of a lookup value: an <see cref="EntityReference"/> or a <see cref="Guid"/>; null otherwise.</summary>
+    /// <summary>The id of a lookup value: a <see cref="RecordReference"/> or a <see cref="Guid"/>; null otherwise.</summary>
     public static Guid? IdOf(object? value) => value switch
     {
-        EntityReference reference => reference.Id,
+        RecordReference reference => reference.Id,
         Guid guid => guid,
         _ => null,
     };
@@ -150,7 +150,7 @@ public static class DuplicateRuleRules
     /// and <c>ignoreblankvalues</c> false when not given. A rule's new <c>uniquename</c> reaches its conditions. Other tables:
     /// nothing.
     /// </summary>
-    public static async Task ApplyServerColumnsAsync(DataSession s, IMetadataStore store, string entityLogicalName, Entity row, bool isCreate,
+    public static async Task ApplyServerColumnsAsync(DataSession s, IMetadataStore store, string entityLogicalName, Record row, bool isCreate,
         Guid id, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(s);
@@ -161,18 +161,18 @@ public static class DuplicateRuleRules
             if (isCreate)
             {
                 foreach (var (name, code) in new[] { (BaseEntityName, BaseEntityTypeCode), (MatchingEntityName, MatchingEntityTypeCode) })
-                    if (store.GetTable(row.GetAttributeValue<string>(name) ?? "")?.ObjectTypeCode is { } otc)
-                        row[code] = new OptionSetValue(otc);
+                    if (store.GetTable(row.SdkValue<string>(name) ?? "")?.ObjectTypeCode is { } otc)
+                        row[code] = new ChoiceValue(otc);
                 foreach (var flag in new[] { ExcludeInactiveRecords, IsCaseSensitive })
                     if (!row.Contains(flag) || row[flag] is null) row[flag] = false;
             }
-            if ((isCreate || row.Contains(UniqueName)) && string.IsNullOrEmpty(row.GetAttributeValue<string>(UniqueName)))
+            if ((isCreate || row.Contains(UniqueName)) && string.IsNullOrEmpty(row.SdkValue<string>(UniqueName)))
                 row[UniqueName] = DefaultUniqueName(id);
             if (!isCreate && row.Contains(UniqueName))
             {
                 await using var cmd = s.Command(
                     $"UPDATE {s.DataTable(Condition)} SET {s.Quote(UniqueRuleName)} = @_name WHERE {s.Quote(RegardingObjectId)} = @_id");
-                cmd.AddParameter("@_name", DbType.String, row.GetAttributeValue<string>(UniqueName), 100);
+                cmd.AddParameter("@_name", DbType.String, row.SdkValue<string>(UniqueName), 100);
                 cmd.AddParameter("@_id", DbType.Guid, id);
                 await cmd.ExecuteNonQueryAsync(ct);
             }
@@ -205,7 +205,7 @@ public static class DuplicateRuleRules
                 $"The table '{table}' does not have IsDuplicateDetectionEnabled: turn duplicate detection on for the table before creating a rule for it.");
     }
 
-    private static string? Resulting(Entity target, string column, string? stored) =>
+    private static string? Resulting(Record target, string column, string? stored) =>
         target.Attributes.TryGetValue(column, out var given) ? given as string : stored;
 
     /// <summary>The column a condition names: it exists on the table and can be compared (not virtual, file, image or multi-select).</summary>
@@ -276,11 +276,11 @@ public static class DuplicateRuleRules
             throw XrmdFaultException.InvalidArgument($"The {OperatorParam} is set only with Same First Characters (1) or Same Last Characters (2).");
     }
 
-    /// <summary>An option value given as an <see cref="OptionSetValue"/> or an <see cref="int"/>; null for null or absent.</summary>
-    private static int? OptionValue(Entity target, string column) =>
+    /// <summary>An option value given as a <see cref="ChoiceValue"/> or an <see cref="int"/>; null for null or absent.</summary>
+    private static int? OptionValue(Record target, string column) =>
         target.Attributes.TryGetValue(column, out var value) ? value switch
         {
-            OptionSetValue option => option.Value,
+            ChoiceValue option => option.Value,
             int number => number,
             null => null,
             _ => int.MinValue,

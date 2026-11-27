@@ -840,6 +840,36 @@ namespace Xrmd.TestPlugins
     }
 
     /// <summary>
+    /// S.2e3c2a Task 5: with <c>CreateOrganizationService(context.UserId)</c>, adds the user of the config <c>"{user}|{template}"</c> to
+    /// the access team of the step's record (<c>PrimaryEntityName</c>, <c>PrimaryEntityId</c>) for the template, with
+    /// AddUserToRecordTeam. A fault propagates.
+    /// </summary>
+    public class AddUserToRecordTeamPlugin : IPlugin
+    {
+        private readonly Guid _user;
+        private readonly Guid _template;
+
+        public AddUserToRecordTeamPlugin(string unsecure, string secure)
+        {
+            var parts = unsecure.Split('|');
+            _user = new Guid(parts[0]);
+            _template = new Guid(parts[1]);
+        }
+
+        public void Execute(IServiceProvider serviceProvider)
+        {
+            var context = (IPluginExecutionContext)serviceProvider.GetService(typeof(IPluginExecutionContext));
+            var factory = (IOrganizationServiceFactory)serviceProvider.GetService(typeof(IOrganizationServiceFactory));
+            factory.CreateOrganizationService(context.UserId).Execute(new AddUserToRecordTeamRequest
+            {
+                Record = new EntityReference(context.PrimaryEntityName, context.PrimaryEntityId),
+                SystemUserId = _user,
+                TeamTemplateId = _template,
+            });
+        }
+    }
+
+    /// <summary>
     /// With <c>CreateOrganizationService(Guid.Empty)</c> (Learn: the same user as <c>context.UserId</c>), tries to update the
     /// record of the config <c>"entity|{guid}"</c> and sets <c>Target["pb_data"] = "caught {ErrorCode}"</c> (or <c>"ok"</c>).
     /// </summary>

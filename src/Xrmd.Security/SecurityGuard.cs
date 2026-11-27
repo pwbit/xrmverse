@@ -1,16 +1,13 @@
 using System.Data;
 using System.Runtime.CompilerServices;
-using Microsoft.Crm.Sdk.Messages;
-using Microsoft.Xrm.Sdk;
-using Microsoft.Xrm.Sdk.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
-using Xrmd.Metadata.Sdk;
 using Xrmd.Model.Metadata;
+using Xrmd.Model.Messages;
+using Xrmd.Model.Records;
 using Xrmd.Model.Security;
-using Xrmd.Security.Sdk;
 using Xrmd.Model.Query;
 using Xrmd.Query;
 using Xrmd.Query.Model;
@@ -28,7 +25,7 @@ namespace Xrmd.Security;
 /// relationships) pass: the core operation answers them with its own 400. Every check holds for each principal of the
 /// call: the caller and, with impersonation, the impersonator (the privileges are the intersection).
 /// </remarks>
-public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, FieldSecurity fields)
+public sealed partial class SecurityGuard(SecurityCache cache, IMetadataStore store, FieldSecurity fields)
 {
     private const string Target = "Target";
     private const string OwnerId = "ownerid";
@@ -65,10 +62,18 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
     /// <summary>The owner columns of a stored record and the values of the lookups asked for.</summary>
     private sealed record StoredRecord(RecordOwnership Owner, IReadOnlyDictionary<string, Guid?> Lookups);
 
+    /// <summary>Test seam: called with each model request <see cref="AuthorizeAsync(Request, Caller, DataSession, CancellationToken)"/> checks.</summary>
+    internal static readonly AsyncLocal<Action<Request>?> AuthorizedRequest = new();
+
     /// <summary>
     /// Checks that <paramref name="caller"/> may run <paramref name="request"/> (the parameters as they are before stage 10;
-    /// SetState arrives already converted to Update).
+    /// SetState arrives already converted to Update). S.2e3c2a (Task 5): on the model request, which for the pipeline is the request
+    /// its core gets, so a mark left on it (<see cref="AccessTeamRules.MarkChecked(Request, AccessTeamRules.RecordTeamTarget)"/>) is
+    /// found there, and a mark the core left on a request it issues (<see cref="CascadeHint"/>) is read there.
     /// </summary>
+    /// <returns>True when the check changed <paramref name="request"/>: only a field share Create that passes its rules gets its
+    /// Target filled (<see cref="SystemTableRules.EnforceFieldSharesAsync(Request, Caller, FieldSecurity, IMetadataStore, DataSession, Func{RecordReference, CancellationToken, Task}, CancellationToken)"/>).
+    /// A refusal after that fill leaves the Target filled as well (<see cref="MayChange"/>).</returns>
     /// <remarks>
     /// Create: <c>prvCreate</c> with a depth covering the owner (<c>ownerid</c> or the caller) and its business unit; each
     /// written lookup: <c>prvAppend</c> on the entity and AppendTo on the referenced record; a value for <c>overriddencreatedon</c>:
@@ -124,42 +129,43 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
     /// RoleUpdateValidationFailure or CannotActOnBehalfOfAnotherUser; 403 FieldCreateDenied (0x8004F502) or FieldUpdateDenied
     /// (0x8004F507) for a secured column (ruling F4); 400 from <see cref="SystemTableRules"/>; 404 for a missing record.</exception>
     /// <exception cref="InvalidOperationException">A message without a rule (fails closed).</exception>
-    public async Task AuthorizeAsync(OrganizationRequest request, Caller caller, DataSession session, CancellationToken ct)
+    public async Task<bool> AuthorizeAsync(Request request, Caller caller, DataSession session, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(caller);
         ArgumentNullException.ThrowIfNull(session);
+        AuthorizedRequest.Value?.Invoke(request);
 
         // Before any exemption: these rules hold for SYSTEM and System Administrator too.
         await SystemTableRules.EnforceAsync(request, caller, await cache.SystemUserIdAsync(ct), cache, store, session, ct);
-        await SystemTableRules.EnforceFieldSharesAsync(request, caller, fields, store, session,
+        var changed = await SystemTableRules.EnforceFieldSharesAsync(request, caller, fields, store, session,
             (record, c) => DemandAccessAsync(caller, record, AccessMask.ReadAccess, session, c), ct);
-        if (AccessTeamRules.IsRecordTeamMessage(request.RequestName))
+        if (AccessTeamRules.IsRecordTeamMessage(request.Name))
         {
             // Its own order (ruling A6): the data checks come before the caller's rights, and the added user's read applies to
             // every caller but the internal one.
             await AuthorizeRecordTeamAsync(request, caller, session, ct);
-            return;
+            return changed;
         }
-        if (await IsUnrestrictedAsync(caller, ct) || ReadMessages.Contains(request.RequestName ?? "")) return;
+        if (await IsUnrestrictedAsync(caller, ct) || ReadMessages.Contains(request.Name ?? "")) return changed;
         var principals = await PrincipalsAsync(caller, ct);
         var parameters = request.Parameters;
 
-        switch (request.RequestName?.ToLowerInvariant())
+        switch (request.Name?.ToLowerInvariant())
         {
             case "create":
-                if (parameters.TryGetValue(Target, out var created) && created is Entity createTarget)
+                if (parameters.TryGetValue(Target, out var created) && created is Record createTarget)
                     await AuthorizeCreateAsync(principals, caller, createTarget, session, ct);
                 break;
             case "update":
-                if (parameters.TryGetValue(Target, out var updated) && updated is Entity updateTarget)
+                if (parameters.TryGetValue(Target, out var updated) && updated is Record updateTarget)
                     await AuthorizeUpdateAsync(principals, updateTarget, session, ct);
                 break;
             case "upsert":
                 // Plan 3.4, ruling E6 (elastic tables): the rule of the Update when the row exists, else of the Create.
                 // On a standard table there is nothing to check here (#76, ruling B10): no step fires on Upsert there, and its
                 // stage 30 runs an inner Create or Update, which this guard checks as that message.
-                if (parameters.TryGetValue(Target, out var upserted) && upserted is Entity upsertTarget && IsElasticTarget(upsertTarget))
+                if (parameters.TryGetValue(Target, out var upserted) && upserted is Record upsertTarget && IsElasticTarget(upsertTarget))
                 {
                     if (await UpsertUpdatesAsync(upsertTarget, request, session, ct)) await AuthorizeUpdateAsync(principals, upsertTarget, session, ct);
                     else await AuthorizeCreateAsync(principals, caller, upsertTarget, session, ct);
@@ -169,14 +175,14 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
                 // #76, ruling B13: the table's Create or Write privilege (any depth) before stage 10, so a caller without it runs no
                 // plug-in of the bulk message; each target is then checked in full by its inner Create or Update.
                 if (BulkTable(parameters) is { } bulkTable)
-                    DemandPrivilege(principals, request.RequestName!.Equals("createmultiple", StringComparison.OrdinalIgnoreCase)
+                    DemandPrivilege(principals, request.Name!.Equals("createmultiple", StringComparison.OrdinalIgnoreCase)
                         ? AccessMask.CreateAccess : AccessMask.WriteAccess, bulkTable);
                 break;
             case "upsertmultiple":
                 // #76, ruling B13: nothing here; no step fires before its inner Upserts check each target.
                 break;
             case "delete":
-                if (parameters.TryGetValue(Target, out var deleted) && deleted is EntityReference deleteTarget
+                if (parameters.TryGetValue(Target, out var deleted) && deleted is RecordReference deleteTarget
                     && store.GetTable(deleteTarget.LogicalName ?? "") is { } deletedEntity)
                 {
                     // Plan 4.1a (ruling R23): a queue item has no owner; its Delete is working it.
@@ -193,38 +199,38 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
                 }
                 break;
             case "assign":
-                if (parameters.TryGetValue(Target, out var assigned) && assigned is EntityReference assignTarget
-                    && parameters.TryGetValue("Assignee", out var a) && a is EntityReference assignee)
+                if (parameters.TryGetValue(Target, out var assigned) && assigned is RecordReference assignTarget
+                    && parameters.TryGetValue("Assignee", out var a) && a is RecordReference assignee)
                     await AuthorizeAssignAsync(principals, assignTarget, assignee, session, ct);
                 break;
             case "associate" or "disassociate":
-                if (parameters.TryGetValue(Target, out var t) && t is EntityReference target
-                    && parameters.TryGetValue("Relationship", out var r) && r is Relationship relationship
-                    && parameters.TryGetValue("RelatedEntities", out var rel) && rel is EntityReferenceCollection related)
+                if (parameters.TryGetValue(Target, out var t) && t is RecordReference target
+                    && parameters.TryGetValue("Relationship", out var r) && r is RelationshipName relationship
+                    && parameters.TryGetValue("RelatedEntities", out var rel) && rel is RecordReferenceCollection related)
                     await AuthorizeAssociateAsync(principals, target, relationship, related,
-                        request.RequestName!.Equals("associate", StringComparison.OrdinalIgnoreCase), session, ct);
+                        request.Name!.Equals("associate", StringComparison.OrdinalIgnoreCase), session, ct);
                 break;
             case "grantaccess" or "modifyaccess":
-                if (parameters.TryGetValue(Target, out var shared) && shared is EntityReference shareTarget
-                    && parameters.TryGetValue("PrincipalAccess", out var pa) && pa is PrincipalAccess { Principal: { } principal } access)
-                    await AuthorizeShareAsync(principals, shareTarget, principal, access.AccessMask.ToModel(), session, ct);
+                if (parameters.TryGetValue(Target, out var shared) && shared is RecordReference shareTarget
+                    && parameters.TryGetValue("PrincipalAccess", out var pa) && pa is PrincipalAccessValue { Principal: { } principal } access)
+                    await AuthorizeShareAsync(principals, shareTarget, principal, access.AccessMask, session, ct);
                 break;
             case "revokeaccess":
-                if (parameters.TryGetValue(Target, out var revoked) && revoked is EntityReference revokeTarget
+                if (parameters.TryGetValue(Target, out var revoked) && revoked is RecordReference revokeTarget
                     && store.GetTable(revokeTarget.LogicalName ?? "") is { OwnershipType: TableOwnership.UserOwned or TableOwnership.TeamOwned } revokedEntity)
                     await DemandRecordAsync(principals, revokedEntity, revokeTarget.Id, AccessMask.ShareAccess, session, ct);
                 break;
             case "addprivilegesrole" or "replaceprivilegesrole":
                 if (parameters.TryGetValue("RoleId", out var role) && role is Guid roleId
-                    && parameters.TryGetValue("Privileges", out var p) && p is RolePrivilege[] privileges)
-                    await AuthorizeRolePrivilegesAsync(principals, roleId, SecurityAdministration.FromSdk(privileges), session, ct);
+                    && parameters.TryGetValue("Privileges", out var p) && p is PrivilegeGrant[] privileges)
+                    await AuthorizeRolePrivilegesAsync(principals, roleId, SecurityAdministration.FromGrants(privileges), session, ct);
                 break;
             case "removeprivilegerole":
                 if (parameters.TryGetValue("RoleId", out var removedFrom) && removedFrom is Guid removedFromId)
                     await DemandRecordAsync(principals, Definition(Role), removedFromId, AccessMask.WriteAccess, session, ct);
                 break;
             case "initializefileblocksupload":
-                if (parameters.TryGetValue(Target, out var uploaded) && uploaded is EntityReference uploadTarget
+                if (parameters.TryGetValue(Target, out var uploaded) && uploaded is RecordReference uploadTarget
                     && store.GetTable(uploadTarget.LogicalName ?? "") is { } uploadEntity)
                 {
                     await DemandRecordAsync(principals, uploadEntity, uploadTarget.Id, AccessMask.WriteAccess, session, ct);
@@ -233,7 +239,7 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
                 }
                 break;
             case "initializefileblocksdownload":
-                if (parameters.TryGetValue(Target, out var downloaded) && downloaded is EntityReference downloadTarget
+                if (parameters.TryGetValue(Target, out var downloaded) && downloaded is RecordReference downloadTarget
                     && store.GetTable(downloadTarget.LogicalName ?? "") is { } downloadEntity)
                 {
                     await DemandRecordAsync(principals, downloadEntity, downloadTarget.Id, AccessMask.ReadAccess, session, ct);
@@ -261,7 +267,7 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
                 break;
             case "retrieveduplicates":
                 // Plan 2.15, ruling D14: Read on the base table.
-                if (parameters.TryGetValue("BusinessEntity", out var business) && business is Entity { LogicalName: { } businessName } given
+                if (parameters.TryGetValue("BusinessEntity", out var business) && business is Record { LogicalName: { } businessName } given
                     && store.GetTable(businessName) is { } businessEntity)
                 {
                     DemandPrivilege(principals, AccessMask.ReadAccess, businessEntity);
@@ -280,7 +286,7 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
             case "calculaterollupfield":
                 // Plan 2.12b, ruling R10: Write on the row (Learn's maker page: Write privilege on the table and Write access on the
                 // row), refused with 0x8004E027; a row that does not exist stays the 404. Nothing on the aggregated rows (R12).
-                if (parameters.TryGetValue(Target, out var rollupRow) && rollupRow is EntityReference rollupTarget
+                if (parameters.TryGetValue(Target, out var rollupRow) && rollupRow is RecordReference rollupTarget
                     && store.GetTable(rollupTarget.LogicalName ?? "") is { } rollupEntity)
                 {
                     // The row the core calculates: its id, else the primary id among its key attributes (the core fills it the same way).
@@ -326,7 +332,7 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
                 // Plan 4.1a (ruling R23): placing. Read on the record, Create Queue Item and the destination queue readable (its
                 // privacy). Moving an item that is elsewhere is the item's Update, which this guard checks as such (working it: the
                 // queue it leaves readable).
-                if (parameters.TryGetValue(Target, out var queued) && queued is EntityReference queuedRecord
+                if (parameters.TryGetValue(Target, out var queued) && queued is RecordReference queuedRecord
                     && store.GetTable(queuedRecord.LogicalName ?? "") is { } queuedEntity)
                     await DemandRecordAsync(principals, queuedEntity, KeyedId(queuedEntity, queuedRecord), AccessMask.ReadAccess, session, ct);
                 if (parameters.TryGetValue("DestinationQueueId", out var destination) && destination is Guid destinationId)
@@ -342,7 +348,7 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
                 // queue, or the default queue of the target user or team).
                 if (parameters.TryGetValue("QueueItemId", out var routed) && routed is Guid routedId)
                     await DemandWorkItemAsync(principals, routedId, AccessMask.WriteAccess, session, ct);
-                if (parameters.TryGetValue(Target, out var routeTarget) && routeTarget is EntityReference routeTo
+                if (parameters.TryGetValue(Target, out var routeTarget) && routeTarget is RecordReference routeTo
                     && await RouteDestinationAsync(routeTo, session, ct) is { } routeQueue)
                     await DemandQueuePlacementAsync(principals, routeQueue, session, ct);
                 break;
@@ -383,18 +389,28 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
                 }
                 break;
             default:
-                throw new InvalidOperationException($"Message '{request.RequestName}' has no security rule."); // fail closed
+                throw new InvalidOperationException($"Message '{request.Name}' has no security rule."); // fail closed
         }
 
         await AuthorizeDuplicateConditionAsync(principals, request, session, ct);
         await AuthorizeFieldWritesAsync(request, caller, session, ct);
+        return changed;
     }
+
+    /// <summary>
+    /// True when <see cref="AuthorizeAsync(Request, Caller, DataSession, CancellationToken)"/> may change <paramref name="request"/>, also
+    /// on the way to a refusal: a Create whose Target is a field share record (its rules fill <c>objectid</c>, <c>objecttypecode</c> and
+    /// the access flags before their last checks).
+    /// </summary>
+    private static bool MayChange(Request request) =>
+        string.Equals(request.Name, "Create", StringComparison.OrdinalIgnoreCase)
+        && request.Parameters.TryGetValue(Target, out var target) && target is Record { LogicalName: FieldSecurityTables.Share };
 
     /// <summary>The table of a bulk message's <c>Targets</c> (its <c>EntityName</c>, else the first target's); null when unknown.</summary>
     // Repeats BulkTargets.TableNameOf: Xrmd.Pipeline references Xrmd.Security, so this project cannot reference that class.
-    private TableDefinition? BulkTable(ParameterCollection parameters) =>
-        parameters.TryGetValue("Targets", out var value) && value is EntityCollection targets
-        && (string.IsNullOrEmpty(targets.EntityName) ? targets.Entities.FirstOrDefault()?.LogicalName : targets.EntityName) is { } name
+    private TableDefinition? BulkTable(ParameterBag parameters) =>
+        parameters.TryGetValue("Targets", out var value) && value is RecordCollection targets
+        && (string.IsNullOrEmpty(targets.EntityName) ? targets.Records.FirstOrDefault()?.LogicalName : targets.EntityName) is { } name
             ? store.GetTable(name)
             : null;
 
@@ -424,7 +440,7 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
     }
 
     /// <summary>The columns of <c>email</c> a SendEmail writes besides the server-maintained ones (<c>senton</c>, the sender).</summary>
-    private static List<string> SendEmailColumns(ParameterCollection parameters)
+    private static List<string> SendEmailColumns(ParameterBag parameters)
     {
         List<string> columns = ["statecode", "statuscode", "directioncode"];
         if (parameters.TryGetValue("TrackingToken", out var token) && token is string { Length: > 0 }) columns.Add("trackingtoken");
@@ -435,9 +451,9 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
     /// <exception cref="XrmdValidationException">A FetchXML query that does not parse (400).</exception>
     private static string? QueryEntity(object? query) => query switch
     {
-        Microsoft.Xrm.Sdk.Query.QueryExpression expression => expression.EntityName,
-        Microsoft.Xrm.Sdk.Query.QueryByAttribute byAttribute => byAttribute.EntityName,
-        Microsoft.Xrm.Sdk.Query.FetchExpression fetch => Xrmd.Query.FetchXml.FetchXmlParser.Parse(fetch.Query).Root.EntityName,
+        RecordQuery expression => expression.EntityName,
+        AttributeQuery byAttribute => byAttribute.EntityName,
+        FetchQuery fetch => Xrmd.Query.FetchXml.FetchXmlParser.Parse(fetch.Text!).Root.EntityName,
         _ => null,
     };
 
@@ -447,10 +463,10 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
     /// relationship (Write on the rule named and on the stored rule of each condition named). Other requests return at once.
     /// </summary>
     /// <exception cref="XrmdFaultException">403 PrivilegeDenied or AccessDenied on the rule.</exception>
-    private async Task AuthorizeDuplicateConditionAsync(IReadOnlyList<SecurityProfile> principals, OrganizationRequest request,
+    private async Task AuthorizeDuplicateConditionAsync(IReadOnlyList<SecurityProfile> principals, Request request,
         DataSession session, CancellationToken ct)
     {
-        var message = request.RequestName?.ToLowerInvariant();
+        var message = request.Name?.ToLowerInvariant();
         if (message is not ("create" or "update" or "delete" or "associate" or "disassociate")
             || !request.Parameters.TryGetValue(Target, out var target)) return;
         var rules = new List<Guid>();
@@ -458,10 +474,10 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
         {
             // A condition moved or unlinked over the conditions relationship: Write on the rule it goes to and on the rule it
             // leaves (its stored rule), whichever side is the target.
-            if (target is not EntityReference end
-                || !request.Parameters.TryGetValue("Relationship", out var r) || r is not Relationship relationship
+            if (target is not RecordReference end
+                || !request.Parameters.TryGetValue("Relationship", out var r) || r is not RelationshipName relationship
                 || !string.Equals(relationship.SchemaName, DuplicateDetectionSchema.ConditionsRelationship, StringComparison.OrdinalIgnoreCase)
-                || !request.Parameters.TryGetValue("RelatedEntities", out var rel) || rel is not EntityReferenceCollection related)
+                || !request.Parameters.TryGetValue("RelatedEntities", out var rel) || rel is not RecordReferenceCollection related)
                 return;
             foreach (var reference in related.Prepend(end))
             {
@@ -475,15 +491,15 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
         }
         switch (target)
         {
-            case Entity { LogicalName: DuplicateDetectionSchema.Condition } condition:
+            case Record { LogicalName: DuplicateDetectionSchema.Condition } condition:
                 if (condition.Attributes.TryGetValue(DuplicateDetectionSchema.RegardingObjectId, out var given)
                     && DuplicateRuleRules.IdOf(given) is { } named)
                     rules.Add(named);
-                var id = condition.Id != Guid.Empty ? condition.Id : condition.GetAttributeValue<Guid?>(DuplicateDetectionSchema.ConditionId) ?? Guid.Empty;
+                var id = condition.Id != Guid.Empty ? condition.Id : condition.SdkValue<Guid?>(DuplicateDetectionSchema.ConditionId) ?? Guid.Empty;
                 if (message == "update" && id != Guid.Empty && await DuplicateRuleRules.StoredConditionRuleAsync(session, id, ct) is { } left)
                     rules.Add(left);
                 break;
-            case EntityReference { LogicalName: DuplicateDetectionSchema.Condition } deleted when message == "delete":
+            case RecordReference { LogicalName: DuplicateDetectionSchema.Condition } deleted when message == "delete":
                 if (await DuplicateRuleRules.StoredConditionRuleAsync(session, deleted.Id, ct) is { } owner) rules.Add(owner);
                 break;
         }
@@ -496,25 +512,25 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
     /// <c>Target</c> with a non-null value (403 FieldCreateDenied); Update needs <c>canupdate</c>, or a field share with update on
     /// the record, on each secured column present in <c>Target</c>, whatever its value (403 FieldUpdateDenied).
     /// <see cref="FieldSecurity"/> decides who bypasses (F1). It runs after the record checks of the message, so a missing record
-    /// or privilege is reported first; the callers the early return of <see cref="AuthorizeAsync"/> lets through (internal work
+    /// or privilege is reported first; the callers the early return of <see cref="AuthorizeAsync(Request, Caller, DataSession, CancellationToken)"/> lets through (internal work
     /// and SYSTEM) are among those F1 bypasses, so that return skips nothing.
     /// </summary>
     /// <exception cref="XrmdFaultException">403 FieldCreateDenied (0x8004F502) or FieldUpdateDenied (0x8004F507).</exception>
-    private async Task AuthorizeFieldWritesAsync(OrganizationRequest request, Caller caller, DataSession session, CancellationToken ct)
+    private async Task AuthorizeFieldWritesAsync(Request request, Caller caller, DataSession session, CancellationToken ct)
     {
         var parameters = request.Parameters;
-        switch (request.RequestName?.ToLowerInvariant())
+        switch (request.Name?.ToLowerInvariant())
         {
             case "create":
-                if (parameters.TryGetValue(Target, out var created) && created is Entity createTarget
+                if (parameters.TryGetValue(Target, out var created) && created is Record createTarget
                     && store.GetTable(createTarget.LogicalName ?? "") is { } createdEntity)
                     await DemandFieldCreateAsync(caller, createdEntity, createTarget, ct);
                 break;
             case "update" or "upsert":
-                if (parameters.TryGetValue(Target, out var updated) && updated is Entity updateTarget
+                if (parameters.TryGetValue(Target, out var updated) && updated is Record updateTarget
                     && store.GetTable(updateTarget.LogicalName ?? "") is { } updatedEntity)
                 {
-                    var upsert = request.RequestName!.Equals("upsert", StringComparison.OrdinalIgnoreCase);
+                    var upsert = request.Name!.Equals("upsert", StringComparison.OrdinalIgnoreCase);
                     if (upsert && !ElasticTables.IsElastic(updatedEntity)) break; // standard: checked by its inner Create or Update (#76, B10)
                     if (upsert && !await UpsertUpdatesAsync(updateTarget, request, session, ct))
                     {
@@ -534,7 +550,7 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
     }
 
     /// <summary>Ruling F4: each secured column <paramref name="target"/> sets to a value needs create (403 FieldCreateDenied).</summary>
-    private async Task DemandFieldCreateAsync(Caller caller, TableDefinition entity, Entity target, CancellationToken ct)
+    private async Task DemandFieldCreateAsync(Caller caller, TableDefinition entity, Record target, CancellationToken ct)
     {
         var written = target.Attributes.Where(a => a.Value is not null).Select(a => a.Key).ToList();
         if (written.Count == 0) return;
@@ -583,11 +599,7 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
     /// </summary>
     /// <exception cref="XrmdFaultException">403 PrivilegeDenied or AccessDenied; 404 when the record does not exist; 400 for an
     /// unknown entity.</exception>
-    public Task DemandAccessAsync(Caller caller, EntityReference record, AccessRights right, DataSession session, CancellationToken ct) =>
-        DemandAccessAsync(caller, record, right.ToModel(), session, ct);
-
-    /// <summary>The model of <see cref="DemandAccessAsync(Caller, EntityReference, AccessRights, DataSession, CancellationToken)"/>.</summary>
-    private async Task DemandAccessAsync(Caller caller, EntityReference record, AccessMask right, DataSession session, CancellationToken ct)
+    public async Task DemandAccessAsync(Caller caller, RecordReference record, AccessMask right, DataSession session, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(caller);
         ArgumentNullException.ThrowIfNull(record);
@@ -614,7 +626,7 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
     /// </summary>
     /// <exception cref="XrmdFaultException">400 for an unknown entity or a principal that is not a systemuser or a team; 404 when the
     /// record or the principal does not exist.</exception>
-    public async Task<AccessRights> RetrievePrincipalAccessAsync(EntityReference principal, EntityReference record, DataSession session,
+    public async Task<AccessMask> RetrievePrincipalAccessAsync(RecordReference principal, RecordReference record, DataSession session,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(principal);
@@ -628,7 +640,7 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
                 $"Principal of type '{principal.LogicalName}' is not supported: access is retrieved for a {SystemUser} or a {Team}.");
         var stored = await ReadRecordAsync(entity, record.Id, [], session, ct);
         var isTeam = principal.LogicalName == Team;
-        if (!isTeam && principal.Id == await cache.SystemUserIdAsync(ct)) return PrincipalAccessRights.Aggregate((a, b) => a | b).ToSdk();
+        if (!isTeam && principal.Id == await cache.SystemUserIdAsync(ct)) return PrincipalAccessRights.Aggregate((a, b) => a | b);
         await BusinessUnitOfAsync(principal, session, ct); // a missing principal is the 404
 
         var profile = isTeam ? await cache.GetTeamProfileAsync(principal.Id, ct) : await cache.GetProfileAsync(principal.Id, ct);
@@ -645,7 +657,7 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
                 || await HierarchyGrantsAsync(profile, entity, record.Id, stored.Owner, right, reportShares, session, ct))
                 rights |= right;
         }
-        return rights.ToSdk();
+        return rights;
     }
 
     /// <summary>
@@ -653,18 +665,11 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
     /// out): the principal's id, its <c>principaltypecode</c> and the mask. With <paramref name="principal"/>, only the shares with
     /// that principal (and, with <paramref name="userAndTeams"/>, with the teams it is a member of).
     /// </summary>
-    public static async Task<IReadOnlyList<(Guid PrincipalId, int PrincipalType, AccessRights Mask)>> ShareRowsAsync(EntityMetadata entity,
+    public static async Task<IReadOnlyList<(Guid PrincipalId, int PrincipalType, AccessMask Mask)>> ShareRowsAsync(TableDefinition entity,
         Guid id, Guid? principal, bool userAndTeams, DataSession session, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(entity);
         ArgumentNullException.ThrowIfNull(session);
-        return [.. (await ShareRowsAsync(entity.ToModel(), id, principal, userAndTeams, session, ct)).Select(r => (r.PrincipalId, r.PrincipalType, r.Mask.ToSdk()))];
-    }
-
-    /// <summary>The model of <see cref="ShareRowsAsync(EntityMetadata, Guid, Guid?, bool, DataSession, CancellationToken)"/>.</summary>
-    private static async Task<IReadOnlyList<(Guid PrincipalId, int PrincipalType, AccessMask Mask)>> ShareRowsAsync(TableDefinition entity,
-        Guid id, Guid? principal, bool userAndTeams, DataSession session, CancellationToken ct)
-    {
         var filter = principal is null ? "" : userAndTeams
             ? $"""
               AND (poa.principalid = @principal OR poa.principalid IN
@@ -724,7 +729,7 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
     /// <summary>
     /// Change tracking (plan 2.13): every principal of the call must hold <c>prvRead</c> on <paramref name="entity"/> at Global
     /// depth (organization-level read; a System Administrator holds it). No effect for <see cref="Caller.Internal"/> and the SYSTEM
-    /// user. The RetrieveEntityChanges message gets it from <see cref="AuthorizeAsync"/>; a front end that reads changes without the
+    /// user. The RetrieveEntityChanges message gets it from <see cref="AuthorizeAsync(Request, Caller, DataSession, CancellationToken)"/>; a front end that reads changes without the
     /// message (the Web API delta) calls it itself.
     /// </summary>
     /// <exception cref="XrmdFaultException">403 PrivilegeDenied; 400 for an unknown entity.</exception>
@@ -783,7 +788,7 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
 
     // ---- messages ---------------------------------------------------------------------------------------------------
 
-    private async Task AuthorizeCreateAsync(IReadOnlyList<SecurityProfile> principals, Caller caller, Entity target,
+    private async Task AuthorizeCreateAsync(IReadOnlyList<SecurityProfile> principals, Caller caller, Record target,
         DataSession session, CancellationToken ct)
     {
         if (store.GetTable(target.LogicalName ?? "") is not { } entity) return;
@@ -795,20 +800,20 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
         // Plan 4.1b: an email's attachment follows its email (Write on it), whatever the table's own privileges.
         if (entity.LogicalName == MailSchema.Attachment)
         {
-            await DemandAttachmentWriteAsync(principals, entity, Guid.Empty, target.GetAttributeValue<EntityReference>(ActivitySchema.ObjectId), session, ct);
+            await DemandAttachmentWriteAsync(principals, entity, Guid.Empty, target.SdkValue<RecordReference>(ActivitySchema.ObjectId), session, ct);
             return;
         }
         var privilege = DemandPrivilege(principals, AccessMask.CreateAccess, entity);
         await DemandMailAdministrationAsync(principals, entity, target, Guid.Empty, session, ct);
         var pk = SystemAttributes.PrimaryIdName(entity);
-        var id = target.Id != Guid.Empty ? target.Id : target.GetAttributeValue<Guid?>(pk) ?? Guid.Empty;
+        var id = target.Id != Guid.Empty ? target.Id : target.SdkValue<Guid?>(pk) ?? Guid.Empty;
 
         // The owner the record will have: ownerid (default: the caller), or the business unit of a business-owned record.
         RecordOwnership owner;
         switch (entity.OwnershipType)
         {
             case TableOwnership.UserOwned or TableOwnership.TeamOwned:
-                var ownerRef = target.GetAttributeValue<EntityReference>(OwnerId) ?? new EntityReference(SystemUser, caller.UserId);
+                var ownerRef = target.SdkValue<RecordReference>(OwnerId) ?? new RecordReference { LogicalName = SystemUser, Id = caller.UserId };
                 if (ownerRef.LogicalName is not (SystemUser or Team)) return; // the core operation rejects it
                 var isTeam = ownerRef.LogicalName == Team;
                 var ownerUnit = await BusinessUnitOfAsync(ownerRef, session, ct);
@@ -816,7 +821,7 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
                 break;
             case TableOwnership.BusinessOwned:
                 var unit = entity.Attributes?.Any(a => a.LogicalName == BusinessUnitId) == true
-                    ? target.GetAttributeValue<EntityReference>(BusinessUnitId)?.Id
+                    ? target.SdkValue<RecordReference>(BusinessUnitId)?.Id
                     : null;
                 owner = new RecordOwnership(null, null, unit ?? caller.BusinessUnitId);
                 break;
@@ -828,7 +833,7 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
         var tree = await cache.GetBusinessUnitTreeAsync(ct);
         foreach (var p in principals)
             if (!AccessEvaluator.HasAccess(p, tree, entity, p.DepthOf(privilege), owner, AccessMask.CreateAccess, 0))
-                throw XrmdFaultException.AccessDenied(p.UserId, AccessMask.CreateAccess.ToSdk(), entity.LogicalName!, id);
+                throw XrmdFaultException.AccessDenied(p.UserId, AccessMask.CreateAccess, entity.LogicalName!, id);
 
         // Plan 3.5 UI-1g (controller ruling): the post tables have no Append or AppendTo privilege; a post or comment is created on
         // a record, or a post, the caller can read (the read rule of ReadSecurity.PostFilter), instead of Append/AppendTo.
@@ -859,7 +864,7 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
     /// </summary>
     /// <exception cref="XrmdFaultException">403 PrivilegeDenied or AccessDenied; 404 for a missing attachment or email.</exception>
     private async Task DemandAttachmentWriteAsync(IReadOnlyList<SecurityProfile> principals, TableDefinition attachment, Guid id,
-        EntityReference? email, DataSession session, CancellationToken ct)
+        RecordReference? email, DataSession session, CancellationToken ct)
     {
         if (store.GetTable(ActivitySchema.Email) is not { } emailEntity) return;
         Guid emailId;
@@ -868,7 +873,7 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
             var stored = await ReadRecordAsync(attachment, id, [ActivitySchema.ObjectId], session, ct);
             // Fails closed: an attachment without an email (never made by the server) is writable by nobody but unrestricted callers.
             if (stored.Lookups.GetValueOrDefault(ActivitySchema.ObjectId) is not { } owner)
-                throw XrmdFaultException.AccessDenied(principals[0].UserId, AccessMask.WriteAccess.ToSdk(), attachment.LogicalName!, id);
+                throw XrmdFaultException.AccessDenied(principals[0].UserId, AccessMask.WriteAccess, attachment.LogicalName!, id);
             emailId = owner;
         }
         else
@@ -885,16 +890,16 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
     /// (<c>objectid</c>). A missing or unknown reference is left to the core operation (400).
     /// </summary>
     /// <exception cref="XrmdFaultException">403 PrivilegeDenied or AccessDenied; 404 for a missing queue or record.</exception>
-    private async Task DemandQueueItemParentsAsync(IReadOnlyList<SecurityProfile> principals, Entity target, DataSession session,
+    private async Task DemandQueueItemParentsAsync(IReadOnlyList<SecurityProfile> principals, Record target, DataSession session,
         CancellationToken ct)
     {
-        if (target.GetAttributeValue<EntityReference>(QueueSchema.QueueIdColumn) is { } queue && store.GetTable(QueueSchema.Queue) is not null)
+        if (target.SdkValue<RecordReference>(QueueSchema.QueueIdColumn) is { } queue && store.GetTable(QueueSchema.Queue) is not null)
             await DemandQueueReadableAsync(principals, queue.Id, session, ct);
-        if (target.GetAttributeValue<EntityReference>(QueueSchema.ObjectId) is { } record && store.GetTable(record.LogicalName ?? "") is { } recordEntity)
+        if (target.SdkValue<RecordReference>(QueueSchema.ObjectId) is { } record && store.GetTable(record.LogicalName ?? "") is { } recordEntity)
             await DemandRecordAsync(principals, recordEntity, KeyedId(recordEntity, record), AccessMask.ReadAccess, session, ct);
     }
 
-    private async Task AuthorizeUpdateAsync(IReadOnlyList<SecurityProfile> principals, Entity target, DataSession session,
+    private async Task AuthorizeUpdateAsync(IReadOnlyList<SecurityProfile> principals, Record target, DataSession session,
         CancellationToken ct)
     {
         if (store.GetTable(target.LogicalName ?? "") is not { } entity) return;
@@ -924,7 +929,7 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
         var record = await ReadRecordAsync(entity, id, lookups.Select(l => l.Attribute).ToList(), session, ct);
         await DemandRecordAsync(principals, entity, id, AccessMask.WriteAccess, record, session, ct);
         if (entity.LogicalName == MailSchema.Mailbox && target.Attributes.ContainsKey(MailSchema.TestScheduled)
-            && await ChangesTestScheduledAsync(entity, id, target.GetAttributeValue<bool?>(MailSchema.TestScheduled) == true, session, ct))
+            && await ChangesTestScheduledAsync(entity, id, target.SdkValue<bool?>(MailSchema.TestScheduled) == true, session, ct))
             DemandMailboxTestAllowed(principals, record.Owner);
 
         var changed = lookups.Where(l => record.Lookups.GetValueOrDefault(l.Attribute) != l.Value?.Id).ToList();
@@ -936,7 +941,7 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
         }
 
         if (entity.OwnershipType is TableOwnership.UserOwned or TableOwnership.TeamOwned
-            && target.Attributes.TryGetValue(OwnerId, out var o) && o is EntityReference newOwner
+            && target.Attributes.TryGetValue(OwnerId, out var o) && o is RecordReference newOwner
             && newOwner.Id != (record.Owner.OwningUser ?? record.Owner.OwningTeam))
         {
             await DemandRecordAsync(principals, entity, id, AccessMask.AssignAccess, record, session, ct);
@@ -950,7 +955,7 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
     /// retrieves all columns and sends them back passes). <paramref name="id"/> is empty on a Create, where every named column counts.
     /// </summary>
     /// <exception cref="XrmdFaultException">403 PrivilegeDenied.</exception>
-    private async Task DemandMailAdministrationAsync(IReadOnlyList<SecurityProfile> principals, TableDefinition entity, Entity target, Guid id,
+    private async Task DemandMailAdministrationAsync(IReadOnlyList<SecurityProfile> principals, TableDefinition entity, Record target, Guid id,
         DataSession session, CancellationToken ct)
     {
         var pk = SystemAttributes.PrimaryIdName(entity);
@@ -961,8 +966,8 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
         if (sent.Count == 0 || principals.FirstOrDefault(p => !p.IsSystemAdministrator) is not { } notAdministrator) return;
         static object? Normal(string column, object? v) => v switch
         {
-            OptionSetValue o => o.Value,
-            EntityReference r => r.Id,
+            ChoiceValue o => o.Value,
+            RecordReference r => r.Id,
             string { Length: 0 } => null,
             null when column == MailSchema.ApprovalColumn => 0,
             var x => x,
@@ -1027,13 +1032,13 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
     /// <c>queueid</c> must be readable (<see cref="DemandQueueReadableAsync"/>) and a new <c>objectid</c> readable.
     /// </summary>
     /// <exception cref="XrmdFaultException">403 PrivilegeDenied or AccessDenied; 404 for a missing item, queue or record.</exception>
-    private async Task AuthorizeQueueItemUpdateAsync(IReadOnlyList<SecurityProfile> principals, Guid id, Entity target,
+    private async Task AuthorizeQueueItemUpdateAsync(IReadOnlyList<SecurityProfile> principals, Guid id, Record target,
         DataSession session, CancellationToken ct)
     {
         var stored = await DemandWorkItemAsync(principals, id, AccessMask.WriteAccess, session, ct);
-        if (target.GetAttributeValue<EntityReference>(QueueSchema.QueueIdColumn) is { } moved && moved.Id != stored.Queue)
+        if (target.SdkValue<RecordReference>(QueueSchema.QueueIdColumn) is { } moved && moved.Id != stored.Queue)
             await DemandQueueReadableAsync(principals, moved.Id, session, ct);
-        if (target.GetAttributeValue<EntityReference>(QueueSchema.ObjectId) is { } record && record.Id != stored.Record
+        if (target.SdkValue<RecordReference>(QueueSchema.ObjectId) is { } record && record.Id != stored.Record
             && store.GetTable(record.LogicalName ?? "") is { } recordEntity)
             await DemandRecordAsync(principals, recordEntity, KeyedId(recordEntity, record), AccessMask.ReadAccess, session, ct);
     }
@@ -1081,7 +1086,7 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
     /// when the target names none (another table, or a principal without a default queue), which the core operation refuses (400).
     /// </summary>
     /// <exception cref="XrmdFaultException">404 for a missing user or team.</exception>
-    private async Task<Guid?> RouteDestinationAsync(EntityReference target, DataSession session, CancellationToken ct)
+    private async Task<Guid?> RouteDestinationAsync(RecordReference target, DataSession session, CancellationToken ct)
     {
         if (target.LogicalName == QueueSchema.Queue) return target.Id;
         if (target.LogicalName is not (SystemUser or Team)) return null;
@@ -1125,10 +1130,10 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
         }
         await ReadRecordAsync(queue, queueId, [], session, ct); // 404 for a missing queue
         var denied = principals.FirstOrDefault(p => !p.IsSystemAdministrator) ?? principals[0];
-        throw XrmdFaultException.AccessDenied(denied.UserId, AccessMask.ReadAccess.ToSdk(), queue.LogicalName!, queueId);
+        throw XrmdFaultException.AccessDenied(denied.UserId, AccessMask.ReadAccess, queue.LogicalName!, queueId);
     }
 
-    private async Task AuthorizeAssignAsync(IReadOnlyList<SecurityProfile> principals, EntityReference target, EntityReference assignee,
+    private async Task AuthorizeAssignAsync(IReadOnlyList<SecurityProfile> principals, RecordReference target, RecordReference assignee,
         DataSession session, CancellationToken ct)
     {
         // An entity without owner: the core operation rejects the Assign.
@@ -1138,8 +1143,8 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
         await DemandOwnerCanReadAsync(entity, assignee, session, ct);
     }
 
-    private async Task AuthorizeAssociateAsync(IReadOnlyList<SecurityProfile> principals, EntityReference target, Relationship relationship,
-        EntityReferenceCollection related, bool associate, DataSession session, CancellationToken ct)
+    private async Task AuthorizeAssociateAsync(IReadOnlyList<SecurityProfile> principals, RecordReference target, RelationshipName relationship,
+        RecordReferenceCollection related, bool associate, DataSession session, CancellationToken ct)
     {
         if (SecurityAdministration.FindRelationship(relationship.SchemaName) is { } security)
         {
@@ -1157,8 +1162,8 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
             || store.GetTable(r.ReferencedEntity!) is not { } referencedEntity)
             return; // the core operation rejects it
 
-        List<EntityReference> referencing;
-        EntityReference referenced;
+        List<RecordReference> referencing;
+        RecordReference referenced;
         if (target.LogicalName == r.ReferencedEntity)
         {
             referencing = related.Where(e => e.LogicalName == r.ReferencingEntity).ToList();
@@ -1195,7 +1200,7 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
     /// </summary>
     /// <exception cref="XrmdFaultException">403 PrivilegeDenied or AccessDenied; 404 for a missing item, queue or record.</exception>
     private async Task AuthorizeQueueItemRelinkAsync(IReadOnlyList<SecurityProfile> principals, OneToManyRelationship relationship,
-        IReadOnlyList<EntityReference> items, EntityReference parent, bool associate, DataSession session, CancellationToken ct)
+        IReadOnlyList<RecordReference> items, RecordReference parent, bool associate, DataSession session, CancellationToken ct)
     {
         foreach (var item in items)
             await DemandWorkItemAsync(principals, item.Id, AccessMask.WriteAccess, session, ct);
@@ -1213,7 +1218,7 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
     /// related record; for <c>queuemembership_association</c>, Append To on the queue(s) only. Records of the wrong entities are left to the core operation's 400.
     /// </summary>
     private async Task AuthorizeManyToManyAsync(IReadOnlyList<SecurityProfile> principals, ManyToManyRelationship relationship,
-        EntityReference target, EntityReferenceCollection related, DataSession session, CancellationToken ct)
+        RecordReference target, RecordReferenceCollection related, DataSession session, CancellationToken ct)
     {
         var other = target.LogicalName == relationship.Entity1LogicalName ? relationship.Entity2LogicalName
             : target.LogicalName == relationship.Entity2LogicalName ? relationship.Entity1LogicalName
@@ -1245,7 +1250,7 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
     /// if assigning it). Records of the wrong entities are left to the core operation's 400.
     /// </summary>
     private async Task AuthorizeSecurityAssociateAsync(IReadOnlyList<SecurityProfile> principals, SecurityRelationship relationship,
-        EntityReference target, EntityReferenceCollection related, bool associate, DataSession session, CancellationToken ct)
+        RecordReference target, RecordReferenceCollection related, bool associate, DataSession session, CancellationToken ct)
     {
         if (!relationship.TryGetPairs(target, related, out var pairs)) return;
         // F9: giving or taking a field security profile is a write of the profile, whoever the principal is.
@@ -1353,7 +1358,7 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
     /// GrantAccess/ModifyAccess: Share on the record, each right of <paramref name="mask"/> held on the record, the principal
     /// holds <c>prvRead</c>. An entity that cannot be shared or an invalid mask is left to the core operation's 400.
     /// </summary>
-    private async Task AuthorizeShareAsync(IReadOnlyList<SecurityProfile> principals, EntityReference target, EntityReference principal,
+    private async Task AuthorizeShareAsync(IReadOnlyList<SecurityProfile> principals, RecordReference target, RecordReference principal,
         AccessMask mask, DataSession session, CancellationToken ct)
     {
         if (store.GetTable(target.LogicalName ?? "") is not { OwnershipType: TableOwnership.UserOwned or TableOwnership.TeamOwned } entity
@@ -1378,17 +1383,17 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
     /// </summary>
     /// <exception cref="XrmdFaultException">404 or 400 from steps 1–5; 403 PrivilegeDenied or AccessDenied (step 6); 400
     /// InvalidArgument (step 7).</exception>
-    private async Task AuthorizeRecordTeamAsync(OrganizationRequest request, Caller caller, DataSession session, CancellationToken ct)
+    private async Task AuthorizeRecordTeamAsync(Request request, Caller caller, DataSession session, CancellationToken ct)
     {
         if (caller == Caller.Internal) return;
         var (record, userId, templateId) = AccessTeamRules.RecordTeamParameters(request);
         // Outside the transaction (stage 10 has not run yet): no locks; the core reads again under its locks and checks that
         // what it writes is what was checked here (AccessTeamRules.DemandSameAsChecked and DemandTeamShareChecked).
         var target = await AccessTeamRules.DemandRecordTeamAsync(session, store, record, userId, templateId, lockRows: false, ct);
-        var add = string.Equals(request.RequestName, AccessTeamRules.AddUserToRecordTeam, StringComparison.OrdinalIgnoreCase);
-        var table = target.Table.ToModel();
-        var mask = target.Mask.ToModel();
-        if (add) mask |= (await AccessTeamRules.TeamShareMaskAsync(session, target, lockRows: false, ct))?.ToModel() ?? AccessMask.None;
+        var add = string.Equals(request.Name, AccessTeamRules.AddUserToRecordTeam, StringComparison.OrdinalIgnoreCase);
+        var table = target.Table;
+        var mask = target.Mask;
+        if (add) mask |= await AccessTeamRules.TeamShareMaskAsync(session, target, lockRows: false, ct) ?? AccessMask.None;
 
         if (!await IsUnrestrictedAsync(caller, ct))
         {
@@ -1410,7 +1415,7 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
                         $"grants {right}, so the user needs {privilege} at Basic depth or wider.");
             }
         }
-        AccessTeamRules.MarkChecked(request, target with { Mask = mask.ToSdk() });
+        AccessTeamRules.MarkChecked(request, target with { Mask = mask });
     }
 
     // ---- checks -----------------------------------------------------------------------------------------------------
@@ -1442,25 +1447,25 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
     /// without the lookup is left to the core operation (400 or 404).
     /// </summary>
     /// <exception cref="XrmdFaultException">403 PrivilegeDenied or AccessDenied; 404 when the record or post does not exist.</exception>
-    private async Task DemandPostParentReadAsync(IReadOnlyList<SecurityProfile> principals, TableDefinition entity, Entity row,
+    private async Task DemandPostParentReadAsync(IReadOnlyList<SecurityProfile> principals, TableDefinition entity, Record row,
         DataSession session, CancellationToken ct)
     {
         if (entity.LogicalName == PostSchema.Comment)
         {
-            if (row.GetAttributeValue<EntityReference>(PostSchema.PostId) is not { } postRef) return;
+            if (row.SdkValue<RecordReference>(PostSchema.PostId) is not { } postRef) return;
             var post = Definition(PostSchema.Post);
             await DemandRecordAsync(principals, post, KeyedId(post, postRef), AccessMask.ReadAccess, session, ct);
             return;
         }
-        if (row.GetAttributeValue<EntityReference>(ActivitySchema.RegardingObjectId) is not { } regarding
+        if (row.SdkValue<RecordReference>(ActivitySchema.RegardingObjectId) is not { } regarding
             || store.GetTable(regarding.LogicalName ?? "") is not { } regardingEntity) return;
         await DemandRecordAsync(principals, regardingEntity, KeyedId(regardingEntity, regarding), AccessMask.ReadAccess, session, ct);
     }
 
     /// <summary>The stored lookup of a post-table row its read rule follows: <c>postid</c> of a comment, else <c>regardingobjectid</c>.</summary>
-    private async Task<Entity> PostParentAsync(TableDefinition entity, Guid id, DataSession session, CancellationToken ct)
+    private async Task<Record> PostParentAsync(TableDefinition entity, Guid id, DataSession session, CancellationToken ct)
     {
-        var row = new Entity(entity.LogicalName, id);
+        var row = new Record(entity.LogicalName!, id);
         var column = entity.LogicalName == PostSchema.Comment ? PostSchema.PostId : ActivitySchema.RegardingObjectId;
         var typed = column == ActivitySchema.RegardingObjectId;
         await using var cmd = session.Command(
@@ -1469,9 +1474,9 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
         cmd.AddParameter(IdParameter, DbType.Guid, id);
         await using var rd = await cmd.ExecuteReaderAsync(ct);
         if (!await rd.ReadAsync(ct) || rd.IsDBNull(0)) return row;
-        if (!typed) row[column] = new EntityReference(PostSchema.Post, rd.GetGuid(0));
+        if (!typed) row[column] = new RecordReference { LogicalName = PostSchema.Post, Id = rd.GetGuid(0) };
         else if (!rd.IsDBNull(1) && store.GetTableByObjectTypeCode(rd.GetInt32(1)) is { } table)
-            row[column] = new EntityReference(table.LogicalName, rd.GetGuid(0));
+            row[column] = new RecordReference { LogicalName = table.LogicalName!, Id = rd.GetGuid(0) };
         return row;
     }
 
@@ -1491,7 +1496,7 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
             var shared = await SharedRightsAsync(entity, id, p.UserId, session, ct);
             if (AccessEvaluator.HasAccess(p, tree, entity, depth, record.Owner, right, shared)) continue;
             if (!await HierarchyGrantsAsync(p, entity, id, record.Owner, right, null, session, ct))
-                throw XrmdFaultException.AccessDenied(p.UserId, right.ToSdk(), entity.LogicalName!, id);
+                throw XrmdFaultException.AccessDenied(p.UserId, right, entity.LogicalName!, id);
         }
     }
 
@@ -1538,13 +1543,13 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
                 shared ??= await SharedRightsAsync(entity, id, p.UserId, session, ct);
                 if (AccessEvaluator.HasAccess(p, tree, entity, depth, record.Owner, right, shared.Value)) continue;
                 if (!await HierarchyGrantsAsync(p, entity, id, record.Owner, right, reportShares, session, ct))
-                    throw XrmdFaultException.AccessDenied(p.UserId, right.ToSdk(), entity.LogicalName!, id);
+                    throw XrmdFaultException.AccessDenied(p.UserId, right, entity.LogicalName!, id);
             }
         }
     }
 
     /// <summary>AppendTo on the record a written lookup points to (an unknown entity is left to the core operation).</summary>
-    private async Task DemandAppendToAsync(IReadOnlyList<SecurityProfile> principals, EntityReference reference, DataSession session,
+    private async Task DemandAppendToAsync(IReadOnlyList<SecurityProfile> principals, RecordReference reference, DataSession session,
         CancellationToken ct)
     {
         if (store.GetTable(reference.LogicalName ?? "") is { } referenced)
@@ -1553,7 +1558,7 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
 
     /// <summary>A new owner (user or team) must hold <c>prvRead</c> on the entity; the SYSTEM user always does.</summary>
     /// <exception cref="XrmdFaultException">403 PrincipalPrivilegeDenied; 404 for a missing owner.</exception>
-    private async Task DemandOwnerCanReadAsync(TableDefinition entity, EntityReference owner, DataSession session, CancellationToken ct)
+    private async Task DemandOwnerCanReadAsync(TableDefinition entity, RecordReference owner, DataSession session, CancellationToken ct)
     {
         var privilege = PrivilegeNames.For(AccessMask.ReadAccess, entity);
         bool holds;
@@ -1594,10 +1599,10 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
     /// <summary>
     /// The lookups of <paramref name="target"/> the operation writes (the owner and the system-set ones excepted), with
     /// their value (null: cleared). A field share's lookups (<c>objectid</c>, <c>principalid</c>) need no Append/AppendTo: who may
-    /// share a column on a record is ruling F6's rule 4 (<see cref="SystemTableRules.EnforceFieldSharesAsync"/>), as Basic User
+    /// share a column on a record is ruling F6's rule 4 (<see cref="SystemTableRules.EnforceFieldSharesAsync(Request, Caller, FieldSecurity, IMetadataStore, DataSession, Func{RecordReference, CancellationToken, Task}, CancellationToken)"/>), as Basic User
     /// holds only Create, Read, Write and Delete on the table.
     /// </summary>
-    private static IEnumerable<(string Attribute, EntityReference? Value)> WrittenLookups(TableDefinition entity, Entity target, bool isCreate)
+    private static IEnumerable<(string Attribute, RecordReference? Value)> WrittenLookups(TableDefinition entity, Record target, bool isCreate)
     {
         if (entity.LogicalName == FieldSecurityTables.Share) yield break;
         foreach (var (name, value) in target.Attributes)
@@ -1609,40 +1614,40 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
             if (ActivitySchema.IsPartyList(lookup)) continue;
             switch (value)
             {
-                case EntityReference reference: yield return (name, reference); break;
+                case RecordReference reference: yield return (name, reference); break;
                 case null: yield return (name, null); break;
             }
         }
     }
 
-    /// <summary>The id of <paramref name="entity"/>: <see cref="Entity.Id"/>, else its primary key attribute; null when neither is set.</summary>
-    private static Guid? StoredRowId(TableDefinition definition, Entity entity) =>
+    /// <summary>The id of <paramref name="entity"/>: <see cref="Record.Id"/>, else its primary key attribute; null when neither is set.</summary>
+    private static Guid? StoredRowId(TableDefinition definition, Record entity) =>
         entity.Id != Guid.Empty ? entity.Id
         : entity.Attributes.TryGetValue(SystemAttributes.PrimaryIdName(definition), out var pk) && pk is Guid id && id != Guid.Empty ? id
         : null;
 
     /// <summary>
-    /// The id of a write's target: <see cref="Entity.Id"/>, else its primary key attribute, else the primary id among its
+    /// The id of a write's target: <see cref="Record.Id"/>, else its primary key attribute, else the primary id among its
     /// <c>KeyAttributes</c> (a row of an elastic table named by key, plan 3.4); empty when none is set. On an elastic table the
     /// ids given must agree (400 otherwise, as in the core), so the row checked here is the row written.
     /// </summary>
-    private static Guid KeyedId(TableDefinition definition, Entity target)
+    private static Guid KeyedId(TableDefinition definition, Record target)
     {
-        ElasticTables.DemandOneRowId(definition.SdkView(), target); // a request record: the check stays on the SDK (S.2e)
+        ElasticTables.DemandOneRowId(definition, target);
         return StoredRowId(definition, target) ?? KeyedId(definition, target.KeyAttributes);
     }
 
-    /// <summary>The id of a reference: <see cref="EntityReference.Id"/>, else the primary id among its <c>KeyAttributes</c>.</summary>
-    private static Guid KeyedId(TableDefinition definition, EntityReference reference) =>
+    /// <summary>The id of a reference: <see cref="RecordReference.Id"/>, else the primary id among its <c>KeyAttributes</c>.</summary>
+    private static Guid KeyedId(TableDefinition definition, RecordReference reference) =>
         reference.Id != Guid.Empty ? reference.Id : KeyedId(definition, reference.KeyAttributes);
 
-    private static Guid KeyedId(TableDefinition definition, KeyAttributeCollection? keys) =>
+    private static Guid KeyedId(TableDefinition definition, IDictionary<string, object?>? keys) =>
         keys is not null && keys.TryGetValue(SystemAttributes.PrimaryIdName(definition), out var value)
             ? value switch { Guid g => g, string text when Guid.TryParse(text, out var parsed) => parsed, _ => Guid.Empty }
             : Guid.Empty;
 
     /// <summary>True when <paramref name="target"/> is a record of an elastic table (plan 3.4).</summary>
-    private bool IsElasticTarget(Entity target) => store.GetTable(target.LogicalName ?? "") is { } entity && ElasticTables.IsElastic(entity);
+    private bool IsElasticTarget(Record target) => store.GetTable(target.LogicalName ?? "") is { } entity && ElasticTables.IsElastic(entity);
 
     /// <summary>
     /// True when an Upsert of <paramref name="target"/> updates a stored row (one has its id and, exactly, its partition: the key
@@ -1651,7 +1656,7 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
     /// stored in another partition is a Create there, which fails with 412 DuplicateRecord (plan 3.4, ruling E1), so here it gets
     /// the Create rule.
     /// </summary>
-    private async Task<bool> UpsertUpdatesAsync(Entity target, OrganizationRequest request, DataSession session, CancellationToken ct)
+    private async Task<bool> UpsertUpdatesAsync(Record target, Request request, DataSession session, CancellationToken ct)
     {
         if (store.GetTable(target.LogicalName ?? "") is not { } entity || KeyedId(entity, target) is var id && id == Guid.Empty) return false;
         if (!ElasticTables.IsElastic(entity)) return false;
@@ -1674,7 +1679,7 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
     }
 
     /// <summary>The <c>partitionId</c> parameter of <paramref name="request"/> (any case, as the core reads it); null when absent.</summary>
-    private static object? PartitionIdParameter(OrganizationRequest request) =>
+    private static object? PartitionIdParameter(Request request) =>
         request.Parameters.FirstOrDefault(p => string.Equals(p.Key, "partitionId", StringComparison.OrdinalIgnoreCase)).Value;
 
     private static async Task<bool> RowExistsAsync(TableDefinition entity, Guid id, DataSession session, CancellationToken ct)
@@ -1766,7 +1771,7 @@ public sealed class SecurityGuard(SecurityCache cache, IMetadataStore store, Fie
 
     /// <summary>The business unit of a <c>systemuser</c> or <c>team</c> owner.</summary>
     /// <exception cref="XrmdFaultException">404 when the owner does not exist.</exception>
-    private async Task<Guid?> BusinessUnitOfAsync(EntityReference owner, DataSession session, CancellationToken ct)
+    private async Task<Guid?> BusinessUnitOfAsync(RecordReference owner, DataSession session, CancellationToken ct)
     {
         var table = owner.LogicalName == Team ? Team : SystemUser;
         var entity = store.GetTable(table) ?? throw new InvalidOperationException($"Entity '{table}' is not defined.");

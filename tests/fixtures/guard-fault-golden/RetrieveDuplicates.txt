@@ -1,0 +1,47 @@
+=== PipelineExecutor.ExecuteAsync as a user with Basic User ===
+--- request ---
+Request: RetrieveDuplicatesRequest
+  RequestName: String:"RetrieveDuplicates"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    BusinessEntity: Entity(contact)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[1]
+        emailaddress1: String:"gfg@example.com"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+    MatchingEntityName: String:"contact"
+    PagingInfo: PagingInfo
+      Count: Int32:10
+      PageNumber: Int32:1
+      PagingCookie: null
+      ReturnRecordCountLessThanMarv: Boolean:False
+      ReturnTotalRecordCount: Boolean:False
+--- fault ---
+Fault: XrmdFaultException 0x80040220 403 "Principal user (Id={a:caller}, type=8) is missing prvReadContact privilege (Id={id1}) on OTC=2 for entity 'contact'. Consider adding missing privilege to one of the principal (user/team) roles for the request to succeed."
+--- request after ---
+Request: RetrieveDuplicatesRequest
+  RequestName: String:"RetrieveDuplicates"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    BusinessEntity: Entity(contact)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[1]
+        emailaddress1: String:"gfg@example.com"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+    MatchingEntityName: String:"contact"
+    PagingInfo: PagingInfo
+      Count: Int32:10
+      PageNumber: Int32:1
+      PagingCookie: null
+      ReturnRecordCountLessThanMarv: Boolean:False
+      ReturnTotalRecordCount: Boolean:False
+--- rows ---
+rows written: 0

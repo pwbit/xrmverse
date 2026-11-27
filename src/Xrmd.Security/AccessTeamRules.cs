@@ -1,14 +1,13 @@
 using System.Data;
-using Microsoft.Crm.Sdk.Messages;
-using Microsoft.Xrm.Sdk;
-using Microsoft.Xrm.Sdk.Metadata;
+using System.Runtime.CompilerServices;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
-using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Messages;
+using Xrmd.Model.Metadata;
+using Xrmd.Model.Records;
 using Xrmd.Model.Security;
-using Xrmd.Security.Sdk;
 
 namespace Xrmd.Security;
 
@@ -20,9 +19,14 @@ namespace Xrmd.Security;
 /// A template's table is checked twice: by <see cref="SystemTableRules"/> on the parameters the caller sent (before stage 10,
 /// outside the transaction), and by the core operation at stage 30, inside the request's transaction, on the values it
 /// writes (what pre-operation plug-ins left). Only the second takes the lock that settles the race with disabling the table
-/// (<see cref="DemandTemplateAsync"/>).
+/// (<see cref="DemandTemplateAsync(DataSession, IMetadataStore, Record, bool, Guid, CancellationToken)"/>).
+/// <para>
+/// S.2e3c2a (Task 3): on model values. The SDK twins are in <c>Sdk/SecurityRules.Sdk.cs</c>. Task 4: <see cref="SystemTableRules"/> calls
+/// the model members. Task 5 (Decision 6): the record team marks the <c>SecurityGuard</c> leaves are keyed on the model request it
+/// checks, which for the pipeline is the request the core gets.
+/// </para>
 /// </remarks>
-public static class AccessTeamRules
+public static partial class AccessTeamRules
 {
     /// <summary>The most templates a table can have (<see cref="AccessTeamSchema.MaxTemplatesPerTable"/>).</summary>
     public const int MaxTemplatesPerTable = AccessTeamSchema.MaxTemplatesPerTable;
@@ -59,17 +63,14 @@ public static class AccessTeamRules
     /// </list>
     /// </summary>
     /// <exception cref="XrmdFaultException">400 InvalidArgument naming the column.</exception>
-    public static async Task DemandTemplateAsync(DataSession session, IMetadataStore store, Entity target, bool isCreate, Guid id,
+    public static async Task DemandTemplateAsync(DataSession session, IMetadataStore store, Record target, bool isCreate, Guid id,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(target);
         var maskGiven = target.Attributes.TryGetValue(AccessTeamSchema.DefaultAccessRightsMask, out var mask);
-        if ((isCreate || maskGiven) && !(mask is int value && MaskIsValid(value)))
-            throw XrmdFaultException.InvalidArgument(
-                $"The {AccessTeamSchema.DefaultAccessRightsMask} of an access team template must combine some of Read (1), Write (2), Append (4), " +
-                $"AppendTo (16), Delete (65536), Share (262144) and Assign (524288), and nothing else; got {mask ?? "no value"}.");
+        if ((isCreate || maskGiven) && !(mask is int value && MaskIsValid(value))) throw InvalidTemplateMask(mask);
 
         var codeGiven = target.Attributes.TryGetValue(AccessTeamSchema.ObjectTypeCode, out var codeValue);
         if (isCreate)
@@ -87,7 +88,17 @@ public static class AccessTeamRules
         }
     }
 
-    /// <summary>The Create part of <see cref="DemandTemplateAsync"/>: the lock, the flag of the stored definition, the count.</summary>
+    /// <summary>
+    /// The refusal of a template's <c>defaultaccessrightsmask</c>, which prints the value it got (<paramref name="mask"/>) as the caller
+    /// sent it: a model value as the SDK value the mirror read it in from (<see cref="SdkTypeNames.Text"/>, ruling 3a), so the text shows
+    /// what it shows today.
+    /// </summary>
+    internal static XrmdFaultException InvalidTemplateMask(object? mask) =>
+        XrmdFaultException.InvalidArgument(
+            $"The {AccessTeamSchema.DefaultAccessRightsMask} of an access team template must combine some of Read (1), Write (2), Append (4), " +
+            $"AppendTo (16), Delete (65536), Share (262144) and Assign (524288), and nothing else; got {(mask is null ? "no value" : SdkTypeNames.Text(mask))}.");
+
+    /// <summary>The Create part of <see cref="DemandTemplateAsync(DataSession, IMetadataStore, Record, bool, Guid, CancellationToken)"/>: the lock, the flag of the stored definition, the count.</summary>
     private static async Task DemandTemplateTableAsync(DataSession session, IMetadataStore store, int code, CancellationToken ct)
     {
         var table = store.GetTableByObjectTypeCode(code)?.LogicalName;
@@ -137,28 +148,32 @@ public static class AccessTeamRules
         || string.Equals(name, RemoveUserFromRecordTeam, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// The parameters of a record team message: <c>Record</c> (EntityReference), <c>SystemUserId</c> and <c>TeamTemplateId</c> (Guid).
+    /// The parameters of a record team message: <c>Record</c> (a reference), <c>SystemUserId</c> and <c>TeamTemplateId</c> (Guid), read in
+    /// this order.
     /// </summary>
-    /// <exception cref="XrmdFaultException">400 when one is missing or of another type.</exception>
-    public static (EntityReference Record, Guid UserId, Guid TemplateId) RecordTeamParameters(OrganizationRequest request)
+    /// <exception cref="XrmdFaultException">400 when one is missing or of another type (named with its SDK type, Decision 2).</exception>
+    public static (RecordReference Record, Guid UserId, Guid TemplateId) RecordTeamParameters(Request request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        return (Parameter<EntityReference>("Record"), Parameter<Guid>("SystemUserId"), Parameter<Guid>("TeamTemplateId"));
+        return (Parameter<RecordReference>("Record"), Parameter<Guid>("SystemUserId"), Parameter<Guid>("TeamTemplateId"));
 
         T Parameter<T>(string name) =>
             request.Parameters.TryGetValue(name, out var value) && value is T typed
                 ? typed
-                : throw XrmdFaultException.InvalidArgument(
-                    $"Required parameter '{name}' of request '{request.RequestName}' is missing or not a {typeof(T).Name}.");
+                : throw InvalidRecordTeamParameter(name, request.Name, SdkTypeNames.Of(typeof(T)));
     }
+
+    /// <summary>The refusal of a record team parameter that is missing or not a <paramref name="typeName"/>.</summary>
+    internal static XrmdFaultException InvalidRecordTeamParameter(string name, string? requestName, string typeName) =>
+        XrmdFaultException.InvalidArgument($"Required parameter '{name}' of request '{requestName}' is missing or not a {typeName}.");
 
     /// <summary>
     /// A record team message's parameters once checked (<see cref="DemandRecordTeamAsync"/>): the record's table, the template's
     /// mask now and the record's owning business unit (the business unit of a team created for it). In what the
-    /// <c>SecurityGuard</c> records (<see cref="MarkChecked"/>), <see cref="Mask"/> is every right it checked: the template's mask,
+    /// <c>SecurityGuard</c> records (<c>MarkChecked</c>), <see cref="Mask"/> is every right it checked: the template's mask,
     /// with, for AddUserToRecordTeam, the rights of the existing team's share (<see cref="TeamShareMaskAsync"/>).
     /// </summary>
-    public sealed record RecordTeamTarget(EntityMetadata Table, Guid RecordId, Guid UserId, Guid TemplateId, AccessRights Mask,
+    public sealed partial record RecordTeamTarget(TableDefinition Table, Guid RecordId, Guid UserId, Guid TemplateId, AccessMask Mask,
         Guid? OwningBusinessUnit);
 
     /// <summary>
@@ -174,7 +189,7 @@ public static class AccessTeamRules
     /// instead of deadlocking on the team rows. A record Delete takes the record's update lock before its access teams
     /// (<c>CoreOperations.DeleteAccessTeamsAsync</c>), the order used here.</param>
     /// <exception cref="XrmdFaultException">404 ObjectDoesNotExist or 400 InvalidArgument for the first check that fails.</exception>
-    public static async Task<RecordTeamTarget> DemandRecordTeamAsync(DataSession session, IMetadataStore store, EntityReference record,
+    public static async Task<RecordTeamTarget> DemandRecordTeamAsync(DataSession session, IMetadataStore store, RecordReference record,
         Guid userId, Guid templateId, bool lockRows, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(session);
@@ -229,53 +244,16 @@ public static class AccessTeamRules
             }
         }
 
-        return new RecordTeamTarget(table.SdkView(), record.Id, userId, templateId, ((AccessMask)mask).ToSdk(), businessUnit);
-    }
-
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<OrganizationRequest, RecordTeamTarget> Checked = new();
-
-    /// <summary>Records what the <c>SecurityGuard</c> checked (steps 1–7) for <paramref name="request"/>, for <see cref="DemandSameAsChecked"/>.</summary>
-    public static void MarkChecked(OrganizationRequest request, RecordTeamTarget target)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        Checked.AddOrUpdate(request, target);
-    }
-
-    /// <summary>
-    /// The core's side of the caller and added-user checks (steps 6 and 7), which the <c>SecurityGuard</c> made before stage 10 on
-    /// the parameters the caller sent and the template's mask it read then: what the core is about to write (the final
-    /// parameters, after pre-operation plug-ins, and the mask read under the template's lock) must be what was checked, with no
-    /// right the check did not cover. Otherwise the request fails explicitly instead of writing unchecked rights. No check for
-    /// <see cref="Caller.Internal"/>, which the guard does not check either.
-    /// </summary>
-    /// <exception cref="XrmdFaultException">400 InvalidArgument when the record, user or template differs from the checked
-    /// one, or the template's mask gained a right since the check; 500 when no check was recorded.</exception>
-    public static void DemandSameAsChecked(OrganizationRequest request, Caller caller, RecordTeamTarget target)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        ArgumentNullException.ThrowIfNull(caller);
-        ArgumentNullException.ThrowIfNull(target);
-        if (caller == Caller.Internal) return;
-        if (!Checked.TryGetValue(request, out var check))
-            throw new XrmdFaultException(ErrorCodes.Unexpected,
-                $"{request.RequestName} reached its core operation without the security check of its caller.", 500);
-        if (check.Table.LogicalName != target.Table.LogicalName /* SDK read, no conversion; the record signature moves in S.2e */ || check.RecordId != target.RecordId || check.UserId != target.UserId
-            || check.TemplateId != target.TemplateId)
-            throw XrmdFaultException.InvalidArgument(
-                $"The parameters of {request.RequestName} were changed after its security check (by a plug-in); they cannot be checked again.");
-        if ((target.Mask & ~check.Mask) != 0)
-            throw XrmdFaultException.InvalidArgument(
-                $"The access team template {target.TemplateId} was changed while {request.RequestName} ran: it now grants {target.Mask}, " +
-                $"but the caller's rights were checked for {check.Mask}. Retry the request.");
+        return new RecordTeamTarget(table, record.Id, userId, templateId, (AccessMask)mask, businessUnit);
     }
 
     /// <summary>
     /// The rights of the share of the record held by its team for the template (direct and inherited masks), the rights a member
-    /// added now receives; null when the record has no team for the template yet, <see cref="AccessRights.None"/> when the team
+    /// added now receives; null when the record has no team for the template yet, <see cref="AccessMask.None"/> when the team
     /// has no share of the record. With <paramref name="lockRows"/> (the core, after it locked the team), the share row is read
     /// WITH (UPDLOCK, HOLDLOCK) until commit, so it cannot change before the member is added.
     /// </summary>
-    public static async Task<AccessRights?> TeamShareMaskAsync(DataSession session, RecordTeamTarget target, bool lockRows,
+    public static async Task<AccessMask?> TeamShareMaskAsync(DataSession session, RecordTeamTarget target, bool lockRows,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(session);
@@ -294,13 +272,54 @@ public static class AccessTeamRules
             """);
         cmd.AddParameter("@_record", DbType.Guid, target.RecordId);
         cmd.AddParameter("@_template", DbType.Guid, target.TemplateId);
-        cmd.AddParameter("@_otc", DbType.Int32, target.Table.ObjectTypeCode ?? 0 /* SDK read, no conversion; the record signature moves in S.2e */);
+        cmd.AddParameter("@_otc", DbType.Int32, target.Table.ObjectTypeCode ?? 0);
         await using var rd = await cmd.ExecuteReaderAsync(ct);
         if (!await rd.ReadAsync(ct)) return null;
         var mask = 0;
         do mask |= rd.GetInt32(1);
         while (await rd.ReadAsync(ct));
-        return ((AccessMask)mask).ToSdk();
+        return (AccessMask)mask;
+    }
+
+    // ---- the record team marks (Decision 6) ----------------------------------------------------------------------------
+
+    /// <summary>What the <c>SecurityGuard</c> checked for each model request (<see cref="MarkChecked(Request, RecordTeamTarget)"/>).</summary>
+    private static readonly ConditionalWeakTable<Request, RecordTeamTarget> Checked = new();
+
+    /// <summary>
+    /// Records what the <c>SecurityGuard</c> checked (steps 1–7) for <paramref name="request"/>, for
+    /// <see cref="DemandSameAsChecked"/> and <see cref="DemandTeamShareChecked"/>.
+    /// </summary>
+    public static void MarkChecked(Request request, RecordTeamTarget target)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        Checked.AddOrUpdate(request, target);
+    }
+
+    /// <summary>
+    /// The core's side of the caller and added-user checks (steps 6 and 7), which the <c>SecurityGuard</c> made before stage 10 on
+    /// the parameters the caller sent and the template's mask it read then: what the core is about to write (the final
+    /// parameters, after pre-operation plug-ins, and the mask read under the template's lock) must be what was checked, with no
+    /// right the check did not cover. Otherwise the request fails explicitly instead of writing unchecked rights. No check for
+    /// <see cref="Caller.Internal"/>, which the guard does not check either.
+    /// </summary>
+    /// <exception cref="XrmdFaultException">400 InvalidArgument when the record, user or template differs from the checked
+    /// one, or the template's mask gained a right since the check; 500 when no check was recorded.</exception>
+    public static void DemandSameAsChecked(Request request, Caller caller, RecordTeamTarget target)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(caller);
+        ArgumentNullException.ThrowIfNull(target);
+        if (caller == Caller.Internal) return;
+        var check = CheckOf(request);
+        if (check.Table.LogicalName != target.Table.LogicalName || check.RecordId != target.RecordId || check.UserId != target.UserId
+            || check.TemplateId != target.TemplateId)
+            throw XrmdFaultException.InvalidArgument(
+                $"The parameters of {request.Name} were changed after its security check (by a plug-in); they cannot be checked again.");
+        if ((target.Mask & ~check.Mask) != 0)
+            throw XrmdFaultException.InvalidArgument(
+                $"The access team template {target.TemplateId} was changed while {request.Name} ran: it now grants {target.Mask}, " +
+                $"but the caller's rights were checked for {check.Mask}. Retry the request.");
     }
 
     /// <summary>
@@ -310,20 +329,26 @@ public static class AccessTeamRules
     /// out unchecked rights. No check for <see cref="Caller.Internal"/>.
     /// </summary>
     /// <exception cref="XrmdFaultException">400 InvalidArgument (retry); 500 when no check was recorded.</exception>
-    public static void DemandTeamShareChecked(OrganizationRequest request, Caller caller, RecordTeamTarget target, AccessRights teamShare)
+    public static void DemandTeamShareChecked(Request request, Caller caller, RecordTeamTarget target, AccessMask teamShare)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(caller);
         ArgumentNullException.ThrowIfNull(target);
         if (caller == Caller.Internal) return;
-        if (!Checked.TryGetValue(request, out var check))
-            throw new XrmdFaultException(ErrorCodes.Unexpected,
-                $"{request.RequestName} reached its core operation without the security check of its caller.", 500);
+        var check = CheckOf(request);
         if ((teamShare & ~check.Mask) != 0)
             throw XrmdFaultException.InvalidArgument(
-                $"The access team of the record for the template {target.TemplateId} changed while {request.RequestName} ran: its share " +
+                $"The access team of the record for the template {target.TemplateId} changed while {request.Name} ran: its share " +
                 $"now grants {teamShare}, but the caller's rights were checked for {check.Mask}. Retry the request.");
     }
+
+    /// <summary>What was checked for <paramref name="request"/>.</summary>
+    /// <exception cref="XrmdFaultException">500 when no check was recorded.</exception>
+    private static RecordTeamTarget CheckOf(Request request) =>
+        Checked.TryGetValue(request, out var check)
+            ? check
+            : throw new XrmdFaultException(ErrorCodes.Unexpected,
+                $"{request.Name} reached its core operation without the security check of its caller.", 500);
 
     /// <summary>True when the team exists and is system-managed (<c>systemmanaged</c> = 1).</summary>
     public static async Task<bool> IsSystemManagedTeamAsync(DataSession session, Guid teamId, CancellationToken ct)

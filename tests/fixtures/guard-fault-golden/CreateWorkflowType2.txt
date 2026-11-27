@@ -1,0 +1,43 @@
+=== PipelineExecutor.ExecuteAsync as a user with Basic User ===
+--- request ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(workflow)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[4]
+        name: String:"gfg activation"
+        type: OptionSetValue
+          Value: Int32:2
+        category: OptionSetValue
+          Value: Int32:0
+        primaryentity: String:"account"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- fault ---
+Fault: XrmdFaultException 0x80040203 400 "Create of 'workflow' is refused: Only a definition (type 1) is written, not type 2: activations are made by SetState."
+--- request after ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(workflow)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[4]
+        name: String:"gfg activation"
+        type: OptionSetValue
+          Value: Int32:2
+        category: OptionSetValue
+          Value: Int32:0
+        primaryentity: String:"account"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- rows ---
+processes named 'gfg activation': 0

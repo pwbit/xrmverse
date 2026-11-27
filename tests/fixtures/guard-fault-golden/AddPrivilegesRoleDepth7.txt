@@ -1,0 +1,33 @@
+=== PipelineExecutor.ExecuteAsync as a user with Basic User and prvReadRole Global, prvWriteRole Global, prvReadAccount Basic ===
+--- request ---
+Request: AddPrivilegesRoleRequest
+  RequestName: String:"AddPrivilegesRole"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    Privileges: RolePrivilege[][1]
+      [0]: RolePrivilege
+        BusinessUnitId: Guid:{empty}
+        Depth: PrivilegeDepth:7
+        PrivilegeId: Guid:{id1}
+        PrivilegeName: null
+        RecordFilterId: Guid:{empty}
+        RecordFilterUniqueName: null
+    RoleId: Guid:{a:role}
+--- fault ---
+Fault: XrmdFaultException 0x80040203 400 "Privilege prvReadAccount (Id={id1}) cannot be granted at depth None."
+--- request after ---
+Request: AddPrivilegesRoleRequest
+  RequestName: String:"AddPrivilegesRole"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    Privileges: RolePrivilege[][1]
+      [0]: RolePrivilege
+        BusinessUnitId: Guid:{empty}
+        Depth: PrivilegeDepth:7
+        PrivilegeId: Guid:{id1}
+        PrivilegeName: null
+        RecordFilterId: Guid:{empty}
+        RecordFilterUniqueName: null
+    RoleId: Guid:{a:role}
+--- rows ---
+privileges of the role: 0

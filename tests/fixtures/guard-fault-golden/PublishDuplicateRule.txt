@@ -1,0 +1,17 @@
+=== PipelineExecutor.ExecuteAsync as a user with Basic User ===
+--- request ---
+Request: PublishDuplicateRuleRequest
+  RequestName: String:"PublishDuplicateRule"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    DuplicateRuleId: Guid:{a:rule}
+--- fault ---
+Fault: XrmdFaultException 0x80040220 403 "Principal user (Id={a:caller}, type=8) is missing prvWriteDuplicateRule privilege (Id={id1}) on OTC=4414 for entity 'duplicaterule'. Consider adding missing privilege to one of the principal (user/team) roles for the request to succeed."
+--- request after ---
+Request: PublishDuplicateRuleRequest
+  RequestName: String:"PublishDuplicateRule"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    DuplicateRuleId: Guid:{a:rule}
+--- rows ---
+publish jobs of the rule: 0

@@ -1,0 +1,61 @@
+=== PipelineExecutor.ExecuteAsync as a user with Basic User and prvReadnew_GfgSecure Global ===
+--- request ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(principalobjectattributeaccess)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[4]
+        objectid: EntityReference
+          LogicalName: String:"new_gfgsecure"
+          Id: Guid:{a:record}
+          Name: null
+          KeyAttributes: KeyAttributeCollection[0]
+          RowVersion: null
+        attributeid: Guid:{id1}
+        principalid: EntityReference
+          LogicalName: String:"systemuser"
+          Id: Guid:{a:principal}
+          Name: null
+          KeyAttributes: KeyAttributeCollection[0]
+          RowVersion: null
+        readaccess: Boolean:True
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- fault ---
+none
+--- request after ---
+Request: CreateRequest
+  RequestName: String:"Create"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(principalobjectattributeaccess)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[6]
+        objectid: EntityReference
+          LogicalName: String:"new_gfgsecure"
+          Id: Guid:{a:record}
+          Name: null
+          KeyAttributes: KeyAttributeCollection[0]
+          RowVersion: null
+        attributeid: Guid:{id1}
+        principalid: EntityReference
+          LogicalName: String:"systemuser"
+          Id: Guid:{a:principal}
+          Name: null
+          KeyAttributes: KeyAttributeCollection[0]
+          RowVersion: null
+        readaccess: Boolean:True
+        objecttypecode: String:"new_gfgsecure"
+        updateaccess: Boolean:False
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- rows ---
+field shares of the record: 1

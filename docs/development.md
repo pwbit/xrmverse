@@ -236,8 +236,9 @@ What stays on the SDK, and the step that moves it:
 
 | Still on the SDK | Moves in |
 |---|---|
-| Security: the stage-20 guard (`SecurityGuard`), `SystemTableRules` and the other Security row rules, and the `StandardUpsert`, `InnerExecution` and `AccessTeamRules` marks | S.2e3c2 |
-| `HoldChecksMayWrite`, the held window of the messages moved in S.2e3c1, and the Security bridges of `CoreSdkBridges`, which are removed | S.2e3c2 |
+| Stage 20: the internal checks on `Record` (custom API authoring, registration validation, process writes, service endpoints, mail secrets), with the Workflows hook behind its lent view, and the `StandardUpsert` and `InnerExecution` marks on model keys | S.2e3c2b |
+| `HoldChecksMayWrite` and the held window of the messages moved in S.2e3c1 | S.2e3c2b |
+| `PrivilegeCatalog` and `SecurityCache`, which implement the SDK-typed metadata hooks `IEntityCreatedHandler` and `IEntityDeletedHandler` | With the metadata writes |
 | `OrganizationService`, `RetrieveMultipleModelRequest` and `MetadataOperations` (RetrieveEntity, RetrieveAttribute and the metadata reads) | S.2e3c3 |
 | The core entry adapter, and the callers of the `PipelineCoreSdk` extension methods in Workflows, Solution and Admin; the methods are removed | S.2e3c3 |
 | Mail, Elastic, Duplicates, Solutions and Rollups, and their bridges | S.2e4 |
@@ -345,7 +346,7 @@ The cost of a message through the core, measured against the code before S.2e3a 
   806 objects instead of 606, or 2 to 3 more per child. The time stays within noise.
 - **The stage-20 SDK image checks cost one conversion each.** The checks on writes of the custom API, plug-in registration, workflow
   and service endpoint tables, and the owner lookup of real-time workflows, read their image through the model member into a mirror
-  of their own. Each read converts that one row in once, and the checks get the core's `Entity`. S.2e3c2 can move these
+  of their own. Each read converts that one row in once, and the checks get the core's `Entity`. S.2e3c2b moves these
   checks to `Record`.
 - **Direct SDK callers pay three conversions of the request.** An extension method converts the request in, and the adapter writes
   it out and reads it back, so a caller outside a pipeline pays three times the size of its request. That is what a message pays
@@ -395,7 +396,7 @@ texts that name a value type keep the SDK name they show today.
   converted. Otherwise the bridge converts the row with a mirror of the call, reads it in before writing it out, calls the helper
   and reads the row back into the same `Record`. A Create, Update, Retrieve or Delete of a plain custom table therefore crosses no
   bridge; `CoreSdkBridges.Crossings` and `CountCrossings()` are the test seams that prove it. Each bridge goes away with the step
-  that moves its helper (S.2e3c2 for Security, S.2e4 for Mail, Elastic, Duplicates and Rollups, S.2f for Files and Audit).
+  that moves its helper (S.2e3c2a for Security, S.2e4 for Mail, Elastic, Duplicates and Rollups, S.2f for Files and Audit).
 - **The mark copies.** `CascadeHint` and `AuditActionHint` have model keys (`Mark(Request)`, `IsMarked(Request)`, `Of(Request)`)
   in SDK-free files; their SDK overloads are in `src/Xrmd.Abstractions/Sdk/RequestHints.Sdk.cs`. The pipeline copies the marks at its
   crossings: an SDK `AuditActionHint` goes onto the model request after the request crosses in, and a model `CascadeHint` goes onto
@@ -437,13 +438,13 @@ The budget is +10%. The SDK twin read is over it in one round of three, and the 
 step meets the budget. Each caller that reads through the SDK twin stops paying it when its own step moves to the model (S.2f for
 the Web API, S.2h for MCP and Host).
 
-The SDK usage count of Core is 55 and that of Abstractions is 8; Pipeline stays 30. S.2e3c1 moves the other core messages, S.2e3c2 the Security row rules, and
+The SDK usage count of Core is 55 and that of Abstractions is 8; Pipeline stays 30. S.2e3c1 moves the other core messages, S.2e3c2a the guard and the Security row rules (S.2e3c2b the rest of stage 20), and
 S.2e3c3 `OrganizationService` and `RetrieveMultipleModelRequest`, removes the core entry adapter and the SDK extension methods, and
 moves the callers outside the pipeline to their own boundary.
 
 ### The other core messages on the model (S.2e3c1)
 
-S.2e3c is split in three: S.2e3c1 moves the other core messages, S.2e3c2 moves Security (the stage-20 guard, the row rules and the
+S.2e3c is split in three: S.2e3c1 moves the other core messages, S.2e3c2 moves Security (S.2e3c2a the stage-20 guard and the row rules, S.2e3c2b the rest of stage 20 and the
 marks), and S.2e3c3 moves `OrganizationService`, `RetrieveMultipleModelRequest`, `MetadataOperations` and the SDK callers outside the
 pipeline. S.2e3c1 moves the core-owned messages onto `Request`, `Record` and `TableDefinition`. External contracts do not change:
 the response goldens (86 files and `mutation.txt`), the row, plug-in context, remote context, metadata and row parameter goldens are
@@ -509,11 +510,11 @@ byte-identical to the code before S.2e3c1, and so are the fault texts and the CL
   `ChangeTracker.ReadRequest` and `QueueMessages.ExecuteAsync` exist on the model only.
 - **Security stays on the SDK.** The moved code calls `SecurityGuard` and the Security row rules through their model overloads where
   S.2d made one, and through bridges in `CoreSdkBridges` otherwise (the access checks, the share rows, the record team checks, the role
-  grants, and the share and privilege audit rows). As in S.2e3b, a bridge runs the helper's guard first. S.2e3c2 removes these bridges.
+  grants, and the share and privilege audit rows). As in S.2e3b, a bridge runs the helper's guard first. S.2e3c2a removes these bridges.
   `ChangeTracker` still answers with the SDK `BusinessEntityChanges`, built by a bridge, because it has no model twin yet.
 - **The held window.** The model request is current when the core runs a moved message, so the core no longer uses the held SDK
   request for them. The pipeline still holds a window for the moved messages that go through it, which costs one write and one read
-  of the request, as before; the core ignores it. S.2e3c2 removes it together with stage 20.
+  of the request, as before; the core ignores it. S.2e3c2b removes it together with stage 20.
 - **Images.** `RetrieveImageAsync` reads the image on the model (`ReadImageAsync`). When the pipeline named a mirror for the read
   (`CoreHandOff.ReadImagesWith`), the record is written out into that mirror once, so its SDK twin there is the core's own `Entity`
   and an image still costs one conversion.
@@ -521,6 +522,106 @@ byte-identical to the code before S.2e3c1, and so are the fault texts and the CL
 The SDK usage count of Core is 51 (55 before S.2e3c1): `RecordTeams.cs`, `AccessMessages.cs`, `CurrencyMessages.cs`,
 `ChangeTracker.cs`, `QueueMessages.cs` and `InitializeFrom.cs` name no SDK type any more, and the new `CoreOperations.Access.cs`,
 `CoreOperations.Roles.cs` and `CoreOperations.NonPipeline.cs` are SDK-free. Abstractions stays 8 and Pipeline 30.
+
+### The guard and the Security rules on the model (S.2e3c2a)
+
+S.2e3c2 is split in two. S.2e3c2a moves the stage-20 guard (`SecurityGuard`) and the Security row rules (`SystemTableRules`,
+`CurrencyRules`, `DuplicateRuleRules`, `EnvironmentVariableRules`, `OrganizationSettingRules`, `RollupJobRules`, `AccessTeamRules`
+and `SecurityAdministration`) onto `Request`, `Record`, `RecordReference` and `TableDefinition`, runs the guard on the pipeline's
+model request and removes the Security bridges of `CoreSdkBridges`. S.2e3c2b moves the rest of stage 20 (see the table above).
+External contracts do not change: the response, row, plug-in context, remote context, metadata and row parameter goldens are
+byte-identical to the code before S.2e3c2a, and so are the new guard fault goldens in `tests/fixtures/guard-fault-golden/` (45
+scenarios, written on the code before the move by `GuardFaultGoldenTests`: the fault, the request after the call and the rows written,
+on SQL Server and PostgreSQL).
+
+- **Model values.** The guard and the rules match model values, as the core does since S.2e3b: `Record`, `RecordReference`,
+  `RecordReferenceCollection`, `RelationshipName`, `RecordCollection`, `ChoiceValue`, `MoneyValue`, `PrincipalAccessValue`,
+  `PrivilegeGrant`, `AccessMask`, `ParameterBag` and the three model queries (a fetch query is parsed from `FetchQuery.Text`). They
+  read `TableDefinition` and `ColumnDefinition` from `IMetadataStore.GetTable`. The model members:
+
+  | Member | Model signature |
+  |---|---|
+  | `SecurityGuard.AuthorizeAsync` | `(Request, Caller, DataSession, ct) : Task<bool>`, `true` when the guard changed the request |
+  | `SecurityGuard.DemandAccessAsync` | `(Caller, RecordReference, AccessMask, DataSession, ct)` |
+  | `SecurityGuard.RetrievePrincipalAccessAsync` | `(RecordReference, RecordReference, DataSession, ct) : Task<AccessMask>` |
+  | `SecurityGuard.ShareRowsAsync` | `(TableDefinition, …) : Task<IReadOnlyList<(Guid, int, AccessMask)>>` |
+  | `SystemTableRules.EnforceAsync` | `(Request, Caller, Guid, SecurityCache, IMetadataStore, DataSession, ct)` |
+  | `SystemTableRules.EnforceFieldSharesAsync` | `(Request, …) : Task<bool>`, `true` only when a field share Create passes |
+  | `SystemTableRules.DemandValidProcessWrite` | `(string, Record, Caller)` |
+  | `CurrencyRules`, `DuplicateRuleRules`, `EnvironmentVariableRules`, `OrganizationSettingRules`, `RollupJobRules` | the same members on `Request` and `Record`; `DuplicateRuleRules.IdOf` matches `RecordReference` or `Guid` |
+  | `AccessTeamRules` | `DemandTemplateAsync(…, Record, …)`, `RecordTeamParameters(Request)`, `DemandRecordTeamAsync(…, RecordReference, …)`, `TeamShareMaskAsync(…) : Task<AccessMask?>`, `MarkChecked`, `DemandSameAsChecked` and `DemandTeamShareChecked` on `Request` |
+  | `SecurityAdministration` | `TryGetPairs(RecordReference, RecordReferenceCollection, …)`, `AddRoleAsync`, `RemoveRoleAsync`, `AddProfileAsync`, `RemoveProfileAsync` on `RecordReference`, `RoleGrantsAsync(DataSession, Guid, ct) : Task<IReadOnlyList<PrivilegeGrant>>` |
+
+- **SDK twins.** A public member that a caller outside Security still calls with SDK types keeps a twin with the old name and
+  signature, in `src/Xrmd.Security/Sdk/SecurityGuard.Sdk.cs` and `src/Xrmd.Security/Sdk/SecurityRules.Sdk.cs` (the classes are
+  `partial`). A twin reads its arguments in with a mirror of the call (`new SdkMirror()`), runs the model member and writes back into
+  the caller's objects only what the model member changed. Tests count as callers. A member that nothing outside Security calls with
+  SDK types lost its SDK form (`RetrievePrincipalAccessAsync`, `ShareRowsAsync`, `EnforceFieldSharesAsync`, `RecordTeamParameters`,
+  `DemandRecordTeamAsync`, `TryGetPairs`, `RemoveProfileAsync`, the duplicate rule, environment variable, organization setting and
+  rollup job members).
+
+  | SDK twin | Why it stays |
+  |---|---|
+  | `SecurityGuard.AuthorizeAsync(OrganizationRequest, …)` | `SolutionCascadeDeleter`, `SolutionUninstaller` and the pipeline's create-only Upsert (until S.2e3c2b); it also carries the request's `CascadeHint` onto the model request |
+  | `SecurityGuard.AuthorizeAsync(Request, SdkMirror, …)` | The pipeline's crossing form (below) |
+  | `SecurityGuard.DemandAccessAsync(Caller, EntityReference, AccessRights, …)` | The workflows (`WorkflowActivation`, `ExecuteWorkflow`), `IncomingEmailImporter`, `SolutionUninstaller`, `SolutionCascadeDeleter` |
+  | `SystemTableRules.EnforceAsync(OrganizationRequest, …)`, `DemandValidProcessWrite(string, Entity, Caller)` | `SolutionImporter`, `SolutionCascadeDeleter`, the stage-20 process write check of the pipeline and `IWorkflowPipelineHook` (until S.2e3c2b), tests |
+  | `CurrencyRules.DemandRateInRange(Entity)` | Tests |
+  | `AccessTeamRules.MarkChecked(OrganizationRequest, …)`, `CopyMark`, the `RecordTeamTarget(EntityMetadata, …, AccessRights, …)` constructor | The handshake test of `RecordTeamTests`, which marks an SDK request |
+  | `SecurityAdministration.AddRoleAsync`, `RemoveRoleAsync`, `AddProfileAsync` (`EntityReference`), `RolePrivilegesAsync` (`RolePrivilege`), `FromSdk` | The migration `SecurityPhase`, tests. `RolePrivilegesAsync` keeps its SDK form because C# cannot overload on the return type; the model member is `RoleGrantsAsync` |
+
+  A twin converts only when the model member could act: `SystemTableRules.EnforceAsync` passes an unknown message, and
+  `DemandValidProcessWrite` a table other than `workflow` or `processtrigger` or the internal caller, without converting anything.
+- **Texts keep the SDK names.** `src/Xrmd.Security/SdkTypeNames.cs` (internal, SDK-free: the SDK names are string literals) keeps
+  today's texts on model values:
+  - `SdkTypeNames.Of(Type)` gives the SDK simple name of a model type (`RecordReference` → "EntityReference", `ChoiceValue` →
+    "OptionSetValue", `MoneyValue` → "Money", arrays as `X[]`), and any other type its own `Name`: "not a EntityReference" and "got a
+    Money" read as before.
+  - `SdkTypeNames.Text(object)` prints what the SDK value's `ToString()` printed (the full SDK type name of a converted class, the
+    schema name of a relationship).
+  - `SdkValue<T>(this Record, string)` reads a column as `Record.GetValue<T>` does, and turns a wrong-typed value's
+    `InvalidCastException` into the runtime's text with the SDK type names (`CastText`), as `Entity.GetAttributeValue<T>` threw it.
+    That text reaches a plug-in through the sandbox gate (`0x80040216` with the exception's message). Every model read of the guard and
+    the rules that replaced a `GetAttributeValue` uses it; `SdkTypeNamesTests` compares it with the SDK read, and
+    `SecurityModelTests.Cast_errors_keep_todays_sdk_text` pins it through the pipeline.
+- **The crossing before the guard.** `PipelineExecutor.RunAsync` crosses the request into the model (`mirror.In`, the
+  `AuditActionHint` copy, `SdkMirror.Register`, the bag pairing) before the guard instead of after it, and runs the guard on the model
+  request through `AuthorizeAsync(Request, SdkMirror, …)`. The crossing moves; none is added. The custom API and action validators
+  that follow the guard still read the SDK request, so a custom action now crosses before its validators run; the order of the checks
+  does not change.
+- **The `Out` after a field share Create.** The guard changes the request only for a field share Create
+  (`SystemTableRules.ShareRules`: `objectid`, `objecttypecode`, `readaccess`, `updateaccess`). Then the crossing form writes the model
+  out once (`mirror.Out`), so the caller's `Entity` holds those values, with a new `objectid` instance, as before, and the validators
+  and steps read them. A field share Create refused after the fill is written out too, so the caller's `Target` keeps the filled values
+  as before. Nothing is written out for any other request.
+- **The record team mark.** `AccessTeamRules.RecordTeamTarget` is `(TableDefinition Table, Guid RecordId, Guid UserId, Guid TemplateId,
+  AccessMask Mask, Guid? OwningBusinessUnit)` and replaces the core's `RecordTeams.Target`. `MarkChecked`, `DemandSameAsChecked` and
+  `DemandTeamShareChecked` key a weak table on the model request. The guard marks the pipeline's model request, which is the one the
+  core gets, so `RecordTeams` finds the mark with no bridge. The SDK `MarkChecked(OrganizationRequest, …)` keeps its own table, and
+  `PipelineCoreSdk` copies a mark from it onto the model request at its crossing (`AccessTeamRules.CopyMark`), as `RunAsync` copies
+  `AuditActionHint`.
+- **The cascade mark.** `PipelineExecutor.CoreNestedAsync` no longer copies `CascadeHint` onto the SDK twin of a core-issued nested
+  request: the guard and `IsCoreCascade` read the mark on the model request. The copy in `CoreOperations.CrudNested` and the SDK
+  `CascadeHint` overloads stay, for the SDK callers of `ExecuteCoreAsync` (S.2e3c3).
+- **The bridges removed.** From `CoreSdkBridges`: `EnforceCurrencyRulesAsync`, `DemandRateInRange`, `DemandAccessTeamTemplateAsync`,
+  `ApplyDuplicateRuleColumnsAsync`, `ApplyEnvironmentVariableRowAsync`, `ApplyOrganizationSettingRowAsync`, `SecurityPairs`,
+  `AddRoleAsync`, `RemoveRoleAsync`, `AddProfileAsync`, `RemoveProfileAsync`, `DemandAccessAsync`, `RetrievePrincipalAccessAsync`,
+  `ShareRowsAsync`, `DemandRecordTeamAsync`, `DemandSameAsChecked`, `TeamShareMaskAsync`, `DemandTeamShareChecked`, `CheckedRequest`,
+  `RoleGrantsAsync` and the private `Sdk(RecordTeams.Target)`. The core calls the model members directly. Their bridge tests in
+  `CoreSdkBridgeTests` became tests of the model members in `SecurityModelTests`, which also prove that the row rules on a plain table
+  cross no bridge. The share and role privilege audit bridges (S.2f), the change tracking answer and the Mail, Elastic, Duplicates,
+  Rollups and Files bridges stay.
+
+The pipeline path converts nothing more: the counts of `PipelineModelBoundaryTests` do not change. The SDK twins convert one small
+request (a Delete of one reference, a Create of one target) for the solution uninstall and create-only Upsert callers, and the
+workflow Target for `DemandValidProcessWrite` (until S.2e3c2b). Three more twin conversions are new on callers that ran the SDK rules
+without one before: `SystemTableRules.EnforceAsync(OrganizationRequest, …)` reads in each request of a known message, once per imported
+row in `SolutionImporter` and, together with the `AuthorizeAsync` twin, twice per delete in `SolutionCascadeDeleter`, and the
+`DemandAccessAsync` twin reads in one reference for Workflows and incoming mail.
+
+The SDK usage count of Security is 6 (13 before S.2e3c2a): `PrivilegeCatalog` and `SecurityCache` (the SDK-typed metadata hooks),
+`Sdk/SdkSecurityTwins.cs`, `Sdk/SdkSecurityTypes.cs`, `Sdk/SecurityRules.Sdk.cs` and `Sdk/SecurityGuard.Sdk.cs`. Core stays 51,
+Abstractions 8 and Pipeline 30.
 
 The view is transitional. The other modules move to the model in S.2d to S.2h, and S.2i removes the view, the twins and the bridge.
 

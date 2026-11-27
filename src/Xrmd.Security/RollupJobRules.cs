@@ -1,10 +1,10 @@
 using System.Data;
-using Microsoft.Xrm.Sdk;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Computed;
+using Xrmd.Model.Records;
 
 namespace Xrmd.Security;
 
@@ -40,15 +40,15 @@ public static class RollupJobRules
     /// </summary>
     /// <returns>True when the job is a rollup job (and the Update is allowed); false for any other job, left to the other rules.</returns>
     /// <exception cref="XrmdFaultException">400 for a refused Update; 400 <c>0x8004D2A2</c> for a recurrence below one hour.</exception>
-    public static async Task<bool> DemandUpdateAsync(Entity target, Guid id, DataSession session, CancellationToken ct)
+    public static async Task<bool> DemandUpdateAsync(Record target, Guid id, DataSession session, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(target);
         if (await OperationTypeAsync(id, session, ct) is not ({ } type and (CalculateRollupField or MassCalculateRollupField))) return false;
 
         if (target.Attributes.ContainsKey(StateCode) || target.Attributes.ContainsKey(StatusCode))
         {
-            var cancel = target.GetAttributeValue<OptionSetValue>(StateCode)?.Value == Completed
-                         && target.GetAttributeValue<OptionSetValue>(StatusCode)?.Value is null or Canceled;
+            var cancel = target.SdkValue<ChoiceValue>(StateCode)?.Value == Completed
+                         && target.SdkValue<ChoiceValue>(StatusCode)?.Value is null or Canceled;
             throw XrmdFaultException.InvalidArgument(cancel ? NotCancelledOrDeleted : NotPausedOrResumed);
         }
 

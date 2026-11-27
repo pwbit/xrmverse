@@ -1,0 +1,21 @@
+=== PipelineExecutor.ExecuteAsync as a user with Basic User ===
+--- request ---
+Request: PickFromQueueRequest
+  RequestName: String:"PickFromQueue"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    QueueItemId: Guid:{a:item}
+    RemoveQueueItem: Boolean:False
+    WorkerId: Guid:{a:caller}
+--- fault ---
+Fault: XrmdFaultException 0x80048306 403 "Principal user with id {a:caller} does not have ReadAccess right(s) for record with id {a:queue} of entity queue."
+--- request after ---
+Request: PickFromQueueRequest
+  RequestName: String:"PickFromQueue"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    QueueItemId: Guid:{a:item}
+    RemoveQueueItem: Boolean:False
+    WorkerId: Guid:{a:caller}
+--- rows ---
+items worked by the caller: 0

@@ -1,9 +1,9 @@
 using System.Data;
-using Microsoft.Xrm.Sdk;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
+using Xrmd.Model.Records;
 using static Xrmd.Metadata.EnvironmentVariableSchema;
 
 namespace Xrmd.Security;
@@ -22,7 +22,7 @@ public static class EnvironmentVariableRules
     /// cannot both pass.
     /// </summary>
     /// <exception cref="XrmdFaultException">400 InvalidArgument.</exception>
-    public static async Task ApplyRowAsync(DataSession s, string entityLogicalName, Entity row, bool isCreate, Guid id, CancellationToken ct)
+    public static async Task ApplyRowAsync(DataSession s, string entityLogicalName, Record row, bool isCreate, Guid id, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(s);
         ArgumentNullException.ThrowIfNull(row);
@@ -36,7 +36,7 @@ public static class EnvironmentVariableRules
     /// existing definition.
     /// </summary>
     /// <exception cref="XrmdFaultException">400 InvalidArgument.</exception>
-    public static async Task DemandDefinitionGivenAsync(DataSession s, Entity target, bool isCreate, CancellationToken ct)
+    public static async Task DemandDefinitionGivenAsync(DataSession s, Record target, bool isCreate, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(s);
         ArgumentNullException.ThrowIfNull(target);
@@ -45,10 +45,10 @@ public static class EnvironmentVariableRules
         if (await StoredDefinitionNameAsync(s, definitionId, ct) is null) throw MissingDefinition(definitionId);
     }
 
-    private static async Task DefinitionAsync(DataSession s, Entity row, bool isCreate, Guid id, CancellationToken ct)
+    private static async Task DefinitionAsync(DataSession s, Record row, bool isCreate, Guid id, CancellationToken ct)
     {
         if (!isCreate && !row.Contains(SchemaName)) return;
-        var name = row.GetAttributeValue<string>(SchemaName);
+        var name = row.SdkValue<string>(SchemaName);
         if (isCreate)
         {
             if (string.IsNullOrWhiteSpace(name))
@@ -73,7 +73,7 @@ public static class EnvironmentVariableRules
                 $"The {SchemaName} of the environment variable definition '{stored}' cannot change once it is created.");
     }
 
-    private static async Task ValueAsync(DataSession s, Entity row, bool isCreate, Guid id, CancellationToken ct)
+    private static async Task ValueAsync(DataSession s, Record row, bool isCreate, Guid id, CancellationToken ct)
     {
         if (!isCreate && !row.Contains(DefinitionLookup)) return;
         var definitionId = DefinitionId(row);
@@ -92,11 +92,11 @@ public static class EnvironmentVariableRules
                     $"The environment variable '{name}' already has a value: change that value row instead of adding another (one value per definition).");
         }
 
-        if (isCreate && string.IsNullOrEmpty(row.GetAttributeValue<string>(SchemaName))) row[SchemaName] = name;
+        if (isCreate && string.IsNullOrEmpty(row.SdkValue<string>(SchemaName))) row[SchemaName] = name;
     }
 
     /// <summary>The definition a value row names; 400 when it names none.</summary>
-    private static Guid DefinitionId(Entity row) =>
+    private static Guid DefinitionId(Record row) =>
         DuplicateRuleRules.IdOf(row.Contains(DefinitionLookup) ? row[DefinitionLookup] : null) is { } id && id != Guid.Empty
             ? id
             : throw XrmdFaultException.InvalidArgument($"An environment variable value needs {DefinitionLookup}, the definition it gives a value to.");

@@ -1,0 +1,19 @@
+=== PipelineExecutor.ExecuteAsync as a user with Basic User ===
+--- request ---
+Request: RemovePrivilegeRoleRequest
+  RequestName: String:"RemovePrivilegeRole"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    PrivilegeId: Guid:{id1}
+    RoleId: Guid:{a:role}
+--- fault ---
+Fault: XrmdFaultException 0x80040220 403 "Principal user (Id={a:caller}, type=8) is missing prvWriteRole privilege (Id={id2}) on OTC=1036 for entity 'role'. Consider adding missing privilege to one of the principal (user/team) roles for the request to succeed."
+--- request after ---
+Request: RemovePrivilegeRoleRequest
+  RequestName: String:"RemovePrivilegeRole"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    PrivilegeId: Guid:{id1}
+    RoleId: Guid:{a:role}
+--- rows ---
+privileges of the role removed: 0

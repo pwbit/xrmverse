@@ -1,0 +1,39 @@
+=== PipelineExecutor.ExecuteAsync as a user with Basic User and prvReadAccount Global, prvAssignAccount Global ===
+--- request ---
+Request: AssignRequest
+  RequestName: String:"Assign"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    Assignee: EntityReference
+      LogicalName: String:"systemuser"
+      Id: Guid:{a:assignee}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+    Target: EntityReference
+      LogicalName: String:"account"
+      Id: Guid:{a:account}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- fault ---
+Fault: XrmdFaultException 0x80040231 403 "The target user or team lacks a privilege the operation needs."
+--- request after ---
+Request: AssignRequest
+  RequestName: String:"Assign"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    Assignee: EntityReference
+      LogicalName: String:"systemuser"
+      Id: Guid:{a:assignee}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+    Target: EntityReference
+      LogicalName: String:"account"
+      Id: Guid:{a:account}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- rows ---
+account owned by the assignee: 0

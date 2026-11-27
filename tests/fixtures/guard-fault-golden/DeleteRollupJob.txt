@@ -1,0 +1,27 @@
+=== PipelineExecutor.ExecuteAsync as a user with Basic User ===
+--- request ---
+Request: DeleteRequest
+  RequestName: String:"Delete"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: EntityReference
+      LogicalName: String:"asyncoperation"
+      Id: Guid:{a:job}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- fault ---
+Fault: XrmdFaultException 0x80040203 400 "Rollup calculation jobs cannot be cancelled or deleted: postpone them instead."
+--- request after ---
+Request: DeleteRequest
+  RequestName: String:"Delete"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: EntityReference
+      LogicalName: String:"asyncoperation"
+      Id: Guid:{a:job}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- rows ---
+job deleted: 0

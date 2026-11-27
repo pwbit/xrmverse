@@ -92,12 +92,12 @@ public sealed partial class CoreOperations
         var migrated = MigrationScope.IsActive ? MigratedSystemColumns(record, attrs) : null;
         if (migrated is not null) detectDuplicates = false;
         // Plan 2.10, final review I1: the currency rules on the final row (after the plug-ins), in the transaction.
-        await CoreSdkBridges.EnforceCurrencyRulesAsync(row, id, isCreate: true, store, s, ct);
+        await CurrencyRules.EnforceRowAsync(row, id, isCreate: true, store, s, ct);
         await ApplyAccessTeamRulesAsync(s, m, attrs, row, isCreate: true, id, ct);
-        await CoreSdkBridges.ApplyDuplicateRuleColumnsAsync(s, store, m.LogicalName!, row, isCreate: true, id, ct);
+        await DuplicateRuleRules.ApplyServerColumnsAsync(s, store, m.LogicalName!, row, isCreate: true, id, ct);
         // #167 (ruling E2): unique and fixed definition names, one value per definition, the value's default name.
-        await CoreSdkBridges.ApplyEnvironmentVariableRowAsync(s, m.LogicalName!, row, isCreate: true, id, ct);
-        await CoreSdkBridges.ApplyOrganizationSettingRowAsync(s, m.LogicalName!, row, isCreate: true, id, ct);
+        await EnvironmentVariableRules.ApplyRowAsync(s, m.LogicalName!, row, isCreate: true, id, ct);
+        await OrganizationSettingRules.ApplyRowAsync(s, m.LogicalName!, row, isCreate: true, id, ct);
         var now = DateTime.UtcNow;
         var callerRef = Reference(SystemUser, caller.UserId);
         SetIfDefined(row, attrs, "createdon", now);

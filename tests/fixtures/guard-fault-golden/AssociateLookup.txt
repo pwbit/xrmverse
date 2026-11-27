@@ -1,0 +1,47 @@
+=== PipelineExecutor.ExecuteAsync as a user with Basic User ===
+--- request ---
+Request: AssociateRequest
+  RequestName: String:"Associate"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    RelatedEntities: EntityReferenceCollection[1]
+      [0]: EntityReference
+        LogicalName: String:"account"
+        Id: Guid:{a:account}
+        Name: null
+        KeyAttributes: KeyAttributeCollection[0]
+        RowVersion: null
+    Relationship: Relationship
+      SchemaName: String:"account_primary_contact"
+      PrimaryEntityRole: null
+    Target: EntityReference
+      LogicalName: String:"contact"
+      Id: Guid:{a:contact}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- fault ---
+Fault: XrmdFaultException 0x80040220 403 "Principal user (Id={a:caller}, type=8) is missing prvAppendAccount privilege (Id={id1}) on OTC=1 for entity 'account'. Consider adding missing privilege to one of the principal (user/team) roles for the request to succeed."
+--- request after ---
+Request: AssociateRequest
+  RequestName: String:"Associate"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    RelatedEntities: EntityReferenceCollection[1]
+      [0]: EntityReference
+        LogicalName: String:"account"
+        Id: Guid:{a:account}
+        Name: null
+        KeyAttributes: KeyAttributeCollection[0]
+        RowVersion: null
+    Relationship: Relationship
+      SchemaName: String:"account_primary_contact"
+      PrimaryEntityRole: null
+    Target: EntityReference
+      LogicalName: String:"contact"
+      Id: Guid:{a:contact}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- rows ---
+account with the contact as primary contact: 0

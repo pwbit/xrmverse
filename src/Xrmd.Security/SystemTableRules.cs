@@ -1,11 +1,12 @@
 using System.Data;
-using Microsoft.Crm.Sdk.Messages;
-using Microsoft.Xrm.Sdk;
 using Xrmd.Model.Metadata;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
+using Xrmd.Model.Messages;
+using Xrmd.Model.Records;
+using Xrmd.Model.Security;
 
 namespace Xrmd.Security;
 
@@ -14,8 +15,13 @@ namespace Xrmd.Security;
 /// maintains, modify the SYSTEM user's row, set <c>role.roletemplateid</c>, or register a step impersonating another user
 /// without <c>prvActOnBehalfOfAnotherUser</c>. Only requests are concerned: the internal writers (async queue, trace
 /// writer, bootstrap) write these tables with their own SQL.
+/// <para>
+/// S.2e3c2a (Task 4): on model values (Decision 1). The SDK twins of <see cref="EnforceAsync(Request, Caller, Guid, SecurityCache, IMetadataStore, DataSession, CancellationToken)"/>,
+/// <see cref="EnforceFieldSharesAsync(Request, Caller, FieldSecurity, IMetadataStore, DataSession, Func{RecordReference, CancellationToken, Task}, CancellationToken)"/>
+/// and <see cref="DemandValidProcessWrite(string, Record, Caller)"/>, for the callers still on the SDK, are in <c>Sdk/SecurityRules.Sdk.cs</c>.
+/// </para>
 /// </summary>
-public static class SystemTableRules
+public static partial class SystemTableRules
 {
     private const string Target = "Target";
     private const string AsyncOperation = "asyncoperation";
@@ -214,7 +220,7 @@ public static class SystemTableRules
     /// <item>Currencies (plan 2.10): the rules of <see cref="CurrencyRules"/> on <c>transactioncurrency</c>, <c>organization</c>
     /// and <c>usersettings</c> (base currency fixed, unique and valid codes, rate and precision ranges, active user currency).</item>
     /// <item>Processes (plan 2.14, ruling W4, and plan 2.21, ruling A16, which lifts 2.14's W3; <see cref="Caller.Internal"/> is
-    /// exempt): a Create or Update of <c>workflow</c> goes through <see cref="DemandValidProcessWrite"/> (no server-written column,
+    /// exempt): a Create or Update of <c>workflow</c> goes through <see cref="DemandValidProcessWrite(string, Record, Caller)"/> (no server-written column,
     /// type 1, category 0, 2 or 3, created Draft; the XAML and the Draft-only rules are the pipeline's, at stage 20); no Create,
     /// Update or Delete of <c>processtrigger</c> (400); no Delete of a <c>workflow</c> row whose definition is Activated (400).</item>
     /// <item>Environment variables (#167, ruling E2): a Create or Update of <c>environmentvariablevalue</c> names an existing
@@ -228,7 +234,7 @@ public static class SystemTableRules
     /// role; 400 InvalidArgument for a refused <c>asyncoperation</c> transition, a write of <c>roletemplateid</c> or a reserved
     /// <c>roleid</c>; 403
     /// CannotActOnBehalfOfAnotherUser.</exception>
-    public static async Task EnforceAsync(OrganizationRequest request, Caller caller, Guid systemUserId, SecurityCache cache,
+    public static async Task EnforceAsync(Request request, Caller caller, Guid systemUserId, SecurityCache cache,
         IMetadataStore store, DataSession session, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -236,7 +242,7 @@ public static class SystemTableRules
         ArgumentNullException.ThrowIfNull(cache);
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(session);
-        if (!Messages.TryGetValue(request.RequestName?.ToLowerInvariant() ?? "", out var message)) return;
+        if (!Messages.TryGetValue(request.Name?.ToLowerInvariant() ?? "", out var message)) return;
         var parameters = request.Parameters;
         parameters.TryGetValue(Target, out var target);
         var rules = new Rules(caller, systemUserId, cache, store, session);
@@ -244,17 +250,17 @@ public static class SystemTableRules
         await CurrencyRules.EnforceAsync(request, caller, systemUserId, cache, store, session, ct);
         // Plan 2.11 (A1, A10): the pointer and party rows are written by the Core with their activity, never by a request.
         if (message is not ("Associate" or "Disassociate" or "AddMembersTeam" or "RemoveMembersTeam"))
-            DemandNotActivityStore(message, (target as Entity)?.LogicalName ?? (target as EntityReference)?.LogicalName);
+            DemandNotActivityStore(message, (target as Record)?.LogicalName ?? (target as RecordReference)?.LogicalName);
         // Plan 3.5 UI-1a: the components and roles of an app are written by the solution import, never by a request.
         if (caller != Caller.Internal && message is not ("Associate" or "Disassociate" or "AddMembersTeam" or "RemoveMembersTeam"))
-            DemandNotAppModuleStore((target as Entity)?.LogicalName ?? (target as EntityReference)?.LogicalName);
+            DemandNotAppModuleStore((target as Record)?.LogicalName ?? (target as RecordReference)?.LogicalName);
         // Plan X.12b: a flow subscription is written by /api/connector/v1/subscriptions (an internal caller) only.
         if (caller != Caller.Internal && message is "Create" or "Update" or "Assign" or "Delete")
-            DemandNotFlowSubscription((target as Entity)?.LogicalName ?? (target as EntityReference)?.LogicalName);
+            DemandNotFlowSubscription((target as Record)?.LogicalName ?? (target as RecordReference)?.LogicalName);
 
         switch (message)
         {
-            case "Create" when target is Entity created:
+            case "Create" when target is Record created:
                 DemandValidProcessWrite(message, created, caller);
                 await DemandNotCustomApiAsync(message, created.LogicalName, created.Id, created, caller, session, ct);
                 await EnvironmentVariableRules.DemandDefinitionGivenAsync(session, created, isCreate: true, ct);
@@ -295,20 +301,20 @@ public static class SystemTableRules
                     throw XrmdFaultException.InvalidArgument(SystemManagedColumnFixed(managedColumn));
                 await rules.DemandOwnerNotAccessTeamAsync(ValueOf(created, OwnerId), ct);
                 if (created.LogicalName == FieldSecurityTables.Share)
-                    await rules.DemandShareNotToSystemManagedTeamAsync(ValueOf(created, FieldSecurityTables.SharePrincipalId) as EntityReference, ct);
+                    await rules.DemandShareNotToSystemManagedTeamAsync(ValueOf(created, FieldSecurityTables.SharePrincipalId) as RecordReference, ct);
                 break;
-            case "Update" when target is Entity updated:
+            case "Update" when target is Record updated:
                 DemandKnownTimeZone(updated);
                 await EnvironmentVariableRules.DemandDefinitionGivenAsync(session, updated, isCreate: false, ct);
                 await rules.UpdateAsync(message, updated, ct);
                 break;
-            case "Delete" when target is EntityReference deleted:
+            case "Delete" when target is RecordReference deleted:
                 await DemandNotCustomApiAsync(message, deleted.LogicalName, deleted.Id, null, caller, session, ct);
                 if (deleted.LogicalName == WorkflowSchema.Table && caller != Caller.Internal) await DemandProcessNotActivatedAsync(deleted.Id, session, ct);
                 if (deleted.LogicalName == WorkflowSchema.TriggerTable && caller != Caller.Internal) throw ProcessTriggerRefused(message);
                 DemandNotFileAttachment(message, deleted.LogicalName);
                 DemandNotDuplicateRecord(message, deleted.LogicalName, caller);
-                DemandPostWrite(message, new Entity(deleted.LogicalName, deleted.Id), caller);
+                DemandPostWrite(message, new Record(deleted.LogicalName, deleted.Id), caller);
                 DemandNotMaintained(store, message, deleted.LogicalName, alsoTraceLog: false, alsoAsyncOperation: false);
                 if (deleted.LogicalName == SystemUser) DemandNotSystemUser(deleted.Id, systemUserId);
                 if (deleted.LogicalName == FieldSecurityTables.Profile && deleted.Id == FieldSecurityTables.SystemAdministratorProfileId)
@@ -325,16 +331,16 @@ public static class SystemTableRules
                     throw XrmdFaultException.InvalidArgument(OnlyCompletedDeleted);
                 await DemandNoCustomApiUsesAsync(deleted, store, session, ct);
                 break;
-            case "Assign" when target is EntityReference assigned:
+            case "Assign" when target is RecordReference assigned:
                 await DemandNotCustomApiAsync(message, assigned.LogicalName, assigned.Id, null, caller, session, ct);
                 DemandNotDuplicateRecord(message, assigned.LogicalName, caller);
                 DemandNotMaintained(store, message, assigned.LogicalName, alsoTraceLog: true, alsoAsyncOperation: true);
                 if (assigned.LogicalName == SystemUser) DemandNotSystemUser(assigned.Id, systemUserId);
                 await rules.DemandOwnerNotAccessTeamAsync(parameters.TryGetValue("Assignee", out var assignee) ? assignee : null, ct);
                 break;
-            case "Associate" or "Disassociate" when target is EntityReference associated
-                && parameters.TryGetValue("Relationship", out var r) && r is Relationship relationship
-                && parameters.TryGetValue("RelatedEntities", out var rel) && rel is EntityReferenceCollection related:
+            case "Associate" or "Disassociate" when target is RecordReference associated
+                && parameters.TryGetValue("Relationship", out var r) && r is RelationshipName relationship
+                && parameters.TryGetValue("RelatedEntities", out var rel) && rel is RecordReferenceCollection related:
                 if (SecurityAdministration.FindRelationship(relationship.SchemaName) is not null)
                 {
                     foreach (var record in related.Prepend(associated))
@@ -356,7 +362,7 @@ public static class SystemTableRules
                     throw AccessTeamRules.UseRecordTeamMessages(membersTeam);
                 break;
             case "GrantAccess" or "ModifyAccess" when caller != Caller.Internal
-                && parameters.TryGetValue("PrincipalAccess", out var pa) && pa is PrincipalAccess { Principal: { LogicalName: Team } sharedWith }:
+                && parameters.TryGetValue("PrincipalAccess", out var pa) && pa is PrincipalAccessValue { Principal: { LogicalName: Team } sharedWith }:
                 if (await AccessTeamRules.IsSystemManagedTeamAsync(session, sharedWith.Id, ct))
                     throw XrmdFaultException.InvalidArgument(SystemManagedTeamNotShared(sharedWith.Id, message));
                 break;
@@ -375,12 +381,12 @@ public static class SystemTableRules
     /// Plan 3.2: a Create with <c>SolutionUniqueName</c> (the <c>MSCRM.SolutionUniqueName</c> header) of a <c>serviceendpoint</c>,
     /// of a step whose <c>eventhandler</c> is one, or of an image of such a step is refused (400), for every caller.
     /// </summary>
-    private static async Task DemandWebhookNotInSolutionAsync(OrganizationRequest request, Entity created, DataSession session,
+    private static async Task DemandWebhookNotInSolutionAsync(Request request, Record created, DataSession session,
         CancellationToken ct)
     {
         if (!request.Parameters.TryGetValue("SolutionUniqueName", out var solution) || solution is not string { Length: > 0 }) return;
         if (created.LogicalName == ServiceEndpointSchema.Table || created.LogicalName == Step && IsEndpoint(ValueOf(created, "eventhandler"))
-            || created.LogicalName == StepImage && ValueOf(created, "sdkmessageprocessingstepid") is EntityReference step
+            || created.LogicalName == StepImage && ValueOf(created, "sdkmessageprocessingstepid") is RecordReference step
                                              && await IsWebhookStepAsync(step.Id, session, ct))
             throw XrmdFaultException.InvalidArgument(WebhookNotInSolution);
     }
@@ -389,7 +395,7 @@ public static class SystemTableRules
     /// Plan 3.2: an Update (or lookup Associate) that points a step's <c>eventhandler</c> at a <c>serviceendpoint</c> is refused
     /// (400) when the step is a component of a solution other than Default and Active.
     /// </summary>
-    private static async Task DemandWebhookStepNotInSolutionAsync(Entity target, Guid id, DataSession session, CancellationToken ct)
+    private static async Task DemandWebhookStepNotInSolutionAsync(Record target, Guid id, DataSession session, CancellationToken ct)
     {
         if (target.LogicalName != Step || id == Guid.Empty || !target.Attributes.TryGetValue("eventhandler", out var handler)
             || !IsEndpoint(handler)) return;
@@ -421,7 +427,7 @@ public static class SystemTableRules
         if (refused) throw XrmdFaultException.InvalidArgument(WebhookNotInSolution);
     }
 
-    private static bool IsEndpoint(object? handler) => handler is EntityReference { LogicalName: ServiceEndpointSchema.Table };
+    private static bool IsEndpoint(object? handler) => handler is RecordReference { LogicalName: ServiceEndpointSchema.Table };
 
     /// <summary>True when the stored step's <c>eventhandlertype</c> is <c>serviceendpoint</c>.</summary>
     private static async Task<bool> IsWebhookStepAsync(Guid stepId, DataSession session, CancellationToken ct)
@@ -458,7 +464,7 @@ public static class SystemTableRules
 
     /// <summary><c>teamtemplate.issystem</c> is read-only: a value (null included) is refused rather than ignored.</summary>
     /// <exception cref="XrmdFaultException">400 InvalidArgument.</exception>
-    private static void DemandNoIsSystem(Entity target)
+    private static void DemandNoIsSystem(Record target)
     {
         if (target.Attributes.ContainsKey(AccessTeamSchema.IsSystem))
             throw XrmdFaultException.InvalidArgument(
@@ -490,33 +496,36 @@ public static class SystemTableRules
     /// </remarks>
     /// <exception cref="XrmdFaultException">400, 403 or 404 as listed.</exception>
     /// <param name="demandRecordRead">Demands Read on a record for the caller (the record-access check of <see cref="SecurityGuard"/>).</param>
-    public static async Task EnforceFieldSharesAsync(OrganizationRequest request, Caller caller, FieldSecurity fields, IMetadataStore store,
-        DataSession session, Func<EntityReference, CancellationToken, Task> demandRecordRead, CancellationToken ct)
+    /// <returns>True when the request is a field share Create that passed: its Target holds the filled columns (<c>objectid</c>, a new
+    /// value, <c>objecttypecode</c>, <c>readaccess</c> and <c>updateaccess</c>), which the caller's request must then hold too.</returns>
+    public static async Task<bool> EnforceFieldSharesAsync(Request request, Caller caller, FieldSecurity fields, IMetadataStore store,
+        DataSession session, Func<RecordReference, CancellationToken, Task> demandRecordRead, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(demandRecordRead);
-        if (!Messages.TryGetValue(request.RequestName?.ToLowerInvariant() ?? "", out var message)) return;
+        if (!Messages.TryGetValue(request.Name?.ToLowerInvariant() ?? "", out var message)) return false;
         var parameters = request.Parameters;
         parameters.TryGetValue(Target, out var target);
         switch (message)
         {
-            case "Create" when target is Entity { LogicalName: FieldSecurityTables.Share } created:
+            case "Create" when target is Record { LogicalName: FieldSecurityTables.Share } created:
                 await new ShareRules(caller, fields, store, session, demandRecordRead).CreateAsync(created, ct);
-                break;
-            case "Update" when target is Entity { LogicalName: FieldSecurityTables.Share } updated:
+                return true;
+            case "Update" when target is Record { LogicalName: FieldSecurityTables.Share } updated:
                 await new ShareRules(caller, fields, store, session, demandRecordRead).UpdateAsync(updated, ct);
                 break;
-            case "Delete" when target is EntityReference { LogicalName: FieldSecurityTables.Share } deleted:
+            case "Delete" when target is RecordReference { LogicalName: FieldSecurityTables.Share } deleted:
                 await new ShareRules(caller, fields, store, session, demandRecordRead).DeleteAsync(deleted.Id, ct);
                 break;
-            case "Associate" or "Disassociate" when target is EntityReference associated
-                && parameters.TryGetValue("Relationship", out var r) && r is Relationship relationship
-                && parameters.TryGetValue("RelatedEntities", out var rel) && rel is EntityReferenceCollection related
+            case "Associate" or "Disassociate" when target is RecordReference associated
+                && parameters.TryGetValue("Relationship", out var r) && r is RelationshipName relationship
+                && parameters.TryGetValue("RelatedEntities", out var rel) && rel is RecordReferenceCollection related
                 && store.GetRelationshipDefinition(relationship.SchemaName ?? "") is OneToManyRelationship { ReferencingEntity: FieldSecurityTables.Share } lookup:
                 if (LookupUpdates(lookup, associated, related, message == "Associate").Any())
                     throw XrmdFaultException.InvalidArgument(ShareColumnsFixed);
                 break;
         }
+        return false;
     }
 
     private const string ShareColumnsFixed =
@@ -524,17 +533,17 @@ public static class SystemTableRules
 
     /// <summary>The F6 rules of one field share write (<see cref="EnforceFieldSharesAsync"/>).</summary>
     private sealed class ShareRules(Caller caller, FieldSecurity fields, IMetadataStore store, DataSession session,
-        Func<EntityReference, CancellationToken, Task> demandRecordRead)
+        Func<RecordReference, CancellationToken, Task> demandRecordRead)
     {
         private const string ShareTable = FieldSecurityTables.Share;
 
         /// <summary>A stored share: its record (table, id), column id and access.</summary>
         private sealed record StoredShare(string? Table, Guid Record, Guid Attribute, bool Read, bool Update);
 
-        public async Task CreateAsync(Entity target, CancellationToken ct)
+        public async Task CreateAsync(Record target, CancellationToken ct)
         {
             // The record: objectid, with objecttypecode filled from it (or naming its table when objectid has none).
-            if (ValueOf(target, FieldSecurityTables.ShareObjectId) is not EntityReference { Id: var recordId } objectRef || recordId == Guid.Empty)
+            if (ValueOf(target, FieldSecurityTables.ShareObjectId) is not RecordReference { Id: var recordId } objectRef || recordId == Guid.Empty)
                 throw XrmdFaultException.InvalidArgument($"A field share needs {FieldSecurityTables.ShareObjectId}, the record it applies to.");
             var givenTable = ValueOf(target, FieldSecurityTables.ShareObjectTypeCodeColumn) as string;
             var table = string.IsNullOrEmpty(objectRef.LogicalName) ? givenTable : objectRef.LogicalName;
@@ -543,11 +552,11 @@ public static class SystemTableRules
             if (!string.IsNullOrEmpty(givenTable) && !string.Equals(givenTable, entity.LogicalName, StringComparison.OrdinalIgnoreCase))
                 throw XrmdFaultException.InvalidArgument(
                     $"{FieldSecurityTables.ShareObjectTypeCodeColumn} '{givenTable}' does not name the table of {FieldSecurityTables.ShareObjectId} ('{entity.LogicalName}').");
-            target[FieldSecurityTables.ShareObjectId] = new EntityReference(entity.LogicalName, recordId);
+            target[FieldSecurityTables.ShareObjectId] = Reference(entity, recordId);
             target[FieldSecurityTables.ShareObjectTypeCodeColumn] = entity.LogicalName;
 
             // The principal: principalidtype is written from its table by the row mapper.
-            if (ValueOf(target, FieldSecurityTables.SharePrincipalId) is not EntityReference { Id: var principalId } || principalId == Guid.Empty)
+            if (ValueOf(target, FieldSecurityTables.SharePrincipalId) is not RecordReference { Id: var principalId } || principalId == Guid.Empty)
                 throw XrmdFaultException.InvalidArgument($"A field share needs {FieldSecurityTables.SharePrincipalId}, the user or team it is given to.");
 
             // 1. The column must be secured.
@@ -564,11 +573,11 @@ public static class SystemTableRules
             // The record must exist (the core operation answers a missing principal with its 404); the caller must read the record;
             // then 4. the grant rule.
             if (!await RecordExistsAsync(entity, recordId, ct)) throw XrmdFaultException.ObjectDoesNotExist(entity.LogicalName!, recordId);
-            await demandRecordRead(new EntityReference(entity.LogicalName, recordId), ct);
+            await demandRecordRead(Reference(entity, recordId), ct);
             await DemandCanGrantAsync(entity.LogicalName!, recordId, attribute.LogicalName!, read, ct);
         }
 
-        public async Task UpdateAsync(Entity target, CancellationToken ct)
+        public async Task UpdateAsync(Record target, CancellationToken ct)
         {
             var id = RecordId(target);
             var primaryId = SystemAttributes.PrimaryIdName(ShareTable);
@@ -585,7 +594,7 @@ public static class SystemTableRules
             var update = target.Attributes.TryGetValue(FieldSecurityTables.ShareUpdateAccess, out var u) ? IsTrue(u) : stored.Update;
             if (!read && !update) throw XrmdFaultException.ShareUpdateWithoutAccess();
             // Read on the record, then 4. the grant rule on the resulting access.
-            await demandRecordRead(new EntityReference(entity.LogicalName, stored.Record), ct);
+            await demandRecordRead(Reference(entity, stored.Record), ct);
             await DemandCanGrantAsync(entity.LogicalName!, stored.Record, attribute.LogicalName!, read, ct);
         }
 
@@ -593,7 +602,7 @@ public static class SystemTableRules
         {
             if (id == Guid.Empty || await StoredAsync(id, ct) is not { } stored) return; // the core operation's 404
             if (stored.Table is null || store.GetTable(stored.Table) is not { } entity) return;
-            await demandRecordRead(new EntityReference(entity.LogicalName, stored.Record), ct);
+            await demandRecordRead(Reference(entity, stored.Record), ct);
             // A table without columns fails closed, as SecuredColumn does: it must not skip the grant rule below.
             var columns = entity.Attributes
                 ?? throw XrmdFaultException.PermissionOnUnsecuredColumn(entity.LogicalName!, stored.Attribute.ToString());
@@ -674,6 +683,9 @@ public static class SystemTableRules
         }
 
         private static bool IsTrue(object? value) => value is true;
+
+        /// <summary>A new reference to the record <paramref name="id"/> of <paramref name="entity"/>.</summary>
+        private static RecordReference Reference(TableDefinition entity, Guid id) => new() { LogicalName = entity.LogicalName!, Id = id };
     }
 
     /// <summary>
@@ -681,24 +693,24 @@ public static class SystemTableRules
     /// referenced record (each related record of the referencing entity is updated) or, failing that, the referencing record
     /// (with exactly one related record). Records the core operation rejects (400) yield nothing.
     /// </summary>
-    internal static IEnumerable<Entity> LookupUpdates(OneToManyRelationship lookup, EntityReference target,
-        EntityReferenceCollection related, bool associate)
+    internal static IEnumerable<Record> LookupUpdates(OneToManyRelationship lookup, RecordReference target,
+        RecordReferenceCollection related, bool associate)
     {
         var attribute = lookup.ReferencingAttribute;
         if (attribute is null) yield break;
         if (target.LogicalName == lookup.ReferencedEntity)
         {
             foreach (var record in related.Where(e => e.LogicalName == lookup.ReferencingEntity))
-                yield return new Entity(record.LogicalName, record.Id)
+                yield return new Record(record.LogicalName, record.Id)
                 {
-                    [attribute] = associate ? new EntityReference(target.LogicalName, target.Id) : null,
+                    [attribute] = associate ? new RecordReference { LogicalName = target.LogicalName, Id = target.Id } : null,
                 };
         }
         else if (target.LogicalName == lookup.ReferencingEntity && related.Count == 1 && related[0].LogicalName == lookup.ReferencedEntity)
         {
-            yield return new Entity(target.LogicalName, target.Id)
+            yield return new Record(target.LogicalName, target.Id)
             {
-                [attribute] = associate ? new EntityReference(related[0].LogicalName, related[0].Id) : null,
+                [attribute] = associate ? new RecordReference { LogicalName = related[0].LogicalName, Id = related[0].Id } : null,
             };
         }
     }
@@ -713,7 +725,7 @@ public static class SystemTableRules
         /// is not renamed by any request: its Update is refused by the core, ruling M14.)
         /// </summary>
         /// <exception cref="XrmdFaultException">400 InvalidArgument naming both solutions.</exception>
-        public async Task DemandNotHoldingNameAsync(Entity target, CancellationToken ct)
+        public async Task DemandNotHoldingNameAsync(Record target, CancellationToken ct)
         {
             if (target.LogicalName != Solution || caller == Caller.Internal || LayerOperationScope.IsActive) return;
             if (!target.Attributes.TryGetValue(UniqueName, out var value) || value is not string name
@@ -728,7 +740,7 @@ public static class SystemTableRules
         }
 
         /// <summary>The rules of an Update of <paramref name="target"/>, reported under <paramref name="message"/>.</summary>
-        public async Task UpdateAsync(string message, Entity target, CancellationToken ct)
+        public async Task UpdateAsync(string message, Record target, CancellationToken ct)
         {
             DemandNotActivityStore(message, target.LogicalName);
             DemandValidProcessWrite(message, target, caller);
@@ -777,7 +789,7 @@ public static class SystemTableRules
             if (target.Attributes.TryGetValue(OwnerId, out var owner)) await DemandOwnerNotAccessTeamAsync(owner, ct);
             if (target.LogicalName == FieldSecurityTables.Share && id != Guid.Empty)
                 await DemandShareNotToSystemManagedTeamAsync(
-                    target.Attributes.TryGetValue(FieldSecurityTables.SharePrincipalId, out var principal) && principal is EntityReference given
+                    target.Attributes.TryGetValue(FieldSecurityTables.SharePrincipalId, out var principal) && principal is RecordReference given
                         ? given : await StoredSharePrincipalAsync(id, ct), ct);
             if (target.LogicalName == AccessTeamSchema.TeamTemplate)
             {
@@ -810,7 +822,7 @@ public static class SystemTableRules
         /// <exception cref="XrmdFaultException">400 InvalidArgument.</exception>
         public async Task DemandOwnerNotAccessTeamAsync(object? owner, CancellationToken ct)
         {
-            if (caller == Caller.Internal || owner is not EntityReference { LogicalName: Team, Id: var teamId } || teamId == Guid.Empty) return;
+            if (caller == Caller.Internal || owner is not RecordReference { LogicalName: Team, Id: var teamId } || teamId == Guid.Empty) return;
             await using var cmd = session.Command(
                 $"SELECT {session.Dialect.IsNull(session.Quote(TeamType), "0")} FROM {session.DataTable(Team)} " +
                 $"WHERE {session.Quote(SystemAttributes.PrimaryIdName(Team))} = {IdParameter}");
@@ -825,7 +837,7 @@ public static class SystemTableRules
         /// team could read or update would reach each new member unchecked. <see cref="Caller.Internal"/> is exempt.
         /// </summary>
         /// <exception cref="XrmdFaultException">400 InvalidArgument.</exception>
-        public async Task DemandShareNotToSystemManagedTeamAsync(EntityReference? principal, CancellationToken ct)
+        public async Task DemandShareNotToSystemManagedTeamAsync(RecordReference? principal, CancellationToken ct)
         {
             if (caller == Caller.Internal || principal is not { LogicalName: Team, Id: var teamId }) return;
             if (await AccessTeamRules.IsSystemManagedTeamAsync(session, teamId, ct))
@@ -836,14 +848,14 @@ public static class SystemTableRules
         /// The stored principal id of a field share, as a team reference (a user's id matches no team row, so the check above
         /// passes for it); null when the share is missing.
         /// </summary>
-        private async Task<EntityReference?> StoredSharePrincipalAsync(Guid shareId, CancellationToken ct)
+        private async Task<RecordReference?> StoredSharePrincipalAsync(Guid shareId, CancellationToken ct)
         {
             if (caller == Caller.Internal) return null;
             await using var cmd = session.Command(
                 $"SELECT {session.Quote(FieldSecurityTables.SharePrincipalId)} FROM {session.DataTable(FieldSecurityTables.Share)} " +
                 $"WHERE {session.Quote(SystemAttributes.PrimaryIdName(FieldSecurityTables.Share))} = {IdParameter}");
             cmd.AddParameter(IdParameter, DbType.Guid, shareId);
-            return await cmd.ExecuteScalarAsync(ct) is Guid id ? new EntityReference(Team, id) : null;
+            return await cmd.ExecuteScalarAsync(ct) is Guid id ? new RecordReference { LogicalName = Team, Id = id } : null;
         }
 
         /// <summary>
@@ -854,7 +866,7 @@ public static class SystemTableRules
         /// 1 to 100 and <c>usepositionhierarchy</c> is not true (the position model is not supported).
         /// </summary>
         /// <exception cref="XrmdFaultException">403 PrivilegeDenied; 400 InvalidArgument.</exception>
-        public async Task DemandHierarchySettingsAsync(Entity target, bool update, CancellationToken ct)
+        public async Task DemandHierarchySettingsAsync(Record target, bool update, CancellationToken ct)
         {
             if (target.LogicalName != Organization || !HierarchySettings.Any(target.Attributes.ContainsKey)) return;
             if (!cache.IsUnrestricted(caller, systemUserId)
@@ -869,7 +881,7 @@ public static class SystemTableRules
         }
 
         /// <summary>
-        /// A step impersonating (<paramref name="impersonating"/>: an EntityReference or a Guid) another user than the caller,
+        /// A step impersonating (<paramref name="impersonating"/>: a reference or a Guid) another user than the caller,
         /// or than the caller's impersonator: that principal must hold <c>prvActOnBehalfOfAnotherUser</c> from a role
         /// assigned directly. SYSTEM and <see cref="Caller.Internal"/> are exempt.
         /// </summary>
@@ -878,7 +890,7 @@ public static class SystemTableRules
         {
             var impersonated = impersonating switch
             {
-                EntityReference reference => reference.Id,
+                RecordReference reference => reference.Id,
                 Guid id => id,
                 _ => Guid.Empty,
             };
@@ -895,7 +907,7 @@ public static class SystemTableRules
         /// True when the Update sets a hierarchy setting to another value than the stored one. A row that cannot be read, or a
         /// value of an unexpected type, counts as a change (fails closed).
         /// </summary>
-        private async Task<bool> ChangesHierarchySettingsAsync(Entity target, CancellationToken ct)
+        private async Task<bool> ChangesHierarchySettingsAsync(Record target, CancellationToken ct)
         {
             var id = RecordId(target);
             if (id == Guid.Empty) return true;
@@ -927,7 +939,7 @@ public static class SystemTableRules
         /// (a stored value sent back passes, NULL <c>systemmanaged</c> as false). A missing team is left to the core's 404.
         /// </summary>
         /// <exception cref="XrmdFaultException">400 InvalidArgument naming the column.</exception>
-        private async Task DemandSystemManagedUnchangedAsync(Entity target, Guid id, CancellationToken ct)
+        private async Task DemandSystemManagedUnchangedAsync(Record target, Guid id, CancellationToken ct)
         {
             if (!AccessTeamRules.SystemManagedColumns.Any(target.Attributes.ContainsKey)
                 || await AccessTeamRules.StoredSystemManagedColumnsAsync(session, id, ct) is not { } stored) return;
@@ -945,7 +957,7 @@ public static class SystemTableRules
         private static Guid? LookupId(object? value) => value switch
         {
             null => null,
-            EntityReference reference => reference.Id,
+            RecordReference reference => reference.Id,
             Guid id => id,
             _ => Guid.Empty,
         };
@@ -964,7 +976,7 @@ public static class SystemTableRules
         private static int TeamTypeValue(object? value) => value switch
         {
             null => 0,
-            OptionSetValue option => option.Value,
+            ChoiceValue option => option.Value,
             int number => number,
             _ => int.MinValue,
         };
@@ -981,12 +993,12 @@ public static class SystemTableRules
     }
 
     /// <summary>
-    /// The id of an Update's target: <see cref="Entity.Id"/>, else its primary key attribute when it is a Guid; otherwise
+    /// The id of an Update's target: <see cref="Record.Id"/>, else its primary key attribute when it is a Guid; otherwise
     /// <see cref="Guid.Empty"/> (the core operation answers a missing or malformed id with its 400).
     /// </summary>
-    internal static Guid RecordId(Entity target) =>
+    internal static Guid RecordId(Record target) =>
         target.Id != Guid.Empty ? target.Id
-        : target.Attributes.TryGetValue(SystemAttributes.PrimaryIdName(target.LogicalName ?? ""), out var value) && value is Guid id ? id
+        : target.Attributes.TryGetValue(SystemAttributes.PrimaryIdName(target.LogicalName), out var value) && value is Guid id ? id
         : Guid.Empty;
 
     /// <summary>The system solutions <c>Default</c> and <c>Active</c> (fixed ids, seeded).</summary>
@@ -1031,7 +1043,7 @@ public static class SystemTableRules
     /// <c>processtrigger</c> is refused too: its rows go with their definition, in the core).
     /// </summary>
     /// <exception cref="XrmdFaultException">400 InvalidArgument.</exception>
-    public static void DemandValidProcessWrite(string message, Entity target, Caller caller)
+    public static void DemandValidProcessWrite(string message, Record target, Caller caller)
     {
         ArgumentNullException.ThrowIfNull(target);
         if (caller == Caller.Internal) return;
@@ -1153,7 +1165,7 @@ public static class SystemTableRules
     /// the plug-ins.
     /// </summary>
     /// <exception cref="XrmdFaultException">400 InvalidArgument.</exception>
-    private static void DemandPostWrite(string message, Entity target, Caller caller)
+    private static void DemandPostWrite(string message, Record target, Caller caller)
     {
         switch (target.LogicalName)
         {
@@ -1161,7 +1173,7 @@ public static class SystemTableRules
                 throw XrmdFaultException.InvalidArgument(PostSchema.ServerMaintained);
             case PostSchema.Post or PostSchema.Comment when message is "Update" or "Associate" or "Disassociate":
                 throw XrmdFaultException.InvalidArgument(PostSchema.NotUpdatable);
-            case PostSchema.Post when message == "Create" && target.GetAttributeValue<OptionSetValue>(PostSchema.Source) is { } source
+            case PostSchema.Post when message == "Create" && target.SdkValue<ChoiceValue>(PostSchema.Source) is { } source
                                       && PostSchema.IsAutoSource(source.Value):
                 throw XrmdFaultException.InvalidArgument(PostSchema.AutoPostsRefused);
         }
@@ -1187,7 +1199,7 @@ public static class SystemTableRules
     /// retention <c>expirechangetrackingindays</c>: 0 to 365 days.
     /// </summary>
     /// <exception cref="XrmdFaultException">400 InvalidArgument.</exception>
-    private static void DemandValidAuditSettings(Entity target)
+    private static void DemandValidAuditSettings(Record target)
     {
         if (target.LogicalName != Organization) return;
         if (target.Attributes.TryGetValue(IsUserAccessAuditEnabled, out var access) && access is true)
@@ -1226,7 +1238,7 @@ public static class SystemTableRules
     /// (Allowed); <c>canreadunmasked</c> is 0, since masking is not supported. A null value is left as it is (read as 0).
     /// </summary>
     /// <exception cref="XrmdFaultException">400 InvalidArgument naming the column.</exception>
-    private static void DemandValidPermission(Entity target)
+    private static void DemandValidPermission(Record target)
     {
         foreach (var column in PermissionColumns)
             if (target.Attributes.TryGetValue(column, out var value) && value is not null
@@ -1275,10 +1287,10 @@ public static class SystemTableRules
     private static readonly string[] PermissionColumns =
         [FieldSecurityTables.CanCreate, FieldSecurityTables.CanRead, FieldSecurityTables.CanUpdate];
 
-    /// <summary>The value of a choice column (an <see cref="OptionSetValue"/> or a number); null for anything else.</summary>
-    private static int? OptionValue(object value) => value switch
+    /// <summary>The value of a choice column (a <see cref="ChoiceValue"/> or a number); null for anything else.</summary>
+    private static int? OptionValue(object? value) => value switch
     {
-        OptionSetValue option => option.Value,
+        ChoiceValue option => option.Value,
         int number => number,
         _ => null,
     };
@@ -1286,7 +1298,7 @@ public static class SystemTableRules
     /// <summary>True for a reference (or id) of the System Administrator field security profile.</summary>
     private static bool IsAdministratorProfile(object? value) => value switch
     {
-        EntityReference reference => reference.Id == FieldSecurityTables.SystemAdministratorProfileId,
+        RecordReference reference => reference.Id == FieldSecurityTables.SystemAdministratorProfileId,
         Guid id => id == FieldSecurityTables.SystemAdministratorProfileId,
         _ => false,
     };
@@ -1313,7 +1325,7 @@ public static class SystemTableRules
     /// <see cref="TimeZoneCatalog"/>, so that every client can convert the user's dates.
     /// </summary>
     /// <exception cref="XrmdFaultException">400 InvalidArgument naming the code.</exception>
-    private static void DemandKnownTimeZone(Entity target)
+    private static void DemandKnownTimeZone(Record target)
     {
         if (target.LogicalName != CurrencySchema.UserSettings || !target.Attributes.TryGetValue(TimeZoneSchema.Code, out var value)) return;
         if (value is int code && !TimeZoneCatalog.Contains(code))
@@ -1323,7 +1335,7 @@ public static class SystemTableRules
 
     /// <summary>A role carrying <c>roletemplateid</c> (any value, null included) is refused: the template makes a System Administrator.</summary>
     /// <exception cref="XrmdFaultException">400 InvalidArgument.</exception>
-    private static void DemandNoRoleTemplate(Entity target)
+    private static void DemandNoRoleTemplate(Record target)
     {
         if (target.LogicalName == Role && target.Attributes.ContainsKey(RoleTemplateId))
             throw XrmdFaultException.InvalidArgument($"The attribute {RoleTemplateId} of {Role} is maintained by the system and cannot be set.");
@@ -1336,7 +1348,7 @@ public static class SystemTableRules
     /// forge a managed solution, or the holding solution of one that a DeleteAndPromote then applies.
     /// </summary>
     /// <exception cref="XrmdFaultException">400 InvalidArgument naming the column.</exception>
-    private static void DemandNoIsManaged(Entity target, Caller caller)
+    private static void DemandNoIsManaged(Record target, Caller caller)
     {
         if (caller == Caller.Internal || !target.Attributes.ContainsKey(IsManaged)) return;
         if (target.LogicalName != Solution)
@@ -1356,7 +1368,7 @@ public static class SystemTableRules
     /// component, which the export writes again; only the solution import writes it (with its own SQL).
     /// </summary>
     /// <exception cref="XrmdFaultException">400 InvalidArgument naming the column.</exception>
-    private static void DemandNoImportOnlyColumn(Entity target)
+    private static void DemandNoImportOnlyColumn(Record target)
     {
         if (target.Attributes.Keys.FirstOrDefault(name => IsImportOnly(target.LogicalName, name)) is { } column)
             throw XrmdFaultException.InvalidArgument(
@@ -1368,13 +1380,13 @@ public static class SystemTableRules
     /// the core would write, and the job in state 0 or 1 (read with UPDLOCK). A missing job is left to the core's 404.
     /// </summary>
     /// <exception cref="XrmdFaultException">400 InvalidArgument otherwise.</exception>
-    private static async Task DemandCancellationAsync(Entity target, Guid id, DataSession session, CancellationToken ct)
+    private static async Task DemandCancellationAsync(Record target, Guid id, DataSession session, CancellationToken ct)
     {
         foreach (var name in target.Attributes.Keys)
             if (name is not (StateCode or StatusCode) && (name == OwnerId || !SystemAttributes.IsReservedName(AsyncOperation, name)))
                 throw XrmdFaultException.InvalidArgument(OnlyCancellation);
-        if (ValueOf(target, StateCode) is not OptionSetValue { Value: Completed }
-            || ValueOf(target, StatusCode) is not OptionSetValue { Value: Canceled })
+        if (ValueOf(target, StateCode) is not ChoiceValue { Value: Completed }
+            || ValueOf(target, StatusCode) is not ChoiceValue { Value: Canceled })
             throw XrmdFaultException.InvalidArgument(OnlyCancellation);
         if (id != Guid.Empty && await JobStateAsync(id, session, ct) is { } state && state is not (0 or 1))
             throw XrmdFaultException.InvalidArgument(OnlyCancellation);
@@ -1400,7 +1412,7 @@ public static class SystemTableRules
     /// other message) are not concerned.
     /// </summary>
     /// <exception cref="XrmdFaultException">400 InvalidArgument.</exception>
-    private static async Task DemandNotCustomApiAsync(string message, string? table, Guid id, Entity? target, Caller caller,
+    private static async Task DemandNotCustomApiAsync(string message, string? table, Guid id, Record? target, Caller caller,
         DataSession session, CancellationToken ct)
     {
         if (table is null || caller == Caller.Internal) return;
@@ -1443,7 +1455,7 @@ public static class SystemTableRules
     /// </summary>
     /// <param name="message">The request's message: Create, Update, Associate or Disassociate.</param>
     /// <exception cref="XrmdFaultException">400 InvalidArgument naming the API (and the parameter or property).</exception>
-    private static async Task DemandCustomApiLookupsAsync(string message, Entity target, bool isCreate, Caller caller,
+    private static async Task DemandCustomApiLookupsAsync(string message, Record target, bool isCreate, Caller caller,
         DataSession session, CancellationToken ct)
     {
         if (caller == Caller.Internal) return;
@@ -1480,7 +1492,7 @@ public static class SystemTableRules
     }
 
     /// <summary>The <see cref="DemandCustomApiLookupsAsync"/> checks of a request parameter or response property.</summary>
-    private static async Task DemandCustomApiFieldLookupsAsync(string message, Entity target, bool isCreate, DataSession session,
+    private static async Task DemandCustomApiFieldLookupsAsync(string message, Record target, bool isCreate, DataSession session,
         CancellationToken ct)
     {
         var table = target.LogicalName;
@@ -1529,7 +1541,7 @@ public static class SystemTableRules
     /// type, cannot be deleted while the API exists: the API would silently lose its main operation.
     /// </summary>
     /// <exception cref="XrmdFaultException">400 InvalidArgument naming the API.</exception>
-    private static async Task DemandNoCustomApiUsesAsync(EntityReference deleted, IMetadataStore store, DataSession session, CancellationToken ct)
+    private static async Task DemandNoCustomApiUsesAsync(RecordReference deleted, IMetadataStore store, DataSession session, CancellationToken ct)
     {
         var table = deleted.LogicalName;
         if (table is not ("plugintype" or "pluginassembly") || store.GetTable(CustomApiTables.Api) is null) return;
@@ -1549,7 +1561,7 @@ public static class SystemTableRules
 
     private static Guid? IdOf(object value) => value switch
     {
-        EntityReference reference => reference.Id,
+        RecordReference reference => reference.Id,
         Guid id => id,
         _ => null,
     };
@@ -1584,7 +1596,7 @@ public static class SystemTableRules
     }
 
     /// <summary>The value of the attribute in <paramref name="target"/>; null when absent.</summary>
-    private static object? ValueOf(Entity target, string attribute) =>
+    private static object? ValueOf(Record target, string attribute) =>
         target.Attributes.TryGetValue(attribute, out var value) ? value : null;
 
     /// <summary>

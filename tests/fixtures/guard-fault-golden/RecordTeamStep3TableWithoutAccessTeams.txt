@@ -1,0 +1,31 @@
+=== PipelineExecutor.ExecuteAsync as a user with Basic User ===
+--- request ---
+Request: AddUserToRecordTeamRequest
+  RequestName: String:"AddUserToRecordTeam"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    Record: EntityReference
+      LogicalName: String:"contact"
+      Id: Guid:{a:contact}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+    SystemUserId: Guid:{a:member}
+    TeamTemplateId: Guid:{a:template}
+--- fault ---
+Fault: XrmdFaultException 0x80040203 400 "The table 'contact' does not have AutoCreateAccessTeams."
+--- request after ---
+Request: AddUserToRecordTeamRequest
+  RequestName: String:"AddUserToRecordTeam"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    Record: EntityReference
+      LogicalName: String:"contact"
+      Id: Guid:{a:contact}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+    SystemUserId: Guid:{a:member}
+    TeamTemplateId: Guid:{a:template}
+--- rows ---
+access teams of the record: 0

@@ -1,0 +1,47 @@
+=== PipelineExecutor.ExecuteAsync as a user with Basic User and prvReadSystemUser Global, prvWriteSystemUser Global ===
+--- request ---
+Request: AssociateRequest
+  RequestName: String:"Associate"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    RelatedEntities: EntityReferenceCollection[1]
+      [0]: EntityReference
+        LogicalName: String:"role"
+        Id: Guid:{a:role}
+        Name: null
+        KeyAttributes: KeyAttributeCollection[0]
+        RowVersion: null
+    Relationship: Relationship
+      SchemaName: String:"systemuserroles_association"
+      PrimaryEntityRole: null
+    Target: EntityReference
+      LogicalName: String:"systemuser"
+      Id: Guid:{a:member}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- fault ---
+Fault: XrmdFaultException 0x80048D3C 403 "User {a:caller} cannot grant prvReadAccount at depth Global without holding it at that depth."
+--- request after ---
+Request: AssociateRequest
+  RequestName: String:"Associate"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    RelatedEntities: EntityReferenceCollection[1]
+      [0]: EntityReference
+        LogicalName: String:"role"
+        Id: Guid:{a:role}
+        Name: null
+        KeyAttributes: KeyAttributeCollection[0]
+        RowVersion: null
+    Relationship: Relationship
+      SchemaName: String:"systemuserroles_association"
+      PrimaryEntityRole: null
+    Target: EntityReference
+      LogicalName: String:"systemuser"
+      Id: Guid:{a:member}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- rows ---
+systemuserroles of the user: 0

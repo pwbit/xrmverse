@@ -1,0 +1,31 @@
+=== PipelineExecutor.ExecuteAsync as a user with Basic User and prvReadAccount Global, prvShareAccount Global ===
+--- request ---
+Request: AddUserToRecordTeamRequest
+  RequestName: String:"AddUserToRecordTeam"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    Record: EntityReference
+      LogicalName: String:"account"
+      Id: Guid:{a:account}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+    SystemUserId: Guid:{a:added}
+    TeamTemplateId: Guid:{a:template}
+--- fault ---
+Fault: XrmdFaultException 0x80040203 400 "The user {a:added} cannot be added to the access team of this 'account' record: the team grants ReadAccess, so the user needs prvReadAccount at Basic depth or wider."
+--- request after ---
+Request: AddUserToRecordTeamRequest
+  RequestName: String:"AddUserToRecordTeam"
+  RequestId: null
+  Parameters: ParameterCollection[3]
+    Record: EntityReference
+      LogicalName: String:"account"
+      Id: Guid:{a:account}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+    SystemUserId: Guid:{a:added}
+    TeamTemplateId: Guid:{a:template}
+--- rows ---
+access teams of the record: 0

@@ -1,4 +1,5 @@
 using Xrmd.Model.Metadata;
+using Xrmd.Model.Records;
 using Xrmd.Core.Errors;
 
 namespace Xrmd.Metadata;
@@ -145,6 +146,39 @@ public static partial class ElasticTables
         if (actions.FirstOrDefault(x => x.Value is not (null or CascadeAction.NoCascade)) is { Value: { } value } action)
             throw XrmdFaultException.InvalidArgument(
                 $"Relationship '{r.SchemaName}': CascadeConfiguration.{action.Name} = {value} is not possible with the elastic table '{(IsElastic(referenced) ? referenced : referencing).LogicalName}' (use NoCascade).");
+    }
+
+    /// <summary>
+    /// Final review I4: the ids a write on the elastic table <paramref name="e"/> gives for its row (<see cref="Record.Id"/>, the primary key
+    /// attribute, the primary id among the <see cref="Record.KeyAttributes"/>) must agree, so that the security guard and the core address
+    /// the same row whichever of them each reads first. Nothing is checked on a standard table. S.2e3c2a (Task 5): the model form, for the
+    /// guard on the model request.
+    /// </summary>
+    /// <exception cref="XrmdFaultException">400 when two of the ids given differ.</exception>
+    public static void DemandOneRowId(TableDefinition e, Record target)
+    {
+        ArgumentNullException.ThrowIfNull(e);
+        ArgumentNullException.ThrowIfNull(target);
+        if (!IsElastic(e)) return;
+        var pk = SystemAttributes.PrimaryIdName(e);
+        DemandOneRowId(e.LogicalName, pk, target.Id, target.Attributes.TryGetValue(pk, out var value) ? value : null,
+            target.KeyAttributes is { } keys && keys.TryGetValue(pk, out var key) ? key : null);
+    }
+
+    /// <summary>
+    /// The check of <see cref="DemandOneRowId(TableDefinition, Record)"/> on the three ids of a row of <paramref name="table"/>: its id,
+    /// the value of its primary key attribute <paramref name="pk"/> (a <see cref="Guid"/>, else none) and its key attribute
+    /// <paramref name="pk"/> (a <see cref="Guid"/> or its text, else none).
+    /// </summary>
+    /// <exception cref="XrmdFaultException">400 when two of the ids given differ.</exception>
+    private static void DemandOneRowId(string? table, string pk, Guid id, object? attributeValue, object? keyValue)
+    {
+        var attribute = attributeValue is Guid g ? g : Guid.Empty;
+        var key = keyValue switch { Guid kg => kg, string text when Guid.TryParse(text, out var parsed) => parsed, _ => Guid.Empty };
+        var given = new[] { id, attribute, key }.Where(i => i != Guid.Empty).Distinct().ToList();
+        if (given.Count > 1)
+            throw XrmdFaultException.InvalidArgument(
+                $"The record of entity '{table}' is named by different ids ({string.Join(", ", given)}): the record id, the {pk} value and the key attribute {pk} must agree.");
     }
 
     /// <summary>

@@ -1,0 +1,33 @@
+=== PipelineExecutor.ExecuteAsync as a user with Basic User ===
+--- request ---
+Request: GrantAccessRequest
+  RequestName: String:"GrantAccess"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    PrincipalAccess: PrincipalAccess
+      AccessMask: AccessRights:ReadAccess
+      Principal: null
+    Target: EntityReference
+      LogicalName: String:"account"
+      Id: Guid:{a:account}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- fault ---
+Fault: XrmdFaultException 0x80040203 400 "Required parameter 'PrincipalAccess.Principal' is missing."
+--- request after ---
+Request: GrantAccessRequest
+  RequestName: String:"GrantAccess"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    PrincipalAccess: PrincipalAccess
+      AccessMask: AccessRights:ReadAccess
+      Principal: null
+    Target: EntityReference
+      LogicalName: String:"account"
+      Id: Guid:{a:account}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- rows ---
+shares of the account: 0

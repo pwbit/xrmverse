@@ -3,6 +3,7 @@ using Xrmd.Abstractions;
 using Xrmd.Abstractions.Sdk;
 using Xrmd.Model.Messages;
 using Xrmd.Model.Records;
+using Xrmd.Security;
 
 namespace Xrmd.Pipeline;
 
@@ -115,7 +116,9 @@ public static class PipelineCoreSdk
 
     /// <summary>
     /// The model twin of an SDK request in a mirror of its own, registered for it. An SDK request has no chain mirror of its own (only a
-    /// model request is registered), so every call gets a fresh one; both directions of the call use it.
+    /// model request is registered), so every call gets a fresh one; both directions of the call use it. A record team mark the caller
+    /// left on the SDK request goes onto the model request (S.2e3c2a, Decision 6: <see cref="AccessTeamRules.CopyMark"/>), as the
+    /// pipeline copies the audit action at its crossing.
     /// </summary>
     private static (SdkMirror Mirror, Request Model) Cross(OrganizationRequest request)
     {
@@ -123,6 +126,7 @@ public static class PipelineCoreSdk
         var mirror = new SdkMirror();
         var model = mirror.In(request)!;
         SdkMirror.Register(model, mirror);
+        AccessTeamRules.CopyMark(request, model);
         return (mirror, model);
     }
 

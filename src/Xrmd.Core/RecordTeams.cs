@@ -8,6 +8,7 @@ using Xrmd.Model.Metadata;
 using Xrmd.Model.Records;
 using Xrmd.Model.Security;
 using Xrmd.Security;
+using Target = Xrmd.Security.AccessTeamRules.RecordTeamTarget;
 
 namespace Xrmd.Core;
 
@@ -19,23 +20,17 @@ namespace Xrmd.Core;
 /// <remarks>
 /// The team of a (record, template) is found with UPDLOCK/HOLDLOCK on <c>team (regardingobjectid, teamtemplateid)</c>, so the
 /// calls for one record and template queue up: the first creates the team, the others find it. Before that, the template
-/// row and the record are locked until commit (<see cref="AccessTeamRules.DemandRecordTeamAsync"/>), so a template Delete, a
+/// row and the record are locked until commit (<see cref="AccessTeamRules.DemandRecordTeamAsync(DataSession, IMetadataStore, RecordReference, Guid, Guid, bool, CancellationToken)"/>), so a template Delete, a
 /// mask change or a record Delete waits for the call (or the call for it). The unique index <c>UX_team_record_template</c> is the
 /// backstop: a Create that still loses the race reads the team once more.
 /// <para>
-/// S.2e3c1 (Task 3): on the model request and model values. The checks of <see cref="AccessTeamRules"/> stay on the SDK until S.2e3c2
-/// and are reached through <see cref="CoreSdkBridges"/>.
+/// S.2e3c1 (Task 3): on the model request and model values. S.2e3c2a (Task 3): the checks of <see cref="AccessTeamRules"/> run on the
+/// model; Task 5: so do the record team marks, which the <c>SecurityGuard</c> leaves on the model request the core gets.
 /// </para>
 /// </remarks>
 internal sealed class RecordTeams(CoreOperations core, IMetadataStore store, SecurityAdministration security)
 {
     private const string Team = AccessTeamSchema.Team;
-
-    /// <summary>
-    /// A record team message's parameters once checked (the model of <see cref="AccessTeamRules.RecordTeamTarget"/>): the record's
-    /// table, the template's mask now and the record's owning business unit.
-    /// </summary>
-    internal sealed record Target(TableDefinition Table, Guid RecordId, Guid UserId, Guid TemplateId, AccessMask Mask, Guid? OwningBusinessUnit);
 
     /// <summary>Test seam: runs right before the team is created, in the request's session (to force a lost race).</summary>
     internal Func<DataSession, Task>? BeforeCreateTeam { get; set; }
@@ -47,8 +42,9 @@ internal sealed class RecordTeams(CoreOperations core, IMetadataStore store, Sec
     /// </summary>
     /// <returns>The team's id (<c>AccessTeamId</c>).</returns>
     /// <exception cref="XrmdFaultException">400 for a missing parameter; the faults of
-    /// <see cref="AccessTeamRules.DemandRecordTeamAsync"/> (404, 400), <see cref="AccessTeamRules.DemandSameAsChecked"/> and
-    /// <see cref="AccessTeamRules.DemandTeamShareChecked"/> (400).</exception>
+    /// <see cref="AccessTeamRules.DemandRecordTeamAsync(DataSession, IMetadataStore, RecordReference, Guid, Guid, bool, CancellationToken)"/>
+    /// (404, 400), <see cref="AccessTeamRules.DemandSameAsChecked(Request, Caller, Target)"/> and
+    /// <see cref="AccessTeamRules.DemandTeamShareChecked(Request, Caller, Target, AccessMask)"/> (400).</exception>
     public async Task<Guid> AddUserAsync(DataSession s, Caller caller, Request request, CancellationToken ct)
     {
         var target = await LockedTargetAsync(s, caller, request, ct);
@@ -78,26 +74,11 @@ internal sealed class RecordTeams(CoreOperations core, IMetadataStore store, Sec
     private async Task<Target> LockedTargetAsync(DataSession s, Caller caller, Request request,
         CancellationToken ct)
     {
-        var (record, userId, templateId) = RecordTeamParameters(request);
-        var target = await CoreSdkBridges.DemandRecordTeamAsync(s, store, record, userId, templateId, ct);
-        CoreSdkBridges.DemandSameAsChecked(request, caller, target);
+        var (record, userId, templateId) = AccessTeamRules.RecordTeamParameters(request);
+        var target = await AccessTeamRules.DemandRecordTeamAsync(s, store, record, userId, templateId, lockRows: true, ct);
+        AccessTeamRules.DemandSameAsChecked(request, caller, target);
         return target;
     }
-
-    /// <summary>
-    /// The parameters of a record team message (the model of <see cref="AccessTeamRules.RecordTeamParameters"/>): <c>Record</c>
-    /// (a reference), <c>SystemUserId</c> and <c>TeamTemplateId</c> (Guid), read in this order.
-    /// </summary>
-    /// <exception cref="XrmdFaultException">400 when one is missing or of another type (named with today's SDK type).</exception>
-    private static (RecordReference Record, Guid UserId, Guid TemplateId) RecordTeamParameters(Request request) =>
-        (Parameter<RecordReference>(request, "Record", "EntityReference"), Parameter<Guid>(request, "SystemUserId", nameof(Guid)),
-            Parameter<Guid>(request, "TeamTemplateId", nameof(Guid)));
-
-    private static T Parameter<T>(Request request, string name, string sdkTypeName) =>
-        request.Parameters.TryGetValue(name, out var value) && value is T typed
-            ? typed
-            : throw XrmdFaultException.InvalidArgument(
-                $"Required parameter '{name}' of request '{request.Name}' is missing or not a {sdkTypeName}.");
 
     private async Task<Guid> FindOrCreateTeamAsync(DataSession s, Caller caller, Request request,
         Target target, CancellationToken ct)
@@ -123,13 +104,13 @@ internal sealed class RecordTeams(CoreOperations core, IMetadataStore store, Sec
 
     /// <summary>
     /// An existing team, locked: the member receives its share of the record, so the rights of that share, read under the lock,
-    /// must be rights the <c>SecurityGuard</c> checked (<see cref="AccessTeamRules.DemandTeamShareChecked"/>).
+    /// must be rights the <c>SecurityGuard</c> checked (<see cref="AccessTeamRules.DemandTeamShareChecked(Request, Caller, Target, AccessMask)"/>).
     /// </summary>
     private static async Task<Guid> CheckedTeamAsync(DataSession s, Caller caller, Request request,
         Target target, Guid teamId, CancellationToken ct)
     {
-        var share = await CoreSdkBridges.TeamShareMaskAsync(s, target, ct) ?? AccessMask.None;
-        CoreSdkBridges.DemandTeamShareChecked(request, caller, target, share);
+        var share = await AccessTeamRules.TeamShareMaskAsync(s, target, lockRows: true, ct) ?? AccessMask.None;
+        AccessTeamRules.DemandTeamShareChecked(request, caller, target, share);
         return teamId;
     }
 

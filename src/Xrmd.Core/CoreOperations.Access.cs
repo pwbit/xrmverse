@@ -18,8 +18,8 @@ namespace Xrmd.Core;
 /// S.2e3c1 (Task 3, Decisions 1 and 5): the share and record team messages on the model request (GrantAccess, ModifyAccess,
 /// RevokeAccess, AddUserToRecordTeam, RemoveUserFromRecordTeam) and the share bodies on model values (<see cref="ShareRecordAsync"/>,
 /// <see cref="RevokeRecordAccessAsync"/>). The SDK twin <c>ShareAsync</c> keeps today's name for the
-/// caller still on the SDK (the migration's sharing phase). The audit writer and the security rules stay on the SDK until their
-/// steps: they are reached through <see cref="CoreSdkBridges"/>.
+/// caller still on the SDK (the migration's sharing phase). The share audit writer stays on the SDK until S.2f and is reached
+/// through <see cref="CoreSdkBridges"/>; the security rules and the guard run on the model (S.2e3c2a).
 /// </summary>
 public sealed partial class CoreOperations
 {

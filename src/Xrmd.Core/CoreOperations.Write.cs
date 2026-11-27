@@ -37,7 +37,7 @@ public sealed partial class CoreOperations
         CoreSdkBridges.NormalizeElasticKeys(m, record, isCreate, store);
         var attrs = ColumnsOf(m);
         // Plan 2.10, ruling X3: a currency's rate out of range is InvalidExchangeRate, not the generic range error.
-        CoreSdkBridges.DemandRateInRange(record);
+        CurrencyRules.DemandRateInRange(record);
         EntityValidator.Validate(record, m, attrs, isCreate);
         // Plan 2.12a, ruling K5 (and 2.12c F9 for a formula column): a value sent for a calculated column is ignored; it is dropped here, so that it never reaches a
         // plug-in's Target nor the audit of the write. Plan 2.12b, ruling R11: the same for a rollup column, its companions and the
@@ -326,7 +326,7 @@ public sealed partial class CoreOperations
 
     /// <summary>
     /// Plan 2.16 at stage 30, in the request's transaction: a template's values are checked again on what is written (ruling A2,
-    /// <see cref="AccessTeamRules.DemandTemplateAsync"/>, which on Create takes the lock that serializes it with disabling the
+    /// <see cref="AccessTeamRules.DemandTemplateAsync(DataSession, IMetadataStore, Record, bool, Guid, CancellationToken)"/>, which on Create takes the lock that serializes it with disabling the
     /// table and counts the templates under it). xrmverse applies no column default on insert, so a Create writes
     /// <c>teamtemplate.issystem</c> false and, when not given, <c>team.systemmanaged</c> false.
     /// </summary>
@@ -335,7 +335,7 @@ public sealed partial class CoreOperations
     {
         if (m.LogicalName == AccessTeamSchema.TeamTemplate)
         {
-            await CoreSdkBridges.DemandAccessTeamTemplateAsync(s, store, row, isCreate, id, ct);
+            await AccessTeamRules.DemandTemplateAsync(s, store, row, isCreate, id, ct);
             if (isCreate) SetIfDefined(row, attrs, AccessTeamSchema.IsSystem, false);
         }
         else if (isCreate && m.LogicalName == Team && !row.Contains(AccessTeamSchema.SystemManaged))

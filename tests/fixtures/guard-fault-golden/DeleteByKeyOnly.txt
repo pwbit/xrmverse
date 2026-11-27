@@ -1,0 +1,29 @@
+=== PipelineExecutor.ExecuteAsync as a user with Basic User and prvDeleteAccount Basic ===
+--- request ---
+Request: DeleteRequest
+  RequestName: String:"Delete"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: EntityReference
+      LogicalName: String:"account"
+      Id: Guid:{empty}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[1]
+        accountid: Guid:{a:account}
+      RowVersion: null
+--- fault ---
+Fault: XrmdFaultException 0x80048306 403 "Principal user with id {a:caller} does not have DeleteAccess right(s) for record with id {a:account} of entity account."
+--- request after ---
+Request: DeleteRequest
+  RequestName: String:"Delete"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: EntityReference
+      LogicalName: String:"account"
+      Id: Guid:{empty}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[1]
+        accountid: Guid:{a:account}
+      RowVersion: null
+--- rows ---
+account deleted: 0

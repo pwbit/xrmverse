@@ -1,0 +1,19 @@
+=== PipelineExecutor.ExecuteAsync as a user with only prvReadQueue Basic ===
+--- request ---
+Request: RetrieveUserQueuesRequest
+  RequestName: String:"RetrieveUserQueues"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    IncludePublic: Boolean:True
+    UserId: Guid:{user}
+--- fault ---
+Fault: XrmdFaultException 0x80040220 403 "Principal user (Id={a:caller}, type=8) is missing prvReadQueue privilege (Id={id1}) on OTC=2020 for entity 'queue'. Consider adding missing privilege to one of the principal (user/team) roles for the request to succeed."
+--- request after ---
+Request: RetrieveUserQueuesRequest
+  RequestName: String:"RetrieveUserQueues"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    IncludePublic: Boolean:True
+    UserId: Guid:{user}
+--- rows ---
+rows written: 0

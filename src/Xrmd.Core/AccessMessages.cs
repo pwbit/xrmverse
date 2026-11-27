@@ -24,8 +24,8 @@ namespace Xrmd.Core;
 /// table has no shares (ruling E9): refused with 400, not answered as if the record had none.
 /// <para>
 /// S.2e3c1 (Task 3): on the model request and model values (<see cref="PrincipalAccessValue"/>, <see cref="AccessMask"/>). The SDK
-/// twins (<c>Sdk/AccessMessages.Sdk.cs</c>) keep today's signatures for the Web API and the organization service. The security guard
-/// stays on the SDK until S.2e3c2 and is reached through <see cref="CoreSdkBridges"/>.
+/// twins (<c>Sdk/AccessMessages.Sdk.cs</c>) keep today's signatures for the Web API and the organization service. S.2e3c2a (Task 5): the
+/// security guard is on the model too, and is called directly.
 /// </para>
 /// </summary>
 public sealed partial class AccessMessages(IMetadataStore store, SecurityGuard guard, IDbConnectionFactory factory)
@@ -63,12 +63,12 @@ public sealed partial class AccessMessages(IMetadataStore store, SecurityGuard g
                     ?? throw XrmdFaultException.InvalidArgument(
                         $"The entity with a name = '{target.LogicalName}' with namemapping = 'Logical' was not found in the MetadataCache.");
         ElasticTables.DemandNotElastic(table, "Record shares and the access rights they give");
-        await CoreSdkBridges.DemandAccessAsync(guard, caller, target, AccessMask.ReadAccess, session, ct);
+        await guard.DemandAccessAsync(caller, target, AccessMask.ReadAccess, session, ct);
 
         if (string.Equals(request.Name, RetrievePrincipalAccess, StringComparison.OrdinalIgnoreCase))
         {
             var principal = Parameter(request, "Principal");
-            var rights = await CoreSdkBridges.RetrievePrincipalAccessAsync(guard, principal, target, session, ct);
+            var rights = await guard.RetrievePrincipalAccessAsync(principal, target, session, ct);
             return new Response { Name = RetrievePrincipalAccess, Results = { ["AccessRights"] = rights } };
         }
         if (string.Equals(request.Name, RetrieveSharedPrincipalsAndAccess, StringComparison.OrdinalIgnoreCase))
@@ -90,7 +90,7 @@ public sealed partial class AccessMessages(IMetadataStore store, SecurityGuard g
     private static async Task<PrincipalAccessValue[]> SharesAsync(TableDefinition table, RecordReference target, DataSession session,
         CancellationToken ct)
     {
-        var rows = await CoreSdkBridges.ShareRowsAsync(table, target.Id, principal: null, userAndTeams: false, session, ct);
+        var rows = await SecurityGuard.ShareRowsAsync(table, target.Id, principal: null, userAndTeams: false, session, ct);
         return [.. rows
             .Select(r => (Row: r, Table: r.PrincipalType == TeamPrincipalType ? "team" : r.PrincipalType == UserPrincipalType ? "systemuser" : null))
             .Where(x => x.Table is not null)

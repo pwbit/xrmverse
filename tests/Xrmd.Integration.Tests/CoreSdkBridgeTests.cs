@@ -56,8 +56,8 @@ public sealed class CoreSdkBridgeTests(XrmdFixture fx)
         return Task.CompletedTask;
     });
 
-    /// <summary>A session in a transaction that is never committed.</summary>
-    private sealed class Session : IAsyncDisposable
+    /// <summary>A session in a transaction that is never committed (also used by <see cref="SecurityModelTests"/>).</summary>
+    internal sealed class Session : IAsyncDisposable
     {
         private DbConnection _connection = null!;
         private DbTransaction _transaction = null!;
@@ -125,21 +125,6 @@ public sealed class CoreSdkBridgeTests(XrmdFixture fx)
     }
 
     [Fact]
-    public async Task Bridge_skips_DemandRateInRange_when_not_a_currency_rate()
-    {
-        ShouldBeSkipped(await CrossingsOf(() => CoreSdkBridges.DemandRateInRange(new Record("contact") { [CurrencySchema.ExchangeRate] = 0m })));
-        ShouldBeSkipped(await CrossingsOf(() => CoreSdkBridges.DemandRateInRange(new Record(CurrencySchema.Table) { ["currencyname"] = "x" })));
-    }
-
-    [Fact]
-    public async Task Bridge_runs_DemandRateInRange_when_it_applies()
-    {
-        var result = await CrossingsOf(() => CoreSdkBridges.DemandRateInRange(new Record(CurrencySchema.Table) { [CurrencySchema.ExchangeRate] = 0m }));
-        ShouldBeRefused(result);
-        ((XrmdFaultException)result.Fault!).ErrorCode.Should().Be(ErrorCodes.InvalidExchangeRate);
-    }
-
-    [Fact]
     public async Task Bridge_skips_DemandElasticWrite_when_standard_table()
     {
         await using var kit = await CoreScenarioKit.StartAsync(fx, ownDatabase: false);
@@ -154,100 +139,6 @@ public sealed class CoreSdkBridgeTests(XrmdFixture fx)
         await kit.EnsureElasticTableAsync();
         ShouldBeRefused(await CrossingsOf(() => CoreSdkBridges.DemandElasticWrite(kit.Store.GetTable("new_crgelastic")!,
             new Record("new_crgelastic") { [ElasticTables.TtlInSeconds] = 0 }, true)));
-    }
-
-    // ---- Security row rules ----
-
-    [Fact]
-    public async Task Bridge_skips_EnforceCurrencyRules_when_other_table()
-    {
-        await using var kit = await CoreScenarioKit.StartAsync(fx, ownDatabase: false);
-        ShouldBeSkipped(await CrossingsOf(() =>
-            CoreSdkBridges.EnforceCurrencyRulesAsync(new Record("contact") { ["lastname"] = "crb" }, Unknown, true, kit.Store, null!, default)));
-    }
-
-    [Fact]
-    public async Task Bridge_runs_EnforceCurrencyRules_when_it_applies()
-    {
-        await using var kit = await CoreScenarioKit.StartAsync(fx, ownDatabase: false);
-        await using var session = await Session.OpenAsync(kit.ConnectionString);
-        var row = new Record("organization") { ["name"] = "crb" };
-        ShouldHaveRun(await CrossingsOf(() => CoreSdkBridges.EnforceCurrencyRulesAsync(row, Unknown, true, kit.Store, session.S, default)));
-        row["name"].Should().Be("crb");
-    }
-
-    [Fact]
-    public async Task Bridge_skips_DemandAccessTeamTemplate_when_other_table()
-    {
-        await using var kit = await CoreScenarioKit.StartAsync(fx, ownDatabase: false);
-        ShouldBeSkipped(await CrossingsOf(() =>
-            CoreSdkBridges.DemandAccessTeamTemplateAsync(null!, kit.Store, new Record("team") { ["name"] = "crb" }, true, Unknown, default)));
-    }
-
-    [Fact]
-    public async Task Bridge_runs_DemandAccessTeamTemplate_when_it_applies()
-    {
-        await using var kit = await CoreScenarioKit.StartAsync(fx, ownDatabase: false);
-        await using var session = await Session.OpenAsync(kit.ConnectionString);
-        ShouldBeRefused(await CrossingsOf(() => CoreSdkBridges.DemandAccessTeamTemplateAsync(session.S, kit.Store,
-            new Record(AccessTeamSchema.TeamTemplate) { [AccessTeamSchema.DefaultAccessRightsMask] = 8 }, true, Unknown, default)));
-    }
-
-    [Fact]
-    public async Task Bridge_skips_ApplyDuplicateRuleColumns_when_other_table()
-    {
-        await using var kit = await CoreScenarioKit.StartAsync(fx, ownDatabase: false);
-        var row = new Record("contact");
-        ShouldBeSkipped(await CrossingsOf(() => CoreSdkBridges.ApplyDuplicateRuleColumnsAsync(null!, kit.Store, "contact", row, true, Unknown, default)));
-        row.Attributes.Should().BeEmpty();
-    }
-
-    [Fact]
-    public async Task Bridge_runs_ApplyDuplicateRuleColumns_when_it_applies()
-    {
-        await using var kit = await CoreScenarioKit.StartAsync(fx, ownDatabase: false);
-        await using var session = await Session.OpenAsync(kit.ConnectionString);
-        var row = new Record(DuplicateDetectionSchema.Condition);
-        ShouldHaveRun(await CrossingsOf(() =>
-            CoreSdkBridges.ApplyDuplicateRuleColumnsAsync(session.S, kit.Store, DuplicateDetectionSchema.Condition, row, true, Unknown, default)));
-        row["ignoreblankvalues"].Should().Be(false);
-    }
-
-    [Fact]
-    public async Task Bridge_skips_ApplyEnvironmentVariableRow_when_other_table()
-    {
-        ShouldBeSkipped(await CrossingsOf(() => CoreSdkBridges.ApplyEnvironmentVariableRowAsync(null!, "contact", new Record("contact"), true, Unknown, default)));
-    }
-
-    [Fact]
-    public async Task Bridge_runs_ApplyEnvironmentVariableRow_when_it_applies()
-    {
-        await using var kit = await CoreScenarioKit.StartAsync(fx, ownDatabase: false);
-        await using var session = await Session.OpenAsync(kit.ConnectionString);
-        ShouldBeRefused(await CrossingsOf(() => CoreSdkBridges.ApplyEnvironmentVariableRowAsync(session.S, EnvironmentVariableSchema.Definition,
-            new Record(EnvironmentVariableSchema.Definition), true, Unknown, default)));
-    }
-
-    [Fact]
-    public async Task Bridge_skips_ApplyOrganizationSettingRow_when_update_without_definition()
-    {
-        ShouldBeSkipped(await CrossingsOf(() => CoreSdkBridges.ApplyOrganizationSettingRowAsync(null!, AppModuleSchema.OrganizationSetting,
-            new Record(AppModuleSchema.OrganizationSetting) { ["value"] = "x" }, false, Unknown, default)));
-        ShouldBeSkipped(await CrossingsOf(() => CoreSdkBridges.ApplyOrganizationSettingRowAsync(null!, "contact", new Record("contact"), true, Unknown, default)));
-    }
-
-    [Fact]
-    public async Task Bridge_runs_ApplyOrganizationSettingRow_when_it_applies()
-    {
-        await using var kit = await CoreScenarioKit.StartAsync(fx, ownDatabase: false);
-        await using var session = await Session.OpenAsync(kit.ConnectionString);
-        var row = new Record(AppModuleSchema.OrganizationSetting)
-        {
-            ["settingdefinitionid"] = new RecordReference { LogicalName = AppModuleSchema.SettingDefinition, Id = Guid.Empty },
-        };
-        ShouldHaveRun(await CrossingsOf(() =>
-            CoreSdkBridges.ApplyOrganizationSettingRowAsync(session.S, AppModuleSchema.OrganizationSetting, row, true, Unknown, default)));
-        row.GetValue<RecordReference>("settingdefinitionid")!.Id.Should().Be(Guid.Empty);
     }
 
     // ---- Mail ----

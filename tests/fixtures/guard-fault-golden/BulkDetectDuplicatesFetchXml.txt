@@ -1,0 +1,33 @@
+=== PipelineExecutor.ExecuteAsync as a user with Basic User ===
+--- request ---
+Request: BulkDetectDuplicatesRequest
+  RequestName: String:"BulkDetectDuplicates"
+  RequestId: null
+  Parameters: ParameterCollection[8]
+    CCRecipients: Guid[][0]
+    JobName: String:"gfg bulk detect"
+    Query: FetchExpression
+      Query: String:"<fetch><entity name='contact'><attribute name='fullname' /></entity></fetch>"
+    RecurrencePattern: String:""
+    RecurrenceStartTime: DateTime:2020-01-02T03:04:05.0000000Z
+    SendEmailNotification: Boolean:False
+    TemplateId: Guid:{empty}
+    ToRecipients: Guid[][0]
+--- fault ---
+Fault: XrmdFaultException 0x80040220 403 "Principal user (Id={a:caller}, type=8) is missing prvReadContact privilege (Id={id1}) on OTC=2 for entity 'contact'. Consider adding missing privilege to one of the principal (user/team) roles for the request to succeed."
+--- request after ---
+Request: BulkDetectDuplicatesRequest
+  RequestName: String:"BulkDetectDuplicates"
+  RequestId: null
+  Parameters: ParameterCollection[8]
+    CCRecipients: Guid[][0]
+    JobName: String:"gfg bulk detect"
+    Query: FetchExpression
+      Query: String:"<fetch><entity name='contact'><attribute name='fullname' /></entity></fetch>"
+    RecurrencePattern: String:""
+    RecurrenceStartTime: DateTime:2020-01-02T03:04:05.0000000Z
+    SendEmailNotification: Boolean:False
+    TemplateId: Guid:{empty}
+    ToRecipients: Guid[][0]
+--- rows ---
+jobs named 'gfg bulk detect': 0

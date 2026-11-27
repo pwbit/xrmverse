@@ -1,0 +1,29 @@
+=== PipelineExecutor.ExecuteAsync as a user with Basic User ===
+--- request ---
+Request: CalculateRollupFieldRequest
+  RequestName: String:"CalculateRollupField"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    FieldName: String:"xrmv_ordertotal"
+    Target: EntityReference
+      LogicalName: String:"account"
+      Id: Guid:{a:account}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- fault ---
+Fault: XrmdFaultException 0x8004E027 403 "Cannot calculate the column 'account.xrmv_ordertotal' for the row {a:account}: the caller has no Write access to the row. Principal user (Id={a:caller}, type=8) is missing prvWriteAccount privilege (Id={id1}) on OTC=1 for entity 'account'. Consider adding missing privilege to one of the principal (user/team) roles for the request to succeed."
+--- request after ---
+Request: CalculateRollupFieldRequest
+  RequestName: String:"CalculateRollupField"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    FieldName: String:"xrmv_ordertotal"
+    Target: EntityReference
+      LogicalName: String:"account"
+      Id: Guid:{a:account}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- rows ---
+rows written: 0

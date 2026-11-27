@@ -1,0 +1,43 @@
+=== PipelineExecutor.ExecuteAsync as a user with Basic User and prvReadAccount Global, prvShareAccount Global ===
+--- request ---
+Request: GrantAccessRequest
+  RequestName: String:"GrantAccess"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    PrincipalAccess: PrincipalAccess
+      AccessMask: AccessRights:ReadAccess, WriteAccess
+      Principal: EntityReference
+        LogicalName: String:"systemuser"
+        Id: Guid:{a:principal}
+        Name: null
+        KeyAttributes: KeyAttributeCollection[0]
+        RowVersion: null
+    Target: EntityReference
+      LogicalName: String:"account"
+      Id: Guid:{a:account}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- fault ---
+Fault: XrmdFaultException 0x80048306 403 "Principal user with id {a:caller} does not have WriteAccess right(s) for record with id {a:account} of entity account."
+--- request after ---
+Request: GrantAccessRequest
+  RequestName: String:"GrantAccess"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    PrincipalAccess: PrincipalAccess
+      AccessMask: AccessRights:ReadAccess, WriteAccess
+      Principal: EntityReference
+        LogicalName: String:"systemuser"
+        Id: Guid:{a:principal}
+        Name: null
+        KeyAttributes: KeyAttributeCollection[0]
+        RowVersion: null
+    Target: EntityReference
+      LogicalName: String:"account"
+      Id: Guid:{a:account}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- rows ---
+shares of the account: 0

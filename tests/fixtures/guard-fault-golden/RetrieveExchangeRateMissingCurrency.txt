@@ -1,0 +1,17 @@
+=== PipelineExecutor.ExecuteAsync as a user with Basic User ===
+--- request ---
+Request: RetrieveExchangeRateRequest
+  RequestName: String:"RetrieveExchangeRate"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    TransactionCurrencyId: Guid:{unknown}
+--- fault ---
+Fault: XrmdFaultException 0x80040217 404 "transactioncurrency With Id = {unknown} Does Not Exist"
+--- request after ---
+Request: RetrieveExchangeRateRequest
+  RequestName: String:"RetrieveExchangeRate"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    TransactionCurrencyId: Guid:{unknown}
+--- rows ---
+rows written: 0

@@ -1,15 +1,16 @@
 using System.Data;
-using Microsoft.Xrm.Sdk;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
+using Xrmd.Model.Messages;
 using Xrmd.Model.Metadata;
+using Xrmd.Model.Records;
 
 namespace Xrmd.Security;
 
 /// <summary>
-/// The request rules of multi-currency (plan 2.10, rulings X2, X3, X9, D2), called by <see cref="SystemTableRules.EnforceAsync"/>
+/// The request rules of multi-currency (plan 2.10, rulings X2, X3, X9, D2), called by <see cref="SystemTableRules.EnforceAsync(Request, Caller, Guid, SecurityCache, IMetadataStore, DataSession, CancellationToken)"/>
 /// before any exemption, so they hold for every caller (SYSTEM and System Administrator included):
 /// <list type="bullet">
 /// <item><c>transactioncurrency</c> Create and Update: name and symbol are required and not blank; <c>isocurrencycode</c> is unique
@@ -38,7 +39,7 @@ namespace Xrmd.Security;
 /// check and the write. The unique index on <c>isocurrencycode</c> settles a duplicate code a concurrent Create commits first.
 /// </para>
 /// </summary>
-public static class CurrencyRules
+public static partial class CurrencyRules
 {
     private const string Organization = "organization";
     private const string StateCode = "statecode";
@@ -50,11 +51,11 @@ public static class CurrencyRules
 
     /// <summary>The rules of <paramref name="request"/> (Create, Update, Delete, Associate, Disassociate); other messages pass.</summary>
     /// <remarks>
-    /// The parameters mirror <see cref="SystemTableRules.EnforceAsync"/> (pre-flight ruling C9); <paramref name="caller"/>,
+    /// The parameters mirror <see cref="SystemTableRules.EnforceAsync(Request, Caller, Guid, SecurityCache, IMetadataStore, DataSession, CancellationToken)"/> (pre-flight ruling C9); <paramref name="caller"/>,
     /// <paramref name="systemUserId"/> and <paramref name="cache"/> are not read: these rules hold for every caller.
     /// </remarks>
     /// <exception cref="XrmdFaultException">400 with the codes listed on the class.</exception>
-    public static async Task EnforceAsync(OrganizationRequest request, Caller caller, Guid systemUserId, SecurityCache cache,
+    public static async Task EnforceAsync(Request request, Caller caller, Guid systemUserId, SecurityCache cache,
         IMetadataStore store, DataSession session, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -65,23 +66,23 @@ public static class CurrencyRules
         _ = systemUserId;
         var parameters = request.Parameters;
         parameters.TryGetValue("Target", out var target);
-        switch (request.RequestName?.ToLowerInvariant())
+        switch (request.Name?.ToLowerInvariant())
         {
-            case "create" when target is Entity created:
+            case "create" when target is Record created:
                 await WriteAsync(created, isCreate: true, store, session, ct);
                 break;
-            case "update" when target is Entity updated:
+            case "update" when target is Record updated:
                 await WriteAsync(updated, isCreate: false, store, session, ct);
                 break;
-            case "delete" when target is EntityReference { LogicalName: CurrencySchema.Table } deleted:
+            case "delete" when target is RecordReference { LogicalName: CurrencySchema.Table } deleted:
                 await DeleteAsync(deleted.Id, session, ct);
                 break;
-            case "associate" or "disassociate" when target is EntityReference associated
-                && parameters.TryGetValue("Relationship", out var r) && r is Relationship relationship
-                && parameters.TryGetValue("RelatedEntities", out var rel) && rel is EntityReferenceCollection related
+            case "associate" or "disassociate" when target is RecordReference associated
+                && parameters.TryGetValue("Relationship", out var r) && r is RelationshipName relationship
+                && parameters.TryGetValue("RelatedEntities", out var rel) && rel is RecordReferenceCollection related
                 && store.GetRelationshipDefinition(relationship.SchemaName ?? "") is OneToManyRelationship { ReferencedEntity: CurrencySchema.Table } lookup:
                 foreach (var update in SystemTableRules.LookupUpdates(lookup, associated, related,
-                             request.RequestName.Equals("associate", StringComparison.OrdinalIgnoreCase)))
+                             string.Equals(request.Name, "associate", StringComparison.OrdinalIgnoreCase)))
                     await WriteAsync(update, isCreate: false, store, session, ct);
                 break;
         }
@@ -93,13 +94,13 @@ public static class CurrencyRules
     /// transaction, so the reads are locked to its end. Other tables pass.
     /// </summary>
     /// <exception cref="XrmdFaultException">400 with the codes listed on the class.</exception>
-    public static Task EnforceRowAsync(Entity row, Guid id, bool isCreate, IMetadataStore store, DataSession session, CancellationToken ct)
+    public static Task EnforceRowAsync(Record row, Guid id, bool isCreate, IMetadataStore store, DataSession session, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(row);
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(session);
         if (row.LogicalName is not (CurrencySchema.Table or Organization or CurrencySchema.UserSettings)) return Task.CompletedTask;
-        var target = new Entity(row.LogicalName, id);
+        var target = new Record(row.LogicalName, id);
         foreach (var (name, value) in row.Attributes) target[name] = value;
         return WriteAsync(target, isCreate, store, session, ct);
     }
@@ -115,7 +116,7 @@ public static class CurrencyRules
         return DeleteAsync(id, session, ct);
     }
 
-    private static Task WriteAsync(Entity target, bool isCreate, IMetadataStore store, DataSession session, CancellationToken ct) => target.LogicalName switch
+    private static Task WriteAsync(Record target, bool isCreate, IMetadataStore store, DataSession session, CancellationToken ct) => target.LogicalName switch
     {
         CurrencySchema.Table => CurrencyAsync(target, isCreate, store, session, ct),
         Organization when !isCreate => OrganizationAsync(target, session, ct),
@@ -129,7 +130,7 @@ public static class CurrencyRules
     /// <summary>The stored columns of a currency these rules read.</summary>
     private sealed record StoredCurrency(string? Code, int? Type, bool IsBase);
 
-    private static async Task CurrencyAsync(Entity target, bool isCreate, IMetadataStore store, DataSession session, CancellationToken ct)
+    private static async Task CurrencyAsync(Record target, bool isCreate, IMetadataStore store, DataSession session, CancellationToken ct)
     {
         var id = SystemTableRules.RecordId(target);
         StoredCurrency? stored = null;
@@ -174,7 +175,7 @@ public static class CurrencyRules
     /// The state is the one the write ends in: <c>statecode</c>, else the state that owns the given <c>statuscode</c> (the core
     /// derives the one from the other, so a lone <c>statuscode</c> 2 would deactivate the row; review I1).
     /// </remarks>
-    private static void DemandBaseUnchanged(Entity target, Guid id, StoredCurrency stored, IMetadataStore store)
+    private static void DemandBaseUnchanged(Record target, Guid id, StoredCurrency stored, IMetadataStore store)
     {
         var state = target.Contains(StateCode) ? OptionValue(Value(target, StateCode))
             : target.Contains(StatusCode) ? StateOfStatus(store, OptionValue(Value(target, StatusCode))) : null;
@@ -203,7 +204,7 @@ public static class CurrencyRules
     /// with InvalidExchangeRate. A missing or null rate is left to <see cref="EnforceAsync"/> (the base currency's own code first).
     /// </summary>
     /// <exception cref="XrmdFaultException">InvalidExchangeRate (400).</exception>
-    public static void DemandRateInRange(Entity target)
+    public static void DemandRateInRange(Record target)
     {
         ArgumentNullException.ThrowIfNull(target);
         // A value that is not a number is left to the write's type check (an Edm.Decimal is expected).
@@ -217,7 +218,7 @@ public static class CurrencyRules
     {
         if (value is not null && AsNumber(value) is null)
             throw XrmdFaultException.InvalidArgument(
-                $"The {CurrencySchema.ExchangeRate} of a currency must be a number (Edm.Decimal); got a {value.GetType().Name}.");
+                $"The {CurrencySchema.ExchangeRate} of a currency must be a number (Edm.Decimal); got a {SdkTypeNames.Of(value.GetType())}.");
         if (AsNumber(value) is not { } rate || rate is < CurrencySchema.MinRate or > CurrencySchema.MaxRate)
             throw new XrmdFaultException(ErrorCodes.InvalidExchangeRate,
                 $"The {CurrencySchema.ExchangeRate} of a currency is required and must be from {CurrencySchema.MinRate} to " +
@@ -310,7 +311,7 @@ public static class CurrencyRules
 
     // ---- organization -----------------------------------------------------------------------------------------------------
 
-    private static async Task OrganizationAsync(Entity target, DataSession session, CancellationToken ct)
+    private static async Task OrganizationAsync(Record target, DataSession session, CancellationToken ct)
     {
         if (target.Contains(CurrencySchema.PricingPrecision)
             && (Value(target, CurrencySchema.PricingPrecision) is not int pricing
@@ -320,7 +321,7 @@ public static class CurrencyRules
                 "(xrmverse stores money with 4 decimals).");
         if (!target.Contains(CurrencySchema.BaseCurrencyId)) return;
         var id = SystemTableRules.RecordId(target);
-        var given = (Value(target, CurrencySchema.BaseCurrencyId) as EntityReference)?.Id;
+        var given = (Value(target, CurrencySchema.BaseCurrencyId) as RecordReference)?.Id;
         await using var cmd = session.Command(
             $"SELECT {CurrencySchema.BaseCurrencyId} FROM {session.DataTable(Organization)}{session.Dialect.LockHint(RowLock.UpdateRange)} " +
             $"WHERE {SystemAttributes.PrimaryIdName(Organization)} = {IdParameter}{session.Dialect.LockClause(RowLock.UpdateRange)}");
@@ -332,9 +333,9 @@ public static class CurrencyRules
 
     // ---- usersettings -----------------------------------------------------------------------------------------------------
 
-    private static async Task UserSettingsAsync(Entity target, string key, bool isCreate, DataSession session, CancellationToken ct)
+    private static async Task UserSettingsAsync(Record target, string key, bool isCreate, DataSession session, CancellationToken ct)
     {
-        if (Value(target, CurrencySchema.CurrencyId) is not EntityReference { Id: var currency } || currency == Guid.Empty) return;
+        if (Value(target, CurrencySchema.CurrencyId) is not RecordReference { Id: var currency } || currency == Guid.Empty) return;
         // usersettings is keyed by systemuserid: the target's Id, else that key.
         var id = target.Id != Guid.Empty ? target.Id : Value(target, key) as Guid? ?? Guid.Empty;
         await using var cmd = session.Command(
@@ -359,12 +360,12 @@ public static class CurrencyRules
 
     // ---- values -------------------------------------------------------------------------------------------------------------
 
-    private static object? Value(Entity target, string attribute) => target.Attributes.TryGetValue(attribute, out var value) ? value : null;
+    private static object? Value(Record target, string attribute) => target.Attributes.TryGetValue(attribute, out var value) ? value : null;
 
-    /// <summary>The value of a choice given as an <see cref="OptionSetValue"/> or a number; null otherwise.</summary>
+    /// <summary>The value of a choice given as a <see cref="ChoiceValue"/> or a number; null otherwise.</summary>
     private static int? OptionValue(object? value) => value switch
     {
-        OptionSetValue option => option.Value,
+        ChoiceValue option => option.Value,
         int number => number,
         _ => null,
     };

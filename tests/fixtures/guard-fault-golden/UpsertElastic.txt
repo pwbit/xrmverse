@@ -1,0 +1,33 @@
+=== PipelineExecutor.ExecuteAsync as a user with Basic User ===
+--- request ---
+Request: UpsertRequest
+  RequestName: String:"Upsert"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(new_crgelastic)
+      Id: Guid:{id1}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[1]
+        new_name: String:"gfg upsert"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- fault ---
+Fault: XrmdFaultException 0x80040220 403 "Principal user (Id={a:caller}, type=8) is missing prvCreatenew_crgelastic privilege (Id={id2}) on OTC={otc} for entity 'new_crgelastic'. Consider adding missing privilege to one of the principal (user/team) roles for the request to succeed."
+--- request after ---
+Request: UpsertRequest
+  RequestName: String:"Upsert"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(new_crgelastic)
+      Id: Guid:{id1}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[1]
+        new_name: String:"gfg upsert"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- rows ---
+rows named 'gfg upsert': 0

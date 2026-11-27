@@ -1,14 +1,12 @@
 using System.Data;
 using System.Text.Json;
-using Microsoft.Crm.Sdk.Messages;
-using Microsoft.Xrm.Sdk;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
 using Xrmd.Model.Metadata;
+using Xrmd.Model.Records;
 using Xrmd.Model.Security;
-using Xrmd.Security.Sdk;
 
 namespace Xrmd.Security;
 
@@ -16,14 +14,14 @@ namespace Xrmd.Security;
 /// A security relationship: the many-to-many relationship <paramref name="SchemaName"/> between <paramref name="Entity1"/>
 /// and <paramref name="Entity2"/>, stored in the intersect entity <paramref name="IntersectEntity"/>.
 /// </summary>
-public sealed record SecurityRelationship(string SchemaName, string Entity1, string Entity2, string IntersectEntity)
+public sealed partial record SecurityRelationship(string SchemaName, string Entity1, string Entity2, string IntersectEntity)
 {
     /// <summary>
     /// The (<see cref="Entity1"/>, <see cref="Entity2"/>) pairs an Associate/Disassociate names: the target on either side,
-    /// every related record on the other. False when a record is not of the expected entity.
+    /// every related record on the other (the caller's own references). False when a record is not of the expected entity.
     /// </summary>
-    public bool TryGetPairs(EntityReference target, EntityReferenceCollection related,
-        out IReadOnlyList<(EntityReference First, EntityReference Second)> pairs)
+    public bool TryGetPairs(RecordReference target, RecordReferenceCollection related,
+        out IReadOnlyList<(RecordReference First, RecordReference Second)> pairs)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(related);
@@ -47,8 +45,12 @@ public sealed record SecurityRelationship(string SchemaName, string Entity1, str
 /// Every method writes to one of the <see cref="SecurityCache.SecurityEntities"/> and registers the invalidation of the
 /// <see cref="SecurityCache"/> with <see cref="DataSession.OnCommitted"/>: whoever owns the transaction (the pipeline, the
 /// Admin API, the CLI) only reports its commit with <see cref="DataSession.Committed"/>. Existence checks and duplicate checks read with UPDLOCK/HOLDLOCK in the session's transaction.
+/// <para>
+/// S.2e3c2a (Task 3): on model values; the SDK twins of the members the migration and tests call with SDK values are in
+/// <c>Sdk/SecurityRules.Sdk.cs</c>.
+/// </para>
 /// </remarks>
-public sealed class SecurityAdministration(IMetadataStore store, SecurityCache cache)
+public sealed partial class SecurityAdministration(IMetadataStore store, SecurityCache cache)
 {
     private const string SystemUser = "systemuser";
     private const string Team = "team";
@@ -94,19 +96,7 @@ public sealed class SecurityAdministration(IMetadataStore store, SecurityCache c
         schemaName is not null && Relationships.TryGetValue(schemaName, out var r) ? r : null;
 
     /// <summary>
-    /// The privileges of SDK <see cref="RolePrivilege"/>s (<see cref="FromGrants"/> of their model values; the depth is cast by value, so
-    /// one that is not an SDK depth stays undefined and gives <see cref="DepthMask.None"/>).
-    /// </summary>
-    public static IReadOnlyList<(Guid PrivilegeId, DepthMask Depth)> FromSdk(IEnumerable<RolePrivilege?> privileges)
-    {
-        ArgumentNullException.ThrowIfNull(privileges);
-        return FromGrants(privileges.Select(p => p is null
-            ? null
-            : new PrivilegeGrant(p.PrivilegeId, p.PrivilegeName, p.BusinessUnitId, (PrivilegeScope)(int)p.Depth)));
-    }
-
-    /// <summary>
-    /// The privileges of <see cref="PrivilegeGrant"/>s (S.2e3c1 Task 4: the model overload of <see cref="FromSdk"/>): <c>PrivilegeId</c>,
+    /// The privileges of <see cref="PrivilegeGrant"/>s (S.2e3c1 Task 4: the model overload of <c>FromSdk</c>): <c>PrivilegeId</c>,
     /// or (when empty) the id of <c>PrivilegeName</c> (<see cref="PrivilegeNames.IdOf"/>); the depth through <see cref="DepthMasks.From"/>
     /// (<see cref="DepthMask.None"/> for a null grant or a value that is not a defined depth, which <see cref="SetRolePrivilegesAsync"/>
     /// rejects).
@@ -128,7 +118,7 @@ public sealed class SecurityAdministration(IMetadataStore store, SecurityCache c
     /// <summary>Assigns the role to a <c>systemuser</c> (<c>systemuserroles</c>) or an owner <c>team</c> (<c>teamroles</c>).</summary>
     /// <exception cref="XrmdFaultException">400 for a principal of another type or a team that is not an owner team; 404 when
     /// the principal or the role does not exist; 412 DuplicateRecord when the role is already assigned.</exception>
-    public async Task AddRoleAsync(DataSession s, EntityReference principal, Guid roleId, CancellationToken ct)
+    public async Task AddRoleAsync(DataSession s, RecordReference principal, Guid roleId, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(s);
         s.OnCommitted(cache.Invalidate);
@@ -149,7 +139,7 @@ public sealed class SecurityAdministration(IMetadataStore store, SecurityCache c
 
     /// <summary>Removes the role from the user or team (nothing to remove is not an error); true when an assignment was removed.</summary>
     /// <exception cref="XrmdFaultException">400 for a principal of another type; 404 when the principal or the role does not exist.</exception>
-    public async Task<bool> RemoveRoleAsync(DataSession s, EntityReference principal, Guid roleId, CancellationToken ct)
+    public async Task<bool> RemoveRoleAsync(DataSession s, RecordReference principal, Guid roleId, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(s);
         s.OnCommitted(cache.Invalidate);
@@ -196,7 +186,7 @@ public sealed class SecurityAdministration(IMetadataStore store, SecurityCache c
     /// <summary>Gives the field security profile to a <c>systemuser</c> (<c>systemuserprofiles</c>) or a <c>team</c> (<c>teamprofiles</c>, any type).</summary>
     /// <exception cref="XrmdFaultException">400 for a principal of another type; 404 when the principal or the profile does not
     /// exist; 412 DuplicateRecord when the principal already has the profile.</exception>
-    public async Task AddProfileAsync(DataSession s, EntityReference principal, Guid profileId, CancellationToken ct)
+    public async Task AddProfileAsync(DataSession s, RecordReference principal, Guid profileId, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(s);
         s.OnCommitted(cache.Invalidate);
@@ -209,7 +199,7 @@ public sealed class SecurityAdministration(IMetadataStore store, SecurityCache c
 
     /// <summary>Takes the field security profile from the user or team (nothing to remove is not an error).</summary>
     /// <exception cref="XrmdFaultException">400 for a principal of another type; 404 when the principal or the profile does not exist.</exception>
-    public async Task RemoveProfileAsync(DataSession s, EntityReference principal, Guid profileId, CancellationToken ct)
+    public async Task RemoveProfileAsync(DataSession s, RecordReference principal, Guid profileId, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(s);
         s.OnCommitted(cache.Invalidate);
@@ -271,11 +261,11 @@ public sealed class SecurityAdministration(IMetadataStore store, SecurityCache c
     }
 
     /// <summary>
-    /// The privileges of the role as SDK <see cref="RolePrivilege"/>s (privilege id, depth, the role's business unit), ordered by
+    /// The privileges of the role as <see cref="PrivilegeGrant"/>s (privilege id, depth, the role's business unit; no name), ordered by
     /// privilege id. A row without a depth is not a granted privilege and is left out.
     /// </summary>
     /// <exception cref="XrmdFaultException">404 when the role does not exist.</exception>
-    public async Task<IReadOnlyList<RolePrivilege>> RolePrivilegesAsync(DataSession s, Guid roleId, CancellationToken ct)
+    public async Task<IReadOnlyList<PrivilegeGrant>> RoleGrantsAsync(DataSession s, Guid roleId, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(s);
         await EnsureExistsAsync(s, Role, roleId, ct);
@@ -287,7 +277,7 @@ public sealed class SecurityAdministration(IMetadataStore store, SecurityCache c
             WHERE rp.roleid = @role ORDER BY rp.privilegeid
             """);
         cmd.AddParameter("@role", DbType.Guid, roleId);
-        var result = new List<RolePrivilege>();
+        var result = new List<PrivilegeGrant>();
         await using var rd = await cmd.ExecuteReaderAsync(ct);
         while (await rd.ReadAsync(ct))
         {
@@ -295,7 +285,7 @@ public sealed class SecurityAdministration(IMetadataStore store, SecurityCache c
             // RolePrivilege carries one depth, so the audit cannot show more than that either.
             var depth = DepthMasks.Highest(rd.IsDBNull(1) ? DepthMask.None : (DepthMask)rd.GetInt32(1));
             if (depth == DepthMask.None) continue;
-            result.Add(new RolePrivilege((int)Scope(depth), rd.GetGuid(0), rd.IsDBNull(2) ? Guid.Empty : rd.GetGuid(2)));
+            result.Add(new PrivilegeGrant(rd.GetGuid(0), null, rd.IsDBNull(2) ? Guid.Empty : rd.GetGuid(2), Scope(depth)));
         }
         return result;
     }
@@ -345,7 +335,7 @@ public sealed class SecurityAdministration(IMetadataStore store, SecurityCache c
 
     /// <summary>The intersect and principal column of a role assignment.</summary>
     /// <exception cref="XrmdFaultException">400 for a principal that is not a systemuser or team.</exception>
-    private static (string Intersect, string Column) RoleIntersect(EntityReference principal) => principal.LogicalName switch
+    private static (string Intersect, string Column) RoleIntersect(RecordReference principal) => principal.LogicalName switch
     {
         SystemUser => (SystemUserRolesEntity, "systemuserid"),
         Team => (TeamRolesEntity, "teamid"),
@@ -355,7 +345,7 @@ public sealed class SecurityAdministration(IMetadataStore store, SecurityCache c
 
     /// <summary>The intersect and principal column of a profile link.</summary>
     /// <exception cref="XrmdFaultException">400 for a principal that is not a systemuser or team.</exception>
-    private static (string Intersect, string Column) ProfileIntersect(EntityReference principal) => principal.LogicalName switch
+    private static (string Intersect, string Column) ProfileIntersect(RecordReference principal) => principal.LogicalName switch
     {
         SystemUser => (FieldSecurityTables.UserProfiles, "systemuserid"),
         Team => (FieldSecurityTables.TeamProfiles, "teamid"),

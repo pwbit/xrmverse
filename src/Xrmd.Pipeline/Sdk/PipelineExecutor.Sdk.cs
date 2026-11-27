@@ -238,22 +238,10 @@ public sealed partial class PipelineExecutor
         // after it returns; a request it makes before that, outside a transaction at stage 10, would otherwise be written).
         if (invocation.Parent is { } parent)
             ReservedSharedVariables.DemandKept(parent, $"The plug-in or workflow that issued this '{request.RequestName}' request");
-        // Before anything of the message runs (stage 10 included), with the parameters as the caller sent them.
-        if (!customAction) await guard.AuthorizeAsync(request, invocation.Caller, session, ct);
-        if (api is not null)
-        {
-            CustomApiValidator.Validate(api, request);
-            if (api.ExecutePrivilegeName is { } privilege)
-                await guard.DemandPrivilegeAsync(invocation.Caller, privilege, api.BoundEntity ?? NoEntity, ct);
-        }
-        if (action is not null)
-            CustomApiValidator.ValidateRequest(action.BoundEntity, action.Inputs, request,
-                problem => XrmdFaultException.InvalidArgument($"Request to action '{action.Message}' is invalid: {problem}"));
-
-        // The request crosses into the model only now: the guard writes into the SDK request (the Target of a field share gets its
-        // objecttypecode and access flags), and the boundary's Out must carry those values, not the request as the caller sent it.
-        // From here to the boundary, only the views of the steps and hooks (each read back) and the process-write check (read back
-        // after it) change the SDK request.
+        // S.2e3c2a (Decision 5): the request crosses into the model before the guard, which runs on the model request the core gets
+        // (a record team mark it leaves there is found by the core; a cascade mark the core left on a request it issues is read there).
+        // From here to the boundary, only the guard (written out below), the views of the steps and hooks (each read back) and the
+        // process-write check (read back after it) change the SDK request.
         var mirror = invocation.Mirror!;
         var model = mirror.In(request)!;
         // S.2e3b (Decision 6): the audit action is a mark on the SDK request; the core on the model reads it on the model request.
@@ -272,6 +260,20 @@ public sealed partial class PipelineExecutor
             }
         }
         else if (!mirror.TryGetSdk(model.Parameters, out _)) mirror.Pair(model.Parameters, request.Parameters);
+
+        // Before anything of the message runs (stage 10 included), with the parameters as the caller sent them. What the guard writes
+        // (the Target of a field share Create gets its objectid, objecttypecode and access flags) is written out into the SDK request
+        // the steps and the caller see, on a refusal after the fill too (ruling 4a).
+        if (!customAction) await guard.AuthorizeAsync(model, mirror, invocation.Caller, session, ct);
+        if (api is not null)
+        {
+            CustomApiValidator.Validate(api, request);
+            if (api.ExecutePrivilegeName is { } privilege)
+                await guard.DemandPrivilegeAsync(invocation.Caller, privilege, api.BoundEntity ?? NoEntity, ct);
+        }
+        if (action is not null)
+            CustomApiValidator.ValidateRequest(action.BoundEntity, action.Inputs, request,
+                problem => XrmdFaultException.InvalidArgument($"Request to action '{action.Message}' is invalid: {problem}"));
 
         var message = request.RequestName;
         var (entityName, entityId) = api is not null ? CustomApiPrimaryEntity(api, request)
@@ -480,7 +482,8 @@ public sealed partial class PipelineExecutor
     /// A request the core issues (the record Update of CommitFileBlocksUpload, a delete cascade) runs as a plug-in-issued request would:
     /// one level deeper, with (a copy of) this message's context as its ParentContext. Plan 4.1c: it keeps the server shared variables
     /// (the queueitem Create of a delivery's AddToQueue carries the delivery's), not the server values. The core's adapter has just read
-    /// the request in, so its SDK twin is the core's own request (its type and its marks, such as <see cref="CascadeHint"/>). The answer
+    /// the request in, so its SDK twin is the core's own request (its type). The guard reads the core's marks, such as
+    /// <see cref="CascadeHint"/>, on <paramref name="nested"/> itself, the model twin of that request (S.2e3c2a, Decision 5). The answer
     /// goes back as the model twin of the nested execution's response (an unread shell when nothing converted it), so the core gets
     /// that SDK response unchanged and filled.
     /// </summary>
@@ -488,15 +491,13 @@ public sealed partial class PipelineExecutor
     {
         var mirror = run.Mirror;
         var request = mirror.TryGetSdk(nested, out var twin) && twin is OrganizationRequest held ? held : mirror.Out(nested)!;
-        // S.2e3b (Decision 6): the guard reads the cascade mark on the SDK request until S.2e3c; the core's model mark goes onto the twin.
-        if (CascadeHint.IsMarked(nested)) CascadeHint.Mark(request);
         var response = await ExecuteAsync(request,
             run.Invocation with
             {
                 // A copy of this context (same stage and values, shared bags) per call, as for the inner executions: the view
                 // of a copy lent once is never lent again with values of a later stage.
                 Session = run.Session, Parent = run.Context.Clone(run.Context.Stage), Depth = run.Invocation.Depth + 1,
-                IsCoreCascade = CascadeHint.IsMarked(request),
+                IsCoreCascade = CascadeHint.IsMarked(nested),
                 ServerSetValues = null,
             }, ct);
         // The nested execution answered with its core's typed response (paired with an unread shell in this chain's mirror when nothing
@@ -655,7 +656,7 @@ public sealed partial class PipelineExecutor
 
     /// <summary>
     /// The checks of a public Create or Update of <c>workflow</c> or <c>processtrigger</c> (plan 2.21, ruling A16) on the request's
-    /// Target as it is now: <see cref="SystemTableRules.DemandValidProcessWrite"/>, then <see cref="IWorkflowPipelineHook.ValidateWriteAsync"/>
+    /// Target as it is now: <see cref="SystemTableRules.DemandValidProcessWrite(string, Entity, Caller)"/>, then <see cref="IWorkflowPipelineHook.ValidateWriteAsync"/>
     /// (the stored row, the XAML). A Create of <c>workflow</c> without a <c>type</c> is a definition: the Target gets <c>type</c> 1 (Dataverse's
     /// default from memory, checklist 1a), so the registry and the activation, which read definitions by their type, find it. Returns the message (Create
     /// or Update) of a <c>workflow</c> write, else null. <see cref="Caller.Internal"/> is exempt from every rule.

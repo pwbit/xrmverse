@@ -157,9 +157,9 @@ public sealed partial class CoreOperations
     /// <summary>
     /// The model nested delegate a CRUD body calls (the cascaded children of a Delete, <see cref="DeleteRecordAsync"/>), through the
     /// chain mirror: the request the core built is registered with the mirror and written out into today's typed SDK request
-    /// (<see cref="CoreResponses.TypedRequest"/>, a <see cref="DeleteRequest"/> for a cascaded child) carrying the SDK cascade mark, so the
-    /// pipeline, the security guard and a plug-in that casts the request get what the core built before S.2e3b. The model delegate runs
-    /// on the model request itself.
+    /// (<see cref="CoreResponses.TypedRequest"/>, a <see cref="DeleteRequest"/> for a cascaded child) carrying the SDK cascade mark. The guard and the
+    /// pipeline read the cascade mark on the model request; the SDK copy serves only the SDK-typed callers of <c>ExecuteCoreAsync</c> and a
+    /// plug-in that casts the request. The model delegate runs on the model request itself.
     /// </summary>
     private static NestedRequest? CrudNested(SdkMirror mirror, NestedRequest? nested) =>
         nested is null

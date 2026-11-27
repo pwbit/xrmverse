@@ -12,7 +12,7 @@
     "Xrmd.Pipeline": 30,
     "Xrmd.Query": 10,
     "Xrmd.Schema": 5,
-    "Xrmd.Security": 13,
+    "Xrmd.Security": 6,
     "Xrmd.Solution": 20,
     "Xrmd.Tds": 4,
     "Xrmd.WebApi": 28,

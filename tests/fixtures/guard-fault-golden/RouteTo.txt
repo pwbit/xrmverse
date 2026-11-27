@@ -1,0 +1,29 @@
+=== PipelineExecutor.ExecuteAsync as a user with Basic User ===
+--- request ---
+Request: RouteToRequest
+  RequestName: String:"RouteTo"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    QueueItemId: Guid:{a:item}
+    Target: EntityReference
+      LogicalName: String:"queue"
+      Id: Guid:{a:destination}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- fault ---
+Fault: XrmdFaultException 0x80048306 403 "Principal user with id {a:caller} does not have ReadAccess right(s) for record with id {a:email} of entity email."
+--- request after ---
+Request: RouteToRequest
+  RequestName: String:"RouteTo"
+  RequestId: null
+  Parameters: ParameterCollection[2]
+    QueueItemId: Guid:{a:item}
+    Target: EntityReference
+      LogicalName: String:"queue"
+      Id: Guid:{a:destination}
+      Name: null
+      KeyAttributes: KeyAttributeCollection[0]
+      RowVersion: null
+--- rows ---
+items of the destination: 0

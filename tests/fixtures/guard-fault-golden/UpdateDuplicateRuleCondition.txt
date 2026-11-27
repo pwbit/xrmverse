@@ -1,0 +1,35 @@
+=== PipelineExecutor.ExecuteAsync as a user with Basic User and prvReadDuplicateRuleCondition Global, prvWriteDuplicateRuleCondition Global, prvReadDuplicateRule Global ===
+--- request ---
+Request: UpdateRequest
+  RequestName: String:"Update"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(duplicaterulecondition)
+      Id: Guid:{a:condition}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[2]
+        baseattributename: String:"lastname"
+        matchingattributename: String:"lastname"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- fault ---
+Fault: XrmdFaultException 0x80040220 403 "Principal user (Id={a:caller}, type=8) is missing prvWriteDuplicateRule privilege (Id={id1}) on OTC=4414 for entity 'duplicaterule'. Consider adding missing privilege to one of the principal (user/team) roles for the request to succeed."
+--- request after ---
+Request: UpdateRequest
+  RequestName: String:"Update"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(duplicaterulecondition)
+      Id: Guid:{a:condition}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[2]
+        baseattributename: String:"lastname"
+        matchingattributename: String:"lastname"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- rows ---
+conditions on lastname: 0

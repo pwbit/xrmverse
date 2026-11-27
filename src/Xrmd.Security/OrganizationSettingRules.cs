@@ -1,9 +1,9 @@
 using System.Data;
-using Microsoft.Xrm.Sdk;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
+using Xrmd.Model.Records;
 
 namespace Xrmd.Security;
 
@@ -21,7 +21,7 @@ public static class OrganizationSettingRules
     /// Other tables: nothing.
     /// </summary>
     /// <exception cref="XrmdFaultException">400 <see cref="ErrorCodes.DuplicateRecord"/>.</exception>
-    public static async Task ApplyRowAsync(DataSession s, string entityLogicalName, Entity row, bool isCreate, Guid id, CancellationToken ct)
+    public static async Task ApplyRowAsync(DataSession s, string entityLogicalName, Record row, bool isCreate, Guid id, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(s);
         ArgumentNullException.ThrowIfNull(row);
@@ -37,7 +37,7 @@ public static class OrganizationSettingRules
         cmd.AddParameter("@_id", DbType.Guid, id);
         if (Convert.ToInt64(await cmd.ExecuteScalarAsync(ct)) == 0) return;
 
-        var name = row.GetAttributeValue<string>("uniquename");
+        var name = row.SdkValue<string>("uniquename");
         if (string.IsNullOrEmpty(name))
         {
             await using var read = s.Command($"""
