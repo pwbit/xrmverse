@@ -199,6 +199,26 @@ public class UnpackTests
     }
 
     [SourceLayoutFact]
+    public void Roles_sharing_a_name_are_refused_with_every_id()
+    {
+        var zip = SourceLayoutFixtures.Zip("OpenProject365");
+        var customizations = XDocument.Parse(Encoding.UTF8.GetString(SolutionZip.ReadRaw(zip)[SolutionZip.CustomizationsEntry]).TrimStart('\uFEFF'));
+        var role = customizations.Root!.Element("Roles")!.Elements("Role").First();
+        var copy = new XElement(role);
+        copy.SetAttributeValue("id", "{00000000-0000-0000-0000-000000000042}");
+        copy.SetAttributeValue("name", ((string)role.Attribute("name")!).ToUpperInvariant());
+        role.AddAfterSelf(copy);
+        var changed = Rewrite(zip, "customizations.xml", _ => Encoding.UTF8.GetBytes(customizations.ToString()));
+
+        var act = () => SolutionUnpacker.Unpack(changed);
+
+        var fault = act.Should().Throw<XrmdFaultException>().Which;
+        fault.ErrorCode.Should().Be(ErrorCodes.UnsupportedComponent);
+        fault.Message.Should().Contain((string)role.Attribute("name")!).And.Contain((string)role.Attribute("id")!)
+            .And.Contain("{00000000-0000-0000-0000-000000000042}");
+    }
+
+    [SourceLayoutFact]
     public void Unknown_entity_part_fails_with_its_name()
     {
         var zip = Rewrite(SourceLayoutFixtures.Zip("XrmSharedTest"), "customizations.xml",

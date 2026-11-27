@@ -730,6 +730,9 @@ them with their outlook.
   business process flows, actions and dialogs (these four for now), and any other component type that the reference folders
   of Dataverse's tools hold nothing for. `unpack` and `sync` write nothing in that case; `diff` reports the
   same refusal.
+- **Roles that share a name** are refused (exit 5), and the message gives the name and every role id: each role is the
+  file `Roles/<name>.xml`, and the layout has no name for a second one. A solution import can add a role with the name of
+  an existing one (Dataverse allows this too); keep one and delete the others in the organization.
 - **Managed solutions** are not unpacked, packed, compared or synced: a managed zip is refused (exit 2).
 - **The YAML layout** that Dataverse's Git integration writes is not the layout used here and is not read.
 - **Files outside the component folders** (a `README.md`, `.git/`, CI files) are ignored by `diff` and `pack` and kept by
