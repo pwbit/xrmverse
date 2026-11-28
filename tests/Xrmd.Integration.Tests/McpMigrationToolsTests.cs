@@ -51,20 +51,14 @@ public sealed class McpMigrationToolsTests(XrmdFixture fx) : IDisposable
         b.UseSetting(MigrationPackages.ImportRootSetting, _root);
     });
 
-    /// <summary>Polls <c>migrate_get_status</c> until the run is no longer queued or running, at most 60 s.</summary>
-    private static async Task<JsonObject> WaitAsync(McpClient client, string runId, List<string> answers)
-    {
-        var until = DateTime.UtcNow.AddSeconds(60);
-        while (true)
+    /// <summary>Polls <c>migrate_get_status</c> until the run has settled (<see cref="MigrationRunPolling.IsSettled"/>), at most 60 s.</summary>
+    private static Task<JsonObject> WaitAsync(McpClient client, string runId, List<string> answers) =>
+        MigrationRunPolling.WaitSettledAsync(async () =>
         {
             var (text, status) = await CallAsync(client, "migrate_get_status", new() { ["runId"] = runId });
             answers.Add(text);
-            if (status["state"]!.GetValue<string>() is not (MigrationRunStates.Queued or MigrationRunStates.Running or MigrationRunStates.Completed)
-                || DateTime.UtcNow > until)
-                return status;
-            await Task.Delay(250);
-        }
-    }
+            return status;
+        }, TimeSpan.FromSeconds(60));
 
     [Fact]
     public async Task Tools_are_listed_with_their_flags()
@@ -204,14 +198,7 @@ public sealed class McpMigrationToolsTests(XrmdFixture fx) : IDisposable
         var (_, started) = await CallAsync(client, "migrate_start_import", new() { ["serverPath"] = file, ["passphrase"] = Passphrase, ["dryRun"] = true });
         var runId = started["runId"]!.GetValue<string>();
         started["dryRun"]!.GetValue<bool>().Should().BeTrue();
-        JsonObject status;
-        var until = DateTime.UtcNow.AddSeconds(60);
-        do
-        {
-            await Task.Delay(250);
-            (_, status) = await CallAsync(client, "migrate_get_status", new() { ["runId"] = runId });
-        }
-        while (status["state"]!.GetValue<string>() is MigrationRunStates.Queued or MigrationRunStates.Running && DateTime.UtcNow < until);
+        var status = await WaitAsync(client, runId, []);
 
         status["state"]!.GetValue<string>().Should().Be(MigrationRunStates.Completed, status["message"]?.ToString());
         status["dryRun"]!.GetValue<bool>().Should().BeTrue();
@@ -251,14 +238,7 @@ public sealed class McpMigrationToolsTests(XrmdFixture fx) : IDisposable
         MapSet.Combine([MapReader.Parse(map, "map")]).BySource("quote")!.Archive.Should().BeTrue();
 
         var runId = started["runId"]!.GetValue<string>();
-        JsonObject status;
-        var until = DateTime.UtcNow.AddSeconds(60);
-        do
-        {
-            await Task.Delay(250);
-            (_, status) = await CallAsync(client, "migrate_get_status", new() { ["runId"] = runId });
-        }
-        while (status["state"]!.GetValue<string>() is MigrationRunStates.Queued or MigrationRunStates.Running && DateTime.UtcNow < until);
+        var status = await WaitAsync(client, runId, []);
         status["state"]!.GetValue<string>().Should().Be(MigrationRunStates.Completed, status["message"]?.ToString());
 
         // The report names the maps the run used (here the package's) and every candidate, for the CLI to save the choices with them.

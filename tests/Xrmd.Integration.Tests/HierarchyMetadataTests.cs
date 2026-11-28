@@ -317,49 +317,47 @@ public sealed class HierarchyMetadataTests(XrmdFixture fx)
         }
     }
 
+    /// <summary>
+    /// The import runs on a host and a database of its own: clearing an import (<see cref="SolutionImportTests.ClearImportAsync(XrmdFixture)"/>)
+    /// deletes every view, form, site map and app of the database, the seeded ones of the "xrmd" collection's other tests included.
+    /// </summary>
     [Fact]
     public async Task Import_rejects_two_hierarchical_relationships()
     {
-        await TestEntities.EnsurePipeAsync(Store);
-        await fx.App.Services.GetRequiredService<SdkMessageCatalog>().EnsureAsync(default);
-        await SolutionImportTests.ClearImportAsync(fx);
-        try
+        await using var app = fx.WithOwnDatabase(_ => { });
+        var store = app.Services.GetRequiredService<IMetadataStore>();
+        await app.Services.GetRequiredService<SdkMessageCatalog>().EnsureAsync(default);
+        var stamp = store.VersionStamp;
+        var zip = SolutionFixtureZip.Build(c =>
         {
-            var stamp = Store.VersionStamp;
-            var zip = SolutionFixtureZip.Build(c =>
+            var lookup = c.Root!.Descendants("attribute")
+                .Single(a => (string?)a.Attribute("PhysicalName") == "xv_ProjectId" && a.Element("Type")!.Value == "lookup");
+            var relationship = c.Root!.Element("EntityRelationships")!.Elements("EntityRelationship")
+                .Single(r => (string?)r.Attribute("Name") == "xv_project_xv_task_ProjectId");
+            foreach (var n in new[] { "One", "Two" })
             {
-                var lookup = c.Root!.Descendants("attribute")
-                    .Single(a => (string?)a.Attribute("PhysicalName") == "xv_ProjectId" && a.Element("Type")!.Value == "lookup");
-                var relationship = c.Root!.Element("EntityRelationships")!.Elements("EntityRelationship")
-                    .Single(r => (string?)r.Attribute("Name") == "xv_project_xv_task_ProjectId");
-                foreach (var n in new[] { "One", "Two" })
-                {
-                    var column = new XElement(lookup);
-                    column.SetAttributeValue("PhysicalName", $"xv_Parent{n}Id");
-                    column.Element("Name")!.Value = column.Element("LogicalName")!.Value = $"xv_parent{n.ToLowerInvariant()}id";
-                    lookup.AddAfterSelf(column);
+                var column = new XElement(lookup);
+                column.SetAttributeValue("PhysicalName", $"xv_Parent{n}Id");
+                column.Element("Name")!.Value = column.Element("LogicalName")!.Value = $"xv_parent{n.ToLowerInvariant()}id";
+                lookup.AddAfterSelf(column);
 
-                    var r = new XElement(relationship);
-                    r.SetAttributeValue("Name", $"xv_task_xv_task_Parent{n}");
-                    r.Element("ReferencedEntityName")!.Value = "xv_task";
-                    r.Element("IsHierarchical")!.Value = "1";
-                    r.Element("ReferencingAttributeName")!.Value = $"xv_Parent{n}Id";
-                    r.Element("RelationshipDescription")?.Remove();
-                    var roles = r.Element("EntityRelationshipRoles")!.Elements("EntityRelationshipRole").ToList();
-                    roles[0].Element("NavigationPropertyName")!.Value = $"xv_Parent{n}Id";
-                    roles[1].Element("NavigationPropertyName")!.Value = $"xv_task_xv_task_Parent{n}";
-                    relationship.AddAfterSelf(r);
-                }
-            });
+                var r = new XElement(relationship);
+                r.SetAttributeValue("Name", $"xv_task_xv_task_Parent{n}");
+                r.Element("ReferencedEntityName")!.Value = "xv_task";
+                r.Element("IsHierarchical")!.Value = "1";
+                r.Element("ReferencingAttributeName")!.Value = $"xv_Parent{n}Id";
+                r.Element("RelationshipDescription")?.Remove();
+                var roles = r.Element("EntityRelationshipRoles")!.Elements("EntityRelationshipRole").ToList();
+                roles[0].Element("NavigationPropertyName")!.Value = $"xv_Parent{n}Id";
+                roles[1].Element("NavigationPropertyName")!.Value = $"xv_task_xv_task_Parent{n}";
+                relationship.AddAfterSelf(r);
+            }
+        });
 
-            var fault = await FaultAsync(() => Admin.ExecuteAsync(new ImportSolutionRequest { CustomizationFile = zip, ImportJobId = Guid.NewGuid() }), 400);
-            fault.Message.Should().Contain("xv_task_xv_task_ParentOne").And.Contain("xv_task_xv_task_ParentTwo");
-            Store.GetEntity("xv_task").Should().BeNull();
-            Store.VersionStamp.Should().Be(stamp, "the import fails before any write");
-        }
-        finally
-        {
-            await SolutionImportTests.ClearImportAsync(fx);
-        }
+        var admin = TestServices.NewOrganizationService(app.Services, fx.AdminObjectId);
+        var fault = await FaultAsync(() => admin.ExecuteAsync(new ImportSolutionRequest { CustomizationFile = zip, ImportJobId = Guid.NewGuid() }), 400);
+        fault.Message.Should().Contain("xv_task_xv_task_ParentOne").And.Contain("xv_task_xv_task_ParentTwo");
+        store.GetEntity("xv_task").Should().BeNull();
+        store.VersionStamp.Should().Be(stamp, "the import fails before any write");
     }
 }

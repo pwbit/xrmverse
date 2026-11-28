@@ -1,0 +1,45 @@
+=== OrganizationService.UpsertAsync(target, createOnly: true) as the System Administrator ===
+--- request ---
+Request: UpsertRequest
+  RequestName: String:"Upsert"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(xrmv_order)
+      Id: Guid:{a:order}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[3]
+        xrmv_name: String:"mrg create-only sent"
+        xrmv_status: OptionSetValue
+          Value: Int32:128830000
+        xrmv_amount: Decimal:12.5
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- fault ---
+Fault: XrmdFaultException 0x80040237 412 "A record of 'xrmv_order' with the id {a:order} already exists."
+--- request after ---
+Request: UpsertRequest
+  RequestName: String:"Upsert"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(xrmv_order)
+      Id: Guid:{a:order}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[3]
+        xrmv_name: String:"mrg create-only sent"
+        xrmv_status: OptionSetValue
+          Value: Int32:128830000
+        xrmv_amount: Decimal:12.5
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- response ---
+none
+--- rows ---
+orders named 'mrg ...': xrmv_orderid={a:order}, xrmv_name="mrg create-only existing", xrmv_status=128830000, xrmv_amount=null
+--- stage 40 ---
+none
+--- async ---
+none

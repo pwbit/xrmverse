@@ -157,17 +157,30 @@ public sealed class MigrationImportJob(MigrationRunStore store, MigrationPassphr
 
     /// <summary>
     /// Finalizes a run in one of the states <paramref name="from"/> (compare and set): the lock lifts and the uploaded package is
-    /// deleted unless kept (migration spec §7.7, §8.1). False, with nothing done, when the run was in another state.
+    /// deleted unless kept (migration spec §7.7, §8.1). False, with nothing done, when the run was in another state. The state, the
+    /// package's row and the lock change together: whoever reads the run <c>finalized</c> finds the lock off and the package gone.
+    /// The package's files are deleted inside the transaction, once the run's compare and set has passed and before the commit
+    /// (the deletion is idempotent): if it or the commit fails, the run and the package's row stay, so a later finalize or
+    /// <c>DELETE /admin/migrate/packages/{id}</c> can retry, and no file is ever left without its row.
     /// </summary>
     internal static async Task<bool> FinalizeAsync(MigrationRunStore store, MigrationLock migrationLock, IFileStore files, Guid runId, string database,
         Guid? packageId, bool keepPackage, params string[] from)
     {
-        if (!await store.SetStateAsync(runId, MigrationRunStates.Finalized, null, CancellationToken.None, from)) return false;
-        migrationLock.Clear();
-        if (packageId is { } id && !keepPackage)
+        var deleted = keepPackage ? null : packageId;
+        var held = migrationLock.ActiveRunId;
+        try
         {
-            await files.DeletePrefixAsync(MigrationPackageKeys.Folder(database, id), CancellationToken.None);
-            await store.DeletePackageAsync(id, CancellationToken.None);
+            if (!await store.FinalizeRunAsync(runId, deleted, async () =>
+                {
+                    if (deleted is { } id) await files.DeletePrefixAsync(MigrationPackageKeys.Folder(database, id), CancellationToken.None);
+                    migrationLock.Clear();
+                }, CancellationToken.None, from)) return false;
+        }
+        catch when (held is { } h && migrationLock.ActiveRunId is null)
+        {
+            // The commit failed after the lock was lifted: the run is not finalized, so the lock is back on.
+            migrationLock.Set(h);
+            throw;
         }
         return true;
     }

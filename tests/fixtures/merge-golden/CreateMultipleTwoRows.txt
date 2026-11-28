@@ -1,0 +1,111 @@
+=== PipelineExecutor.ExecuteAsync as the System Administrator ===
+--- request ---
+Request: CreateMultipleRequest
+  RequestName: String:"CreateMultiple"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Targets: EntityCollection
+      EntityName: String:"xrmv_order"
+      Entities: DataCollection[2]
+        [0]: Entity(xrmv_order)
+          Id: Guid:{empty}
+          EntityState: null
+          RowVersion: null
+          Attributes: AttributeCollection[3]
+            xrmv_name: String:"mrg cm 1"
+            xrmv_status: OptionSetValue
+              Value: Int32:128830000
+            xrmv_amount: Decimal:12.5
+          FormattedValues: FormattedValueCollection[0]
+          KeyAttributes: KeyAttributeCollection[0]
+          RelatedEntities: RelatedEntityCollection[0]
+        [1]: Entity(xrmv_order)
+          Id: Guid:{empty}
+          EntityState: null
+          RowVersion: null
+          Attributes: AttributeCollection[3]
+            xrmv_name: String:"mrg cm 2"
+            xrmv_status: OptionSetValue
+              Value: Int32:128830000
+            xrmv_amount: Decimal:12.5
+          FormattedValues: FormattedValueCollection[0]
+          KeyAttributes: KeyAttributeCollection[0]
+          RelatedEntities: RelatedEntityCollection[0]
+      MoreRecords: Boolean:False
+      PagingCookie: null
+      TotalRecordCount: Int32:0
+      TotalRecordCountLimitExceeded: Boolean:False
+--- fault ---
+none
+--- request after ---
+Request: CreateMultipleRequest
+  RequestName: String:"CreateMultiple"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Targets: EntityCollection
+      EntityName: String:"xrmv_order"
+      Entities: DataCollection[2]
+        [0]: Entity(xrmv_order)
+          Id: Guid:{empty}
+          EntityState: null
+          RowVersion: null
+          Attributes: AttributeCollection[3]
+            xrmv_name: String:"mrg cm 1"
+            xrmv_status: OptionSetValue
+              Value: Int32:128830000
+            xrmv_amount: Decimal:12.5
+          FormattedValues: FormattedValueCollection[0]
+          KeyAttributes: KeyAttributeCollection[0]
+          RelatedEntities: RelatedEntityCollection[0]
+        [1]: Entity(xrmv_order)
+          Id: Guid:{empty}
+          EntityState: null
+          RowVersion: null
+          Attributes: AttributeCollection[3]
+            xrmv_name: String:"mrg cm 2"
+            xrmv_status: OptionSetValue
+              Value: Int32:128830000
+            xrmv_amount: Decimal:12.5
+          FormattedValues: FormattedValueCollection[0]
+          KeyAttributes: KeyAttributeCollection[0]
+          RelatedEntities: RelatedEntityCollection[0]
+      MoreRecords: Boolean:False
+      PagingCookie: null
+      TotalRecordCount: Int32:0
+      TotalRecordCountLimitExceeded: Boolean:False
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.CreateMultipleResponse
+ResponseName: String:"CreateMultiple"
+Results: ParameterCollection[1]
+  Ids: Guid[][2]
+    [0]: Guid:{id1}
+    [1]: Guid:{id2}
+--- rows ---
+orders named 'mrg ...': xrmv_orderid={id1}, xrmv_name="mrg cm 1", xrmv_status=128830000, xrmv_amount=12.50
+orders named 'mrg ...': xrmv_orderid={id2}, xrmv_name="mrg cm 2", xrmv_status=128830000, xrmv_amount=12.50
+--- stage 40 ---
+step Create|40|0|1
+  target: Entity(xrmv_order) id={empty} {xrmv_name="mrg cm 1", xrmv_status=OptionSetValue(128830000), xrmv_amount=Decimal:12.5}
+  pre image collections: 0
+  post image collections: 0
+  parent: CreateMultiple|30
+    targets: EntityName=xrmv_order, 2 entities
+      [0] Entity(xrmv_order) id={empty} {xrmv_name="mrg cm 1", xrmv_status=OptionSetValue(128830000), xrmv_amount=Decimal:12.5}
+      [1] Entity(xrmv_order) id={empty} {xrmv_name="mrg cm 2", xrmv_status=OptionSetValue(128830000), xrmv_amount=Decimal:12.5}
+step Create|40|0|1
+  target: Entity(xrmv_order) id={empty} {xrmv_name="mrg cm 2", xrmv_status=OptionSetValue(128830000), xrmv_amount=Decimal:12.5}
+  pre image collections: 0
+  post image collections: 0
+  parent: CreateMultiple|30
+    targets: EntityName=xrmv_order, 2 entities
+      [0] Entity(xrmv_order) id={empty} {xrmv_name="mrg cm 1", xrmv_status=OptionSetValue(128830000), xrmv_amount=Decimal:12.5}
+      [1] Entity(xrmv_order) id={empty} {xrmv_name="mrg cm 2", xrmv_status=OptionSetValue(128830000), xrmv_amount=Decimal:12.5}
+step CreateMultiple|40|0|1
+  targets: EntityName=xrmv_order, 2 entities
+    [0] Entity(xrmv_order) id={empty} {xrmv_name="mrg cm 1", xrmv_status=OptionSetValue(128830000), xrmv_amount=Decimal:12.5}
+    [1] Entity(xrmv_order) id={empty} {xrmv_name="mrg cm 2", xrmv_status=OptionSetValue(128830000), xrmv_amount=Decimal:12.5}
+  pre image collections: 2
+  post image collections: 2
+  parent: none
+--- async ---
+none

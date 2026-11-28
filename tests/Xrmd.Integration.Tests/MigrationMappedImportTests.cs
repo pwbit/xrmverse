@@ -336,14 +336,8 @@ public sealed class MigrationMappedImportTests(XrmdFixture fx) : IDisposable
         res.StatusCode.Should().Be(HttpStatusCode.Accepted, text);
         var runId = Guid.Parse(JsonNode.Parse(text)!["runId"]!.GetValue<string>());
 
-        var until = DateTime.UtcNow.AddSeconds(180);
-        JsonNode status;
-        do
-        {
-            await Task.Delay(250);
-            status = JsonNode.Parse(await (await h.SendAsync(HttpMethod.Get, $"admin/migrate/runs/{runId}")).Content.ReadAsStringAsync())!;
-        }
-        while (status["state"]!.GetValue<string>() is MigrationRunStates.Queued or MigrationRunStates.Running && DateTime.UtcNow < until);
+        var status = await MigrationRunPolling.WaitSettledAsync(async () =>
+            JsonNode.Parse(await (await h.SendAsync(HttpMethod.Get, $"admin/migrate/runs/{runId}")).Content.ReadAsStringAsync())!, TimeSpan.FromSeconds(180));
         status["state"]!.GetValue<string>().Should().Be(MigrationRunStates.Finalized, status["message"]?.ToString());
 
         await AssertImportedAsync(h, x);

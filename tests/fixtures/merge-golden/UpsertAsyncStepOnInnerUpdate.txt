@@ -1,0 +1,54 @@
+=== PipelineExecutor.ExecuteAsync as the System Administrator ===
+--- request ---
+Request: UpsertRequest
+  RequestName: String:"Upsert"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(xrmv_order)
+      Id: Guid:{a:order}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[3]
+        xrmv_name: String:"mrg upsert updated async"
+        xrmv_status: OptionSetValue
+          Value: Int32:128830000
+        xrmv_amount: Decimal:12.5
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- fault ---
+none
+--- request after ---
+Request: UpsertRequest
+  RequestName: String:"Upsert"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(xrmv_order)
+      Id: Guid:{a:order}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[3]
+        xrmv_name: String:"mrg upsert updated async"
+        xrmv_status: OptionSetValue
+          Value: Int32:128830000
+        xrmv_amount: Decimal:12.5
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[0]
+      RelatedEntities: RelatedEntityCollection[0]
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.UpsertResponse
+ResponseName: String:"Upsert"
+Results: ParameterCollection[2]
+  RecordCreated: Boolean:False
+  Target: EntityReference
+    LogicalName: String:"xrmv_order"
+    Id: Guid:{a:order}
+    Name: null
+    KeyAttributes: KeyAttributeCollection[0]
+    RowVersion: null
+--- rows ---
+orders named 'mrg ...': xrmv_orderid={a:order}, xrmv_name="mrg upsert updated async", xrmv_status=128830000, xrmv_amount=12.50
+--- stage 40 ---
+none
+--- async ---
+job: <RemoteExecutionContext xmlns:i="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://schemas.microsoft.com/xrm/2011/Contracts"><BusinessUnitId>{businessunit}</BusinessUnitId><CorrelationId>{id1}</CorrelationId><Depth>1</Depth><InitiatingUserAgent i:nil="true" /><InitiatingUserAzureActiveDirectoryObjectId>{empty}</InitiatingUserAzureActiveDirectoryObjectId><InitiatingUserId>{user}</InitiatingUserId><InputParameters xmlns:d2p1="http://schemas.datacontract.org/2004/07/System.Collections.Generic"><KeyValuePairOfstringanyType><d2p1:key>Target</d2p1:key><d2p1:value i:type="Entity"><Attributes><KeyValuePairOfstringanyType><d2p1:key>xrmv_name</d2p1:key><d2p1:value xmlns:d7p1="http://www.w3.org/2001/XMLSchema" i:type="d7p1:string">mrg upsert updated async</d2p1:value></KeyValuePairOfstringanyType><KeyValuePairOfstringanyType><d2p1:key>xrmv_status</d2p1:key><d2p1:value i:type="OptionSetValue"><Value>128830000</Value></d2p1:value></KeyValuePairOfstringanyType><KeyValuePairOfstringanyType><d2p1:key>xrmv_amount</d2p1:key><d2p1:value xmlns:d7p1="http://www.w3.org/2001/XMLSchema" i:type="d7p1:decimal">12.5</d2p1:value></KeyValuePairOfstringanyType></Attributes><EntityState i:nil="true" /><FormattedValues /><Id>{a:order}</Id><KeyAttributes xmlns:d5p1="http://schemas.microsoft.com/xrm/7.1/Contracts" /><LogicalName>xrmv_order</LogicalName><RelatedEntities /><RowVersion i:nil="true" /></d2p1:value></KeyValuePairOfstringanyType></InputParameters><IsExecutingOffline>false</IsExecutingOffline><IsInTransaction>false</IsInTransaction><IsOfflinePlayback>false</IsOfflinePlayback><IsolationMode>2</IsolationMode><MessageName>Update</MessageName><Mode>1</Mode><OperationCreatedOn>{date}</OperationCreatedOn><OperationId>{id2}</OperationId><OrganizationId>{organization}</OrganizationId><OrganizationName>Test Org</OrganizationName><OutputParameters xmlns:d2p1="http://schemas.datacontract.org/2004/07/System.Collections.Generic" /><OwningExtension><Id>{id3}</Id><KeyAttributes xmlns:d3p1="http://schemas.microsoft.com/xrm/7.1/Contracts" xmlns:d3p2="http://schemas.datacontract.org/2004/07/System.Collections.Generic" /><LogicalName>sdkmessageprocessingstep</LogicalName><Name>Update:xrmv_order:40:1</Name><RowVersion i:nil="true" /></OwningExtension><ParentContext><BusinessUnitId>{businessunit}</BusinessUnitId><CorrelationId>{id1}</CorrelationId><Depth>1</Depth><InitiatingUserAgent i:nil="true" /><InitiatingUserAzureActiveDirectoryObjectId>{empty}</InitiatingUserAzureActiveDirectoryObjectId><InitiatingUserId>{user}</InitiatingUserId><InputParameters xmlns:d3p1="http://schemas.datacontract.org/2004/07/System.Collections.Generic"><KeyValuePairOfstringanyType><d3p1:key>Target</d3p1:key><d3p1:value i:type="Entity"><Attributes><KeyValuePairOfstringanyType><d3p1:key>xrmv_name</d3p1:key><d3p1:value xmlns:d8p1="http://www.w3.org/2001/XMLSchema" i:type="d8p1:string">mrg upsert updated async</d3p1:value></KeyValuePairOfstringanyType><KeyValuePairOfstringanyType><d3p1:key>xrmv_status</d3p1:key><d3p1:value i:type="OptionSetValue"><Value>128830000</Value></d3p1:value></KeyValuePairOfstringanyType><KeyValuePairOfstringanyType><d3p1:key>xrmv_amount</d3p1:key><d3p1:value xmlns:d8p1="http://www.w3.org/2001/XMLSchema" i:type="d8p1:decimal">12.5</d3p1:value></KeyValuePairOfstringanyType></Attributes><EntityState i:nil="true" /><FormattedValues /><Id>{a:order}</Id><KeyAttributes xmlns:d6p1="http://schemas.microsoft.com/xrm/7.1/Contracts" /><LogicalName>xrmv_order</LogicalName><RelatedEntities /><RowVersion i:nil="true" /></d3p1:value></KeyValuePairOfstringanyType></InputParameters><IsExecutingOffline>false</IsExecutingOffline><IsInTransaction>false</IsInTransaction><IsOfflinePlayback>false</IsOfflinePlayback><IsolationMode>2</IsolationMode><MessageName>Upsert</MessageName><Mode>0</Mode><OperationCreatedOn>{date}</OperationCreatedOn><OperationId>{id4}</OperationId><OrganizationId>{organization}</OrganizationId><OrganizationName>Test Org</OrganizationName><OutputParameters xmlns:d3p1="http://schemas.datacontract.org/2004/07/System.Collections.Generic" /><OwningExtension><Id>{empty}</Id><KeyAttributes xmlns:d4p1="http://schemas.microsoft.com/xrm/7.1/Contracts" xmlns:d4p2="http://schemas.datacontract.org/2004/07/System.Collections.Generic" /><LogicalName i:nil="true" /><Name i:nil="true" /><RowVersion i:nil="true" /></OwningExtension><ParentContext i:nil="true" /><PostEntityImages xmlns:d3p1="http://schemas.datacontract.org/2004/07/System.Collections.Generic" /><PreEntityImages xmlns:d3p1="http://schemas.datacontract.org/2004/07/System.Collections.Generic" /><PrimaryEntityId>{a:order}</PrimaryEntityId><PrimaryEntityName>xrmv_order</PrimaryEntityName><RequestId>{id5}</RequestId><SecondaryEntityName>none</SecondaryEntityName><SharedVariables xmlns:d3p1="http://schemas.datacontract.org/2004/07/System.Collections.Generic" /><Stage>30</Stage><UserAzureActiveDirectoryObjectId>{empty}</UserAzureActiveDirectoryObjectId><UserId>{user}</UserId></ParentContext><PostEntityImages xmlns:d2p1="http://schemas.datacontract.org/2004/07/System.Collections.Generic" /><PreEntityImages xmlns:d2p1="http://schemas.datacontract.org/2004/07/System.Collections.Generic" /><PrimaryEntityId>{a:order}</PrimaryEntityId><PrimaryEntityName>xrmv_order</PrimaryEntityName><RequestId>{id6}</RequestId><SecondaryEntityName>none</SecondaryEntityName><SharedVariables xmlns:d2p1="http://schemas.datacontract.org/2004/07/System.Collections.Generic" /><Stage>40</Stage><UserAzureActiveDirectoryObjectId>{empty}</UserAzureActiveDirectoryObjectId><UserId>{user}</UserId></RemoteExecutionContext>

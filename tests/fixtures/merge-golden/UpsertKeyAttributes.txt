@@ -1,0 +1,41 @@
+=== PipelineExecutor.ExecuteAsync as the System Administrator ===
+--- request ---
+Request: UpsertRequest
+  RequestName: String:"Upsert"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(xrmv_order)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[1]
+        xrmv_name: String:"mrg upsert by key"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[1]
+        xrmv_name: String:"mrg upsert by key"
+      RelatedEntities: RelatedEntityCollection[0]
+--- fault ---
+Fault: XrmdFaultException 0x80040203 400 "Key attributes (xrmv_name) are not supported for entity 'xrmv_order': xrmverse supports alternate keys only for elastic tables."
+--- request after ---
+Request: UpsertRequest
+  RequestName: String:"Upsert"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Target: Entity(xrmv_order)
+      Id: Guid:{empty}
+      EntityState: null
+      RowVersion: null
+      Attributes: AttributeCollection[1]
+        xrmv_name: String:"mrg upsert by key"
+      FormattedValues: FormattedValueCollection[0]
+      KeyAttributes: KeyAttributeCollection[1]
+        xrmv_name: String:"mrg upsert by key"
+      RelatedEntities: RelatedEntityCollection[0]
+--- response ---
+none
+--- rows ---
+orders named 'mrg ...': none
+--- stage 40 ---
+none
+--- async ---
+none

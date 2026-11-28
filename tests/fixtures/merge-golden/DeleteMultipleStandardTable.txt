@@ -1,0 +1,36 @@
+=== OrganizationService.ExecuteAsync as the System Administrator ===
+--- request ---
+Request: OrganizationRequest
+  RequestName: String:"DeleteMultiple"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Targets: EntityReferenceCollection[1]
+      [0]: EntityReference
+        LogicalName: String:"xrmv_order"
+        Id: Guid:{a:a}
+        Name: null
+        KeyAttributes: KeyAttributeCollection[0]
+        RowVersion: null
+--- fault ---
+Fault: XrmdFaultException 0x80040203 400 "DeleteMultiple has not yet been implemented."
+--- request after ---
+Request: OrganizationRequest
+  RequestName: String:"DeleteMultiple"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Targets: EntityReferenceCollection[1]
+      [0]: EntityReference
+        LogicalName: String:"xrmv_order"
+        Id: Guid:{a:a}
+        Name: null
+        KeyAttributes: KeyAttributeCollection[0]
+        RowVersion: null
+--- response ---
+none
+--- rows ---
+orders named 'mrg ...': xrmv_orderid={a:a}, xrmv_name="mrg um a", xrmv_status=128830000, xrmv_amount=null
+orders named 'mrg ...': xrmv_orderid={a:b}, xrmv_name="mrg um b", xrmv_status=128830000, xrmv_amount=null
+--- stage 40 ---
+none
+--- async ---
+none

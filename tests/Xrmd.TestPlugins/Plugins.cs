@@ -1031,6 +1031,213 @@ namespace Xrmd.TestPlugins
         }
     }
 
+    /// <summary>
+    /// S.2e3c3a merge goldens. Records, into a record of the configured entity named <c>Message|Stage|Mode|Depth</c>, what the step
+    /// sees of the merged messages: its <c>Target</c> or <c>Targets</c> (each entity with its columns and values in their own order),
+    /// the other input parameters, the single images and the image collections of <c>IPluginExecutionContext4</c>, and the
+    /// <c>ParentContext</c>'s message, stage and Target(s). <c>pb_data</c> starts with <c>seq=N</c>, the creation order in this
+    /// process, which the test uses to order the records and does not write.
+    /// </summary>
+    public class MergeRecorderPlugin : IPlugin
+    {
+        private static int _sequence;
+
+        private readonly string _entity;
+
+        public MergeRecorderPlugin(string unsecure, string secure) { _entity = unsecure; }
+
+        public void Execute(IServiceProvider serviceProvider)
+        {
+            var context = (IPluginExecutionContext)serviceProvider.GetService(typeof(IPluginExecutionContext));
+            var factory = (IOrganizationServiceFactory)serviceProvider.GetService(typeof(IOrganizationServiceFactory));
+            var lines = new List<string> { "seq=" + Interlocked.Increment(ref _sequence).ToString(CultureInfo.InvariantCulture) };
+
+            Inputs(lines, "  ", context, all: true);
+            foreach (var image in context.PreEntityImages.OrderBy(i => i.Key, StringComparer.Ordinal))
+                lines.Add("  pre image " + image.Key + ": " + EntityText(image.Value));
+            foreach (var image in context.PostEntityImages.OrderBy(i => i.Key, StringComparer.Ordinal))
+                lines.Add("  post image " + image.Key + ": " + EntityText(image.Value));
+            var bulk = (IPluginExecutionContext4)context;
+            Collections(lines, "pre", bulk.PreEntityImagesCollection);
+            Collections(lines, "post", bulk.PostEntityImagesCollection);
+            var parent = context.ParentContext;
+            lines.Add("  parent: " + (parent == null
+                ? "none"
+                : parent.MessageName + "|" + parent.Stage.ToString(CultureInfo.InvariantCulture)));
+            if (parent != null) Inputs(lines, "    ", parent, all: false);
+
+            var record = new Entity(_entity);
+            record["pb_name"] = string.Format(CultureInfo.InvariantCulture, "{0}|{1}|{2}|{3}",
+                context.MessageName, context.Stage, context.Mode, context.Depth);
+            record["pb_data"] = string.Join("\n", lines);
+            factory.CreateOrganizationService(context.UserId).Create(record);
+        }
+
+        /// <summary><c>Target</c> and <c>Targets</c>, and with <paramref name="all"/> every other input parameter, by ordinal key.</summary>
+        private static void Inputs(List<string> lines, string indent, IExecutionContext context, bool all)
+        {
+            foreach (var input in context.InputParameters.OrderBy(p => p.Key, StringComparer.Ordinal))
+            {
+                if (input.Key == "Target" && input.Value is Entity target) lines.Add(indent + "target: " + EntityText(target));
+                else if (input.Key == "Targets" && input.Value is EntityCollection targets)
+                {
+                    lines.Add(indent + "targets: EntityName=" + (targets.EntityName ?? "null") + ", "
+                        + targets.Entities.Count.ToString(CultureInfo.InvariantCulture) + " entities");
+                    for (var i = 0; i < targets.Entities.Count; i++)
+                        lines.Add(indent + "  [" + i.ToString(CultureInfo.InvariantCulture) + "] " + EntityText(targets.Entities[i]));
+                }
+                else if (all) lines.Add(indent + "input " + input.Key + ": " + ValueText(input.Value));
+            }
+        }
+
+        private static void Collections(List<string> lines, string kind, EntityImageCollection[] collections)
+        {
+            if (collections == null) return;
+            lines.Add("  " + kind + " image collections: " + collections.Length.ToString(CultureInfo.InvariantCulture));
+            for (var i = 0; i < collections.Length; i++)
+            {
+                if (collections[i] == null) { lines.Add("    [" + i.ToString(CultureInfo.InvariantCulture) + "] null"); continue; }
+                foreach (var image in collections[i].OrderBy(x => x.Key, StringComparer.Ordinal))
+                    lines.Add("    [" + i.ToString(CultureInfo.InvariantCulture) + "] " + image.Key + ": " + EntityText(image.Value));
+            }
+        }
+
+        private static string EntityText(Entity? e)
+        {
+            if (e == null) return "null";
+            var text = new StringBuilder(e.GetType().Name).Append('(').Append(e.LogicalName ?? "null").Append(") id=").Append(e.Id.ToString("D"))
+                .Append(" {").Append(string.Join(", ", e.Attributes.Select(a => a.Key + "=" + ValueText(a.Value)))).Append('}');
+            if (e.KeyAttributes.Count > 0)
+                text.Append(" keys {").Append(string.Join(", ", e.KeyAttributes.Select(a => a.Key + "=" + ValueText(a.Value)))).Append('}');
+            return text.ToString();
+        }
+
+        private static string ValueText(object? v)
+        {
+            if (v == null) return "null";
+            if (v is string s) return "\"" + s + "\"";
+            if (v is OptionSetValue option) return "OptionSetValue(" + option.Value.ToString(CultureInfo.InvariantCulture) + ")";
+            if (v is Money money) return "Money(" + money.Value.ToString(CultureInfo.InvariantCulture) + ")";
+            if (v is EntityReference reference) return "EntityReference(" + reference.LogicalName + "," + reference.Id.ToString("D") + ")";
+            if (v is EntityCollection collection)
+                return "EntityCollection[" + collection.Entities.Count.ToString(CultureInfo.InvariantCulture) + "]";
+            if (v is DateTime || v is DateTimeOffset) return v.GetType().Name + ":{date}";
+            if (v is Guid g) return "Guid:" + g.ToString("D");
+            if (v is bool b) return "Boolean:" + (b ? "True" : "False");
+            if (v is IFormattable f) return v.GetType().Name + ":" + f.ToString(null, CultureInfo.InvariantCulture);
+            return v.GetType().Name;
+        }
+    }
+
+    /// <summary>
+    /// S.2e3c3a merge goldens. <c>"{attr}={n}"</c> sets <c>Value</c> of the <see cref="OptionSetValue"/> in <c>Target[attr]</c> to
+    /// <c>n</c> in place (the instance stays); <c>"{attr}={n}|{when}={text}"</c> does so only when <c>Target[when]</c> is the string
+    /// <c>text</c> (one named row of a bulk message).
+    /// </summary>
+    public class InPlaceOptionPlugin : IPlugin
+    {
+        private readonly string _attribute;
+        private readonly int _value;
+        private readonly string? _when;
+        private readonly string? _text;
+
+        public InPlaceOptionPlugin(string unsecure, string secure)
+        {
+            var parts = unsecure.Split(new[] { '|' }, 2);
+            var i = parts[0].IndexOf('=');
+            _attribute = parts[0].Substring(0, i);
+            _value = int.Parse(parts[0].Substring(i + 1), CultureInfo.InvariantCulture);
+            if (parts.Length > 1)
+            {
+                var j = parts[1].IndexOf('=');
+                _when = parts[1].Substring(0, j);
+                _text = parts[1].Substring(j + 1);
+            }
+        }
+
+        public void Execute(IServiceProvider serviceProvider)
+        {
+            var context = (IPluginExecutionContext)serviceProvider.GetService(typeof(IPluginExecutionContext));
+            var target = (Entity)context.InputParameters["Target"];
+            if (_when != null && target.GetAttributeValue<string>(_when) != _text) return;
+            ((OptionSetValue)target[_attribute]).Value = _value;
+        }
+    }
+
+    /// <summary>
+    /// S.2e3c3a merge goldens. <c>"{attr}={text}|{message}"</c>: throws an <c>InvalidPluginExecutionException</c> with the message
+    /// when <c>Target[attr]</c> is the string <c>text</c> (one target of a bulk message fails in its inner step).
+    /// </summary>
+    public class ThrowOnValuePlugin : IPlugin
+    {
+        private readonly string _attribute;
+        private readonly string _text;
+        private readonly string _message;
+
+        public ThrowOnValuePlugin(string unsecure, string secure)
+        {
+            var parts = unsecure.Split(new[] { '|' }, 2);
+            var i = parts[0].IndexOf('=');
+            _attribute = parts[0].Substring(0, i);
+            _text = parts[0].Substring(i + 1);
+            _message = parts[1];
+        }
+
+        public void Execute(IServiceProvider serviceProvider)
+        {
+            var context = (IPluginExecutionContext)serviceProvider.GetService(typeof(IPluginExecutionContext));
+            var target = context.InputParameters.Contains("Target") ? context.InputParameters["Target"] as Entity : null;
+            if (target != null && target.GetAttributeValue<string>(_attribute) == _text) throw new InvalidPluginExecutionException(_message);
+        }
+    }
+
+    /// <summary>
+    /// S.2e3c3a merge goldens: changes <c>Targets</c> of a bulk message (register it on PreOperation). <c>"empty"</c> removes every
+    /// target; <c>"add:{table}:{attr}={text}"</c> adds a new target of <c>table</c> with that string column;
+    /// <c>"repeat:{attr}={text}"</c> adds a target with the first target's table and id and that string column;
+    /// <c>"removesecond"</c> removes the second target; <c>"setid:{index}:{guid}"</c> sets the <c>Id</c> of that target.
+    /// </summary>
+    public class TargetsEditPlugin : IPlugin
+    {
+        private readonly string _config;
+
+        public TargetsEditPlugin(string unsecure, string secure) { _config = unsecure; }
+
+        public void Execute(IServiceProvider serviceProvider)
+        {
+            var context = (IPluginExecutionContext)serviceProvider.GetService(typeof(IPluginExecutionContext));
+            var targets = ((EntityCollection)context.InputParameters["Targets"]).Entities;
+            var parts = _config.Split(new[] { ':' }, 3);
+            switch (parts[0])
+            {
+                case "empty":
+                    targets.Clear();
+                    break;
+                case "add":
+                    targets.Add(WithColumn(new Entity(parts[1]), parts[2]));
+                    break;
+                case "repeat":
+                    targets.Add(WithColumn(new Entity(targets[0].LogicalName, targets[0].Id), _config.Substring("repeat:".Length)));
+                    break;
+                case "removesecond":
+                    targets.RemoveAt(1);
+                    break;
+                case "setid":
+                    targets[int.Parse(parts[1], CultureInfo.InvariantCulture)].Id = new Guid(parts[2]);
+                    break;
+                default:
+                    throw new InvalidPluginExecutionException("Unknown edit " + _config);
+            }
+        }
+
+        private static Entity WithColumn(Entity e, string column)
+        {
+            var i = column.IndexOf('=');
+            e[column.Substring(0, i)] = column.Substring(i + 1);
+            return e;
+        }
+    }
+
 #nullable disable
     /// <summary>
     /// S.2e2c golden dumps. Config <c>"{entity}"</c> or <c>"{entity}|{mutation}"</c>. The mutation (applied to <c>Target</c>, every

@@ -382,7 +382,7 @@ public sealed class PipelineModelBoundaryTests(XrmdFixture fx) : IAsyncLifetime
     }
 
     /// <summary>The objects one crossing of <paramref name="request"/> writes.</summary>
-    private static long SizeOf(OrganizationRequest request)
+    internal static long SizeOf(OrganizationRequest request)
     {
         var mirror = new SdkMirror();
         mirror.In(request);

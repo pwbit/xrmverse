@@ -26,6 +26,7 @@ using Xrmd.Pipeline.Sandbox;
 using Xrmd.Pipeline.Webhooks;
 using Xrmd.Pipeline.Workflows;
 using Xrmd.Security;
+using TableDefinition = Xrmd.Model.Metadata.TableDefinition;
 
 namespace Xrmd.Pipeline;
 
@@ -33,15 +34,16 @@ namespace Xrmd.Pipeline;
 /// The SDK side of the <see cref="PipelineExecutor"/> (S.2e2c, Decision 4): the public entry on an <see cref="OrganizationRequest"/>,
 /// which crosses the request into the model through the chain's <see cref="SdkMirror"/> and back; the checks that work on SDK values
 /// (the custom API and action validation, the primary entity); the boundary of stages 20 and 30, where the internal checks run on the
-/// model request (S.2e3c2b) and, for a message the core does not answer on the model, the core and the hooks work on the SDK request
-/// (<see cref="HoldAtCoreAsync"/> writes the model into it once, <see cref="ReleaseCore"/> reads it back once); the images the core
-/// reads; the response.
+/// model request (S.2e3c2b) and, for a message the core does not answer on the model and that is no merge run (<see cref="Run.MergeOnModel"/>:
+/// a standard-table Upsert or bulk message, S.2e3c3a), the core and the hooks work on the SDK request (<see cref="HoldAtCoreAsync"/>
+/// writes the model into it once, <see cref="ReleaseCore"/> reads it back once); the images the core reads; the response.
 /// </summary>
 public sealed partial class PipelineExecutor
 {
     /// <summary>
-    /// The <c>InputParameters</c> of the executions whose SDK request the core holds (between <see cref="HoldAtCoreAsync"/> and
-    /// <see cref="ReleaseCore"/>), with that request's parameters: a level of a nested chain lent meanwhile is first read from it
+    /// The <c>InputParameters</c> of the executions whose SDK request the core holds, or that are registered for a merge run
+    /// (<see cref="Run.MergeOnModel"/>, S.2e3c3a: no window, but the two reads stay), between <see cref="HoldAtCoreAsync"/> and
+    /// <see cref="ReleaseCore"/>, with that request's parameters: a level of a nested chain lent meanwhile is first read from it
     /// (<see cref="HeldLevels"/>, <see cref="SyncBoundaries"/>), so the view never writes stale model values over what the core did.
     /// </summary>
     private static readonly ConditionalWeakTable<ParameterBag, ParameterCollection> AtCore = new();
@@ -63,10 +65,10 @@ public sealed partial class PipelineExecutor
         public ActionDefinition? Action { get; init; }
 
         /// <summary>The table of an Upsert on a standard table (#76, ruling B10): no event, its stage 30 runs an inner Create or Update.</summary>
-        public EntityMetadata? UpsertTable { get; init; }
+        public TableDefinition? UpsertTable { get; init; }
 
         /// <summary>The table of a bulk message on a standard table (#76, rulings B1 and B4).</summary>
-        public EntityMetadata? BulkTable { get; init; }
+        public TableDefinition? BulkTable { get; init; }
 
         public bool StandardTable { get; init; }
         public bool BulkInner { get; init; }
@@ -89,9 +91,21 @@ public sealed partial class PipelineExecutor
         /// </summary>
         public required bool CoreOnModel { get; init; }
 
+        /// <summary>
+        /// S.2e3c3a (Decision 7): true when stage 30 merges inner executions on the model request (a standard-table Upsert or bulk
+        /// message): no window is held at the core for it, but its bag is still registered in <see cref="AtCore"/> and the SDK request
+        /// is still read back once after stage 30 (<see cref="ReleaseCore"/>).
+        /// </summary>
+        public required bool MergeOnModel { get; init; }
+
         /// <summary>The model response the core answered with (<see cref="CoreOperationAsync"/>); null for any other stage 30.</summary>
         public Response? CoreResponse { get; set; }
 
+        /// <summary>
+        /// True from <see cref="HoldAtCoreAsync"/> to <see cref="ReleaseCore"/> for an execution whose SDK request the core holds, or that
+        /// is registered for a merge run (<see cref="Run.MergeOnModel"/>, S.2e3c3a: no window is held, but <see cref="ReleaseCore"/> still
+        /// reads the SDK request back once).
+        /// </summary>
         public bool HeldAtCore { get; set; }
 
         /// <summary>True when this execution registered its bag in <see cref="AtCore"/> (not one sharing its caller's held bag).</summary>
@@ -306,9 +320,13 @@ public sealed partial class PipelineExecutor
         var context = await NewContextAsync(model, invocation, session, entityName, entityId, ct);
         // #76, ruling B10: Upsert is not an event on a standard table; its stage 30 runs an inner Create or Update.
         var messageTable = !customAction && entityName is not null ? metadata.GetEntity(session, entityName) : null;
-        var upsertTable = StandardUpsert.Applies(message, messageTable) ? messageTable : null;
+        var upsertTable = messageTable is not null && string.Equals(message, StandardUpsert.MessageName, StringComparison.OrdinalIgnoreCase)
+            ? metadata.GetTable(session, entityName!)
+            : null;
+        if (!StandardUpsert.Applies(message, upsertTable)) upsertTable = null;
         // #76, rulings B1 and B4: a bulk message on a standard table; its stage 30 runs each target as an inner execution.
-        var bulkTable = BulkStage.Applies(message, messageTable) ? messageTable : null;
+        var bulkTable = messageTable is not null && BulkStage.Handles(message) ? metadata.GetTable(session, entityName!) : null;
+        if (!BulkStage.Applies(message, bulkTable)) bulkTable = null;
         if (bulkTable is null && BulkStage.Handles(message))
             throw new InvalidOperationException($"{message} on '{entityName}' is not a standard-table bulk request: the organization service routes it.");
 
@@ -334,6 +352,7 @@ public sealed partial class PipelineExecutor
             MapsOutput = ReadMessages.Contains(message),
             CoreOnModel = !customAction && upsertTable is null && bulkTable is null
                           && !string.Equals(message, ExecuteWorkflowMessage, StringComparison.OrdinalIgnoreCase) && core.AnswersOnModel(message),
+            MergeOnModel = upsertTable is not null || bulkTable is not null,
         };
         await RunStagesAsync(run, ct);
         return FinishResponse(run);
@@ -347,6 +366,12 @@ public sealed partial class PipelineExecutor
 
     /// <summary>Test seam: called with each model request the internal checks of stage 20 run on (<see cref="HoldAtCoreAsync"/>).</summary>
     internal static readonly AsyncLocal<Action<Request>?> StageChecked = new();
+
+    /// <summary>
+    /// Test seam: called by <see cref="RunInnerAsync"/> with each SDK request it assembled for an inner execution (S.2e3c3a, Decision 6),
+    /// before that execution runs.
+    /// </summary>
+    internal static readonly AsyncLocal<Action<OrganizationRequest>?> InnerRequest = new();
 
     /// <summary>
     /// The check of a public write of a process before the pre-operation plug-ins see it (plan 2.21, A16), on the model request (which
@@ -384,25 +409,29 @@ public sealed partial class PipelineExecutor
     /// stored rows the checks read are read by the core with no mirror (<see cref="StoredImageAsync"/>).
     /// S.2e3b and S.2e3c2b (Decision 8): a message the core answers on the model (<see cref="Run.CoreOnModel"/>: the CRUD messages and
     /// the messages S.2e3c1 moved) runs on the model request, so no window is held for it. For any other message the window opens after
-    /// the checks, with the one <c>Out</c> that also carries what they changed, so the SDK request the core holds (stage 30 of Upsert
-    /// and bulk) carries no secret.
+    /// the checks, with the one <c>Out</c> that also carries what they changed, so the SDK request the core holds carries no secret.
+    /// S.2e3c3a (Decision 7): a merge run (<see cref="Run.MergeOnModel"/>) holds no window either: the SDK request is current here (every
+    /// view's bags are its own collections and were read back; the guard and the checks wrote out what they changed), so nothing is
+    /// written out and <see cref="CoreHandOff.Hold"/> is not called. Its bag is still registered in <see cref="AtCore"/>, so a lend or a
+    /// serialization of this level during stage 30 reads the SDK request first, and <see cref="ReleaseCore"/> still reads it back once:
+    /// an inner step that changes in place an SDK instance the caller shares changes the caller's objects as today.
     /// </remarks>
     private async Task HoldAtCoreAsync(Run run, CancellationToken ct)
     {
         if (!run.CustomAction) await StageChecksAsync(run, ct);
         if (run.CoreOnModel) return;
-        run.Mirror.Out(run.Request);
+        if (!run.MergeOnModel) run.Mirror.Out(run.Request);
         // A nested request on the caller's own collection shares the caller's bag: only the execution that registered it removes it.
         run.HeldAtCore = true;
         run.OwnsAtCore = !AtCore.TryGetValue(run.Request.Parameters, out _);
         if (run.OwnsAtCore) AtCore.Add(run.Request.Parameters, run.Sdk.Parameters);
-        run.OwnsHeld = CoreHandOff.Hold(run.Request, run.Sdk);
+        if (!run.MergeOnModel) run.OwnsHeld = CoreHandOff.Hold(run.Request, run.Sdk);
     }
 
     /// <summary>
     /// The internal checks of stage 20 on <see cref="Run.Request"/> (<see cref="HoldAtCoreAsync"/>), with the write-back of Decision 4:
-    /// one <c>Out</c> of the model when a check changed it and the core answers on the model (the window's own <c>Out</c> carries it
-    /// otherwise), one on a refusal of a request of <see cref="StageCheckTables"/>.
+    /// one <c>Out</c> of the model when a check changed it and the core answers on the model or stage 30 merges on it (the window's own
+    /// <c>Out</c> carries it otherwise), one on a refusal of a request of <see cref="StageCheckTables"/>.
     /// </summary>
     private async Task StageChecksAsync(Run run, CancellationToken ct)
     {
@@ -421,7 +450,7 @@ public sealed partial class PipelineExecutor
             run.Mirror.Out(run.Request);
             throw;
         }
-        if (changed && run.CoreOnModel) run.Mirror.Out(run.Request);
+        if (changed && (run.CoreOnModel || run.MergeOnModel)) run.Mirror.Out(run.Request);
     }
 
     /// <summary>
@@ -486,8 +515,9 @@ public sealed partial class PipelineExecutor
     };
 
     /// <summary>
-    /// Stage 30: the custom API's plug-in type, the XAML action, <c>ExecuteWorkflow</c>, the bulk or Upsert inner executions or the
-    /// core operation, on the SDK request; then the follow-ups of the same transaction.
+    /// Stage 30: the custom API's plug-in type, the XAML action, <c>ExecuteWorkflow</c>, the bulk inner executions or the Upsert's inner
+    /// execution (on the model request, S.2e3c3a: <see cref="BulkAsync"/>, <see cref="StandardUpsertAsync"/>) or the core operation;
+    /// then the follow-ups of the same transaction.
     /// </summary>
     private async Task MainOperationAsync(Run run, ExecutionState execution, CancellationToken ct)
     {
@@ -513,14 +543,9 @@ public sealed partial class PipelineExecutor
                 },
             }
             : run.BulkTable is { } bulkTable
-            ? await BulkStage.ExecuteAsync(request, bulkTable, inner => RunInnerAsync(inner, InnerKind.Bulk, run, ct), ct)
+            ? await BulkAsync(run, bulkTable, ct)
             : run.UpsertTable is { } upsertTable
-            ? await StandardUpsert.ExecuteAsync(await CreateOnlyGuardedAsync(request.Parameters.TryGetValue(Target, out var t) && t is Entity upsertTarget ? upsertTarget
-                    : throw XrmdFaultException.InvalidArgument($"Required parameter '{Target}' of request '{message}' is missing or not a {nameof(Entity)}."),
-                    run, ct),
-                upsertTable, core, session,
-                inner => RunInnerAsync(StandardUpsert.CarryParameters(request, inner), InnerKind.Upsert, run, ct),
-                StandardUpsert.IsCreateOnly(run.Request), ct)
+            ? await StandardUpsertAsync(run, upsertTable, ct)
             : await CoreOperationAsync(run, ct);
         // Plan 2.14 (final review I2): the activation of an assigned definition follows its owner, in the same transaction;
         // so does it after an Update of ownerid, which plan 2.21 (A16) accepts on an Activated definition.
@@ -577,29 +602,137 @@ public sealed partial class PipelineExecutor
     }
 
     /// <summary>
-    /// Runs <paramref name="inner"/> as an inner execution of <paramref name="run"/> (#76, ruling B4): marked with
+    /// Stage 30 of an Upsert on a standard table (S.2e3c3a, Decisions 5 and 8), on the model request: its model Target (400 when it is
+    /// missing or not a record, with today's text), the create-only guard (<see cref="CreateOnlyGuardedAsync"/>), then
+    /// <see cref="StandardUpsert.ExecuteAsync"/>, whose inner Create or Update carries the Upsert's other parameters and runs as an inner
+    /// execution (<see cref="RunInnerAsync"/>); its answer is read in only when it is an unread shell, before the id of a Create is read.
+    /// The response is today's typed <see cref="UpsertResponse"/>, built here and never converted unless something observes it.
+    /// </summary>
+    private async Task<OrganizationResponse> StandardUpsertAsync(Run run, TableDefinition table, CancellationToken ct)
+    {
+        var target = run.Request.Parameters.TryGetValue(Target, out var t) && t is Record upsertTarget
+            ? upsertTarget
+            : throw XrmdFaultException.InvalidArgument(
+                $"Required parameter '{Target}' of request '{run.Message}' is missing or not a {SdkTypeNames.Of(typeof(Record))}.");
+        await CreateOnlyGuardedAsync(run, ct);
+        var (created, id) = await StandardUpsert.ExecuteAsync(target, table, core, run.Session, async inner =>
+        {
+            var answer = await RunInnerAsync(StandardUpsert.CarryParameters(run.Request, inner), InnerKind.Upsert, run, ct);
+            if (run.Mirror.IsUnread(answer) && run.Mirror.TryGetSdk(answer, out var sdk)) run.Mirror.In((OrganizationResponse)sdk!);
+            return answer;
+        }, StandardUpsert.IsCreateOnly(run.Request), ct);
+        return new UpsertResponse
+        {
+            ResponseName = StandardUpsert.MessageName,
+            Results = { ["RecordCreated"] = created, ["Target"] = new EntityReference(table.LogicalName, id) },
+        };
+    }
+
+    /// <summary>
+    /// Stage 30 of a bulk message on a standard table (S.2e3c3a, Decisions 3 and 5), on the model request: <see cref="BulkStage.ExecuteAsync"/>
+    /// runs each target as an inner execution (<see cref="RunInnerAsync"/>), in order. The response is today's typed bulk response
+    /// (<see cref="BulkTargets.Response"/>), built from the SDK twins of the inner responses (an <c>UpsertMultipleResponse</c> holds the
+    /// inner runs' own <see cref="UpsertResponse"/> instances), and never converted unless something observes it.
+    /// </summary>
+    private async Task<OrganizationResponse> BulkAsync(Run run, TableDefinition table, CancellationToken ct)
+    {
+        var singles = await BulkStage.ExecuteAsync(run.Request, table, inner => RunInnerAsync(inner, InnerKind.Bulk, run, ct), ct);
+        var mirror = run.Mirror;
+        // Each inner run answers with its own response (RunInnerAsync: the paired model response or a shell, which pairs), so the bulk
+        // response holds the inner runs' own instances; a response without its SDK twin is a server bug, never a silent copy.
+        return BulkTargets.Response(run.Message, [.. singles.Select(single => single is null ? null
+            : mirror.TryGetSdk(single, out var twin) && twin is OrganizationResponse response ? response
+            : throw new InvalidOperationException(
+                "A bulk inner execution has no SDK response of its own: each inner run must answer with its own response (a server bug)."))]);
+    }
+
+    /// <summary>
+    /// Runs the model request <paramref name="inner"/> as an inner execution of <paramref name="run"/> (#76, ruling B4): marked with
     /// <paramref name="kind"/> (<see cref="InnerExecution"/>), in its session and transaction (which it never commits or rolls back:
     /// the outer execution owns it), at the <b>same</b> depth (unlike a plug-in's call), with the outer context as its
     /// <c>ParentContext</c> (a copy that reports the outer's current stage, <see cref="MainOperation"/>: inner runs only happen
     /// there). Its failure propagates to the outer execution, which rolls the whole transaction back. An Upsert's inner run gets the
     /// outer model Target, whose mail secrets its own Target takes when it crosses in (Decision 6).
     /// </summary>
-    private Task<OrganizationResponse> RunInnerAsync(OrganizationRequest inner, InnerKind kind, Run run, CancellationToken ct) =>
-        ExecuteAsync(inner, run.Invocation with { Session = run.Session, Parent = run.Context.Clone(MainOperation), ServerSetValues = null },
-            new InnerRun(kind, kind == InnerKind.Upsert && run.Request.Parameters.TryGetValue(Target, out var t) ? t as Record : null), ct);
+    /// <remarks>
+    /// S.2e3c3a (Decision 6): the SDK request is today's typed one (<see cref="InnerSdkRequest"/>), its <c>Parameters</c> filled by
+    /// assignment, never by writing a record out: each model value takes its SDK twin in the chain mirror, and a value without one is
+    /// written out (a primitive is its own twin). The one record without a twin is an Upsert's copy of its Target, which gets the SDK
+    /// twin the SDK <c>Copy</c> built (<see cref="PairUpsertCopy"/>). Neither <paramref name="inner"/> nor its bag is paired with the
+    /// SDK request (pre-flight ruling F13): the inner crossing makes fresh twins of them, as today, and reads the Target in once. The
+    /// answer is the model twin of the inner response (an unread shell when nothing converted it).
+    /// </remarks>
+    private async Task<Response> RunInnerAsync(Request inner, InnerKind kind, Run run, CancellationToken ct)
+    {
+        var mirror = run.Mirror;
+        var outerTarget = kind == InnerKind.Upsert && run.Request.Parameters.TryGetValue(Target, out var t) ? t as Record : null;
+        if (outerTarget is not null && inner.Parameters.TryGetValue(Target, out var it) && it is Record copy && !mirror.TryGetSdk(copy, out _))
+            PairUpsertCopy(copy, outerTarget, mirror);
+        var request = InnerSdkRequest(inner.Name);
+        request.RequestId = inner.RequestId;
+        foreach (var (name, value) in inner.Parameters) request.Parameters[name] = SdkTwin(value, mirror);
+        InnerRequest.Value?.Invoke(request);
+        var response = await ExecuteAsync(request,
+            run.Invocation with { Session = run.Session, Parent = run.Context.Clone(MainOperation), ServerSetValues = null },
+            new InnerRun(kind, outerTarget), ct);
+        return mirror.TryGetModel(response, out var model) && model is Response paired ? paired : mirror.Shell(response);
+    }
+
+    /// <summary>
+    /// The typed SDK request of an inner execution, as the SDK stages built it (the precedent is the core's nested CRUD requests):
+    /// <see cref="CreateRequest"/>, <see cref="UpdateRequest"/> or <see cref="UpsertRequest"/>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Any other message (a server bug).</exception>
+    private static OrganizationRequest InnerSdkRequest(string? name) => name switch
+    {
+        "Create" => new CreateRequest(),
+        "Update" => new UpdateRequest(),
+        StandardUpsert.MessageName => new UpsertRequest(),
+        _ => throw new InvalidOperationException($"'{name}' is not the message of an inner execution."),
+    };
+
+    /// <summary>The SDK value of the model value <paramref name="value"/>: its twin in <paramref name="mirror"/>, else written out.</summary>
+    private static object? SdkTwin(object? value, SdkMirror mirror) =>
+        value is null ? null : mirror.TryGetSdk(value, out var twin) ? twin : mirror.Out(value);
+
+    /// <summary>
+    /// Pairs an Upsert's <paramref name="copy"/> of its Target <paramref name="source"/> with the SDK twin the SDK <c>Copy</c> built
+    /// (S.2e3c3a, Decision 6): a new <see cref="Entity"/> with the copy's logical name, id and row version whose attributes and key
+    /// attributes are, key by key in the copy's order, the instances the SDK twin of <paramref name="source"/> holds. Nothing is
+    /// converted: the inner crossing reads the copy in from it once.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The Target has no SDK twin, or its twin lacks a key of the copy (a server bug): the
+    /// Target crossed in from the caller's SDK request (the only entry), and every writer that changes it before stage 30 writes the
+    /// change out (<see cref="StageChecksAsync"/>, <see cref="CreateOnlyGuardedAsync"/>, the read-back of each lent view), so its twin
+    /// holds every key the copy takes from it.</exception>
+    private static void PairUpsertCopy(Record copy, Record source, SdkMirror mirror)
+    {
+        var held = mirror.TryGetSdk(source, out var twin) && twin is Entity sourceTwin ? sourceTwin
+            : throw new InvalidOperationException("The Upsert Target has no SDK twin: it must cross in from the caller's request (a server bug).");
+        var entity = new Entity(copy.LogicalName, copy.Id) { RowVersion = copy.RowVersion };
+        foreach (var name in copy.Attributes.Keys) entity[name] = HeldValue(held.Attributes, name);
+        foreach (var name in copy.KeyAttributes.Keys) entity.KeyAttributes[name] = HeldValue(held.KeyAttributes, name);
+        mirror.Pair(copy, entity);
+    }
+
+    /// <summary>The instance <paramref name="held"/> holds for <paramref name="name"/>, the Upsert Target's twin being current.</summary>
+    /// <exception cref="InvalidOperationException">The twin lacks the key (a server bug, <see cref="PairUpsertCopy"/>).</exception>
+    private static object? HeldValue(DataCollection<string, object> held, string name) =>
+        held.TryGetValue(name, out var sdk) ? sdk
+        : throw new InvalidOperationException(
+            $"The SDK twin of the Upsert Target lacks '{name}': every change of the Target before stage 30 must be written out (a server bug).");
 
     /// <summary>
     /// A create-only Upsert (Web API <c>If-None-Match: *</c>, its model request marked, <see cref="StandardUpsert.IsCreateOnly(Request)"/>)
     /// may answer 412 for an existing row, so the caller first passes the guard of the Create it would otherwise run: one without the
     /// right gets the same 403 whether the row exists or not. S.2e3c2b (Decision 7): the guard runs on a model Create of the Upsert's
-    /// model Target, as the checks of stage 20 left it (they ran on the model, and the window's <c>Out</c> wrote it into
-    /// <paramref name="target"/>, its SDK twin); what the guard changes is written out into <paramref name="target"/>, once when it
-    /// answers true and on a refusal of a request it may have changed first (<see cref="SecurityGuard.MayChange"/>, as the guard's
-    /// crossing form). Returns <paramref name="target"/>.
+    /// model Target, as the checks of stage 20 left it; S.2e3c3a: what the guard changes is written out into the Target's SDK twin, the
+    /// caller's, once when it answers true and on a refusal of a request it may have changed first (<see cref="SecurityGuard.MayChange"/>,
+    /// as the guard's crossing form).
     /// </summary>
-    private async Task<Entity> CreateOnlyGuardedAsync(Entity target, Run run, CancellationToken ct)
+    private async Task CreateOnlyGuardedAsync(Run run, CancellationToken ct)
     {
-        if (!StandardUpsert.IsCreateOnly(run.Request)) return target;
+        if (!StandardUpsert.IsCreateOnly(run.Request)) return;
         var model = (Record)run.Request.Parameters[Target]!;
         var create = new Request { Name = "Create", Parameters = { [Target] = model } };
         bool changed;
@@ -613,7 +746,6 @@ public sealed partial class PipelineExecutor
             throw;
         }
         if (changed) run.Mirror.Out(model);
-        return target;
     }
 
     // ---- the response ------------------------------------------------------------------------------------------------------------
@@ -925,7 +1057,7 @@ public sealed partial class PipelineExecutor
 
     /// <summary>
     /// The pre images of an execution, read before stage 20: the record's, and for a bulk execution (#76, ruling B6) one per target
-    /// (none is registered on CreateMultiple), whose ids are read on the SDK request.
+    /// (none is registered on CreateMultiple), whose ids are read on the model request (S.2e3c3a, Decision 8).
     /// </summary>
     private async Task<StepImages> PreImagesAsync(Run run, IReadOnlyList<StageStep>[] stages, CancellationToken ct)
     {
@@ -935,15 +1067,16 @@ public sealed partial class PipelineExecutor
         Record?[]? preList = null;
         if (run.BulkTable is { } bulkTable)
         {
-            // The SDK request is current: the views of stage 10 returned into it (their bags are its own collections).
-            preList = await ReadImagesAsync(bulkTable.LogicalName, BulkTargets.TargetIds(run.Sdk, bulkTable, null), stages, pre: true, run, ct);
+            // The model request is current: the views of stage 10 were read back into it when they returned.
+            preList = await ReadImagesAsync(bulkTable.LogicalName!, BulkTargets.TargetIds(run.Request, bulkTable, null), stages, pre: true, run, ct);
         }
         return new StepImages(pre, null, preList, null);
     }
 
     /// <summary>
     /// <paramref name="images"/> with the post images, read after stage 30: the record's, and for a bulk execution one per target (a
-    /// CreateMultiple's records by its Ids).
+    /// CreateMultiple's records by the Ids of its response), whose ids are read on the model request, which <see cref="ReleaseCore"/> read
+    /// back after stage 30 (S.2e3c3a, Decision 8).
     /// </summary>
     private async Task<StepImages> PostImagesAsync(Run run, StepImages images, IReadOnlyList<StageStep>[] stages, CancellationToken ct)
     {
@@ -951,10 +1084,15 @@ public sealed partial class PipelineExecutor
         if (PostImageMessages.Contains(run.Message) && run.EntityName is not null)
             post = await ReadImageAsync(run.EntityName, run.EntityId, stages, pre: false, run, ct);
         var postList = run.BulkTable is { } bulkTable
-            ? await ReadImagesAsync(bulkTable.LogicalName, BulkTargets.TargetIds(run.Sdk, bulkTable, run.Response), stages, pre: false, run, ct)
+            ? await ReadImagesAsync(bulkTable.LogicalName!, BulkTargets.TargetIds(run.Request, bulkTable, CreatedIds(run.Response)), stages,
+                pre: false, run, ct)
             : null;
         return images with { Post = post, PostList = postList };
     }
+
+    /// <summary>The <c>Ids</c> of a CreateMultiple's response; null for any other response.</summary>
+    private static Guid[]? CreatedIds(OrganizationResponse? response) =>
+        response is not null && response.Results.TryGetValue("Ids", out var ids) ? ids as Guid[] : null;
 
     /// <summary>
     /// Reads the record once with the union of the attributes the steps' pre (type 0/2) or post (type 1/2) images ask

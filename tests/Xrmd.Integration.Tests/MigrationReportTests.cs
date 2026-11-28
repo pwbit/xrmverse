@@ -65,15 +65,8 @@ public sealed class MigrationReportTests(XrmdFixture fx) : IDisposable
             ["users"] = new JsonObject { ["users"] = new JsonArray(new JsonObject { ["id"] = ada.ToString(), ["action"] = "local", ["username"] = "ada" }) },
         }, HttpStatusCode.Accepted);
         var runId = started["runId"]!.GetValue<string>();
-        var until = DateTime.UtcNow.AddSeconds(60);
-        JsonObject status;
-        do
-        {
-            status = await SendAsync(HttpMethod.Get, $"admin/migrate/runs/{runId}", null, HttpStatusCode.OK);
-            if (status["state"]!.GetValue<string>() is not ("queued" or "running")) break;
-            await Task.Delay(250);
-        }
-        while (DateTime.UtcNow < until);
+        var status = await MigrationRunPolling.WaitSettledAsync(() => SendAsync(HttpMethod.Get, $"admin/migrate/runs/{runId}", null, HttpStatusCode.OK),
+            TimeSpan.FromSeconds(60));
         status["state"]!.GetValue<string>().Should().Be(MigrationRunStates.CompletedWithErrors, status.ToJsonString());
 
         var report = await SendAsync(HttpMethod.Get, $"admin/migrate/runs/{runId}/report", null, HttpStatusCode.OK);

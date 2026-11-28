@@ -150,6 +150,37 @@ public sealed class MigrationRunStore(IDbConnectionFactory factory)
     /// <returns>True when the run changed.</returns>
     public async Task<bool> SetStateAsync(Guid runId, string state, string? message, CancellationToken ct, params string[] from)
     {
+        var (sql, parameters) = StateUpdate(runId, state, message, from);
+        return await ExecuteAsync(sql, ct, parameters) > 0;
+    }
+
+    /// <summary>
+    /// Finalizes the run if it is in one of the states <paramref name="from"/> (compare and set), in one transaction with the deletion
+    /// of the row of the uploaded package <paramref name="deletePackageId"/> (when not null): a reader sees the run finalized only
+    /// with its package gone. <paramref name="beforeCommit"/> runs once the run has changed, before the commit (it deletes the
+    /// package's files and lifts the in-process lock, so that both are done by the time anyone reads the run finalized); if it
+    /// throws, the transaction rolls back and the run and the package's row stay, so the finalize can be retried.
+    /// </summary>
+    /// <returns>True when the run was finalized; false, with nothing done, when it was in another state.</returns>
+    public async Task<bool> FinalizeRunAsync(Guid runId, Guid? deletePackageId, Func<Task> beforeCommit, CancellationToken ct, params string[] from)
+    {
+        ArgumentNullException.ThrowIfNull(beforeCommit);
+        await using var conn = await factory.OpenAsync(ct);
+        await using var tx = await conn.BeginTransactionAsync(ct);
+        var (sql, parameters) = StateUpdate(runId, MigrationRunStates.Finalized, null, from);
+        await using (var cmd = Command(conn, tx, sql, parameters))
+            if (await cmd.ExecuteNonQueryAsync(ct) == 0) return false;
+        if (deletePackageId is { } packageId)
+            await using (var cmd = Command(conn, tx, "DELETE FROM meta.migration_package WHERE packageid = @id", ("@id", packageId)))
+                await cmd.ExecuteNonQueryAsync(ct);
+        await beforeCommit();
+        await tx.CommitAsync(ct);
+        return true;
+    }
+
+    /// <summary>The statement of <see cref="SetStateAsync"/> and its parameters.</summary>
+    private (string Sql, (string Name, object? Value)[] Parameters) StateUpdate(Guid runId, string state, string? message, string[] from)
+    {
         ArgumentNullException.ThrowIfNull(from);
         var parameters = new List<(string Name, object? Value)>
         {
@@ -158,13 +189,13 @@ public sealed class MigrationRunStore(IDbConnectionFactory factory)
         for (var i = 0; i < from.Length; i++) parameters.Add(($"@from{i}", from[i]));
         var guard = from.Length == 0 ? "" : $" AND state IN ({string.Join(", ", from.Select((_, i) => $"@from{i}"))})";
         var d = factory.Dialect;
-        return await ExecuteAsync($"""
+        return ($"""
             UPDATE meta.migration_run SET state = @state, message = @message,
                 startedon = CASE WHEN @state = 'running' AND startedon IS NULL THEN {d.UtcNow} ELSE startedon END,
                 endedon = CASE WHEN @terminal = {d.BooleanLiteral(true)} THEN {d.UtcNow} WHEN @state = 'queued' THEN NULL ELSE endedon END,
                 finalizedon = CASE WHEN @state = 'finalized' THEN {d.UtcNow} ELSE finalizedon END
             WHERE runid = @id{guard}
-            """, ct, [.. parameters]) > 0;
+            """, [.. parameters]);
     }
 
     /// <summary>Deletes a run that never started (its start was refused after the run was created).</summary>

@@ -1,0 +1,80 @@
+=== PipelineExecutor.ExecuteAsync as the System Administrator ===
+--- request ---
+Request: CreateMultipleRequest
+  RequestName: String:"CreateMultiple"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Targets: EntityCollection
+      EntityName: String:"pb_pipe"
+      Entities: DataCollection[2]
+        [0]: Pipe(pb_pipe)
+          Id: Guid:{empty}
+          EntityState: null
+          RowVersion: null
+          Attributes: AttributeCollection[1]
+            pb_name: String:"mrg early 1"
+          FormattedValues: FormattedValueCollection[0]
+          KeyAttributes: KeyAttributeCollection[0]
+          RelatedEntities: RelatedEntityCollection[0]
+        [1]: Pipe(pb_pipe)
+          Id: Guid:{empty}
+          EntityState: null
+          RowVersion: null
+          Attributes: AttributeCollection[1]
+            pb_name: String:"mrg early 2"
+          FormattedValues: FormattedValueCollection[0]
+          KeyAttributes: KeyAttributeCollection[0]
+          RelatedEntities: RelatedEntityCollection[0]
+      MoreRecords: Boolean:False
+      PagingCookie: null
+      TotalRecordCount: Int32:0
+      TotalRecordCountLimitExceeded: Boolean:False
+--- fault ---
+none
+--- request after ---
+Request: CreateMultipleRequest
+  RequestName: String:"CreateMultiple"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Targets: EntityCollection
+      EntityName: String:"pb_pipe"
+      Entities: DataCollection[2]
+        [0]: Pipe(pb_pipe)
+          Id: Guid:{empty}
+          EntityState: null
+          RowVersion: null
+          Attributes: AttributeCollection[1]
+            pb_name: String:"mrg early 1"
+          FormattedValues: FormattedValueCollection[0]
+          KeyAttributes: KeyAttributeCollection[0]
+          RelatedEntities: RelatedEntityCollection[0]
+        [1]: Pipe(pb_pipe)
+          Id: Guid:{empty}
+          EntityState: null
+          RowVersion: null
+          Attributes: AttributeCollection[1]
+            pb_name: String:"mrg early 2"
+          FormattedValues: FormattedValueCollection[0]
+          KeyAttributes: KeyAttributeCollection[0]
+          RelatedEntities: RelatedEntityCollection[0]
+      MoreRecords: Boolean:False
+      PagingCookie: null
+      TotalRecordCount: Int32:0
+      TotalRecordCountLimitExceeded: Boolean:False
+same instance Targets[0]: True
+same instance Targets[1]: True
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.CreateMultipleResponse
+ResponseName: String:"CreateMultiple"
+Results: ParameterCollection[1]
+  Ids: Guid[][2]
+    [0]: Guid:{id1}
+    [1]: Guid:{id2}
+--- rows ---
+pipes named 'mrg ...': pb_name="mrg early 1"
+pipes named 'mrg ...': pb_name="mrg early 2"
+--- stage 40 ---
+none
+--- async ---
+job: <RemoteExecutionContext xmlns:i="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://schemas.microsoft.com/xrm/2011/Contracts"><BusinessUnitId>{businessunit}</BusinessUnitId><CorrelationId>{id3}</CorrelationId><Depth>1</Depth><InitiatingUserAgent i:nil="true" /><InitiatingUserAzureActiveDirectoryObjectId>{empty}</InitiatingUserAzureActiveDirectoryObjectId><InitiatingUserId>{user}</InitiatingUserId><InputParameters xmlns:d2p1="http://schemas.datacontract.org/2004/07/System.Collections.Generic"><KeyValuePairOfstringanyType><d2p1:key>Target</d2p1:key><d2p1:value xmlns:d4p1="Xrmd.TestPlugins.EarlyBound" i:type="d4p1:Pipe"><Attributes><KeyValuePairOfstringanyType><d2p1:key>pb_name</d2p1:key><d2p1:value xmlns:d7p1="http://www.w3.org/2001/XMLSchema" i:type="d7p1:string">mrg early 1</d2p1:value></KeyValuePairOfstringanyType></Attributes><EntityState i:nil="true" /><FormattedValues /><Id>{empty}</Id><KeyAttributes xmlns:d5p1="http://schemas.microsoft.com/xrm/7.1/Contracts" /><LogicalName>pb_pipe</LogicalName><RelatedEntities /><RowVersion i:nil="true" /></d2p1:value></KeyValuePairOfstringanyType></InputParameters><IsExecutingOffline>false</IsExecutingOffline><IsInTransaction>false</IsInTransaction><IsOfflinePlayback>false</IsOfflinePlayback><IsolationMode>2</IsolationMode><MessageName>Create</MessageName><Mode>1</Mode><OperationCreatedOn>{date}</OperationCreatedOn><OperationId>{id4}</OperationId><OrganizationId>{organization}</OrganizationId><OrganizationName>Test Org</OrganizationName><OutputParameters xmlns:d2p1="http://schemas.datacontract.org/2004/07/System.Collections.Generic"><KeyValuePairOfstringanyType><d2p1:key>id</d2p1:key><d2p1:value xmlns:d4p1="http://schemas.microsoft.com/2003/10/Serialization/" i:type="d4p1:guid">{id1}</d2p1:value></KeyValuePairOfstringanyType></OutputParameters><OwningExtension><Id>{id5}</Id><KeyAttributes xmlns:d3p1="http://schemas.microsoft.com/xrm/7.1/Contracts" xmlns:d3p2="http://schemas.datacontract.org/2004/07/System.Collections.Generic" /><LogicalName>sdkmessageprocessingstep</LogicalName><Name>Create:pb_pipe:40:1</Name><RowVersion i:nil="true" /></OwningExtension><ParentContext><BusinessUnitId>{businessunit}</BusinessUnitId><CorrelationId>{id3}</CorrelationId><Depth>1</Depth><InitiatingUserAgent i:nil="true" /><InitiatingUserAzureActiveDirectoryObjectId>{empty}</InitiatingUserAzureActiveDirectoryObjectId><InitiatingUserId>{user}</InitiatingUserId><InputParameters xmlns:d3p1="http://schemas.datacontract.org/2004/07/System.Collections.Generic"><KeyValuePairOfstringanyType><d3p1:key>Targets</d3p1:key><d3p1:value i:type="EntityCollection"><Entities><Entity xmlns:d7p1="Xrmd.TestPlugins.EarlyBound" i:type="d7p1:Pipe"><Attributes><KeyValuePairOfstringanyType><d3p1:key>pb_name</d3p1:key><d3p1:value xmlns:d10p1="http://www.w3.org/2001/XMLSchema" i:type="d10p1:string">mrg early 1</d3p1:value></KeyValuePairOfstringanyType></Attributes><EntityState i:nil="true" /><FormattedValues /><Id>{empty}</Id><KeyAttributes xmlns:d8p1="http://schemas.microsoft.com/xrm/7.1/Contracts" /><LogicalName>pb_pipe</LogicalName><RelatedEntities /><RowVersion i:nil="true" /></Entity><Entity xmlns:d7p1="Xrmd.TestPlugins.EarlyBound" i:type="d7p1:Pipe"><Attributes><KeyValuePairOfstringanyType><d3p1:key>pb_name</d3p1:key><d3p1:value xmlns:d10p1="http://www.w3.org/2001/XMLSchema" i:type="d10p1:string">mrg early 2</d3p1:value></KeyValuePairOfstringanyType></Attributes><EntityState i:nil="true" /><FormattedValues /><Id>{empty}</Id><KeyAttributes xmlns:d8p1="http://schemas.microsoft.com/xrm/7.1/Contracts" /><LogicalName>pb_pipe</LogicalName><RelatedEntities /><RowVersion i:nil="true" /></Entity></Entities><EntityName>pb_pipe</EntityName><MinActiveRowVersion i:nil="true" /><MoreRecords>false</MoreRecords><PagingCookie i:nil="true" /><RecordCountLessThanMarv>0</RecordCountLessThanMarv><TotalRecordCount>0</TotalRecordCount><TotalRecordCountLimitExceeded>false</TotalRecordCountLimitExceeded></d3p1:value></KeyValuePairOfstringanyType></InputParameters><IsExecutingOffline>false</IsExecutingOffline><IsInTransaction>false</IsInTransaction><IsOfflinePlayback>false</IsOfflinePlayback><IsolationMode>2</IsolationMode><MessageName>CreateMultiple</MessageName><Mode>0</Mode><OperationCreatedOn>{date}</OperationCreatedOn><OperationId>{id6}</OperationId><OrganizationId>{organization}</OrganizationId><OrganizationName>Test Org</OrganizationName><OutputParameters xmlns:d3p1="http://schemas.datacontract.org/2004/07/System.Collections.Generic" /><OwningExtension><Id>{empty}</Id><KeyAttributes xmlns:d4p1="http://schemas.microsoft.com/xrm/7.1/Contracts" xmlns:d4p2="http://schemas.datacontract.org/2004/07/System.Collections.Generic" /><LogicalName i:nil="true" /><Name i:nil="true" /><RowVersion i:nil="true" /></OwningExtension><ParentContext i:nil="true" /><PostEntityImages xmlns:d3p1="http://schemas.datacontract.org/2004/07/System.Collections.Generic" /><PreEntityImages xmlns:d3p1="http://schemas.datacontract.org/2004/07/System.Collections.Generic" /><PrimaryEntityId>{empty}</PrimaryEntityId><PrimaryEntityName>pb_pipe</PrimaryEntityName><RequestId>{id7}</RequestId><SecondaryEntityName>none</SecondaryEntityName><SharedVariables xmlns:d3p1="http://schemas.datacontract.org/2004/07/System.Collections.Generic" /><Stage>30</Stage><UserAzureActiveDirectoryObjectId>{empty}</UserAzureActiveDirectoryObjectId><UserId>{user}</UserId></ParentContext><PostEntityImages xmlns:d2p1="http://schemas.datacontract.org/2004/07/System.Collections.Generic" /><PreEntityImages xmlns:d2p1="http://schemas.datacontract.org/2004/07/System.Collections.Generic" /><PrimaryEntityId>{id1}</PrimaryEntityId><PrimaryEntityName>pb_pipe</PrimaryEntityName><RequestId>{id8}</RequestId><SecondaryEntityName>none</SecondaryEntityName><SharedVariables xmlns:d2p1="http://schemas.datacontract.org/2004/07/System.Collections.Generic" /><Stage>40</Stage><UserAzureActiveDirectoryObjectId>{empty}</UserAzureActiveDirectoryObjectId><UserId>{user}</UserId></RemoteExecutionContext>
+job: <RemoteExecutionContext xmlns:i="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://schemas.microsoft.com/xrm/2011/Contracts"><BusinessUnitId>{businessunit}</BusinessUnitId><CorrelationId>{id3}</CorrelationId><Depth>1</Depth><InitiatingUserAgent i:nil="true" /><InitiatingUserAzureActiveDirectoryObjectId>{empty}</InitiatingUserAzureActiveDirectoryObjectId><InitiatingUserId>{user}</InitiatingUserId><InputParameters xmlns:d2p1="http://schemas.datacontract.org/2004/07/System.Collections.Generic"><KeyValuePairOfstringanyType><d2p1:key>Target</d2p1:key><d2p1:value xmlns:d4p1="Xrmd.TestPlugins.EarlyBound" i:type="d4p1:Pipe"><Attributes><KeyValuePairOfstringanyType><d2p1:key>pb_name</d2p1:key><d2p1:value xmlns:d7p1="http://www.w3.org/2001/XMLSchema" i:type="d7p1:string">mrg early 2</d2p1:value></KeyValuePairOfstringanyType></Attributes><EntityState i:nil="true" /><FormattedValues /><Id>{empty}</Id><KeyAttributes xmlns:d5p1="http://schemas.microsoft.com/xrm/7.1/Contracts" /><LogicalName>pb_pipe</LogicalName><RelatedEntities /><RowVersion i:nil="true" /></d2p1:value></KeyValuePairOfstringanyType></InputParameters><IsExecutingOffline>false</IsExecutingOffline><IsInTransaction>false</IsInTransaction><IsOfflinePlayback>false</IsOfflinePlayback><IsolationMode>2</IsolationMode><MessageName>Create</MessageName><Mode>1</Mode><OperationCreatedOn>{date}</OperationCreatedOn><OperationId>{id9}</OperationId><OrganizationId>{organization}</OrganizationId><OrganizationName>Test Org</OrganizationName><OutputParameters xmlns:d2p1="http://schemas.datacontract.org/2004/07/System.Collections.Generic"><KeyValuePairOfstringanyType><d2p1:key>id</d2p1:key><d2p1:value xmlns:d4p1="http://schemas.microsoft.com/2003/10/Serialization/" i:type="d4p1:guid">{id2}</d2p1:value></KeyValuePairOfstringanyType></OutputParameters><OwningExtension><Id>{id5}</Id><KeyAttributes xmlns:d3p1="http://schemas.microsoft.com/xrm/7.1/Contracts" xmlns:d3p2="http://schemas.datacontract.org/2004/07/System.Collections.Generic" /><LogicalName>sdkmessageprocessingstep</LogicalName><Name>Create:pb_pipe:40:1</Name><RowVersion i:nil="true" /></OwningExtension><ParentContext><BusinessUnitId>{businessunit}</BusinessUnitId><CorrelationId>{id3}</CorrelationId><Depth>1</Depth><InitiatingUserAgent i:nil="true" /><InitiatingUserAzureActiveDirectoryObjectId>{empty}</InitiatingUserAzureActiveDirectoryObjectId><InitiatingUserId>{user}</InitiatingUserId><InputParameters xmlns:d3p1="http://schemas.datacontract.org/2004/07/System.Collections.Generic"><KeyValuePairOfstringanyType><d3p1:key>Targets</d3p1:key><d3p1:value i:type="EntityCollection"><Entities><Entity xmlns:d7p1="Xrmd.TestPlugins.EarlyBound" i:type="d7p1:Pipe"><Attributes><KeyValuePairOfstringanyType><d3p1:key>pb_name</d3p1:key><d3p1:value xmlns:d10p1="http://www.w3.org/2001/XMLSchema" i:type="d10p1:string">mrg early 1</d3p1:value></KeyValuePairOfstringanyType></Attributes><EntityState i:nil="true" /><FormattedValues /><Id>{empty}</Id><KeyAttributes xmlns:d8p1="http://schemas.microsoft.com/xrm/7.1/Contracts" /><LogicalName>pb_pipe</LogicalName><RelatedEntities /><RowVersion i:nil="true" /></Entity><Entity xmlns:d7p1="Xrmd.TestPlugins.EarlyBound" i:type="d7p1:Pipe"><Attributes><KeyValuePairOfstringanyType><d3p1:key>pb_name</d3p1:key><d3p1:value xmlns:d10p1="http://www.w3.org/2001/XMLSchema" i:type="d10p1:string">mrg early 2</d3p1:value></KeyValuePairOfstringanyType></Attributes><EntityState i:nil="true" /><FormattedValues /><Id>{empty}</Id><KeyAttributes xmlns:d8p1="http://schemas.microsoft.com/xrm/7.1/Contracts" /><LogicalName>pb_pipe</LogicalName><RelatedEntities /><RowVersion i:nil="true" /></Entity></Entities><EntityName>pb_pipe</EntityName><MinActiveRowVersion i:nil="true" /><MoreRecords>false</MoreRecords><PagingCookie i:nil="true" /><RecordCountLessThanMarv>0</RecordCountLessThanMarv><TotalRecordCount>0</TotalRecordCount><TotalRecordCountLimitExceeded>false</TotalRecordCountLimitExceeded></d3p1:value></KeyValuePairOfstringanyType></InputParameters><IsExecutingOffline>false</IsExecutingOffline><IsInTransaction>false</IsInTransaction><IsOfflinePlayback>false</IsOfflinePlayback><IsolationMode>2</IsolationMode><MessageName>CreateMultiple</MessageName><Mode>0</Mode><OperationCreatedOn>{date}</OperationCreatedOn><OperationId>{id6}</OperationId><OrganizationId>{organization}</OrganizationId><OrganizationName>Test Org</OrganizationName><OutputParameters xmlns:d3p1="http://schemas.datacontract.org/2004/07/System.Collections.Generic" /><OwningExtension><Id>{empty}</Id><KeyAttributes xmlns:d4p1="http://schemas.microsoft.com/xrm/7.1/Contracts" xmlns:d4p2="http://schemas.datacontract.org/2004/07/System.Collections.Generic" /><LogicalName i:nil="true" /><Name i:nil="true" /><RowVersion i:nil="true" /></OwningExtension><ParentContext i:nil="true" /><PostEntityImages xmlns:d3p1="http://schemas.datacontract.org/2004/07/System.Collections.Generic" /><PreEntityImages xmlns:d3p1="http://schemas.datacontract.org/2004/07/System.Collections.Generic" /><PrimaryEntityId>{empty}</PrimaryEntityId><PrimaryEntityName>pb_pipe</PrimaryEntityName><RequestId>{id7}</RequestId><SecondaryEntityName>none</SecondaryEntityName><SharedVariables xmlns:d3p1="http://schemas.datacontract.org/2004/07/System.Collections.Generic" /><Stage>30</Stage><UserAzureActiveDirectoryObjectId>{empty}</UserAzureActiveDirectoryObjectId><UserId>{user}</UserId></ParentContext><PostEntityImages xmlns:d2p1="http://schemas.datacontract.org/2004/07/System.Collections.Generic" /><PreEntityImages xmlns:d2p1="http://schemas.datacontract.org/2004/07/System.Collections.Generic" /><PrimaryEntityId>{id2}</PrimaryEntityId><PrimaryEntityName>pb_pipe</PrimaryEntityName><RequestId>{id10}</RequestId><SecondaryEntityName>none</SecondaryEntityName><SharedVariables xmlns:d2p1="http://schemas.datacontract.org/2004/07/System.Collections.Generic" /><Stage>40</Stage><UserAzureActiveDirectoryObjectId>{empty}</UserAzureActiveDirectoryObjectId><UserId>{user}</UserId></RemoteExecutionContext>

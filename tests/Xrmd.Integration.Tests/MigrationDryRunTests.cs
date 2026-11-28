@@ -63,19 +63,10 @@ public sealed class MigrationDryRunTests(XrmdFixture fx) : IDisposable
         return Guid.Parse(started["runId"]!.GetValue<string>());
     }
 
-    /// <summary>Polls the run until it is neither queued nor running, at most 180 s.</summary>
-    private static async Task<JsonObject> WaitAsync(MigrationPhaseHarness h, Guid runId)
-    {
-        var until = DateTime.UtcNow.AddSeconds(180);
-        JsonObject status;
-        do
-        {
-            await Task.Delay(250);
-            status = await ReadAsync(await h.SendAsync(HttpMethod.Get, $"admin/migrate/runs/{runId}"), HttpStatusCode.OK);
-        }
-        while (status["state"]!.GetValue<string>() is MigrationRunStates.Queued or MigrationRunStates.Running && DateTime.UtcNow < until);
-        return status;
-    }
+    /// <summary>Polls the run until it has settled (<see cref="MigrationRunPolling.IsSettled"/>), at most 180 s.</summary>
+    private static Task<JsonObject> WaitAsync(MigrationPhaseHarness h, Guid runId) =>
+        MigrationRunPolling.WaitSettledAsync(async () => await ReadAsync(await h.SendAsync(HttpMethod.Get, $"admin/migrate/runs/{runId}"), HttpStatusCode.OK),
+            TimeSpan.FromSeconds(180));
 
     private static async Task<JsonObject> ReportAsync(MigrationPhaseHarness h, Guid runId) =>
         await ReadAsync(await h.SendAsync(HttpMethod.Get, $"admin/migrate/runs/{runId}/report"), HttpStatusCode.OK);

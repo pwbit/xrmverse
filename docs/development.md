@@ -236,11 +236,12 @@ What stays on the SDK, and the step that moves it:
 
 | Still on the SDK | Moves in |
 |---|---|
-| The held window of the bridged messages | With their bodies (S.2e3c3, S.2e4, S.2f) |
-| The held window of custom actions and APIs, XAML actions, `ExecuteWorkflow`, standard Upsert and bulk | S.2e3c3 (Upsert, bulk), S.2h (workflow hooks) |
+| The held window of the bridged messages | With their bodies (S.2e3c3b, S.2e4, S.2f) |
+| The held window of custom actions and APIs, XAML actions and `ExecuteWorkflow` | S.2h |
+| The read of the outer SDK request before a lend of an Upsert or bulk level, and its read-back after stage 30 | S.2i |
 | `PrivilegeCatalog` and `SecurityCache`, which implement the SDK-typed metadata hooks `IEntityCreatedHandler` and `IEntityDeletedHandler` | With the metadata writes |
-| `OrganizationService`, `RetrieveMultipleModelRequest` and `MetadataOperations` (RetrieveEntity, RetrieveAttribute and the metadata reads) | S.2e3c3 |
-| The core entry adapter, and the callers of the `PipelineCoreSdk` extension methods in Workflows, Solution and Admin; the methods are removed | S.2e3c3 |
+| `OrganizationService`, `RetrieveMultipleModelRequest` and `MetadataOperations` (RetrieveEntity, RetrieveAttribute and the metadata reads) | S.2e3c3b |
+| The core entry adapter, and the callers of the `PipelineCoreSdk` extension methods in Workflows, Solution and Admin; the methods are removed | S.2e3c3b |
 | Mail, Elastic, Duplicates, Solutions and Rollups, and their bridges | S.2e4 |
 | Files and Audit, and the bridges that reach them | S.2f |
 | Workflows (`Xrmd.Workflows`), whose hooks the pipeline calls with a lent SDK view | S.2h |
@@ -260,7 +261,7 @@ The cost of a message is linear in its size:
   it crosses out once at the end.
 - **Residual.** In a bulk request, each inner step that reads `ParentContext` converts the whole outer request once, because the
   parent level holds all the targets. A step on the inner message of a large bulk request should not read its parent unless it
-  needs to. An inner async step or webhook step of a bulk request also reads the whole held outer request once, before its payload
+  needs to. An inner async step or webhook step of a bulk request also reads the whole registered outer request once, before its payload
   is written. That payload already held the whole parent chain before S.2e2c, so the order of growth does not change.
 
 Async payloads and webhook bodies are written from the model context. The model path (`ContextXml`, `ContextJson`) is taken only
@@ -286,7 +287,7 @@ handler body changes, and every caller sees the same objects, CLR types and in-p
   `CoreOperations`. It converts with the request's chain mirror, so the handler gets the SDK twin of the request: the same instance
   the caller or the pipeline holds, with its CLR type, its early-bound values and the marks keyed on it. A request with no chain
   mirror gets a new mirror for that call, and both directions of the call use it. Such a caller has no mirror to read a shell
-  with, so it gets the response already read in (see the read rule below). S.2e3c3 removes the adapter.
+  with, so it gets the response already read in (see the read rule below). S.2e3c3b removes the adapter.
 - **The SDK extension methods.** The callers outside the pipeline (Workflows, Solution, Admin, Core.Solutions, the custom API
   authoring, the plug-in organization service and the tests) still hold SDK objects. They call extension methods with the old names
   and SDK signatures, in `src/Xrmd.Pipeline/Sdk/PipelineCoreSdk.cs` (namespace `Xrmd.Pipeline`, so no `using` changes).
@@ -295,7 +296,7 @@ handler body changes, and every caller sees the same objects, CLR types and in-p
   request a caller passes is therefore the twin the core works on, and the response it gets is the core's own typed instance (a
   `CreateResponse` stays a `CreateResponse`). `RetrieveImageAsync` names the call's mirror for the image
   (`CoreHandOff.ReadImagesWith`), so the caller gets the core's own `Entity`. `LockExistsAsync` converts only the reference, and
-  `WrittenEntities` only the message name and the `Relationship` parameter, because the answer depends on nothing else. S.2e3c3
+  `WrittenEntities` only the message name and the `Relationship` parameter, because the answer depends on nothing else. S.2e3c3b
   moves these callers to their own boundary and removes the methods.
 
 `SdkMirror` gained a registry and response shells for this:
@@ -327,10 +328,12 @@ handler body changes, and every caller sees the same objects, CLR types and in-p
 Two `AsyncLocal` test seams, `HandlerRequest` and `ImageRead`, follow the `AsyncOperationWorker.BeforeAutoDelete` precedent. In
 production each costs one null read per call.
 
-The pipeline calls the model members. Stage 30 calls `ExecuteCoreAsync` inside the held window and takes the SDK twin of the
-returned shell, which is the core's typed instance. `ResponseToContext` reads it in only when the response is observed. The nested
-delegate gets the core's nested request as a model request, runs its SDK twin (the request the core built, with `CascadeHint` and the
-other marks), and answers with the model twin of the nested response, so the core gets the filled typed response back.
+The pipeline calls the model members. Stage 30 calls `ExecuteCoreAsync` inside the held window (at this step; S.2e3b removed the
+window for the CRUD messages, S.2e3c2b for the messages the core answers on the model, and S.2e3c3a for standard Upsert and bulk)
+and takes the SDK twin of the returned shell, which is the core's typed instance. `ResponseToContext` reads it in only when the
+response is observed. The nested delegate gets the core's nested request as a model request, runs its SDK twin (the request the core
+built, with `CascadeHint` and the other marks), and answers with the model twin of the nested response, so the core gets the filled
+typed response back.
 `StandardUpsert` locks with a `RecordReference`. The async worker sends a model `Delete` request (`Target` is the `asyncoperation`
 reference) with `CoreCall(Caller.Internal, session)`, which has no nested delegate, so no step sees it, as before.
 
@@ -439,13 +442,13 @@ step meets the budget. Each caller that reads through the SDK twin stops paying 
 the Web API, S.2h for MCP and Host).
 
 The SDK usage count of Core is 55 and that of Abstractions is 8; Pipeline stays 30. S.2e3c1 moves the other core messages, S.2e3c2a the guard and the Security row rules (S.2e3c2b the rest of stage 20, done), and
-S.2e3c3 `OrganizationService` and `RetrieveMultipleModelRequest`, removes the core entry adapter and the SDK extension methods, and
+S.2e3c3b `OrganizationService` and `RetrieveMultipleModelRequest`, removes the core entry adapter and the SDK extension methods, and
 moves the callers outside the pipeline to their own boundary.
 
 ### The other core messages on the model (S.2e3c1)
 
 S.2e3c is split in three: S.2e3c1 moves the other core messages, S.2e3c2 moves Security (S.2e3c2a the stage-20 guard and the row rules, S.2e3c2b the rest of stage 20 and the
-marks), and S.2e3c3 moves `OrganizationService`, `RetrieveMultipleModelRequest`, `MetadataOperations` and the SDK callers outside the
+marks), and S.2e3c3b moves `OrganizationService`, `RetrieveMultipleModelRequest`, `MetadataOperations` and the SDK callers outside the
 pipeline. S.2e3c1 moves the core-owned messages onto `Request`, `Record` and `TableDefinition`. External contracts do not change:
 the response goldens (86 files and `mutation.txt`), the row, plug-in context, remote context, metadata and row parameter goldens are
 byte-identical to the code before S.2e3c1, and so are the fault texts and the CLR types a caller or a plug-in sees.
@@ -474,7 +477,7 @@ byte-identical to the code before S.2e3c1, and so are the fault texts and the CL
   - Rollups: CalculateRollupField (S.2e4);
   - Files: the six file messages (S.2f);
   - Audit: the audit messages (S.2f);
-  - Metadata: RetrieveEntity, RetrieveAttribute and the metadata reads of `MetadataOperations.Retrieve` (S.2e3c3).
+  - Metadata: RetrieveEntity, RetrieveAttribute and the metadata reads of `MetadataOperations.Retrieve` (S.2e3c3b).
 
   A bridged message still runs on the held SDK request, with the same response instance and in-place changes as before
   (`mutation.txt` pins this). `CoreHandOff.HandlerRequest` fires only for bridged messages.
@@ -570,8 +573,8 @@ on SQL Server and PostgreSQL).
   | `AccessTeamRules.MarkChecked(OrganizationRequest, …)`, `CopyMark`, the `RecordTeamTarget(EntityMetadata, …, AccessRights, …)` constructor | The handshake test of `RecordTeamTests`, which marks an SDK request |
   | `SecurityAdministration.AddRoleAsync`, `RemoveRoleAsync`, `AddProfileAsync` (`EntityReference`), `RolePrivilegesAsync` (`RolePrivilege`), `FromSdk` | The migration `SecurityPhase`, tests. `RolePrivilegesAsync` keeps its SDK form because C# cannot overload on the return type; the model member is `RoleGrantsAsync` |
 
-  A twin converts only when the model member could act: `SystemTableRules.EnforceAsync` passes an unknown message, and
-  `DemandValidProcessWrite` a table other than `workflow` or `processtrigger` or the internal caller, without converting anything.
+  A twin converts only when the model member could act: `SystemTableRules.EnforceAsync` passes an unknown message
+  without converting anything.
 - **Texts keep the SDK names.** `src/Xrmd.Security/SdkTypeNames.cs` (internal, SDK-free: the SDK names are string literals) keeps
   today's texts on model values:
   - `SdkTypeNames.Of(Type)` gives the SDK simple name of a model type (`RecordReference` → "EntityReference", `ChoiceValue` →
@@ -602,7 +605,7 @@ on SQL Server and PostgreSQL).
   `AuditActionHint`.
 - **The cascade mark.** `PipelineExecutor.CoreNestedAsync` no longer copies `CascadeHint` onto the SDK twin of a core-issued nested
   request: the guard and `IsCoreCascade` read the mark on the model request. The copy in `CoreOperations.CrudNested` and the SDK
-  `CascadeHint` overloads stay, for the SDK callers of `ExecuteCoreAsync` (S.2e3c3).
+  `CascadeHint` overloads stay, for the SDK callers of `ExecuteCoreAsync` (S.2e3c3b).
 - **The bridges removed.** From `CoreSdkBridges`: `EnforceCurrencyRulesAsync`, `DemandRateInRange`, `DemandAccessTeamTemplateAsync`,
   `ApplyDuplicateRuleColumnsAsync`, `ApplyEnvironmentVariableRowAsync`, `ApplyOrganizationSettingRowAsync`, `SecurityPairs`,
   `AddRoleAsync`, `RemoveRoleAsync`, `AddProfileAsync`, `RemoveProfileAsync`, `DemandAccessAsync`, `RetrievePrincipalAccessAsync`,
@@ -657,7 +660,7 @@ endpoint and mail scenarios and the real-time workflow owner.
   | `RegistrationValidator.ValidateAsync(string, Entity, Entity?, …)` | `SolutionImporter` (S.2g) |
   | `ServiceEndpointRules.EndpointProblem(Entity, bool)` | `ServiceEndpointRulesTests` |
   | `WebhookSecrets.TakeAsync(Entity, …)` | `UpsertInterleavingTests` (PostgreSQL) |
-  | `StandardUpsert.MarkCreateOnly(OrganizationRequest)`, `IsCreateOnly(OrganizationRequest)` | `OrganizationService` (S.2e3c3) |
+  | `StandardUpsert.MarkCreateOnly(OrganizationRequest)`, `IsCreateOnly(OrganizationRequest)` | `OrganizationService` (S.2e3c3b) |
 
   The twins only the pipeline called are removed, including the SDK `DemandValidProcessWrite` and the SDK forms of the custom API
   `Before*` members. `CustomApiAuthoring.AfterDeleteAsync` sends model requests and has no twin.
@@ -668,7 +671,8 @@ endpoint and mail scenarios and the real-time workflow owner.
   secrets. When a check refuses, the model is written out if the table is one a check writes (the private `StageCheckTables`: the
   custom API and registration tables, `workflow`, `processtrigger`, `serviceendpoint` and the tables with mail secret columns), so a
   refusal after a partial change leaves the caller's Target as before. Nothing is written out for another table, and a check that
-  changed nothing crosses nothing, except the Workflows hook, which is always called through its lent view. The write-out keeps the caller's column order: `SdkRecords.Refill` of a `DataCollection` removes the
+  changed nothing crosses nothing, except on a Create or Update of `workflow`, whose Workflows hook is always
+  called through its lent view. The write-out keeps the caller's column order: `SdkRecords.Refill` of a `DataCollection` removes the
   keys the model lacks and sets the others in the model's order, so kept columns stay where they were and a new column takes a freed
   slot, as a direct write on the `Entity` did (`Checks_keep_the_caller_column_order` pins it).
 - **The Workflows hook behind its lent view.** `IWorkflowPipelineHook` keeps its SDK signatures (S.2h). The pipeline calls
@@ -693,7 +697,9 @@ endpoint and mail scenarios and the real-time workflow owner.
   `RunAsync`: it is false for a custom action or API, an Upsert, a bulk message and `ExecuteWorkflow`, whose stage 30 is not the core's
   model dispatch. The checks run first, then the held window opens (one `Out`) only when `CoreOnModel` is false: the window carries
   what the checks wrote, and a message the core answers on the model has no window at all, so the SDK request is no longer written and
-  read for it.
+  read for it. This was the rule at S.2e3c2b. Since S.2e3c3a, standard Upsert and the bulk messages open no window either
+  (`Run.MergeOnModel`), so the window remains only for custom actions and APIs, XAML actions, `ExecuteWorkflow` and the bridged
+  messages (see the S.2e3c3a section below).
 - **Conversions removed.** A message the core answers on the model loses the window's `Out` and `In` of its request. A write of a
   check table loses the `Out` before the checks and the `In` after them; one `Out` remains when a check wrote. Each stage-20 image and
   the real-time owner lookup convert nothing. The counts of `PipelineModelBoundaryTests` do not change.
@@ -705,6 +711,91 @@ The SDK usage counts are Core 51, Abstractions 8, Pipeline 25 (30 before S.2e3c2
 the twins are the new `Sdk/StageChecks.Sdk.cs`) and Security 6.
 
 The view is transitional. The other modules move to the model in S.2d to S.2h, and S.2i removes the view, the twins and the bridge.
+
+### Standard Upsert and bulk on the model (S.2e3c3a)
+
+S.2e3c3 is split in two. S.2e3c3a (this section) moves stage 30 of standard Upsert and of the bulk messages onto the model, which
+S.2e3c2b left on the held window. S.2e3c3b moves the SDK edge of the core: `OrganizationService`, `RetrieveMultipleModelRequest`,
+`MetadataOperations` and the metadata reads in `CoreSdkMessages.Bridged`, the core entry adapter, and the callers of the
+`PipelineCoreSdk` extension methods in Workflows, Solution and Admin. The two do not depend on each other. External contracts do not
+change: the responses (CLR types included), faults (codes, texts and order), stored rows, plug-in contexts, asynchronous payloads and the
+in-place changes to the caller's request (column order and shared instances included) are the same as before. The goldens of earlier
+steps are byte-identical, and 25 new goldens in `tests/fixtures/merge-golden/` (`MergeGoldenTests`, written on the code before the step)
+pin the Upsert, CreateMultiple, UpdateMultiple, UpsertMultiple and DeleteMultiple scenarios: the caller's request after the call, the
+stage-40 contexts and images, the stored rows, the async operations and the faults.
+
+- **What exists.** The standard-table bulk messages the pipeline runs are `CreateMultiple`, `UpdateMultiple` and `UpsertMultiple`
+  (`BulkStage.Handles`). `DeleteMultiple` never reaches the pipeline as a bulk message: on a standard table `OrganizationService`
+  refuses it with Dataverse's text, and on an elastic table it runs each target as a single Delete. The elastic Upsert and the elastic
+  bulk path move with Elastic in S.2e4.
+- **Model members.** `BulkTargets` and `StandardUpsert` are `partial`; `BulkStage` has no SDK half. The model half is SDK-free: no
+  `Microsoft.*` using and no SDK type name, also not in a cref. Every fault text is the text of the SDK member, through private
+  helpers that both halves share.
+
+  | Class | Model members |
+  |---|---|
+  | `BulkTargets` | the constants, `MessageOf`, `IsRepeated`; `RecordTargetList` and `Read(Request)` (the `Record` targets of the four bulk messages, the `RecordReference` targets of DeleteMultiple); `DemandOneTable(RecordTargetList, string?)`; `IdOf(TableDefinition, object?)`; `TargetIds(Request, TableDefinition, Guid[]?)` |
+  | `StandardUpsert` | `Applies(string?, TableDefinition?)`; `ExecuteAsync(Record, TableDefinition, IPipelineCore, DataSession, Func<Request, Task<Response>>, bool, ct) : Task<(bool Created, Guid Id)>`; `CarryParameters(Request, Request)`; `MarkCreateOnly(Request)`, `IsCreateOnly(Request)`; the private `Copy`, which copies `LogicalName`, the new `Id`, `RowVersion`, the attributes in source order (without the computed values: `ComputedColumnRules.IsComputed` and `RollupColumns.IsRollupValue` over `TableDefinition.Attributes`) and `KeyAttributes`, and nothing else |
+  | `BulkStage` | `Handles(string?)`, `FromPluginMessage(string)`; `Applies(string?, TableDefinition?)`; `ExecuteAsync(Request, TableDefinition, Func<Request, Task<Response>>, ct) : Task<Response?[]>`, the model response of each target in order, null for a repeated UpdateMultiple target that did not run |
+
+- **SDK halves.** One file, `src/Xrmd.Pipeline/Sdk/MergeStages.Sdk.cs`, holds what callers outside the pipeline still call with SDK types:
+
+  | SDK member | Callers |
+  |---|---|
+  | `BulkTargets.TargetList`, `Read(OrganizationRequest)`, `TableOf`, `DemandOneTable(TargetList, …)`, `TableNameOf`, `IdOf(EntityMetadata, …)`, `DemandDistinctIds`, `Prepare`, `Response` | `OrganizationService`, `ElasticBulkMessages` (S.2e3c3b, S.2e4), and the pipeline's primary entity and bulk response |
+  | `StandardUpsert.MarkCreateOnly(OrganizationRequest)`, `IsCreateOnly(OrganizationRequest)`, `CopyCreateOnly(OrganizationRequest, Request)` and the table they key | `OrganizationService` (S.2e3c3b), `RunAsync` |
+
+  The SDK members that only stage 30 called are removed: `StandardUpsert.ExecuteAsync`, `Applies` and `Copy` on SDK types,
+  `BulkStage.ExecuteAsync` and `Applies` on SDK types, and `BulkTargets.TargetIds(OrganizationRequest, …)`. One rule remains for the
+  parameters of an inner request, the model `StandardUpsert.CarryParameters(Request, Request)`, shared by the Upsert and bulk.
+- **Typed responses.** The pipeline's public entry still returns an `OrganizationResponse` until S.2i, so the response is the typed SDK
+  object of today. The Upsert branch builds the `UpsertResponse` (`ResponseName` "Upsert", `RecordCreated`, `Target` as a new
+  `EntityReference`) from the `(Created, Id)` of `StandardUpsert.ExecuteAsync`. The bulk branch (`BulkAsync`) builds the response with
+  the SDK `BulkTargets.Response` from the SDK twins of the model singles, so an `UpsertMultipleResponse` holds the inner runs' own
+  `UpsertResponse` instances. A single without its own SDK twin is a server bug and throws `InvalidOperationException`; it cannot
+  happen today, because `RunInnerAsync` always answers with the paired model response or a shell, which pairs. Both are built in
+  `PipelineExecutor.Sdk.cs`.
+- **Inner requests from twins.** `RunInnerAsync(Request, InnerKind, Run, ct)` pairs the model inner request with today's typed SDK
+  request (`CreateRequest`, `UpdateRequest` or `UpsertRequest`) and fills its `Parameters` by assignment, never by writing a `Record`
+  out: each model value takes its existing SDK twin from the chain mirror, and a value without one is written out. The only `Record`
+  without a twin is the Upsert's copy. `PairUpsertCopy` gives it a new `Entity` whose attributes and key attributes are, key by key in
+  the copy's order, the instances the outer Target's SDK twin holds. That twin holds every key of the copy, because the Target crossed
+  in from the caller's request and every change before stage 30 is written out, so a missing twin or key throws
+  `InvalidOperationException` (a server bug) instead of a silent written-out value. So an inner step sees the same instances in the
+  same order as before, the inner Create's or Update's Target is the caller's own `Entity` for a bulk row, and the inner crossing
+  pays the same one `In` as before. The answer is the model twin of the inner response, and the Upsert reads it in only when it is an
+  unread shell (the read rule of S.2e3a). The test seam `PipelineExecutor.InnerRequest` (`AsyncLocal`, internal) lets a test see each
+  inner SDK request.
+- **No window at the core.** `Run.MergeOnModel` is true when `UpsertTable` or `BulkTable` is set. It joins `CoreOnModel` in
+  `StageChecksAsync`, which writes the request out once when a check changed it. `HoldAtCoreAsync` of a merge run neither writes the
+  model out nor calls `CoreHandOff.Hold`: the SDK request is already current, because the guard, the checks and the create-only guard
+  write out what they change. The held window now opens only for custom actions and APIs, XAML actions and `ExecuteWorkflow` (S.2h) and
+  for the bridged messages (S.2e3c3b, S.2e4, S.2f). Two reads of the outer SDK request stay until S.2i: the read before a lend of the
+  level (`HeldLevels`, `SyncBoundaries`), and the read-back in `ReleaseCore` after stage 30. The merge level is registered in `AtCore`
+  for them (`HeldAtCore`, `OwnsAtCore`). They keep today's semantics for SDK instances the caller shares: an inner step that changes in
+  place an `OptionSetValue` held by several rows (or by the caller's Upsert Target and the copy) changes the caller's objects as before,
+  the next inner crossing reads it, and the outer stage 40 sees what the inner runs did. A model-authoritative outer level would write
+  stale values over the caller's shared instances, so it is not an option without a recorded divergence.
+- **Images and ids on the model.** The pre and post image collections of a bulk run take their ids from the model request
+  (`BulkTargets.TargetIds(run.Request, run.BulkTable, created)`, with `created` the `Ids` of the SDK response of a CreateMultiple), and
+  `Run.UpsertTable` and `Run.BulkTable` are `TableDefinition`s read with `IMetadataStore.GetTable`. `Run.StandardTable` and
+  `CommitsPerStage` keep their `EntityMetadata`. A missing Upsert Target keeps its text: "Required parameter 'Target' of request
+  'Upsert' is missing or not a Entity." (`SdkTypeNames.Of(typeof(Record))`).
+- **Conversions removed.** A merge run loses the window's opening `Out` of its whole request, and an inner request costs what it cost
+  before (its Target is assigned, not written, and read in once at the inner crossing). The probes in `MergeGoldenTests` count
+  `SyncCount` of one run each on a fresh mirror:
+
+  | Probe | Before | Task 3 | Task 4 |
+  |---|---|---|---|
+  | Upsert that creates | 18 | 16 (−2, the `Out` of the Upsert request) | 16 |
+  | CreateMultiple of 10 | 156 | 156 | 144 (−12, the `Out` of the CreateMultiple request) |
+  | UpsertMultiple of 2, one existing | 39 | 35 (−4, the window `Out` of the two inner Upserts) | 31 (−4, the `Out` of the UpsertMultiple request) |
+
+  A bulk run of T targets of size S now pays about 2·T·S (each inner `In` and the closing `In`) instead of 3·T·S. `MergeModelTests`
+  asserts these counts and that no merge run fires `CoreHandOff.Held`. The counts of `PipelineModelBoundaryTests` only go down.
+
+The SDK usage counts are Core 51, Abstractions 8, Pipeline 23 (25 before S.2e3c3a: `StandardUpsert.cs` and `BulkStage.cs` name no SDK
+type any more, and `BulkTargets.cs` became SDK-free as its SDK half moved into `Sdk/MergeStages.Sdk.cs`, which counts) and Security 6.
 
 ## Tests on PostgreSQL
 

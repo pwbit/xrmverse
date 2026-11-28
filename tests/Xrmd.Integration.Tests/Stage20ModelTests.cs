@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Xrm.Sdk;
@@ -342,44 +343,41 @@ public sealed class Stage20ModelTests(XrmdFixture fx)
     /// The solution import keeps the registration validation through the SDK twin of
     /// <see cref="RegistrationValidator.ValidateAsync(string, Record, Record?, Xrmd.Abstractions.DataSession, CancellationToken)"/>: the
     /// fixture's plug-in assembly, which the file names only, is stored with the columns the model member fills for the same content.
+    /// The import runs on a host and a database of its own: clearing an import (<see cref="SolutionImportTests.ClearImportAsync(XrmdFixture)"/>)
+    /// deletes every view, form, site map and app of the database, the seeded ones of the "xrmd" collection's other tests included.
     /// </summary>
     [Fact]
     public async Task Solution_import_keeps_registration_validation()
     {
         var assemblyId = new Guid("6b1c3f4e-1a2b-4c3d-8e9f-0a1b2c3d4e10"); // the fixture's PluginAssemblyId
-        await TestEntities.EnsurePipeAsync(fx.App.Services.GetRequiredService<IMetadataStore>());
-        await fx.App.Services.GetRequiredService<SdkMessageCatalog>().EnsureAsync(default);
-        await SolutionImportTests.ClearImportAsync(fx);
-        try
+        await using var app = fx.WithOwnDatabase(_ => { });
+        var services = app.Services;
+        var connectionString = services.GetRequiredService<IConfiguration>().GetConnectionString("Org")!;
+        await TestEntities.EnsurePipeAsync(services.GetRequiredService<IMetadataStore>());
+        await services.GetRequiredService<SdkMessageCatalog>().EnsureAsync(default);
+        var model = new Record("pluginassembly") { ["name"] = "Xrmd.TestPlugins", ["content"] = Convert.ToBase64String(PluginTestHelper.TestPluginBytes) };
+        await using (var conn = await TestProvider.OpenAsync(connectionString))
         {
-            var model = new Record("pluginassembly") { ["name"] = "Xrmd.TestPlugins", ["content"] = Convert.ToBase64String(PluginTestHelper.TestPluginBytes) };
-            await using (var conn = await TestProvider.OpenAsync(fx.ConnectionString))
-            {
-                await using var tx = await conn.BeginTransactionAsync();
-                (await fx.App.Services.GetRequiredService<RegistrationValidator>()
-                    .ValidateAsync("pluginassembly", model, null, new DataSession(conn, tx), default)).Should().BeTrue();
-                await tx.RollbackAsync();
-            }
-
-            await ServiceFor(fx, fx.AdminObjectId).ExecuteAsync(new ImportSolutionRequest
-            {
-                CustomizationFile = SolutionFixtureZip.Build(), ImportJobId = Guid.NewGuid(),
-            });
-
-            await using var read = await TestProvider.OpenAsync(fx.ConnectionString);
-            await using var cmd = TestSql.Command(read,
-                "SELECT name, version, culture, publickeytoken FROM data.pluginassembly WHERE pluginassemblyid = @id");
-            cmd.Parameters.AddWithValue("@id", assemblyId);
-            await using var rd = await cmd.ExecuteReaderAsync();
-            (await rd.ReadAsync()).Should().BeTrue("the import wrote the assembly");
-            new[] { rd.GetString(0), rd.GetString(1), rd.GetString(2), rd.GetString(3) }.Should().Equal(
-                (string)model["name"]!, (string)model["version"]!, (string)model["culture"]!, (string)model["publickeytoken"]!);
-            rd.GetString(3).Should().Be("a15f04ad73430aaf");
+            await using var tx = await conn.BeginTransactionAsync();
+            (await services.GetRequiredService<RegistrationValidator>()
+                .ValidateAsync("pluginassembly", model, null, new DataSession(conn, tx), default)).Should().BeTrue();
+            await tx.RollbackAsync();
         }
-        finally
+
+        await TestServices.NewOrganizationService(services, fx.AdminObjectId).ExecuteAsync(new ImportSolutionRequest
         {
-            await SolutionImportTests.ClearImportAsync(fx);
-        }
+            CustomizationFile = SolutionFixtureZip.Build(), ImportJobId = Guid.NewGuid(),
+        });
+
+        await using var read = await TestProvider.OpenAsync(connectionString);
+        await using var cmd = TestSql.Command(read,
+            "SELECT name, version, culture, publickeytoken FROM data.pluginassembly WHERE pluginassemblyid = @id");
+        cmd.Parameters.AddWithValue("@id", assemblyId);
+        await using var rd = await cmd.ExecuteReaderAsync();
+        (await rd.ReadAsync()).Should().BeTrue("the import wrote the assembly");
+        new[] { rd.GetString(0), rd.GetString(1), rd.GetString(2), rd.GetString(3) }.Should().Equal(
+            (string)model["name"]!, (string)model["version"]!, (string)model["culture"]!, (string)model["publickeytoken"]!);
+        rd.GetString(3).Should().Be("a15f04ad73430aaf");
     }
 
     // ---- Task 4: service endpoints and mail secrets on the model (Decisions 2 and 6) -------------------------------------

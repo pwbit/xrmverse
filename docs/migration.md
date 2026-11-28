@@ -256,7 +256,8 @@ migration job, and the audit, change tracking and elastic TTL clean-ups skip the
 (202). A failed or cancelled run continues with `POST .../resume` and `{"passphrase": "..."}` from the first phase not
 completed. The passphrase is kept only in memory, never in the database: after a restart, a run that was running is
 `failed` with the message to resume it, and the resume asks for the passphrase again. `POST .../finalize` closes a run
-that will not finalize on its own and lifts the lock; it deletes the uploaded package unless `{"keepPackage": true}`. A
+that will not finalize on its own and lifts the lock; it deletes the uploaded package unless `{"keepPackage": true}`. If the
+package cannot be deleted, the run is not finalized and keeps the lock: finalize it again. A
 queued or running run must be cancelled first.
 
 ### Phases

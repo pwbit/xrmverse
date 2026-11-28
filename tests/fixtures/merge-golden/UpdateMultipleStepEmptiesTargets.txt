@@ -1,0 +1,60 @@
+=== PipelineExecutor.ExecuteAsync as the System Administrator ===
+--- request ---
+Request: UpdateMultipleRequest
+  RequestName: String:"UpdateMultiple"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Targets: EntityCollection
+      EntityName: String:"xrmv_order"
+      Entities: DataCollection[2]
+        [0]: Entity(xrmv_order)
+          Id: Guid:{a:a}
+          EntityState: null
+          RowVersion: null
+          Attributes: AttributeCollection[3]
+            xrmv_name: String:"mrg um a changed"
+            xrmv_status: OptionSetValue
+              Value: Int32:128830000
+            xrmv_amount: Decimal:12.5
+          FormattedValues: FormattedValueCollection[0]
+          KeyAttributes: KeyAttributeCollection[0]
+          RelatedEntities: RelatedEntityCollection[0]
+        [1]: Entity(xrmv_order)
+          Id: Guid:{a:b}
+          EntityState: null
+          RowVersion: null
+          Attributes: AttributeCollection[3]
+            xrmv_name: String:"mrg um b changed"
+            xrmv_status: OptionSetValue
+              Value: Int32:128830000
+            xrmv_amount: Decimal:12.5
+          FormattedValues: FormattedValueCollection[0]
+          KeyAttributes: KeyAttributeCollection[0]
+          RelatedEntities: RelatedEntityCollection[0]
+      MoreRecords: Boolean:False
+      PagingCookie: null
+      TotalRecordCount: Int32:0
+      TotalRecordCountLimitExceeded: Boolean:False
+--- fault ---
+Fault: XrmdFaultException 0x80040203 400 "Request 'UpdateMultiple' needs at least one target."
+--- request after ---
+Request: UpdateMultipleRequest
+  RequestName: String:"UpdateMultiple"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Targets: EntityCollection
+      EntityName: String:"xrmv_order"
+      Entities: DataCollection[0]
+      MoreRecords: Boolean:False
+      PagingCookie: null
+      TotalRecordCount: Int32:0
+      TotalRecordCountLimitExceeded: Boolean:False
+--- response ---
+none
+--- rows ---
+orders named 'mrg ...': xrmv_orderid={a:a}, xrmv_name="mrg um a", xrmv_status=128830000, xrmv_amount=null
+orders named 'mrg ...': xrmv_orderid={a:b}, xrmv_name="mrg um b", xrmv_status=128830000, xrmv_amount=null
+--- stage 40 ---
+none
+--- async ---
+none

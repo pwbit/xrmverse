@@ -1,0 +1,106 @@
+=== PipelineExecutor.ExecuteAsync as the System Administrator ===
+--- request ---
+Request: UpdateMultipleRequest
+  RequestName: String:"UpdateMultiple"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Targets: EntityCollection
+      EntityName: String:"xrmv_order"
+      Entities: DataCollection[2]
+        [0]: Entity(xrmv_order)
+          Id: Guid:{a:a}
+          EntityState: null
+          RowVersion: null
+          Attributes: AttributeCollection[3]
+            xrmv_name: String:"mrg um a changed"
+            xrmv_status: OptionSetValue
+              Value: Int32:128830000
+            xrmv_amount: Decimal:12.5
+          FormattedValues: FormattedValueCollection[0]
+          KeyAttributes: KeyAttributeCollection[0]
+          RelatedEntities: RelatedEntityCollection[0]
+        [1]: Entity(xrmv_order)
+          Id: Guid:{a:b}
+          EntityState: null
+          RowVersion: null
+          Attributes: AttributeCollection[3]
+            xrmv_name: String:"mrg um b changed"
+            xrmv_status: OptionSetValue
+              Value: Int32:128830000
+            xrmv_amount: Decimal:12.5
+          FormattedValues: FormattedValueCollection[0]
+          KeyAttributes: KeyAttributeCollection[0]
+          RelatedEntities: RelatedEntityCollection[0]
+      MoreRecords: Boolean:False
+      PagingCookie: null
+      TotalRecordCount: Int32:0
+      TotalRecordCountLimitExceeded: Boolean:False
+--- fault ---
+none
+--- request after ---
+Request: UpdateMultipleRequest
+  RequestName: String:"UpdateMultiple"
+  RequestId: null
+  Parameters: ParameterCollection[1]
+    Targets: EntityCollection
+      EntityName: String:"xrmv_order"
+      Entities: DataCollection[2]
+        [0]: Entity(xrmv_order)
+          Id: Guid:{a:a}
+          EntityState: null
+          RowVersion: null
+          Attributes: AttributeCollection[3]
+            xrmv_name: String:"mrg um a changed"
+            xrmv_status: OptionSetValue
+              Value: Int32:128830000
+            xrmv_amount: Decimal:12.5
+          FormattedValues: FormattedValueCollection[0]
+          KeyAttributes: KeyAttributeCollection[0]
+          RelatedEntities: RelatedEntityCollection[0]
+        [1]: Entity(xrmv_order)
+          Id: Guid:{a:c}
+          EntityState: null
+          RowVersion: null
+          Attributes: AttributeCollection[3]
+            xrmv_name: String:"mrg um b changed"
+            xrmv_status: OptionSetValue
+              Value: Int32:128830000
+            xrmv_amount: Decimal:12.5
+          FormattedValues: FormattedValueCollection[0]
+          KeyAttributes: KeyAttributeCollection[0]
+          RelatedEntities: RelatedEntityCollection[0]
+      MoreRecords: Boolean:False
+      PagingCookie: null
+      TotalRecordCount: Int32:0
+      TotalRecordCountLimitExceeded: Boolean:False
+--- response ---
+Type: Microsoft.Xrm.Sdk.Messages.UpdateMultipleResponse
+ResponseName: String:"UpdateMultiple"
+Results: ParameterCollection[0]
+--- rows ---
+orders named 'mrg ...': xrmv_orderid={a:a}, xrmv_name="mrg um a changed", xrmv_status=128830000, xrmv_amount=12.50
+orders named 'mrg ...': xrmv_orderid={a:b}, xrmv_name="mrg um b", xrmv_status=128830000, xrmv_amount=null
+orders named 'mrg ...': xrmv_orderid={a:c}, xrmv_name="mrg um b changed", xrmv_status=128830000, xrmv_amount=12.50
+--- stage 40 ---
+step UpdateMultiple|20|0|1
+  targets: EntityName=xrmv_order, 2 entities
+    [0] Entity(xrmv_order) id={a:a} {xrmv_name="mrg um a changed", xrmv_status=OptionSetValue(128830000), xrmv_amount=Decimal:12.5}
+    [1] Entity(xrmv_order) id={a:c} {xrmv_name="mrg um b changed", xrmv_status=OptionSetValue(128830000), xrmv_amount=Decimal:12.5}
+  pre image collections: 2
+    [0] pre: Entity(xrmv_order) id={a:a} {xrmv_name="mrg um a", xrmv_status=OptionSetValue(128830000)}
+    [1] pre: Entity(xrmv_order) id={a:b} {xrmv_name="mrg um b", xrmv_status=OptionSetValue(128830000)}
+  post image collections: 0
+  parent: none
+step UpdateMultiple|40|0|1
+  targets: EntityName=xrmv_order, 2 entities
+    [0] Entity(xrmv_order) id={a:a} {xrmv_name="mrg um a changed", xrmv_status=OptionSetValue(128830000), xrmv_amount=Decimal:12.5}
+    [1] Entity(xrmv_order) id={a:c} {xrmv_name="mrg um b changed", xrmv_status=OptionSetValue(128830000), xrmv_amount=Decimal:12.5}
+  pre image collections: 2
+    [0] pre: Entity(xrmv_order) id={a:a} {xrmv_name="mrg um a"}
+    [1] pre: Entity(xrmv_order) id={a:b} {xrmv_name="mrg um b"}
+  post image collections: 2
+    [0] post: Entity(xrmv_order) id={a:a} {xrmv_name="mrg um a changed", xrmv_status=OptionSetValue(128830000)}
+    [1] post: Entity(xrmv_order) id={a:c} {xrmv_name="mrg um b changed", xrmv_status=OptionSetValue(128830000)}
+  parent: none
+--- async ---
+none
