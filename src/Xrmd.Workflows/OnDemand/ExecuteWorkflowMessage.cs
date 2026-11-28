@@ -4,6 +4,7 @@ using Xrmd.Abstractions;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Records;
 using Xrmd.Pipeline;
 using Xrmd.Pipeline.Sandbox;
 using Xrmd.Security;
@@ -73,7 +74,7 @@ public sealed class ExecuteWorkflowMessage(WorkflowRegistry registry, WorkflowSt
             ? entity
             : throw XrmdFaultException.InvalidArgument($"The workflow '{name}' runs on the table '{activation.PrimaryEntity}', which does not exist.");
         var record = new EntityReference(table.LogicalName, entityId);
-        if (await core.RetrieveImageAsync(record, [table.PrimaryIdAttribute], s, ct) is null)
+        if (await core.RetrieveImageAsync(new RecordReference { LogicalName = table.LogicalName, Id = entityId }, [table.PrimaryIdAttribute], s, ct) is null)
             throw XrmdFaultException.ObjectDoesNotExist(table.LogicalName, entityId);
         await guard.DemandAccessAsync(invocation.Caller, record, AccessRights.ReadAccess, s, ct);
 

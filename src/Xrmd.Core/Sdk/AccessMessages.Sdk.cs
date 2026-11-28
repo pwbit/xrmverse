@@ -2,6 +2,7 @@ using Microsoft.Xrm.Sdk;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Sdk;
 using Xrmd.Core.Errors;
+using Xrmd.Pipeline;
 
 namespace Xrmd.Core;
 

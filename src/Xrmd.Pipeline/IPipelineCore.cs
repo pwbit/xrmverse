@@ -13,22 +13,24 @@ public delegate Task<Response> NestedRequest(Request request, CancellationToken 
 /// <summary>
 /// How the core runs a message: as <paramref name="Caller"/>, in <paramref name="Session"/>, with <paramref name="Nested"/> for the
 /// messages it writes through the pipeline (null when the caller has no pipeline), and with the columns the server writes on a Create
-/// (<paramref name="ServerSetValues"/>, plan 4.1c, <see cref="InvocationContext.ServerSetValues"/>; null for every other call).
+/// (<paramref name="ServerSetValues"/>, plan 4.1c; null for every other call). S.2e3c3b1 (Decision 3): the values that reach the core
+/// are model values; <see cref="InvocationContext.ServerSetValues"/> holds SDK values, which the SDK boundary
+/// (<see cref="CoreSdkBoundary.CoreAsync"/>) reads in.
 /// </summary>
 public sealed record CoreCall(Caller Caller, DataSession Session, NestedRequest? Nested = null,
     IReadOnlyDictionary<string, object?>? ServerSetValues = null);
 
 /// <summary>
-/// The data-layer operations the pipeline calls into (stage 30 core and the lookups plugins need), on the model. The SDK signatures
-/// of the callers that still hold SDK objects are extension methods of the same names (<see cref="PipelineCoreSdk"/>).
+/// The data-layer operations the pipeline calls into (stage 30 core and the lookups plugins need), on the model only (S.2e3c3b1,
+/// Decision 2). The SDK signatures of the callers that still hold SDK objects are the members of the SDK boundary
+/// (<see cref="CoreSdkBoundary"/>).
 /// <para>
-/// A response of <see cref="ExecuteCoreAsync"/> or <see cref="ExecuteNonPipelineAsync"/> is the model twin of the core's typed SDK
-/// response in the request's mirror (<c>SdkMirror.For(request)</c>), and <c>mirror.Out(response)</c> gives back the core's typed
-/// instance. When the caller registered a mirror for the request (the pipeline and the SDK extension methods do), the response is
-/// usually an unread <em>shell</em> (<c>SdkMirror.Shell</c>): its results are empty until the twin is read in, so every model read or
-/// write of it calls <c>mirror.In(twin)</c> first, and a response nobody observes is never converted. When the request has no
-/// registered mirror, the core registers a new one and returns the response already read in, so a model caller without a mirror can
-/// read its results directly.
+/// A message on the model (<see cref="AnswersOnModel"/>, and the messages answered outside the pipeline whose body runs on the model)
+/// answers with a model response of its own: the core registers no mirror for the request, pairs nothing with the response and keeps
+/// no SDK object in step. A bridged message crosses to its SDK handler with the request's mirror (<c>SdkMirror.For(request)</c>, or a
+/// new one the core registers): when the caller registered the mirror, the response is usually an unread <em>shell</em>
+/// (<c>SdkMirror.Shell</c>) of the handler's typed response, whose results are empty until the twin is read in, so every model read or
+/// write of it calls <c>mirror.In(twin)</c> first; when the core registered it, the response comes back already read in.
 /// </para>
 /// </summary>
 public interface IPipelineCore
@@ -42,9 +44,10 @@ public interface IPipelineCore
     /// (e.g. the Update of a record by CommitFileBlocksUpload) uses it.
     /// </para>
     /// <para>
-    /// <see cref="CoreCall.ServerSetValues"/> are the columns the server writes on a Create (plan 4.1c,
-    /// <see cref="InvocationContext.ServerSetValues"/>): set after the Target is validated, so a column not valid for Create may be
-    /// among them; the Target never holds them. Null for every other call.
+    /// <see cref="CoreCall.ServerSetValues"/> are the columns the server writes on a Create (plan 4.1c), as model values (S.2e3c3b1; the
+    /// SDK values of <see cref="InvocationContext.ServerSetValues"/> are read in by <see cref="CoreSdkBoundary.CoreAsync"/>): set after
+    /// the Target is validated, so a column not valid for Create may be among them; the Target never holds them. Null for every other
+    /// call.
     /// </para>
     /// </summary>
     /// <exception cref="InvalidOperationException"><see cref="CoreCall.ServerSetValues"/> is set on a message other than Create, or

@@ -47,7 +47,7 @@ internal sealed class WorkflowActivityServices(PipelineExecutor executor, IPipel
     {
         ArgumentNullException.ThrowIfNull(request);
         if (core.IsNonPipelineMessage(request.RequestName))
-            return Call(ct => WithSessionAsync((s, c) => core.ExecuteNonPipelineAsync(request, caller, s, c), ct));
+            return Call(ct => WithSessionAsync((s, c) => CoreSdkBoundary.ExecuteNonPipelineAsync(core, request, caller, s, c), ct));
         var invocation = run.Invocation with { Caller = caller, Depth = run.Invocation.Depth + 1 };
         return Call(async ct =>
         {

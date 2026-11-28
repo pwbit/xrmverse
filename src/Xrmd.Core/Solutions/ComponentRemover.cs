@@ -8,6 +8,8 @@ using Xrmd.Core.Errors;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Computed;
 using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Messages;
+using Xrmd.Model.Records;
 using Xrmd.Pipeline;
 using Xrmd.Pipeline.CustomApis;
 using Xrmd.Pipeline.Registration;
@@ -356,7 +358,8 @@ public sealed class ComponentRemover(IMetadataStore store, IPipelineCore core, M
     private async Task DeleteRowAsync(DataSession s, Caller caller, string table, Guid id, CancellationToken ct)
     {
         // Plan 2.14 (W4): the jobs of a removed process that have not ended are canceled by the core's delete (IRecordWriteObserver).
-        await core.ExecuteCoreAsync(new DeleteRequest { Target = new EntityReference(table, id) }, caller, s, ct);
+        await core.ExecuteCoreAsync(new Request { Name = "Delete", Parameters = { ["Target"] = new RecordReference { LogicalName = table, Id = id } } },
+            new CoreCall(caller, s), ct);
     }
 
     /// <summary>The delete request of a metadata component, by its name in <paramref name="meta"/>.</summary>

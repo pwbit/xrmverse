@@ -418,7 +418,7 @@ public sealed class WorkflowAuthoring(IDbConnectionFactory factory, PipelineExec
             cmd.AddParameter("@id", DbType.Guid, id);
             if (await cmd.ExecuteScalarAsync(ct) is null) return null;
         }
-        return await core.RetrieveImageAsync(new EntityReference(S.Table, id), null, s, ct) is { } entity ? WorkflowStore.FromEntity(entity) : null;
+        return await CoreSdkBoundary.RetrieveImageAsync(core, new EntityReference(S.Table, id), null, s, ct) is { } entity ? WorkflowStore.FromEntity(entity) : null;
     }
 
     private static async Task<bool> InSolutionAsync(DataSession s, string solution, Guid id, CancellationToken ct)

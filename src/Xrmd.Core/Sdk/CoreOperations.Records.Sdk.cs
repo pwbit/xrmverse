@@ -12,6 +12,7 @@ using Xrmd.Metadata.Sdk;
 using Xrmd.Model.Metadata;
 using Xrmd.Model.Records;
 using Xrmd.Model.Security;
+using Xrmd.Pipeline;
 using Xrmd.Query.Model;
 
 namespace Xrmd.Core;

@@ -1,5 +1,7 @@
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
+using Xrmd.Abstractions.Sdk;
+using Xrmd.Model.Messages;
 using Xrmd.Query.Model;
 
 namespace Xrmd.Core;
@@ -31,4 +33,17 @@ internal sealed class RetrieveMultipleModelRequest : OrganizationRequest
 
     /// <summary>True while <c>Query</c> is still the placeholder (no plug-in replaced it).</summary>
     public bool UsesModel => Parameters.TryGetValue("Query", out var query) && ReferenceEquals(query, _placeholder);
+
+    /// <summary>
+    /// S.2e3c3b1 (Decision 5; S.2e3b Decision 6, moved from the core's entry adapter): attaches the query model a front end built
+    /// (<see cref="QueryModelHint.Attach"/>) to the model RetrieveMultiple <paramref name="request"/> while its SDK twin in the request's
+    /// mirror (<see cref="SdkMirror.For"/>) is one of these still holding its placeholder (<see cref="UsesModel"/>); nothing otherwise.
+    /// </summary>
+    internal static void AttachHint(Request request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (SdkMirror.For(request) is { } mirror && mirror.TryGetSdk(request, out var twin)
+            && twin is RetrieveMultipleModelRequest { UsesModel: true } withModel)
+            QueryModelHint.Attach(request, withModel.Model);
+    }
 }

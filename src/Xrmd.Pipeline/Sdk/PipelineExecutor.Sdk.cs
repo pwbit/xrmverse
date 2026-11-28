@@ -560,13 +560,15 @@ public sealed partial class PipelineExecutor
 
     /// <summary>
     /// The core operation on the model (S.2e3a): the core gets the model request, which the pipeline holds (<see cref="CoreHandOff"/>),
-    /// so its handler runs on <see cref="Run.Sdk"/> without a conversion. The answer is an unread shell paired in the chain's mirror; the
-    /// response is its typed SDK twin, the core's own object, which <see cref="ResponseToContext"/> reads in only when it is observed.
+    /// so a bridged handler runs on <see cref="Run.Sdk"/> without a conversion. S.2e3c3b1 (Decision 6): the call goes through the SDK
+    /// boundary (<see cref="CoreSdkBoundary.CoreAsync"/>) with the chain's mirror, which pairs the core's model answer with today's typed
+    /// response; a bridged answer is an unread shell paired in the same mirror. The response is that typed SDK twin, which
+    /// <see cref="ResponseToContext"/> reads in only when it is observed.
     /// </summary>
     private async Task<OrganizationResponse> CoreOperationAsync(Run run, CancellationToken ct)
     {
         var invocation = run.Invocation;
-        var shell = await core.ExecuteCoreAsync(run.Request,
+        var shell = await CoreSdkBoundary.CoreAsync(core, run.Request, run.Mirror,
             new CoreCall(invocation.Caller, run.Session, (nested, c) => CoreNestedAsync(nested, run, c), invocation.ServerSetValues), ct);
         run.CoreResponse = shell;
         return run.Mirror.TryGetSdk(shell, out var twin) && twin is OrganizationResponse response
@@ -577,8 +579,8 @@ public sealed partial class PipelineExecutor
     /// <summary>
     /// A request the core issues (the record Update of CommitFileBlocksUpload, a delete cascade) runs as a plug-in-issued request would:
     /// one level deeper, with (a copy of) this message's context as its ParentContext. Plan 4.1c: it keeps the server shared variables
-    /// (the queueitem Create of a delivery's AddToQueue carries the delivery's), not the server values. The core's adapter has just read
-    /// the request in, so its SDK twin is the core's own request (its type). The guard reads the core's marks, such as
+    /// (the queueitem Create of a delivery's AddToQueue carries the delivery's), not the server values. The boundary's nested delegate
+    /// (or the core's bridge) has just paired the request, so its SDK twin is the core's own request (its type). The guard reads the core's marks, such as
     /// <see cref="CascadeHint"/>, on <paramref name="nested"/> itself, the model twin of that request (S.2e3c2a, Decision 5). The answer
     /// goes back as the model twin of the nested execution's response (an unread shell when nothing converted it), so the core gets
     /// that SDK response unchanged and filled.
@@ -1096,9 +1098,8 @@ public sealed partial class PipelineExecutor
 
     /// <summary>
     /// Reads the record once with the union of the attributes the steps' pre (type 0/2) or post (type 1/2) images ask
-    /// for; null when no step wants such an image or the record does not exist. The core converts the image once, into the chain's
-    /// mirror (<see cref="ImageAsync"/>), so the record's SDK twin is the core's own <c>Entity</c>, which <see cref="AddImages"/>
-    /// projects from.
+    /// for; null when no step wants such an image or the record does not exist. The SDK boundary converts the image once, into the
+    /// chain's mirror (<see cref="ImageAsync"/>), so the record's SDK twin is the one <c>Entity</c> <see cref="AddImages"/> projects from.
     /// </summary>
     private async Task<Record?> ReadImageAsync(string entityName, Guid id, IReadOnlyList<StageStep>[] stages, bool pre, Run run,
         CancellationToken ct)
@@ -1112,16 +1113,13 @@ public sealed partial class PipelineExecutor
     }
 
     /// <summary>
-    /// The record <paramref name="entityName"/> <paramref name="id"/> as an image (S.2e3a): read by the core, which converts it once
-    /// into <paramref name="mirror"/> (<see cref="CoreHandOff.ReadImagesWith"/>), so its SDK twin there is the core's own <c>Entity</c>.
+    /// The record <paramref name="entityName"/> <paramref name="id"/> as an image (S.2e3a): read by the core and converted once into
+    /// <paramref name="mirror"/> by the SDK boundary (S.2e3c3b1, Decision 6: <see cref="CoreSdkBoundary.ImageAsync"/>), so its SDK
+    /// twin there is the boundary's own <c>Entity</c>.
     /// </summary>
-    private async Task<Record?> ImageAsync(string entityName, Guid id, string[]? attributes, SdkMirror mirror, DataSession session,
-        CancellationToken ct)
-    {
-        var target = new RecordReference { LogicalName = entityName, Id = id };
-        CoreHandOff.ReadImagesWith(target, mirror);
-        return await core.RetrieveImageAsync(target, attributes, session, ct);
-    }
+    private Task<Record?> ImageAsync(string entityName, Guid id, string[]? attributes, SdkMirror mirror, DataSession session,
+        CancellationToken ct) =>
+        CoreSdkBoundary.ImageAsync(core, new RecordReference { LogicalName = entityName, Id = id }, attributes, session, mirror, ct);
 
     /// <summary>
     /// A stored row the internal checks of stage 20 and the owner lookup of the real-time workflows read (S.2e3c2b, Decision 2): read by
@@ -1311,10 +1309,10 @@ public sealed partial class PipelineExecutor
 }
 
 /// <summary>
-/// S.2e3a: what the pipeline hands the core's entry adapter. While the pipeline holds a model request at the core (between
-/// <c>HoldAtCoreAsync</c> and <c>ReleaseCore</c>, S.2e2c), its SDK request, so the adapter runs the handler on it without converting the
-/// request again; and the mirror an image is read into (<see cref="ReadImagesWith"/>), so the image is converted once, into the chain's
-/// mirror, paired with the core's own <c>Entity</c>. Internal: only the core (<c>InternalsVisibleTo</c>) acts on a held request.
+/// S.2e3a: what the pipeline hands the core's bridge. While the pipeline holds a model request at the core (between
+/// <c>HoldAtCoreAsync</c> and <c>ReleaseCore</c>, S.2e2c), its SDK request, so the bridge runs the handler on it without converting the
+/// request again. S.2e3c3b1 (Decision 6): the image mirror is gone; the SDK boundary writes an image out itself
+/// (<see cref="CoreSdkBoundary.ImageAsync"/>). Internal: only the core (<c>InternalsVisibleTo</c>) acts on a held request.
 /// </summary>
 internal static class CoreHandOff
 {
@@ -1324,17 +1322,10 @@ internal static class CoreHandOff
     /// <summary>Test seam: called by <see cref="Hold"/> with each model request a run holds at the core (S.2e3c2b, Decision 8).</summary>
     internal static readonly AsyncLocal<Action<Request>?> Held = new();
 
-    /// <summary>The mirror the core converts the image of a target into (<see cref="ReadImagesWith"/>).</summary>
-    private static readonly ConditionalWeakTable<RecordReference, SdkMirror> ImageMirrors = new();
-
     /// <summary>
-    /// Test seam: called by the core's entry adapter with the SDK request its handler runs on (early-bound identity tests).
+    /// Test seam: called by the core's bridge with the SDK request its handler runs on (early-bound identity tests).
     /// </summary>
     internal static readonly AsyncLocal<Action<OrganizationRequest>?> HandlerRequest = new();
-
-    /// <summary>Test seam: called by the core's entry adapter with each image record it wrote out into the mirror named for it
-    /// (<see cref="ReadImagesWith"/>) and that SDK twin.</summary>
-    internal static readonly AsyncLocal<Action<Entity, Record>?> ImageRead = new();
 
     /// <summary>
     /// True, with the held SDK request, while the pipeline holds <paramref name="request"/> at the core; the core then works on
@@ -1365,17 +1356,5 @@ internal static class CoreHandOff
     {
         if (!owns) return;
         lock (HeldRequests) HeldRequests.Remove(request);
-    }
-
-    /// <summary>Makes the core read the image of <paramref name="target"/> into <paramref name="mirror"/> (see the class remarks).</summary>
-    internal static void ReadImagesWith(RecordReference target, SdkMirror mirror)
-    {
-        lock (ImageMirrors) ImageMirrors.AddOrUpdate(target, mirror);
-    }
-
-    /// <summary>The mirror to read the image of <paramref name="target"/> into, or null (the core then uses a mirror of its own).</summary>
-    internal static SdkMirror? ImageMirror(RecordReference target)
-    {
-        lock (ImageMirrors) return ImageMirrors.TryGetValue(target, out var mirror) ? mirror : null;
     }
 }

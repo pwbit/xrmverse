@@ -71,7 +71,7 @@ public sealed class PluginOrganizationServiceFactory(PipelineExecutor executor, 
         // WhoAmI, RetrieveEntity, RetrieveAttribute and the metadata messages have no pipeline (as for the front ends), answered
         // for the acting user (the metadata writes are refused: see IPipelineCore.ExecuteNonPipelineAsync).
         if (core.IsNonPipelineMessage(request.RequestName))
-            return Call(ct => core.ExecuteNonPipelineAsync(request, caller, session, ct));
+            return Call(ct => CoreSdkBoundary.ExecuteNonPipelineAsync(core, request, caller, session, ct));
         var invocation = new InvocationContext(caller, parent.InitiatingUserId, parent.Depth + 1, parent, session, parent.CorrelationId)
         {
             Mirror = mirror,

@@ -86,13 +86,13 @@ internal static class CoreSdkMessages
     /// <summary>
     /// Reads what the handler changed in the request back into the model (in before out; not in a held window, where the pipeline
     /// reads it back) and answers with the model response of the handler's typed response: an unread shell when the caller brought
-    /// the mirror (it can read the twin in), or the response read in when the adapter made the mirror (<paramref name="created"/>),
+    /// the mirror (it can read the twin in), or the response read in when the bridge made the mirror (<c>Enter</c>, <paramref name="created"/>),
     /// since such a caller has no mirror to read it with.
     /// </summary>
     private static Response Leave(SdkMirror mirror, OrganizationRequest sdk, bool held, bool created, OrganizationResponse response)
     {
         if (!held) mirror.In(sdk);
-        return created ? mirror.In(response)! : PipelineCoreSdk.ModelResponse(mirror, response);
+        return created ? mirror.In(response)! : CoreSdkBoundary.ModelResponse(mirror, response);
     }
 
     /// <summary>

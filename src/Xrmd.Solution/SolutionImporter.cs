@@ -1189,10 +1189,10 @@ public sealed class SolutionImporter(IMetadataStore store, IDbConnectionFactory 
             target[FieldSecurityTables.CanUpdate] = new OptionSetValue(permission.CanUpdate);
             target[FieldSecurityTables.CanReadUnmasked] = new OptionSetValue(0);
             OrganizationRequest request = target.Id == Guid.Empty ? new CreateRequest { Target = target } : new UpdateRequest { Target = target };
-            await core.ExecuteCoreAsync(request, caller, s, ct);
+            await CoreSdkBoundary.ExecuteCoreAsync(core, request, caller, s, ct: ct);
         }
         foreach (var id in existing.Where(e => !wanted.Contains(e.Key)).Select(e => e.Value).Concat(stale))
-            await core.ExecuteCoreAsync(new DeleteRequest { Target = new EntityReference(FieldSecurityTables.Permission, id) }, caller, s, ct);
+            await CoreSdkBoundary.ExecuteCoreAsync(core, new DeleteRequest { Target = new EntityReference(FieldSecurityTables.Permission, id) }, caller, s, ct: ct);
     }
 
     /// <summary>The attribute names the entity has after the import: the published ones (or the system attributes xrmverse
@@ -2214,8 +2214,8 @@ public sealed class SolutionImporter(IMetadataStore store, IDbConnectionFactory 
         }
 
         var stopped = DateTime.UtcNow;
-        await core.ExecuteCoreAsync(new CreateRequest { Target = ImportJob(jobId, package.Solution.UniqueName, plan.SolutionId, 100, log, stopped,
-            log.ToXml(100, stopped)) }, caller, s, ct);
+        await CoreSdkBoundary.ExecuteCoreAsync(core, new CreateRequest { Target = ImportJob(jobId, package.Solution.UniqueName, plan.SolutionId, 100, log, stopped,
+            log.ToXml(100, stopped)) }, caller, s, ct: ct);
         return new ImportResult(jobId, plan.SolutionId, log.Warnings.ToList());
     }
 
@@ -3373,7 +3373,7 @@ public sealed class SolutionImporter(IMetadataStore store, IDbConnectionFactory 
     {
         var package = plan.Package;
         if (!plan.PublisherExists)
-            await core.ExecuteCoreAsync(new CreateRequest
+            await CoreSdkBoundary.ExecuteCoreAsync(core, new CreateRequest
             {
                 Target = new Entity("publisher", plan.PublisherId)
                 {
@@ -3382,7 +3382,7 @@ public sealed class SolutionImporter(IMetadataStore store, IDbConnectionFactory 
                     ["customizationprefix"] = package.Publisher.CustomizationPrefix,
                     ["customizationoptionvalueprefix"] = package.Publisher.CustomizationOptionValuePrefix,
                 },
-            }, caller, s, ct);
+            }, caller, s, ct: ct);
 
         var solution = new Entity("solution", plan.SolutionId)
         {
@@ -3397,13 +3397,13 @@ public sealed class SolutionImporter(IMetadataStore store, IDbConnectionFactory 
         using var layerOperation = plan.IsManaged ? null : Layers.ManagedProperties.LayerOperation();
         if (plan.SolutionExists)
         {
-            await core.ExecuteCoreAsync(new UpdateRequest { Target = solution }, caller, s, ct);
+            await CoreSdkBoundary.ExecuteCoreAsync(core, new UpdateRequest { Target = solution }, caller, s, ct: ct);
         }
         else
         {
             solution["uniquename"] = plan.SolutionName;
             solution["installedon"] = DateTime.UtcNow;
-            await core.ExecuteCoreAsync(new CreateRequest { Target = solution }, caller, s, ct);
+            await CoreSdkBoundary.ExecuteCoreAsync(core, new CreateRequest { Target = solution }, caller, s, ct: ct);
         }
         // What the import keeps for the export: an import-only column, written by the import alone.
         await WriteImportOnlyColumnsAsync(s, new Entity("solution", plan.SolutionId) { [SystemTableRules.UnsupportedXml] = UnsupportedXml(package) }, ct);
@@ -3441,10 +3441,10 @@ public sealed class SolutionImporter(IMetadataStore store, IDbConnectionFactory 
         var target = (Entity)request.Parameters["Target"];
         if (StepRegistry.RegistrationEntities.Contains(target.LogicalName))
         {
-            var existing = row.Create ? null : await core.RetrieveImageAsync(target.ToEntityReference(), null, s, ct);
+            var existing = row.Create ? null : await CoreSdkBoundary.RetrieveImageAsync(core, target.ToEntityReference(), null, s, ct);
             await validator.ValidateAsync(target.LogicalName, target, existing, s, ct);
         }
-        await core.ExecuteCoreAsync(request, caller, s, ct);
+        await CoreSdkBoundary.ExecuteCoreAsync(core, request, caller, s, ct: ct);
         await WriteImportOnlyColumnsAsync(s, row.Target, ct);
     }
 
@@ -3698,7 +3698,7 @@ public sealed class SolutionImporter(IMetadataStore store, IDbConnectionFactory 
                 ["ismetadata"] = component.Type == AppModuleSchema.ComponentType.Entity,
                 ["exempt"] = false,
             };
-            await core.ExecuteCoreAsync(new CreateRequest { Target = target }, Caller.Internal, s, ct);
+            await CoreSdkBoundary.ExecuteCoreAsync(core, new CreateRequest { Target = target }, Caller.Internal, s, ct: ct);
         }
 
         foreach (var roleId in definition.RoleIds)
@@ -3735,7 +3735,7 @@ public sealed class SolutionImporter(IMetadataStore store, IDbConnectionFactory 
                 ["settingdefinitionid"] = new EntityReference(AppModuleSchema.SettingDefinition, definitionId),
                 ["value"] = setting.Value,
             };
-            await core.ExecuteCoreAsync(new CreateRequest { Target = target }, Caller.Internal, s, ct);
+            await CoreSdkBoundary.ExecuteCoreAsync(core, new CreateRequest { Target = target }, Caller.Internal, s, ct: ct);
         }
     }
 
@@ -3753,13 +3753,13 @@ public sealed class SolutionImporter(IMetadataStore store, IDbConnectionFactory 
         {
             var mapId = DerivedId(AttributeMapSchema.EntityMap, $"{map.Source}:{map.Target}");
             if (!await ExistsAsync(s, AttributeMapSchema.EntityMap, mapId, ct))
-                await core.ExecuteCoreAsync(new CreateRequest
+                await CoreSdkBoundary.ExecuteCoreAsync(core, new CreateRequest
                 {
                     Target = new Entity(AttributeMapSchema.EntityMap, mapId)
                     {
                         [AttributeMapSchema.SourceEntity] = map.Source, [AttributeMapSchema.TargetEntity] = map.Target,
                     },
-                }, Caller.Internal, s, ct);
+                }, Caller.Internal, s, ct: ct);
             foreach (var attribute in map.Attributes)
             {
                 var row = new Entity(AttributeMapSchema.AttributeMap, DerivedId(AttributeMapSchema.AttributeMap, $"{map.Source}:{map.Target}:{attribute.Target}"))
@@ -3772,7 +3772,7 @@ public sealed class SolutionImporter(IMetadataStore store, IDbConnectionFactory 
                 OrganizationRequest write = await ExistsAsync(s, AttributeMapSchema.AttributeMap, row.Id, ct)
                     ? new UpdateRequest { Target = row }
                     : new CreateRequest { Target = row };
-                await core.ExecuteCoreAsync(write, Caller.Internal, s, ct);
+                await CoreSdkBoundary.ExecuteCoreAsync(core, write, Caller.Internal, s, ct: ct);
             }
         }
     }
@@ -3920,10 +3920,10 @@ public sealed class SolutionImporter(IMetadataStore store, IDbConnectionFactory 
             var session = new DataSession(conn, tx);
             try
             {
-                await core.ExecuteCoreAsync(new CreateRequest
+                await CoreSdkBoundary.ExecuteCoreAsync(core, new CreateRequest
                 {
                     Target = ImportJob(jobId, log.Solution?.UniqueName, null, 0, log, stopped, log.ToXml(0, stopped, errorCode, error)),
-                }, caller, session, CancellationToken.None);
+                }, caller, session, ct: CancellationToken.None);
                 await tx.CommitAsync(CancellationToken.None);
             }
             catch

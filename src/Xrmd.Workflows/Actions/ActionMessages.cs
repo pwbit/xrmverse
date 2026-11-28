@@ -1,11 +1,11 @@
 using System.Data;
-using Microsoft.Xrm.Sdk;
-using Microsoft.Xrm.Sdk.Messages;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Messages;
+using Xrmd.Model.Records;
 using Xrmd.Pipeline;
 using Xrmd.Pipeline.CustomApis;
 using Xrmd.Workflows.Xaml;
@@ -196,13 +196,20 @@ public sealed class ActionMessages(IPipelineCore core, IMetadataStore metadata)
         var id = preferredId is { } preferred && preferred != Guid.Empty && await NameOfAsync(s, preferred, ct) is null
             ? preferred
             : await NameOfAsync(s, SdkMessageCatalog.MessageId(name), ct) is null ? SdkMessageCatalog.MessageId(name) : Guid.NewGuid();
-        await core.ExecuteCoreAsync(new CreateRequest
+        await core.ExecuteCoreAsync(new Request
         {
-            Target = new Entity(Message, id) { ["name"] = name, ["categoryname"] = Category, ["isprivate"] = false },
-        }, Caller.Internal, s, ct);
+            Name = "Create",
+            Parameters = { ["Target"] = new Record(Message, id) { ["name"] = name, ["categoryname"] = Category, ["isprivate"] = false } },
+        }, new CoreCall(Caller.Internal, s), ct);
         await EnsureFilterAsync(s, id, name, entity, ct);
-        await core.ExecuteCoreAsync(new UpdateRequest { Target = new Entity(S.Table, row.Id) { [S.SdkMessageId] = new EntityReference(Message, id) } },
-            Caller.Internal, s, ct);
+        await core.ExecuteCoreAsync(new Request
+        {
+            Name = "Update",
+            Parameters =
+            {
+                ["Target"] = new Record(S.Table, row.Id) { [S.SdkMessageId] = new RecordReference { LogicalName = Message, Id = id } },
+            },
+        }, new CoreCall(Caller.Internal, s), ct);
         return row with { SdkMessageId = id };
     }
 
@@ -216,18 +223,22 @@ public sealed class ActionMessages(IPipelineCore core, IMetadataStore metadata)
         }
         var filterId = SdkMessageCatalog.FilterId(name, entity);
         if (await ExistsAsync(s, Filter, "sdkmessagefilterid", filterId, ct)) filterId = Guid.NewGuid();
-        await core.ExecuteCoreAsync(new CreateRequest
+        await core.ExecuteCoreAsync(new Request
         {
-            Target = new Entity(Filter, filterId)
+            Name = "Create",
+            Parameters =
             {
-                ["name"] = $"{name}:{entity}",
-                ["sdkmessageid"] = new EntityReference(Message, messageId),
-                ["primaryobjecttypecode"] = entity,
-                ["secondaryobjecttypecode"] = S.NoPrimaryEntity,
-                ["isvisible"] = true,
-                ["iscustomprocessingstepallowed"] = true,
+                ["Target"] = new Record(Filter, filterId)
+                {
+                    ["name"] = $"{name}:{entity}",
+                    ["sdkmessageid"] = new RecordReference { LogicalName = Message, Id = messageId },
+                    ["primaryobjecttypecode"] = entity,
+                    ["secondaryobjecttypecode"] = S.NoPrimaryEntity,
+                    ["isvisible"] = true,
+                    ["iscustomprocessingstepallowed"] = true,
+                },
             },
-        }, Caller.Internal, s, ct);
+        }, new CoreCall(Caller.Internal, s), ct);
     }
 
     /// <summary>
@@ -268,10 +279,14 @@ public sealed class ActionMessages(IPipelineCore core, IMetadataStore metadata)
             await using var rd = await cmd.ExecuteReaderAsync(ct);
             while (await rd.ReadAsync(ct)) filters.Add(rd.GetGuid(0));
         }
-        foreach (var filter in filters)
-            await core.ExecuteCoreAsync(new DeleteRequest { Target = new EntityReference(Filter, filter) }, Caller.Internal, s, ct);
-        await core.ExecuteCoreAsync(new DeleteRequest { Target = new EntityReference(Message, messageId) }, Caller.Internal, s, ct);
+        var call = new CoreCall(Caller.Internal, s);
+        foreach (var filter in filters) await core.ExecuteCoreAsync(DeleteOf(Filter, filter), call, ct);
+        await core.ExecuteCoreAsync(DeleteOf(Message, messageId), call, ct);
     }
+
+    /// <summary>The model Delete of the row <paramref name="id"/> of <paramref name="table"/>.</summary>
+    private static Request DeleteOf(string table, Guid id) =>
+        new() { Name = "Delete", Parameters = { ["Target"] = new RecordReference { LogicalName = table, Id = id } } };
 
     private static async Task<string?> NameOfAsync(DataSession s, Guid id, CancellationToken ct)
     {

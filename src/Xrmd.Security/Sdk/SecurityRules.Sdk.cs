@@ -79,7 +79,7 @@ public static partial class AccessTeamRules
     /// <summary>
     /// Decision 6: the record team mark of the SDK request <paramref name="from"/> (<see cref="MarkChecked(OrganizationRequest, RecordTeamTarget)"/>),
     /// copied onto its model request <paramref name="to"/> when the request crosses into the model outside the pipeline
-    /// (<c>PipelineCoreSdk</c>), as the pipeline copies the audit action. Nothing when it has none.
+    /// (<c>CoreSdkBoundary</c>), as the pipeline copies the audit action. Nothing when it has none.
     /// </summary>
     public static void CopyMark(OrganizationRequest from, Request to)
     {

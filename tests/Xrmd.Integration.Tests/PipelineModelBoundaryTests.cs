@@ -428,14 +428,14 @@ public sealed class PipelineModelBoundaryTests(XrmdFixture fx) : IAsyncLifetime
         var reads = new List<(Entity Image, Xrmd.Model.Records.Record Record)>();
         var mirror = new SdkMirror();
 
-        CoreHandOff.ImageRead.Value = (image, record) => reads.Add((image, record));
+        CoreSdkBoundary.ImageRead.Value = (image, record) => reads.Add((image, record));
         try
         {
             await ExecuteAsync(new UpdateRequest { Target = new Entity(Pipe, row) { ["pb_name"] = "img2", ["pb_count"] = 2 } }, mirror);
         }
         finally
         {
-            CoreHandOff.ImageRead.Value = null;
+            CoreSdkBoundary.ImageRead.Value = null;
         }
 
         reads.Should().HaveCount(2, "one pre image and one post image, each read once");

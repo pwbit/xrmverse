@@ -104,7 +104,7 @@ public sealed class WorkflowStore(IPipelineCore core, WorkflowRegistry registry)
     {
         ArgumentNullException.ThrowIfNull(s);
         if (lockRow && !await ExistsAsync(s, S.Table, S.WorkflowId, id, ct)) return null;
-        if (await core.RetrieveImageAsync(new EntityReference(S.Table, id), null, s, ct) is not { } entity) return null;
+        if (await CoreSdkBoundary.RetrieveImageAsync(core, new EntityReference(S.Table, id), null, s, ct) is not { } entity) return null;
         var row = FromEntity(entity);
         return row with
         {
@@ -152,7 +152,7 @@ public sealed class WorkflowStore(IPipelineCore core, WorkflowRegistry registry)
     }
 
     private Task<OrganizationResponse> ExecuteAsync(DataSession s, OrganizationRequest request, CancellationToken ct) =>
-        core.ExecuteCoreAsync(request, Caller.Internal, s, ct);
+        CoreSdkBoundary.ExecuteCoreAsync(core, request, Caller.Internal, s, ct: ct);
 
     /// <summary>Every column of the row but the owner and the computed <see cref="WorkflowRow.EntityScopeRule"/>.</summary>
     internal static Entity ToEntity(WorkflowRow row)

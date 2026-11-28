@@ -9,6 +9,8 @@ using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
 using Xrmd.Metadata.Sdk;
+using Xrmd.Model.Messages;
+using Xrmd.Model.Records;
 using Xrmd.Pipeline;
 using Xrmd.Pipeline.Async;
 using Xrmd.Security;
@@ -403,7 +405,8 @@ public sealed class SolutionUninstaller(IMetadataStore store, IDbConnectionFacto
     }
 
     private Task DeleteSolutionRowAsync(DataSession s, Guid solutionId, CancellationToken ct) =>
-        core.ExecuteCoreAsync(new DeleteRequest { Target = new EntityReference(SolutionDeleter.Table, solutionId) }, Caller.Internal, s, ct);
+        core.ExecuteCoreAsync(new Request { Name = "Delete", Parameters = { ["Target"] = new RecordReference { LogicalName = SolutionDeleter.Table, Id = solutionId } } },
+            new CoreCall(Caller.Internal, s), ct);
 
     /// <summary>
     /// A component left with no Managed layer (only its System layer, and maybe an Active marker) is no longer managed: its

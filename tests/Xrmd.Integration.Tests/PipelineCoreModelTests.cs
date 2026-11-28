@@ -14,8 +14,8 @@ namespace Xrmd.Integration.Tests;
 
 /// <summary>
 /// S.2e3a, Task 3: <see cref="IPipelineCore"/> on the model. The SDK extension methods (<see cref="PipelineCoreSdk"/>) answer what the
-/// core answered before the move (the Task 1 response goldens and <c>mutation.txt</c>); the model entry returns an unread shell of the
-/// core's typed response; a request the core issues keeps its SDK instance, so the marks keyed on it (<see cref="CascadeHint"/>) and its
+/// core answered before the move (the Task 1 response goldens and <c>mutation.txt</c>); the model entry returns the core's model response
+/// only (S.2e3c3b1, Decision 2); a request the core issues keeps its SDK instance, so the marks keyed on it (<see cref="CascadeHint"/>) and its
 /// CLR type survive both crossings.
 /// </summary>
 [Collection("xrmd")]
@@ -74,13 +74,13 @@ public sealed class PipelineCoreModelTests(XrmdFixture fx)
     }
 
     /// <summary>
-    /// A model Create through the model entry. S.2e3b (Decision 7): the core answers it on the model, so the response is the core's model
-    /// response with the stored row's id, paired in the request's registered mirror with today's <see cref="CreateResponse"/>, which is
-    /// already filled (written out once); it is an ordinary twin, not an unread shell (S.2e3a returned a shell). The request does not
-    /// cross: the Target gets no SDK twin.
+    /// A model Create through the model entry. S.2e3c3b1 (Decision 2): the core answers on the model only, so the response is the core's
+    /// model response with the stored row's id, and nothing is paired with it: the mirror the caller registered stays the request's and
+    /// holds no SDK twin of the response (S.2e3b paired it with today's <see cref="CreateResponse"/>). The request does not cross: the
+    /// Target gets no SDK twin.
     /// </summary>
     [Fact]
-    public async Task Model_path_returns_the_model_response_paired_with_the_typed_one()
+    public async Task Model_path_returns_the_model_response_only()
     {
         await using var kit = await CoreScenarioKit.StartAsync(fx, false);
         await kit.EnsurePipeAsync();
@@ -101,21 +101,19 @@ public sealed class PipelineCoreModelTests(XrmdFixture fx)
         }
 
         SdkMirror.For(request).Should().BeSameAs(mirror);
-        mirror.IsUnread(response).Should().BeFalse();
         response.Name.Should().Be("Create");
         var stored = (Guid)(await kit.ScalarAsync($"SELECT pb_pipeid FROM data.{Pipe} WHERE pb_name = 'pcm-create'"))!;
         response.Results["id"].Should().Be(stored);
-        mirror.TryGetSdk(response, out var twin).Should().BeTrue();
-        twin.Should().BeOfType<CreateResponse>().Which.id.Should().Be(stored);
+        mirror.TryGetSdk(response, out _).Should().BeFalse("the core pairs no typed SDK response");
         mirror.TryGetSdk(target, out _).Should().BeFalse("the request does not cross");
     }
 
     /// <summary>
-    /// A model caller whose request has no registered mirror gets the response already read in (the core's adapter made the mirror,
-    /// so no one else could read the shell): a Create's <c>id</c> is there, and the mirror is now registered for the request.
+    /// A model caller whose request has no registered mirror (S.2e3c3b1, Decision 2): a Create's <c>id</c> is in the model response, and
+    /// the core registers no mirror for the request (S.2e3b registered one to pair the typed response in).
     /// </summary>
     [Fact]
-    public async Task Model_path_without_a_mirror_returns_the_response_read_in()
+    public async Task Model_path_without_a_mirror_registers_none()
     {
         await using var kit = await CoreScenarioKit.StartAsync(fx, false);
         await kit.EnsurePipeAsync();
@@ -137,11 +135,44 @@ public sealed class PipelineCoreModelTests(XrmdFixture fx)
 
         var stored = (Guid)(await kit.ScalarAsync($"SELECT pb_pipeid FROM data.{Pipe} WHERE pb_name = 'pcm-create-unregistered'"))!;
         response.Results["id"].Should().Be(stored);
+        SdkMirror.For(request).Should().BeNull("the core registers no mirror for a message on the model");
+    }
+
+    /// <summary>
+    /// A bridged message from a model caller without a mirror (S.2e3c3b1, Decision 2: the bridge is unchanged): an
+    /// InitializeFileBlocksUpload crosses to its SDK handler with a mirror the bridge registers for the request, and the response comes
+    /// back read in, so its <c>FileContinuationToken</c> is there.
+    /// </summary>
+    [Fact]
+    public async Task Bridged_message_from_a_model_caller_reads_its_response_in()
+    {
+        await using var kit = await CoreScenarioKit.StartAsync(fx, false);
+        var record = await kit.FileRecordAsync();
+        var request = new Request
+        {
+            Name = "InitializeFileBlocksUpload",
+            Parameters =
+            {
+                ["Target"] = new Xrmd.Model.Records.RecordReference { LogicalName = record.LogicalName, Id = record.Id },
+                ["FileAttributeName"] = "new_doc", ["FileName"] = "report.pdf",
+            },
+        };
+
+        Response response;
+        await using (var scope = kit.Services.CreateAsyncScope())
+        {
+            var core = scope.ServiceProvider.GetRequiredService<IPipelineCore>();
+            await using var conn = await TestProvider.OpenAsync(kit.ConnectionString);
+            await using var tx = await conn.BeginTransactionAsync();
+            response = await core.ExecuteCoreAsync(request, new CoreCall(kit.Caller, new DataSession(conn, tx)), default);
+            await tx.CommitAsync();
+        }
+
+        response.Name.Should().Be("InitializeFileBlocksUpload");
+        response.Results["FileContinuationToken"].Should().BeOfType<string>().Which.Should().NotBeNullOrEmpty();
         var mirror = SdkMirror.For(request);
-        mirror.Should().NotBeNull();
+        mirror.Should().NotBeNull("the bridge registers the mirror the request crossed with");
         mirror!.IsUnread(response).Should().BeFalse();
-        mirror.TryGetSdk(response, out var twin).Should().BeTrue();
-        twin.Should().BeOfType<CreateResponse>();
     }
 
     /// <summary>
@@ -158,7 +189,7 @@ public sealed class PipelineCoreModelTests(XrmdFixture fx)
         var target = new EntityReference(Pipe, id);
         var mirror = new SdkMirror();
         (Entity Image, Record Record)? read = null;
-        CoreHandOff.ImageRead.Value = (image, record) => read = (image, record);
+        CoreSdkBoundary.ImageRead.Value = (image, record) => read = (image, record);
         Entity? result;
         try
         {
@@ -171,7 +202,7 @@ public sealed class PipelineCoreModelTests(XrmdFixture fx)
         }
         finally
         {
-            CoreHandOff.ImageRead.Value = null;
+            CoreSdkBoundary.ImageRead.Value = null;
         }
 
         read.Should().NotBeNull();
@@ -188,7 +219,7 @@ public sealed class PipelineCoreModelTests(XrmdFixture fx)
     /// <summary>
     /// The requests the core issues reach the nested delegate as the core's own typed instances: the Update of a CommitFileBlocksUpload
     /// (not a cascade) and the Delete of an email's attachment (a cascade, <see cref="CascadeHint"/>), through the extension path; and,
-    /// through the model entry, a model request registered with the chain's mirror whose twin carries the mark.
+    /// through the model entry, the core's model Delete carrying the model mark, with no mirror registered (S.2e3c3b1, Decision 2).
     /// </summary>
     [Fact]
     public async Task Nested_request_from_the_core_keeps_the_cascade_mark()
@@ -211,15 +242,16 @@ public sealed class PipelineCoreModelTests(XrmdFixture fx)
         seen = await NestedViaExtensionAsync(kit, new DeleteRequest { Target = email });
         seen.Should().ContainSingle().Which.Should().Be((typeof(DeleteRequest), "activitymimeattachment", true));
 
-        // The same through the model entry: the nested model request is registered with the chain's mirror, and its twin is the
-        // core's marked DeleteRequest.
+        // The same through the model entry (S.2e3c3b1, Decision 2): the nested request is the core's model Delete of the attachment,
+        // carrying the model cascade mark, with no mirror registered for it. The test runs it through the pipeline as an SDK request of
+        // its own.
         email = await AttachedEmailAsync(kit);
         var request = new Request
         {
             Name = "Delete",
             Parameters = { ["Target"] = new Xrmd.Model.Records.RecordReference { LogicalName = "email", Id = email.Id } },
         };
-        var modelSeen = new List<(Type Type, bool Registered, bool Marked)>();
+        var modelSeen = new List<(string? Name, string? Table, bool Registered, bool Marked)>();
         await using (var scope = kit.Services.CreateAsyncScope())
         {
             var core = scope.ServiceProvider.GetRequiredService<IPipelineCore>();
@@ -229,18 +261,19 @@ public sealed class PipelineCoreModelTests(XrmdFixture fx)
             var session = new DataSession(conn, tx);
             await core.ExecuteCoreAsync(request, new CoreCall(kit.Caller, session, async (nested, ct) =>
             {
-                var mirror = SdkMirror.For(nested);
-                mirror.Should().NotBeNull().And.BeSameAs(SdkMirror.For(request));
-                mirror!.TryGetSdk(nested, out var sdk).Should().BeTrue();
-                var sdkRequest = (OrganizationRequest)sdk!;
-                modelSeen.Add((sdkRequest.GetType(), true, CascadeHint.IsMarked(sdkRequest)));
+                modelSeen.Add((nested.Name, (nested.Parameters["Target"] as Xrmd.Model.Records.RecordReference)?.LogicalName,
+                    SdkMirror.For(nested) is not null, CascadeHint.IsMarked(nested)));
+                var mirror = new SdkMirror();
+                mirror.Pair(nested, new DeleteRequest());
+                var sdkRequest = mirror.Out(nested)!;
+                CascadeHint.Mark(sdkRequest);
                 var sdkResponse = await executor.ExecuteAsync(sdkRequest,
-                    new InvocationContext(kit.Caller, kit.Caller.UserId, 2, null, session, Guid.NewGuid()) { IsCoreCascade = CascadeHint.IsMarked(sdkRequest) }, ct);
-                return mirror.Shell(sdkResponse);
+                    new InvocationContext(kit.Caller, kit.Caller.UserId, 2, null, session, Guid.NewGuid()) { IsCoreCascade = true }, ct);
+                return mirror.In(sdkResponse)!;
             }), default);
             await tx.CommitAsync();
         }
-        modelSeen.Should().ContainSingle().Which.Should().Be((typeof(DeleteRequest), true, true));
+        modelSeen.Should().ContainSingle().Which.Should().Be(("Delete", "activitymimeattachment", false, true));
         kit.Cache.Invalidate();
     }
 

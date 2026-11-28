@@ -1,12 +1,12 @@
 using System.Data;
 using System.Data.Common;
 using Microsoft.Extensions.Logging;
-using Microsoft.Xrm.Sdk;
-using Microsoft.Xrm.Sdk.Messages;
 using Xrmd.Abstractions;
 using Xrmd.Abstractions.Storage;
 using Xrmd.Core.Errors;
 using Xrmd.Metadata;
+using Xrmd.Model.Messages;
+using Xrmd.Model.Records;
 using Xrmd.Pipeline;
 using Xrmd.Pipeline.Async;
 using Xrmd.Security;
@@ -350,11 +350,17 @@ public sealed class SolutionPromoter(IMetadataStore store, IDbConnectionFactory 
         foreach (var (type, id) in plan.Unmanaged) await SolutionUninstaller.ClearManagedAsync(store, s, type, id, ct);
 
         // The base row goes (its solutioncomponent rows with it); the holding row takes its name and its place (sub 0).
-        await core.ExecuteCoreAsync(new DeleteRequest { Target = new EntityReference(SolutionDeleter.Table, plan.BaseId) }, Caller.Internal, s, ct);
-        await core.ExecuteCoreAsync(new UpdateRequest
+        var call = new CoreCall(Caller.Internal, s);
+        await core.ExecuteCoreAsync(new Request
         {
-            Target = new Entity(SolutionDeleter.Table, plan.HoldingId) { ["uniquename"] = plan.UniqueName },
-        }, Caller.Internal, s, ct);
+            Name = "Delete",
+            Parameters = { ["Target"] = new RecordReference { LogicalName = SolutionDeleter.Table, Id = plan.BaseId } },
+        }, call, ct);
+        await core.ExecuteCoreAsync(new Request
+        {
+            Name = "Update",
+            Parameters = { ["Target"] = new Record(SolutionDeleter.Table, plan.HoldingId) { ["uniquename"] = plan.UniqueName } },
+        }, call, ct);
         await layers.SetRankAsync(s, plan.HoldingId, plan.Segment, 0, ct);
         return plan.Result(warnings);
     }

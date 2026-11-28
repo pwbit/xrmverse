@@ -1027,7 +1027,7 @@ public sealed class CoreCrudModelTests(XrmdFixture fx)
     /// <c>new_ccmcalc</c> (created once): <c>new_name</c>, <c>new_amount</c> (money), <c>new_quantity</c> and the calculated
     /// <c>new_total</c> = amount × quantity, as <c>CalculatedWriteTests</c> builds its tables.
     /// </summary>
-    private static async Task<string> CalculatedTableAsync(CoreScenarioKit kit)
+    internal static async Task<string> CalculatedTableAsync(CoreScenarioKit kit)
     {
         const string table = "new_ccmcalc";
         await CalculatedLock.WaitAsync();

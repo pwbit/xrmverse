@@ -10,6 +10,8 @@ using Xrmd.Core;
 using Xrmd.Core.Errors;
 using Xrmd.Core.Solutions;
 using Xrmd.Metadata;
+using Xrmd.Model.Messages;
+using Xrmd.Model.Records;
 using Xrmd.Pipeline;
 using Xrmd.Pipeline.CustomApis;
 using Xrmd.Pipeline.Registration;
@@ -611,7 +613,8 @@ public sealed class SolutionCascadeDeleter(IMetadataStore store, IDbConnectionFa
         var ordered = plan.Rows.Where(r => ComponentType.OfTable(r.Table) is not null)
             .Select(r => (ComponentType.OfTable(r.Table)!.Value, r.Id)).Concat(plan.Metadata).ToList();
         await remover.ExecuteAsync(s, caller, ordered, ct);
-        await core.ExecuteCoreAsync(new DeleteRequest { Target = new EntityReference(SolutionDeleter.Table, plan.SolutionId) }, caller, s, ct);
+        await core.ExecuteCoreAsync(new Request { Name = "Delete", Parameters = { ["Target"] = new RecordReference { LogicalName = SolutionDeleter.Table, Id = plan.SolutionId } } },
+            new CoreCall(caller, s), ct);
         return plan;
     }
 }

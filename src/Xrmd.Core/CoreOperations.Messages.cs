@@ -24,13 +24,58 @@ namespace Xrmd.Core;
 /// <para>
 /// S.2e3b (Task 8): the eight CRUD messages (Create, Retrieve, Update, Delete, RetrieveMultiple, Assign, Associate, Disassociate)
 /// dispatched on the model request: the parameters are read as model values and the model bodies run, with no conversion of the
-/// request. The answer is a model <see cref="Response"/> with today's results; the entry adapter (<c>Sdk/CoreOperations.Sdk.cs</c>)
-/// pairs it with today's typed SDK response. A helper of another step that is still on the SDK is reached through
-/// <see cref="CoreSdkBridges"/>, which converts only when the helper applies.
+/// request. The answer is a model <see cref="Response"/> with today's results; the SDK boundary of the pipeline
+/// (<see cref="CoreSdkBoundary"/>, S.2e3c3b1) pairs it with today's typed SDK response for an SDK caller. A helper of another step
+/// that is still on the SDK is reached through <see cref="CoreSdkBridges"/>, which converts only when the helper applies.
+/// </para>
+/// <para>
+/// S.2e3c3b1 (Decision 2): the core is model only. The members of <see cref="IPipelineCore"/> below are plain calls of the model
+/// dispatch: they register no mirror, pair no response with a typed SDK one and write no image out (the entry adapter
+/// <c>Sdk/CoreOperations.Sdk.cs</c> that did is now <see cref="CoreSdkBoundary"/>). What stays SDK is the bridge,
+/// <see cref="CoreSdkMessages"/>, unchanged.
 /// </para>
 /// </summary>
 public sealed partial class CoreOperations
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// S.2e3c3b1 (Decision 2): every message enters the model dispatch (<see cref="ExecuteMessageAsync"/>) under its canonical name,
+    /// and the answer is the dispatch's own: a model response for a message on the model, the bridge's for a bridged one (or a name
+    /// that is no core message). The query model a front end built (<see cref="RetrieveMultipleModelRequest.AttachHint"/>, Decision 5)
+    /// is attached to a RetrieveMultiple first.
+    /// </remarks>
+    public async Task<Response> ExecuteCoreAsync(Request request, CoreCall call, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(call);
+        var canonical = CoreMessages.TryGetValue(request.Name ?? "", out var name) ? name : request.Name ?? "";
+        if (canonical == "RetrieveMultiple") RetrieveMultipleModelRequest.AttachHint(request);
+        return await ExecuteMessageAsync(request, canonical, call, ct);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// S.2e3c1 (Decision 2), S.2e3c3b1 (Decision 2): every message enters the model dispatch
+    /// (<see cref="ExecuteNonPipelineMessageAsync"/>) under its canonical name, and the answer is the dispatch's own.
+    /// </remarks>
+    public async Task<Response> ExecuteNonPipelineAsync(Request request, Caller caller, DataSession session, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var canonical = NonPipelineMessages.TryGetValue(request.Name ?? "", out var name) ? name : request.Name ?? "";
+        return await ExecuteNonPipelineMessageAsync(request, canonical, caller, session, ct);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// S.2e3c1 (Task 6): the image is read on the model (<see cref="ReadImageAsync"/>). S.2e3c3b1 (Decision 3): nothing is converted
+    /// here; a caller that wants the record's SDK twin writes it out itself (<see cref="CoreSdkBoundary"/>).
+    /// </remarks>
+    public async Task<Record?> RetrieveImageAsync(RecordReference target, string[]? attributes, DataSession session, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        return await ReadImageAsync(target, attributes, session, ct);
+    }
+
     /// <summary>
     /// Test seam: called with each model request <see cref="ExecuteCrudAsync"/> dispatches (the CRUD messages no longer reach the
     /// adapter's <c>CoreHandOff.HandlerRequest</c> seam, which sees the SDK request of a handler of <c>CoreOperations.cs</c>).
@@ -47,8 +92,10 @@ public sealed partial class CoreOperations
     /// <summary>
     /// True for a core message whose body runs on the model (the eight CRUD messages, S.2e3b; the share and record team messages,
     /// S.2e3c1 Task 3; the role privilege messages, RetrieveExchangeRate and RetrieveEntityChanges, Task 4; the queue messages, Task 5; ExecuteWorkflow, refused, Task 6): a core message of <see cref="CoreMessages"/> that is not bridged (<see cref="CoreSdkMessages.Bridged"/>). The
-    /// entry adapter pairs its model response with today's typed SDK response. Each such name has a model case in
+    /// SDK boundary (<see cref="CoreSdkBoundary"/>) pairs its model response with today's typed SDK response. Each such name has a model case in
     /// <see cref="ExecuteMessageAsync"/> and a typed response in <see cref="CoreResponses.Typed"/>.
+    /// Invariant: the model response of each such message is named with its canonical name, because the boundary pairs it with
+    /// <c>CoreResponses.Typed(response.Name)</c>.
     /// </summary>
     private static bool IsOnModel(string canonicalName) =>
         CoreMessages.Contains(canonicalName) && !CoreSdkMessages.Bridged.Contains(canonicalName);
@@ -58,6 +105,8 @@ public sealed partial class CoreOperations
     /// RetrieveSharedPrincipalsAndAccess, S.2e3c1 Task 3; RetrieveUserPrivileges, Task 4; WhoAmI, RetrieveAppComponents,
     /// RetrieveUnpublished, InitializeFrom, RetrieveFormattedImportJobResults and the refusals from a plug-in, Task 6): one of <see cref="NonPipelineMessages"/> that is not bridged. As
     /// <see cref="IsOnModel"/>, each has a model case in <see cref="ExecuteNonPipelineMessageAsync"/> and a typed response.
+    /// Invariant: the model response of each such message is named with its canonical name, because the boundary pairs it with
+    /// <c>CoreResponses.Typed(response.Name)</c>.
     /// </summary>
     private static bool IsNonPipelineOnModel(string canonicalName) =>
         NonPipelineMessages.Contains(canonicalName) && !CoreSdkMessages.Bridged.Contains(canonicalName);
@@ -93,8 +142,8 @@ public sealed partial class CoreOperations
 
     /// <summary>
     /// The queue messages (S.2e3c1 Task 5) on the model request (<see cref="Core.QueueMessages"/>, plan 4.1a): the item and membership
-    /// writes run through the pipeline, one level deeper (decision 4), as model requests the entry adapter pairs with today's request
-    /// classes.
+    /// writes run through the pipeline, one level deeper (decision 4), as model requests the SDK boundary (<see cref="CoreSdkBoundary"/>)
+    /// pairs with today's request classes.
     /// </summary>
     /// <exception cref="InvalidOperationException">Server values (written on a Create only).</exception>
     private Task<Response> ExecuteQueueAsync(Request request, CoreCall call, CancellationToken ct)
@@ -170,6 +219,9 @@ public sealed partial class CoreOperations
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(call);
+        // S.2e3c3b1 (Decision 4): before anything can fail, so the boundary keeps the caller's Entity as it did when it read the store.
+        if (canonicalName is "Create" or "Update" && request.Parameters.TryGetValue("Target", out var written) && written is Record writeTarget)
+            MarkElastic(writeTarget);
         if (call.ServerSetValues is not null && canonicalName != "Create")
             throw new InvalidOperationException($"Server values are written on a Create only, not on '{request.Name}'.");
         CrudRequest.Value?.Invoke(request);
@@ -230,6 +282,16 @@ public sealed partial class CoreOperations
             default:
                 throw new ArgumentOutOfRangeException(nameof(canonicalName), canonicalName, "Not a CRUD message.");
         }
+    }
+
+    /// <summary>
+    /// S.2e3c3b1 (Decision 4): marks the Target of a Create or Update on an elastic table (<see cref="CoreTargetMarks"/>) before the body
+    /// runs (and before the server values are checked, so a refused call is kept in step as before), so the SDK boundary keeps the
+    /// caller's <c>Entity</c> in step with what the write by key fills (ids, <c>partitionid</c>) without reading the metadata store.
+    /// </summary>
+    private void MarkElastic(Record target)
+    {
+        if (store.GetTable(target.LogicalName ?? "") is { } table && ElasticTables.IsElastic(table)) CoreTargetMarks.MarkElastic(target);
     }
 
     /// <summary>

@@ -272,13 +272,13 @@ public static class ArchiveSchema
             if (publisher is null)
             {
                 publisher = Guid.NewGuid();
-                await core.ExecuteCoreAsync(
+                await CoreSdkBoundary.ExecuteCoreAsync(core,
                     ArchiveSchemaRequests.CreatePublisher(publisher.Value, PublisherUniqueName, PublisherFriendlyName, PublisherPrefix, OptionValuePrefix),
-                    caller, s, ct);
+                    caller, s, ct: ct);
             }
             if (await IdAsync(s, "solution", SolutionName, ct) is null)
-                await core.ExecuteCoreAsync(ArchiveSchemaRequests.CreateSolution(SolutionName, "xrmverse migration archive", "1.0.0.0", publisher.Value,
-                    "The archive tables an import created for source tables this organization does not have."), caller, s, ct);
+                await CoreSdkBoundary.ExecuteCoreAsync(core, ArchiveSchemaRequests.CreateSolution(SolutionName, "xrmverse migration archive", "1.0.0.0", publisher.Value,
+                    "The archive tables an import created for source tables this organization does not have."), caller, s, ct: ct);
             await tx.CommitAsync(ct);
         }
         catch
@@ -321,8 +321,8 @@ public static class ArchiveSchema
         var table = build.Entry.Target;
         var fields = Fields(build);
         var formId = Guid.NewGuid();
-        await core.ExecuteCoreAsync(ArchiveSchemaRequests.CreateMainForm(formId, build.DisplayName, table, FormXml(formId, build.DisplayName, fields)),
-            caller, s, ct);
+        await CoreSdkBoundary.ExecuteCoreAsync(core, ArchiveSchemaRequests.CreateMainForm(formId, build.DisplayName, table, FormXml(formId, build.DisplayName, fields)),
+            caller, s, ct: ct);
 
         var columns = fields.Where(f => f.ClassId != PartyListControl && !later.Contains(f.Column)).Take(6).Select(f => f.Column).ToList();
         var code = metadata.GetTable(s, table)?.ObjectTypeCode ?? 0;
@@ -333,7 +333,7 @@ public static class ArchiveSchema
         var layoutXml = $"<grid name=\"resultset\" object=\"{code}\" jump=\"{build.PrimaryName}\" select=\"1\" icon=\"1\" preview=\"1\">" +
                 $"<row name=\"result\" id=\"{build.PrimaryKey}\">" + string.Concat(columns.Select(c => $"<cell name=\"{c}\" width=\"{(c == build.PrimaryName ? 200 : 150)}\" />")) +
                 "</row></grid>";
-        await core.ExecuteCoreAsync(ArchiveSchemaRequests.CreateView("Active " + build.DisplayName, table, fetchXml, layoutXml), caller, s, ct);
+        await CoreSdkBoundary.ExecuteCoreAsync(core, ArchiveSchemaRequests.CreateView("Active " + build.DisplayName, table, fetchXml, layoutXml), caller, s, ct: ct);
     }
 
     /// <summary>Writes the main form of the archive table again from <paramref name="build"/>'s columns (same form id, same layout).</summary>
@@ -347,7 +347,7 @@ public static class ArchiveSchema
             if (await cmd.ExecuteScalarAsync(ct) is not Guid id) return;
             formId = id;
         }
-        await core.ExecuteCoreAsync(ArchiveSchemaRequests.UpdateFormXml(formId, FormXml(formId, build.DisplayName, Fields(build))), caller, s, ct);
+        await CoreSdkBoundary.ExecuteCoreAsync(core, ArchiveSchemaRequests.UpdateFormXml(formId, FormXml(formId, build.DisplayName, Fields(build))), caller, s, ct: ct);
     }
 
     /// <summary>The columns of the form: the primary name, the archive's own columns in the source's order, then the owner.</summary>

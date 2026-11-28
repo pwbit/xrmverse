@@ -29,7 +29,7 @@ namespace Xrmd.Core;
 /// An incoming email reaches its queue through AddToQueue run by the pipeline (plan 4.1c, <c>IncomingEmailImporter</c>).
 /// <para>
 /// S.2e3c1 (Task 5, Decisions 4 and 5): the messages run on the model request and read and write model records. The nested writes are
-/// model requests; the core's entry adapter pairs each with today's SDK request class (<c>CoreResponses.TypedRequest</c>: a
+/// model requests; the SDK boundary (<c>CoreSdkBoundary</c>) pairs each with today's SDK request class (<c>CoreResponses.TypedRequest</c>: a
 /// <c>CreateRequest</c>, <c>UpdateRequest</c>, <c>DeleteRequest</c> or <c>AssociateRequest</c>), so the pipeline, the security guard and
 /// the plug-ins see what they saw before.
 /// </para>
@@ -76,7 +76,7 @@ public sealed class QueueMessages
     /// <exception cref="XrmdFaultException">400 for a missing or wrong parameter, a table that is not queue-enabled, an inactive record,
     /// queue or item, a source queue the record is not in, or a principal of another table; 404 for a missing record, queue, item,
     /// user or team; the faults of the writes.</exception>
-    /// <remarks>The answer is a model <see cref="Response"/> named as the message; the core's entry adapter pairs it with today's
+    /// <remarks>The answer is a model <see cref="Response"/> named as the message; the SDK boundary (<c>CoreSdkBoundary</c>) pairs it with today's
     /// typed SDK response (<c>AddToQueueResponse</c>, …, <c>RetrieveUserQueuesResponse</c>). The parameters are read in the order of
     /// the SDK handler this replaces, with its texts (the types named as the SDK ones a caller passes).</remarks>
     public async Task<Response> ExecuteAsync(Request request, Caller caller, DataSession s, NestedRequest? nested, CancellationToken ct)
@@ -527,7 +527,7 @@ public sealed class QueueMessages
 
     /// <summary>
     /// The writes of a message: through the pipeline when it runs one (steps fire, the guard checks), else directly. A nested write is a
-    /// model request with the parameters of today's SDK request, in its order; the core's entry adapter pairs it with that request class.
+    /// model request with the parameters of today's SDK request, in its order; the SDK boundary (<c>CoreSdkBoundary</c>) pairs it with that request class.
     /// </summary>
     private sealed class Writer(CoreOperations core, DataSession s, Caller caller, NestedRequest? nested)
     {
